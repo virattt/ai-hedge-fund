@@ -3,8 +3,8 @@ from datetime import timedelta
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from src.tools import get_price_data
-from src.agents import run_hedge_fund
+from ai_hedge_fund.tools.tools import get_price_data
+
 
 class Backtester:
     def __init__(self, agent, ticker, start_date, end_date, initial_capital):
@@ -20,6 +20,7 @@ class Backtester:
         try:
             # Expect JSON output from agent
             import json
+
             decision = json.loads(agent_output)
             return decision["action"], decision["quantity"]
         except:
@@ -54,7 +55,9 @@ class Backtester:
         dates = pd.date_range(self.start_date, self.end_date, freq="B")
 
         print("\nStarting backtest...")
-        print(f"{'Date':<12} {'Ticker':<6} {'Action':<6} {'Quantity':>8} {'Price':>8} {'Cash':>12} {'Stock':>8} {'Total Value':>12}")
+        print(
+            f"{'Date':<12} {'Ticker':<6} {'Action':<6} {'Quantity':>8} {'Price':>8} {'Cash':>12} {'Stock':>8} {'Total Value':>12}"
+        )
         print("-" * 70)
 
         for current_date in dates:
@@ -65,18 +68,20 @@ class Backtester:
                 ticker=self.ticker,
                 start_date=lookback_start,
                 end_date=current_date_str,
-                portfolio=self.portfolio
+                portfolio=self.portfolio,
             )
 
             action, quantity = self.parse_action(agent_output)
             df = get_price_data(self.ticker, lookback_start, current_date_str)
-            current_price = df.iloc[-1]['close']
+            current_price = df.iloc[-1]["close"]
 
             # Execute the trade with validation
             executed_quantity = self.execute_trade(action, quantity, current_price)
 
             # Update total portfolio value
-            total_value = self.portfolio["cash"] + self.portfolio["stock"] * current_price
+            total_value = (
+                self.portfolio["cash"] + self.portfolio["stock"] * current_price
+            )
             self.portfolio["portfolio_value"] = total_value
 
             # Log the current state with executed quantity
@@ -96,8 +101,8 @@ class Backtester:
 
         # Calculate total return
         total_return = (
-                           self.portfolio["portfolio_value"] - self.initial_capital
-                       ) / self.initial_capital
+            self.portfolio["portfolio_value"] - self.initial_capital
+        ) / self.initial_capital
         print(f"Total Return: {total_return * 100:.2f}%")
 
         # Plot the portfolio value over time
@@ -114,7 +119,7 @@ class Backtester:
         # Calculate Sharpe Ratio (assuming 252 trading days in a year)
         mean_daily_return = performance_df["Daily Return"].mean()
         std_daily_return = performance_df["Daily Return"].std()
-        sharpe_ratio = (mean_daily_return / std_daily_return) * (252 ** 0.5)
+        sharpe_ratio = (mean_daily_return / std_daily_return) * (252**0.5)
         print(f"Sharpe Ratio: {sharpe_ratio:.2f}")
 
         # Calculate Maximum Drawdown
@@ -124,24 +129,3 @@ class Backtester:
         print(f"Maximum Drawdown: {max_drawdown * 100:.2f}%")
 
         return performance_df
-    
-### 4. Run the Backtest #####
-if __name__ == "__main__":
-    # Define parameters
-    ticker = "AAPL"  # Example ticker symbol
-    start_date = "2024-01-01"  # Adjust as needed
-    end_date = "2024-03-31"  # Adjust as needed
-    initial_capital = 100000  # $100,000
-
-    # Create an instance of Backtester
-    backtester = Backtester(
-        agent=run_hedge_fund,
-        ticker=ticker,
-        start_date=start_date,
-        end_date=end_date,
-        initial_capital=initial_capital,
-    )
-
-    # Run the backtesting process
-    backtester.run_backtest()
-    performance_df = backtester.analyze_performance()

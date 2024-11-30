@@ -1,5 +1,9 @@
 # AI Hedge Fund
 
+[![Code of Conduct](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](code_of_conduct.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)
+[![Contributing](https://img.shields.io/badge/Contributing-Guidelines-green.svg)](CONTRIBUTING.md)
+
 An AI-powered hedge fund that uses multiple agents to make trading decisions. The system employs several specialized agents working together:
 
 1. Market Data Agent - Gathers and preprocesses market data
@@ -55,8 +59,9 @@ export FINANCIAL_DATASETS_API_KEY='your-api-key-here'
 ### Running the Hedge Fund
 
 ```bash
-poetry run python src/agents.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
+poetry run hedge-fund --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
 ```
+Or, in vscode go to the debug tab and launch the Hedge fund debug config to run in debug mode. You can modify the args in the launch.json file on the .vscode folder.
 
 **Example Output:**
 ```json
@@ -69,8 +74,9 @@ poetry run python src/agents.py --ticker AAPL --start-date 2024-01-01 --end-date
 ### Running the Backtester
 
 ```bash
-poetry run python src/backtester.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
+poetry run backtester --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
 ```
+Or in vscode go to the debug tab and launch the Bakctester debug config to run in debug mode. You can modify the args in the launch.json file on the .vscode folder.
 
 **Example Output:**
 ```

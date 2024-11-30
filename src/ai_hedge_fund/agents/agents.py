@@ -1,22 +1,30 @@
+import argparse
+import operator
+from datetime import datetime
 from typing import Annotated, Any, Dict, Sequence, TypedDict
 
-import operator
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai.chat_models import ChatOpenAI
 from langgraph.graph import END, StateGraph
 
-from src.tools import calculate_bollinger_bands, calculate_macd, calculate_obv, calculate_rsi, get_prices, prices_to_df
-
-import argparse
-from datetime import datetime
+from ai_hedge_fund.tools.tools import (
+    calculate_bollinger_bands,
+    calculate_macd,
+    calculate_obv,
+    calculate_rsi,
+    get_prices,
+    prices_to_df,
+)
 
 llm = ChatOpenAI(model="gpt-4o")
+
 
 # Define agent state
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], operator.add]
     data: Dict[str, Any]
+
 
 ##### 1. Market Data Agent #####
 def market_data_agent(state: AgentState):
@@ -25,14 +33,10 @@ def market_data_agent(state: AgentState):
     data = state["data"]
 
     # Get the historical price data
-    prices = get_prices(
-        data["ticker"], data["start_date"], data["end_date"]
-    )
+    prices = get_prices(data["ticker"], data["start_date"], data["end_date"])
 
-    return {
-        "messages": messages,
-        "data": {**data, "prices": prices}
-    }
+    return {"messages": messages, "data": {**data, "prices": prices}}
+
 
 ##### 2. Quantitative Agent #####
 def quant_agent(state: AgentState):
@@ -40,72 +44,78 @@ def quant_agent(state: AgentState):
     data = state["data"]
     prices = data["prices"]
     prices_df = prices_to_df(prices)
-    
+
     # Calculate indicators
     # 1. MACD (Moving Average Convergence Divergence)
     macd_line, signal_line = calculate_macd(prices_df)
-    
+
     # 2. RSI (Relative Strength Index)
     rsi = calculate_rsi(prices_df)
-    
+
     # 3. Bollinger Bands (Bollinger Bands)
     upper_band, lower_band = calculate_bollinger_bands(prices_df)
-    
+
     # 4. OBV (On-Balance Volume)
     obv = calculate_obv(prices_df)
-    
+
     # Generate individual signals
     signals = []
-    
+
     # MACD signal
-    if macd_line.iloc[-2] < signal_line.iloc[-2] and macd_line.iloc[-1] > signal_line.iloc[-1]:
-        signals.append('bullish')
-    elif macd_line.iloc[-2] > signal_line.iloc[-2] and macd_line.iloc[-1] < signal_line.iloc[-1]:
-        signals.append('bearish')
+    if (
+        macd_line.iloc[-2] < signal_line.iloc[-2]
+        and macd_line.iloc[-1] > signal_line.iloc[-1]
+    ):
+        signals.append("bullish")
+    elif (
+        macd_line.iloc[-2] > signal_line.iloc[-2]
+        and macd_line.iloc[-1] < signal_line.iloc[-1]
+    ):
+        signals.append("bearish")
     else:
-        signals.append('neutral')
-    
+        signals.append("neutral")
+
     # RSI signal
     if rsi.iloc[-1] < 30:
-        signals.append('bullish')
+        signals.append("bullish")
     elif rsi.iloc[-1] > 70:
-        signals.append('bearish')
+        signals.append("bearish")
     else:
-        signals.append('neutral')
-    
+        signals.append("neutral")
+
     # Bollinger Bands signal
-    current_price = prices_df['close'].iloc[-1]
+    current_price = prices_df["close"].iloc[-1]
     if current_price < lower_band.iloc[-1]:
-        signals.append('bullish')
+        signals.append("bullish")
     elif current_price > upper_band.iloc[-1]:
-        signals.append('bearish')
+        signals.append("bearish")
     else:
-        signals.append('neutral')
-    
+        signals.append("neutral")
+
     # OBV signal
     obv_slope = obv.diff().iloc[-5:].mean()
     if obv_slope > 0:
-        signals.append('bullish')
+        signals.append("bullish")
     elif obv_slope < 0:
-        signals.append('bearish')
+        signals.append("bearish")
     else:
-        signals.append('neutral')
-    
+        signals.append("neutral")
+
     # Determine overall signal
-    bullish_signals = signals.count('bullish')
-    bearish_signals = signals.count('bearish')
-    
+    bullish_signals = signals.count("bullish")
+    bearish_signals = signals.count("bearish")
+
     if bullish_signals > bearish_signals:
-        overall_signal = 'bullish'
+        overall_signal = "bullish"
     elif bearish_signals > bullish_signals:
-        overall_signal = 'bearish'
+        overall_signal = "bearish"
     else:
-        overall_signal = 'neutral'
-    
+        overall_signal = "neutral"
+
     # Calculate confidence level based on the proportion of indicators agreeing
     total_signals = len(signals)
     confidence = max(bullish_signals, bearish_signals) / total_signals
-    
+
     # Create the quant agent's message
     message_content = f"""
     Trading Signal: {overall_signal}
@@ -115,11 +125,9 @@ def quant_agent(state: AgentState):
         content=message_content.strip(),
         name="quant_agent",
     )
-    
-    return {
-        "messages": state["messages"] + [message],
-        "data": data
-    }
+
+    return {"messages": state["messages"] + [message], "data": data}
+
 
 ##### 3. Risk Management Agent #####
 def risk_management_agent(state: AgentState):
@@ -136,7 +144,7 @@ def risk_management_agent(state: AgentState):
                 evaluate portfolio exposure and recommend position sizing.
                 Provide the following in your output (not as a JSON):
                 - max_position_size: <float greater than 0>,
-                - risk_score: <integer between 1 and 10>"""
+                - risk_score: <integer between 1 and 10>""",
             ),
             MessagesPlaceholder(variable_name="messages"),
             (
@@ -151,7 +159,7 @@ def risk_management_agent(state: AgentState):
                 Current Position: {portfolio['stock']} shares
                 
                 Only include the max position size and risk score in your output.
-                """
+                """,
             ),
         ]
     )
@@ -182,7 +190,7 @@ def portfolio_management_agent(state: AgentState):
                 Only buy if you have available cash.
                 The quantity that you buy must be less than or equal to the max position size.
                 Only sell if you have shares in the portfolio to sell.
-                The quantity that you sell must be less than or equal to the current position."""
+                The quantity that you sell must be less than or equal to the current position.""",
             ),
             MessagesPlaceholder(variable_name="messages"),
             (
@@ -201,7 +209,7 @@ def portfolio_management_agent(state: AgentState):
                 Remember, the action must be either buy, sell, or hold.
                 You can only buy if you have available cash.
                 You can only sell if you have shares in the portfolio to sell.
-                """
+                """,
             ),
         ]
     )
@@ -209,6 +217,7 @@ def portfolio_management_agent(state: AgentState):
     chain = portfolio_prompt | llm
     result = chain.invoke(state).content
     return {"messages": [HumanMessage(content=result, name="portfolio_management")]}
+
 
 ##### Run the Hedge Fund #####
 def run_hedge_fund(ticker: str, start_date: str, end_date: str, portfolio: dict):
@@ -221,15 +230,16 @@ def run_hedge_fund(ticker: str, start_date: str, end_date: str, portfolio: dict)
                         "ticker": ticker,
                         "start_date": start_date,
                         "end_date": end_date,
-                        "portfolio": portfolio
+                        "portfolio": portfolio,
                     },
                 )
             ],
-            "data": {"ticker": ticker, "start_date": start_date, "end_date": end_date}
+            "data": {"ticker": ticker, "start_date": start_date, "end_date": end_date},
         },
         config={"configurable": {"thread_id": 42}},
     )
     return final_state["messages"][-1].content
+
 
 # Define the new workflow
 workflow = StateGraph(AgentState)
@@ -251,30 +261,34 @@ app = workflow.compile()
 
 # Add this at the bottom of the file
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Run the hedge fund trading system')
-    parser.add_argument('--ticker', type=str, required=True, help='Stock ticker symbol')
-    parser.add_argument('--start-date', type=str, required=True, help='Start date (YYYY-MM-DD)')
-    parser.add_argument('--end-date', type=str, required=True, help='End date (YYYY-MM-DD)')
-    
+    parser = argparse.ArgumentParser(description="Run the hedge fund trading system")
+    parser.add_argument("--ticker", type=str, required=True, help="Stock ticker symbol")
+    parser.add_argument(
+        "--start-date", type=str, required=True, help="Start date (YYYY-MM-DD)"
+    )
+    parser.add_argument(
+        "--end-date", type=str, required=True, help="End date (YYYY-MM-DD)"
+    )
+
     args = parser.parse_args()
-    
+
     # Validate dates
     try:
-        datetime.strptime(args.start_date, '%Y-%m-%d')
-        datetime.strptime(args.end_date, '%Y-%m-%d')
+        datetime.strptime(args.start_date, "%Y-%m-%d")
+        datetime.strptime(args.end_date, "%Y-%m-%d")
     except ValueError:
         raise ValueError("Dates must be in YYYY-MM-DD format")
-    
+
     # Sample portfolio - you might want to make this configurable too
     portfolio = {
         "cash": 100000.0,  # $100,000 initial cash
-        "stock": 0         # No initial stock position
+        "stock": 0,  # No initial stock position
     }
-    
+
     result = run_hedge_fund(
         ticker=args.ticker,
         start_date=args.start_date,
         end_date=args.end_date,
-        portfolio=portfolio
+        portfolio=portfolio,
     )
     print(result)
