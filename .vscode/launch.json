@@ -1,0 +1,32 @@
+{
+    "configurations": [
+        {
+            "name": "Hedge Fund",
+            "type": "debugpy",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/Scripts/python",
+            "module": "ai_hedge_fund.run_hedge_fund",
+            "cwd": "${workspaceFolder}",
+            "envFile": "${workspaceFolder}/.env.example",
+            "args": [
+                "--ticker", "AAPL",
+                "--start-date", "2024-01-01",
+                "--end-date", "2024-03-01"
+            ]
+        },
+        {
+            "name": "Backtester",
+            "type": "debugpy",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/Scripts/python",
+            "module": "ai_hedge_fund.run_backtest",
+            "cwd": "${workspaceFolder}",
+            "envFile": "${workspaceFolder}/.env.example",
+            "args": [
+                "--ticker", "AAPL",
+                "--start-date", "2024-01-01",
+                "--end-date", "2024-03-01"
+            ]            
+        }
+    ]
+}
