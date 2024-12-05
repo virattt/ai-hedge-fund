@@ -15,6 +15,7 @@ def get_prices(ticker, start_date, end_date):
         f"&end_date={end_date}"
     )
     response = requests.get(url, headers=headers)
+    
     if response.status_code != 200:
         raise Exception(
             f"Error fetching data: {response.status_code} - {response.text}"
