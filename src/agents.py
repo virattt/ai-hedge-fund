@@ -1,18 +1,38 @@
 from typing import Annotated, Any, Dict, Sequence, TypedDict
+import os
+import sys
+from pathlib import Path
 
+# Add the project root to Python path
+project_root = str(Path(__file__).parent.parent)
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
+from dotenv import load_dotenv
 import operator
 from langchain_core.messages import BaseMessage, HumanMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai.chat_models import ChatOpenAI
 from langgraph.graph import END, StateGraph
 
-from src.tools import calculate_bollinger_bands, calculate_macd, calculate_obv, calculate_rsi, get_prices, prices_to_df
+from src.tools import (
+    calculate_bollinger_bands,
+    calculate_macd,
+    calculate_obv,
+    calculate_rsi,
+    get_prices,
+    prices_to_df
+)
 
 import argparse
 from datetime import datetime
 import json
 
-llm = ChatOpenAI(model="gpt-4o")
+# Load environment variables
+load_dotenv()
+
+# Initialize the LLM
+llm = ChatOpenAI(model="gpt-4", api_key=os.getenv("OPENAI_API_KEY"))
 
 # Define agent state
 class AgentState(TypedDict):
@@ -173,59 +193,76 @@ def risk_management_agent(state: AgentState):
     quant_message = state["messages"][-1]
 
     # Create the prompt template
-    template = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                """You are a risk management specialist.
-                Your job is to take a look at the trading analysis and
-                evaluate portfolio exposure and recommend position sizing.
-                Provide the following in your output (as a JSON):
-                "max_position_size": <float greater than 0>,
-                "risk_score": <integer between 1 and 10>,
-                "trading_action": <buy | sell | hold>,
-                "reasoning": <concise explanation of the decision>
-                """
-            ),
-            (
-                "human",
-                """Based on the trading analysis below, provide your risk assessment.
+    template = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            """You are an aggressive yet prudent risk management specialist.
+            Your job is to maximize trading opportunities while maintaining strong risk controls.
+            
+            Provide the following in your output (as a JSON):
+            "max_position_size": <float greater than 0>,
+            "risk_score": <integer between 1 and 10>,
+            "trading_action": <buy | sell | hold>,
+            "stop_loss_pct": <float between 0.02 and 0.10>,
+            "take_profit_pct": <float between 0.05 and 0.20>,
+            "reasoning": <concise explanation of the decision>
+            
+            Trading Rules:
+            1. Position Sizing:
+               - High confidence (>0.75): Up to 100% of max position
+               - Medium confidence (0.5-0.75): Up to 75% of max position
+               - Low confidence (<0.5): Up to 50% of max position
+            
+            2. Stop-Loss Strategy:
+               - High volatility: 2-3% stop-loss
+               - Medium volatility: 3-5% stop-loss
+               - Low volatility: 5-7% stop-loss
+            
+            3. Take-Profit Strategy:
+               - Strong trend: 15-20% target
+               - Medium trend: 10-15% target
+               - Weak trend: 5-10% target
+            
+            4. Risk Score Impact:
+               - 1-3: Very Conservative (small positions)
+               - 4-6: Moderate (medium positions)
+               - 7-10: Aggressive (large positions)
+            
+            Always look for trading opportunities, but protect capital first."""
+        ),
+        (
+            "human",
+            """Based on the trading analysis below, provide your risk assessment.
 
-                Quant Trading Signal: {quant_message}
+            Quant Trading Signal: {quant_message}
 
-                Here is the current portfolio:
-                Portfolio:
-                Cash: {portfolio_cash}
-                Current Position: {portfolio_stock} shares
-                
-                Only include the max position size, risk score, trading action, and reasoning in your JSON output.  Do not include any JSON markdown.
-                """
-            ),
-        ]
-    )
+            Current Portfolio:
+            Cash: {portfolio_cash}
+            Current Position: {portfolio_stock} shares
+            Entry Price: {entry_price}
+            Current Stop-Loss: {stop_loss}
+            
+            Only include the required JSON fields. Do not include any JSON markdown."""
+        ),
+    ])
 
     # Generate the prompt
-    prompt = template.invoke(
-        {
-            "quant_message": quant_message.content,
-            "portfolio_cash": f"{portfolio['cash']:.2f}",
-            "portfolio_stock": portfolio["stock"]
-        }
-    )
+    prompt = template.invoke({
+        "quant_message": quant_message.content,
+        "portfolio_cash": f"{portfolio['cash']:.2f}",
+        "portfolio_stock": portfolio["stock"],
+        "entry_price": portfolio["entry_price"],
+        "stop_loss": portfolio["stop_loss"]
+    })
 
     # Invoke the LLM
     result = llm.invoke(prompt)
-    message = HumanMessage(
-        content=result.content,
-        name="risk_management",
-    )
+    message = HumanMessage(content=result.content, name="risk_management")
 
-    # Print the decision if the flag is set
     if show_reasoning:
-        show_agent_reasoning(message.content, "Risk Management Agent")
+        show_agent_reasoning(result.content, "Risk Management Agent")
 
     return {"messages": state["messages"] + [message]}
-
 
 ##### 4. Portfolio Management Agent #####
 def portfolio_management_agent(state: AgentState):
@@ -235,65 +272,75 @@ def portfolio_management_agent(state: AgentState):
     risk_message = state["messages"][-1]
     quant_message = state["messages"][-2]
 
-    # Create the prompt template
-    template = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                """You are a portfolio manager making final trading decisions.
-                Your job is to make a trading decision based on the team's analysis.
-                Provide the following in your output:
-                - "action": "buy" | "sell" | "hold",
-                - "quantity": <positive integer>
-                - "reasoning": <concise explanation of the decision>
-                Only buy if you have available cash.
-                The quantity that you buy must be less than or equal to the max position size.
-                Only sell if you have shares in the portfolio to sell.
-                The quantity that you sell must be less than or equal to the current position."""
-            ),
-            (
-                "human",
-                """Based on the team's analysis below, make your trading decision.
+    template = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            """You are an active portfolio manager focused on maximizing returns while managing risk.
+            Your job is to make trading decisions based on the team's analysis.
+            
+            Provide the following in your output:
+            - "action": "buy" | "sell" | "hold"
+            - "quantity": <positive integer>
+            - "stop_loss": <float or 0>
+            - "take_profit": <float or 0>
+            - "reasoning": <concise explanation>
+            
+            Trading Strategy:
+            1. Entry Rules:
+               - Buy when multiple indicators align bullish
+               - Buy on oversold conditions with positive momentum
+               - Scale into positions on strong trends
+            
+            2. Exit Rules:
+               - Sell on stop-loss hit
+               - Sell on take-profit hit
+               - Sell on trend reversal signals
+            
+            3. Position Management:
+               - Scale in on confirmation
+               - Scale out on weakness
+               - Move stops to breakeven after 5% profit
+            
+            4. Risk Rules:
+               - Never risk more than 2% of portfolio on single trade
+               - Use smaller positions in high volatility
+               - Use wider stops in lower volatility
+            
+            Be aggressive in taking opportunities but always protect capital."""
+        ),
+        (
+            "human",
+            """Based on the team's analysis below, make your trading decision.
 
-                Quant Team Trading Signal: {quant_message}
-                Risk Management Team Signal: {risk_message}
+            Quant Team Signal: {quant_message}
+            Risk Management Signal: {risk_message}
 
-                Here is the current portfolio:
-                Portfolio:
-                Cash: {portfolio_cash}
-                Current Position: {portfolio_stock} shares
+            Current Portfolio:
+            Cash: {portfolio_cash}
+            Current Position: {portfolio_stock} shares
+            Entry Price: {entry_price}
+            Current Stop-Loss: {stop_loss}
 
-                Only include the action, quantity, and reasoning in your output as JSON.  Do not include any JSON markdown.
-
-                Remember, the action must be either buy, sell, or hold.
-                You can only buy if you have available cash.
-                You can only sell if you have shares in the portfolio to sell.
-                """
-            ),
-        ]
-    )
+            Only include the required JSON fields. Do not include any JSON markdown."""
+        ),
+    ])
 
     # Generate the prompt
-    prompt = template.invoke(
-        {
-            "quant_message": quant_message.content, 
-            "risk_message": risk_message.content,
-            "portfolio_cash": f"{portfolio['cash']:.2f}",
-            "portfolio_stock": portfolio["stock"]
-        }
-    )
+    prompt = template.invoke({
+        "quant_message": quant_message.content,
+        "risk_message": risk_message.content,
+        "portfolio_cash": f"{portfolio['cash']:.2f}",
+        "portfolio_stock": portfolio["stock"],
+        "entry_price": portfolio["entry_price"],
+        "stop_loss": portfolio["stop_loss"]
+    })
+
     # Invoke the LLM
     result = llm.invoke(prompt)
+    message = HumanMessage(content=result.content, name="portfolio_management")
 
-    # Create the portfolio management message
-    message = HumanMessage(
-        content=result.content,
-        name="portfolio_management",
-    )
-
-    # Print the decision if the flag is set
     if show_reasoning:
-        show_agent_reasoning(message.content, "Portfolio Management Agent")
+        show_agent_reasoning(result.content, "Portfolio Management Agent")
 
     return {"messages": state["messages"] + [message]}
 
@@ -378,7 +425,9 @@ if __name__ == "__main__":
     # Sample portfolio - you might want to make this configurable too
     portfolio = {
         "cash": 100000.0,  # $100,000 initial cash
-        "stock": 0         # No initial stock position
+        "stock": 0,        # No initial stock position
+        "entry_price": 0,  # No entry price initially
+        "stop_loss": 0     # No stop-loss initially
     }
     
     result = run_hedge_fund(
