@@ -1,5 +1,10 @@
 from functools import reduce
 from typing import Annotated, Any, Dict, Sequence, TypedDict
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 import operator
 from langchain_core.messages import BaseMessage, HumanMessage
@@ -13,7 +18,7 @@ import argparse
 from datetime import datetime
 import json
 
-llm = ChatOpenAI(model="gpt-4o")
+llm = ChatOpenAI(model="gpt-4", api_key=os.getenv("OPENAI_API_KEY"))
 
 def merge_dicts(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
     return {**a, **b}
