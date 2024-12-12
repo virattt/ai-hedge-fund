@@ -4,36 +4,24 @@ Provides common functionality and provider integration for all agents.
 """
 
 from typing import Dict, Any, Optional, List
-from ..providers import ModelProvider
-from ..config import ModelConfig
+from ..providers import BaseProvider
 
 class BaseAgent:
     """Base class for all trading agents."""
 
-    def __init__(
-        self,
-        provider: Optional[ModelProvider] = None,
-        config_path: str = "config/models.yaml",
-        provider_name: str = "openai",
-        model: Optional[str] = None,
-    ):
+    def __init__(self, provider: BaseProvider):
         """
         Initialize base agent with AI provider.
 
         Args:
-            provider: ModelProvider instance (optional)
-            config_path: Path to model configuration file
-            provider_name: Name of provider to use if no provider given
-            model: Model identifier to use with provider
+            provider: BaseProvider instance for model interactions
 
         Raises:
-            ValueError: If provider initialization fails
+            ValueError: If provider is None
         """
         if provider is None:
-            config = ModelConfig(config_path)
-            self.provider = config.get_model_provider(provider_name, model)
-        else:
-            self.provider = provider
+            raise ValueError("Provider cannot be None")
+        self.provider = provider
 
     def generate_response(
         self,
@@ -55,21 +43,24 @@ class BaseAgent:
         Raises:
             Exception: If response generation fails
         """
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
-        return self.provider.generate_response(messages, **kwargs)
+        return self.provider.generate_response(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            **kwargs
+        )
 
-    def validate_response(self, response: str) -> bool:
+    def validate_response(self, response: str) -> Dict[str, Any]:
         """
-        Validate model response.
+        Validate and parse model response.
 
         Args:
             response: Response string from model
 
         Returns:
-            bool: True if response is valid
+            Dict: Parsed response data
+
+        Raises:
+            ResponseValidationError: If response is invalid
         """
         return self.provider.validate_response(response)
 
