@@ -3,68 +3,77 @@ OpenAI model provider implementation.
 Supports GPT-4 and other OpenAI models through LangChain integration.
 """
 
-from typing import Dict, List, Any
+from typing import Dict, Any
 from langchain_openai import ChatOpenAI
-from . import ModelProvider, ModelProviderError, ResponseValidationError
 
-class OpenAIProvider(ModelProvider):
+from .base import (
+    BaseProvider,
+    ModelProviderError,
+    ResponseValidationError,
+    ProviderConnectionError,
+    ProviderAuthenticationError,
+    ProviderQuotaError
+)
+
+class OpenAIProvider(BaseProvider):
     """OpenAI model provider implementation."""
 
-    def __init__(self, model: str = "gpt-4", **kwargs):
-        """
-        Initialize OpenAI provider with specified model.
-
-        Args:
-            model: OpenAI model identifier (default: "gpt-4")
-            **kwargs: Additional configuration parameters for ChatOpenAI
-        """
+    def _initialize_provider(self) -> None:
+        """Initialize the OpenAI client."""
         try:
-            self.model = ChatOpenAI(model=model, **kwargs)
+            self.client = ChatOpenAI(
+                model_name=self.model_name,
+                **self.settings
+            )
         except Exception as e:
-            raise ModelProviderError(f"Failed to initialize OpenAI provider: {str(e)}")
+            raise ModelProviderError(
+                f"Failed to initialize OpenAI provider: {str(e)}",
+                provider="OpenAI"
+            )
 
-    def generate_response(self, messages: List[Dict[str, Any]], **kwargs) -> str:
-        """
-        Generate response using OpenAI model.
-
-        Args:
-            messages: List of message dictionaries with 'role' and 'content'
-            **kwargs: Additional parameters for model invocation
-
-        Returns:
-            str: Model response
-
-        Raises:
-            ModelProviderError: If response generation fails
-        """
+    def generate_response(self, system_prompt: str, user_prompt: str) -> str:
+        """Generate response using OpenAI model."""
         try:
-            response = self.model.invoke(messages)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+            response = self.client.invoke(messages)
             return response.content
         except Exception as e:
-            raise ModelProviderError(f"OpenAI response generation failed: {str(e)}")
+            if "authentication" in str(e).lower():
+                raise ProviderAuthenticationError(
+                    "OpenAI authentication failed",
+                    provider="OpenAI"
+                )
+            elif "rate" in str(e).lower():
+                raise ProviderQuotaError(
+                    "OpenAI rate limit exceeded",
+                    provider="OpenAI"
+                )
+            elif "connection" in str(e).lower():
+                raise ProviderConnectionError(
+                    "OpenAI connection failed",
+                    provider="OpenAI"
+                )
+            else:
+                raise ModelProviderError(
+                    f"OpenAI response generation failed: {str(e)}",
+                    provider="OpenAI"
+                )
 
-    def validate_response(self, response: str) -> bool:
-        """
-        Validate OpenAI response format.
-
-        Args:
-            response: Response string from the model
-
-        Returns:
-            bool: True if response is valid
-
-        Raises:
-            ResponseValidationError: If validation fails
-        """
-        try:
-            # For responses that should be JSON
-            if self._validate_json_response(response):
-                return True
-
-            # For non-JSON responses, ensure it's a non-empty string
-            if isinstance(response, str) and response.strip():
-                return True
-
-            raise ResponseValidationError("Invalid response format")
-        except Exception as e:
-            raise ResponseValidationError(f"Response validation failed: {str(e)}")
+    def validate_response(self, response: str) -> Dict[str, Any]:
+        """Validate OpenAI response format."""
+        if not isinstance(response, str):
+            raise ResponseValidationError(
+                "Response must be a string",
+                provider="OpenAI",
+                response=response
+            )
+        if not response.strip():
+            raise ResponseValidationError(
+                "Response cannot be empty",
+                provider="OpenAI",
+                response=response
+            )
+        return super().validate_response(response)
