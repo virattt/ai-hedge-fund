@@ -7,10 +7,14 @@ readme = "README.md"
 packages = [
     { include = "src", from = "." }
 ]
+
 [tool.poetry.dependencies]
 python = "^3.9"
 langchain = "0.3.0"
 langchain-openai = "0.2.11"
+langchain-anthropic = "^0.1.1"
+langchain-google-genai = "^0.0.6"
+langchain-mistralai = "^0.0.3"
 langgraph = "0.2.56"
 pandas = "^2.1.0"
 numpy = "^1.24.0"

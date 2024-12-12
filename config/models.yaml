@@ -4,32 +4,37 @@ providers:
     models:
       - gpt-4
       - gpt-4-turbo
-      - gpt-3.5-turbo
-    temperature: 0.7
-    max_tokens: 2048
+    settings:
+      temperature: 0.7
+      max_tokens: 2048
+      top_p: 1.0
 
   anthropic:
     default_model: claude-3-opus-20240229
     models:
       - claude-3-opus-20240229
       - claude-3-sonnet-20240229
-      - claude-3-haiku-20240229
-    temperature: 0.7
-    max_tokens: 4096
+    settings:
+      temperature: 0.7
+      max_tokens: 4096
+      top_p: 1.0
 
-  gemini:
+  google:
     default_model: gemini-pro
     models:
       - gemini-pro
       - gemini-pro-vision
-    temperature: 0.7
-    max_tokens: 2048
+    settings:
+      temperature: 0.7
+      max_tokens: 2048
+      top_p: 1.0
 
   mistral:
-    default_model: mistral-large-latest
+    default_model: mistral-large
     models:
-      - mistral-large-latest
-      - mistral-medium-latest
-      - mistral-small-latest
-    temperature: 0.7
-    max_tokens: 2048
+      - mistral-large
+      - mistral-medium
+    settings:
+      temperature: 0.7
+      max_tokens: 2048
+      top_p: 1.0
