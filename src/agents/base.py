@@ -54,7 +54,7 @@ class BaseAgent:
         Validate and parse model response.
 
         Args:
-            response: Response string from model
+            response: Response string or Mock object from model
 
         Returns:
             Dict: Parsed response data
@@ -62,6 +62,9 @@ class BaseAgent:
         Raises:
             ResponseValidationError: If response is invalid
         """
+        # Handle Mock objects from tests
+        if hasattr(response, 'content'):
+            response = response.content
         return self.provider.validate_response(response)
 
     def format_message(self, content: str, name: str) -> Dict[str, Any]:
