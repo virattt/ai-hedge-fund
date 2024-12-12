@@ -1,101 +1,111 @@
 import os
-
-import pandas as pd
+import time
 import requests
+import pandas as pd
 
 
-def get_prices(ticker, start_date, end_date):
-    """Fetch price data from the API."""
-    headers = {"X-API-KEY": os.environ.get("FINANCIAL_DATASETS_API_KEY")}
-    url = (
-        f"https://api.financialdatasets.ai/prices/"
-        f"?ticker={ticker}"
-        f"&interval=day"
-        f"&interval_multiplier=1"
-        f"&start_date={start_date}"
-        f"&end_date={end_date}"
+class CMCClient:
+    def __init__(self):
+        self.api_key = os.environ.get("COINMARKETCAP_API_KEY")
+        if not self.api_key:
+            raise ValueError("COINMARKETCAP_API_KEY environment variable is not set")
+        self.base_url = "https://pro-api.coinmarketcap.com/v1"
+        self.session = requests.Session()
+        self.session.headers.update({
+            'X-CMC_PRO_API_KEY': self.api_key,
+            'Accept': 'application/json'
+        })
+
+    def _handle_rate_limit(self, response: requests.Response) -> bool:
+        if response.status_code == 429:
+            retry_after = int(response.headers.get('Retry-After', 60))
+            time.sleep(retry_after)
+            return True
+        return False
+
+    def _make_request(self, endpoint: str, params: dict = None) -> dict:
+        url = f"{self.base_url}/{endpoint}"
+        while True:
+            response = self.session.get(url, params=params)
+            if not self._handle_rate_limit(response):
+                break
+
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Error fetching data: {response.status_code} - {response.text}")
+
+
+def get_prices(symbol: str, start_date: str, end_date: str) -> dict:
+    client = CMCClient()
+    params = {
+        'symbol': symbol,
+        'time_start': start_date,
+        'time_end': end_date,
+        'convert': 'USD'
+    }
+
+    return client._make_request(
+        'cryptocurrency/quotes/historical',
+        params=params
     )
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise Exception(
-            f"Error fetching data: {response.status_code} - {response.text}"
-        )
-    data = response.json()
-    prices = data.get("prices")
-    if not prices:
-        raise ValueError("No price data returned")
-    return prices
 
 
-def prices_to_df(prices):
-    """Convert prices to a DataFrame."""
-    df = pd.DataFrame(prices)
-    df["Date"] = pd.to_datetime(df["time"])
-    df.set_index("Date", inplace=True)
-    numeric_cols = ["open", "close", "high", "low", "volume"]
+def prices_to_df(prices: dict) -> pd.DataFrame:
+    quotes = prices['data'][list(prices['data'].keys())[0]]['quotes']
+    df = pd.DataFrame(quotes)
+    df['Date'] = pd.to_datetime(df['timestamp'])
+    df.set_index('Date', inplace=True)
+
+    for quote in df['quote'].values:
+        usd_data = quote['USD']
+        for key in ['open', 'high', 'low', 'close', 'volume']:
+            df.loc[df.index[df['quote'] == quote], key] = usd_data.get(key, 0)
+
+    df = df.drop('quote', axis=1)
+    numeric_cols = ['open', 'close', 'high', 'low', 'volume']
     for col in numeric_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
     df.sort_index(inplace=True)
     return df
 
 
-# Update the get_price_data function to use the new functions
-def get_price_data(ticker, start_date, end_date):
-    prices = get_prices(ticker, start_date, end_date)
+def get_price_data(symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+    prices = get_prices(symbol, start_date, end_date)
     return prices_to_df(prices)
 
 
-def get_financial_metrics(ticker, report_period, period="ttm", limit=1):
-    """Fetch financial metrics from the API."""
-    headers = {"X-API-KEY": os.environ.get("FINANCIAL_DATASETS_API_KEY")}
-    url = (
-        f"https://api.financialdatasets.ai/financial-metrics/"
-        f"?ticker={ticker}"
-        f"&report_period_lte={report_period}"
-        f"&limit={limit}"
-        f"&period={period}"
+def get_market_data(symbol: str) -> dict:
+    client = CMCClient()
+    params = {
+        'symbol': symbol,
+        'convert': 'USD'
+    }
+
+    return client._make_request(
+        'cryptocurrency/quotes/latest',
+        params=params
     )
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise Exception(
-            f"Error fetching data: {response.status_code} - {response.text}"
-        )
-    data = response.json()
-    financial_metrics = data.get("financial_metrics")
-    if not financial_metrics:
-        raise ValueError("No financial metrics returned")
-    return financial_metrics
 
 
-def get_insider_trades(ticker, start_date, end_date):
-    """
-    Fetch insider trades for a given ticker and date range.
-    """
-    headers = {"X-API-KEY": os.environ.get("FINANCIAL_DATASETS_API_KEY")}
-    url = (
-        f"https://api.financialdatasets.ai/insider-trades/"
-        f"?ticker={ticker}"
-        f"&filing_date_gte={start_date}"
-        f"&filing_date_lte={end_date}"
+def get_financial_metrics(symbol: str) -> dict:
+    client = CMCClient()
+    params = {
+        'symbol': symbol,
+        'convert': 'USD'
+    }
+
+    return client._make_request(
+        'cryptocurrency/info',
+        params=params
     )
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise Exception(
-            f"Error fetching data: {response.status_code} - {response.text}"
-        )
-    data = response.json()
-    insider_trades = data.get("insider_trades")
-    if not insider_trades:
-        raise ValueError("No insider trades returned")
-    return insider_trades
 
 
 def calculate_confidence_level(signals):
-    """Calculate confidence level based on the difference between SMAs."""
     sma_diff_prev = abs(signals["sma_5_prev"] - signals["sma_20_prev"])
     sma_diff_curr = abs(signals["sma_5_curr"] - signals["sma_20_curr"])
     diff_change = sma_diff_curr - sma_diff_prev
-    # Normalize confidence between 0 and 1
     confidence = min(max(diff_change / signals["current_price"], 0), 1)
     return confidence
 

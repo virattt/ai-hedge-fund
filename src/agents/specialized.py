@@ -21,16 +21,22 @@ class SentimentAgent(BaseAgent):
             Updated state with sentiment analysis
         """
         system_prompt = """
-        You are a market sentiment analyst.
-        Analyze the market data and insider trades to provide sentiment analysis.
+        You are a cryptocurrency market sentiment analyst.
+        Analyze the market data and trading signals to provide sentiment analysis.
+        Consider factors like:
+        - Trading volume and market cap trends
+        - Social media sentiment and community activity
+        - Network metrics (transactions, active addresses)
+        - Market dominance and correlation with major cryptocurrencies
+
         Return your analysis as JSON with the following fields:
-        - sentiment_score: float between -1 (bearish) and 1 (bullish)
+        - sentiment_score: float between -1 (extremely bearish) and 1 (extremely bullish)
         - confidence: float between 0 and 1
-        - reasoning: string explaining the analysis
+        - reasoning: string explaining the crypto-specific analysis
         """
 
         user_prompt = f"""
-        Analyze the following market data and insider trades:
+        Analyze the following market data and trading signals:
         Market Data: {state.get('market_data', {})}
         """
 
@@ -67,12 +73,19 @@ class RiskManagementAgent(BaseAgent):
             Updated state with risk assessment
         """
         system_prompt = """
-        You are a risk management specialist.
+        You are a cryptocurrency risk management specialist.
         Evaluate trading risk based on market data and sentiment analysis.
+        Consider factors like:
+        - Market volatility and 24/7 trading patterns
+        - Liquidity depth and exchange distribution
+        - Historical price action and support/resistance levels
+        - Network security and protocol risks
+
         Return your assessment as JSON with the following fields:
         - risk_level: string (low, moderate, high)
-        - position_limit: integer (maximum position size)
-        - reasoning: string explaining the assessment
+        - position_limit: float (maximum position size as % of portfolio)
+        - stop_loss: float (recommended stop-loss percentage)
+        - reasoning: string explaining the crypto-specific assessment
         """
 
         user_prompt = f"""
@@ -114,12 +127,20 @@ class PortfolioManagementAgent(BaseAgent):
             Updated state with trading decision
         """
         system_prompt = """
-        You are a portfolio manager making final trading decisions.
-        Make a decision based on market data, sentiment, and risk assessment.
+        You are a cryptocurrency portfolio manager making final trading decisions.
+        Make decisions based on market data, sentiment, and risk assessment.
+        Consider factors like:
+        - Market cycles and trend strength
+        - Technical indicators adapted for 24/7 markets
+        - On-chain metrics and network health
+        - Cross-market correlations and market dominance
+
         Return your decision as JSON with the following fields:
         - action: string (buy, sell, hold)
-        - quantity: integer
-        - reasoning: string explaining the decision
+        - quantity: float (amount in USD to trade)
+        - entry_price: float (target entry price in USD)
+        - stop_loss: float (stop-loss price in USD)
+        - reasoning: string explaining the crypto-specific decision
         """
 
         user_prompt = f"""
