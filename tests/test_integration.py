@@ -133,15 +133,18 @@ def mock_market_data():
     }
 
 @pytest.mark.parametrize("provider_config", [
-    (OpenAIProvider, "gpt-4", "mock_openai_client"),
-    (AnthropicProvider, "claude-3-opus-20240229", "mock_anthropic_client")
+    (OpenAIProvider, "gpt-4", "mock_openai_client", {"model_name": "gpt-4"}),
+    (AnthropicProvider, "claude-3-opus-20240229", "mock_anthropic_client", {
+        "model_name": "claude-3-opus-20240229",
+        "settings": {"temperature": 0.7, "max_tokens": 4096}
+    })
 ])
 def test_workflow_execution(provider_config, mock_openai_client, mock_anthropic_client, mock_market_data, request):
     """Test complete workflow with different providers."""
-    ProviderClass, model, mock_fixture = provider_config
+    ProviderClass, model, mock_fixture, provider_args = provider_config
     mock_client = request.getfixturevalue(mock_fixture)
 
-    provider = ProviderClass(model_name=model if ProviderClass == OpenAIProvider else model)
+    provider = ProviderClass(**provider_args)
     app = create_test_workflow(provider)
 
     # Initialize workflow state
@@ -164,15 +167,18 @@ def test_workflow_execution(provider_config, mock_openai_client, mock_anthropic_
         pytest.fail(f"Workflow execution failed with {provider.__class__.__name__}: {str(e)}")
 
 @pytest.mark.parametrize("provider_config", [
-    (OpenAIProvider, "gpt-4", "mock_openai_client"),
-    (AnthropicProvider, "claude-3-opus-20240229", "mock_anthropic_client")
+    (OpenAIProvider, "gpt-4", "mock_openai_client", {"model_name": "gpt-4"}),
+    (AnthropicProvider, "claude-3-opus-20240229", "mock_anthropic_client", {
+        "model_name": "claude-3-opus-20240229",
+        "settings": {"temperature": 0.7, "max_tokens": 4096}
+    })
 ])
 def test_workflow_error_handling(provider_config, mock_openai_client, mock_anthropic_client, mock_market_data, request):
     """Test error handling in workflow execution with different providers."""
-    ProviderClass, model, mock_fixture = provider_config
+    ProviderClass, model, mock_fixture, provider_args = provider_config
     mock_client = request.getfixturevalue(mock_fixture)
 
-    provider = ProviderClass(model_name=model if ProviderClass == OpenAIProvider else model)
+    provider = ProviderClass(**provider_args)
     app = create_test_workflow(provider)
 
     # Initialize workflow state
@@ -199,15 +205,18 @@ def test_workflow_error_handling(provider_config, mock_openai_client, mock_anthr
     assert "trading_decision" not in result
 
 @pytest.mark.parametrize("provider_config", [
-    (OpenAIProvider, "gpt-4", "mock_openai_client"),
-    (AnthropicProvider, "claude-3-opus-20240229", "mock_anthropic_client")
+    (OpenAIProvider, "gpt-4", "mock_openai_client", {"model_name": "gpt-4"}),
+    (AnthropicProvider, "claude-3-opus-20240229", "mock_anthropic_client", {
+        "model_name": "claude-3-opus-20240229",
+        "settings": {"temperature": 0.7, "max_tokens": 4096}
+    })
 ])
 def test_workflow_state_transitions(provider_config, mock_openai_client, mock_anthropic_client, request):
     """Test state transitions between agents with different providers."""
-    ProviderClass, model, mock_fixture = provider_config
+    ProviderClass, model, mock_fixture, provider_args = provider_config
     mock_client = request.getfixturevalue(mock_fixture)
 
-    provider = ProviderClass(model_name=model if ProviderClass == OpenAIProvider else model)
+    provider = ProviderClass(**provider_args)
     app = create_test_workflow(provider)
 
     # Initialize workflow state with minimal data
