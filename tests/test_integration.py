@@ -4,7 +4,7 @@ Tests the complete workflow with multiple providers.
 """
 from typing import Dict, Any, TypedDict, Optional, Callable
 import pytest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 import json
 
 from src.providers.base import (
@@ -24,95 +24,118 @@ class WorkflowState(TypedDict):
     trading_decision: Optional[Dict[str, Any]]
 
 @pytest.fixture
-def mock_openai_client(monkeypatch):
+def mock_openai_client():
     """Mock OpenAI client for testing."""
-    mock_client = Mock()
-    mock_response = Mock()
-    mock_response.content = json.dumps({
-        "sentiment_analysis": {"score": 0.8, "confidence": 0.9},
-        "risk_assessment": {"level": "moderate", "limit": 1000},
-        "trading_decision": {"action": "buy", "quantity": 500}
-    })
-    mock_client.generate.return_value = [mock_response]
-    monkeypatch.setattr("src.providers.openai_provider.ChatOpenAI", lambda *args, **kwargs: mock_client)
-    return mock_client
+    with patch('src.providers.openai_provider.OpenAI') as mock:
+        mock_client = Mock()
+        mock_response = Mock()
+        mock_response.choices = [
+            Mock(message=Mock(content=json.dumps({
+                "sentiment": "positive",
+                "confidence": 0.8,
+                "analysis": "Strong buy signals detected"
+            })))
+        ]
+        mock_client.chat.completions.create.return_value = mock_response
+        mock.return_value = mock_client
+        yield mock_client
 
 @pytest.fixture
-def mock_anthropic_client(monkeypatch):
+def mock_anthropic_client():
     """Mock Anthropic client for testing."""
-    mock_client = Mock()
-    mock_response = Mock()
-    mock_response.content = json.dumps({
-        "sentiment_analysis": {"score": 0.75, "confidence": 0.85},
-        "risk_assessment": {"level": "low", "limit": 800},
-        "trading_decision": {"action": "buy", "quantity": 400}
-    })
-    mock_client.invoke.return_value = mock_response
-    monkeypatch.setattr("src.providers.anthropic_provider.ChatAnthropicMessages", lambda *args, **kwargs: mock_client)
-    return mock_client
+    with patch('src.providers.anthropic_provider.ChatAnthropicMessages') as mock:
+        mock_client = Mock()
+        mock_response = Mock()
+        mock_response.content = json.dumps({
+            "sentiment": "positive",
+            "confidence": 0.8,
+            "analysis": "Strong buy signals detected"
+        })
+        mock_client.invoke.return_value = mock_response
+        mock.return_value = mock_client
+        yield mock_client
 
 def create_test_workflow(provider: Any) -> Callable:
     """Create a test workflow with the specified provider."""
     from src.agents.specialized import (
-        SentimentAgent,
-        RiskManagementAgent,
-        PortfolioManagementAgent
+        sentiment_analysis_agent,
+        risk_management_agent,
+        portfolio_management_agent
     )
 
-    workflow = StateGraph(state_schema=WorkflowState)
-
-    # Initialize agents with provider
-    sentiment_agent = SentimentAgent(provider=provider)
-    risk_agent = RiskManagementAgent(provider=provider)
-    portfolio_agent = PortfolioManagementAgent(provider=provider)
-
-    # Define node functions
-    def sentiment_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    def sentiment_node(state: WorkflowState) -> WorkflowState:
+        """Process sentiment analysis."""
         try:
-            if mock_openai_client.return_value.generate.side_effect:
-                raise mock_openai_client.return_value.generate.side_effect
-            return {
-                **state,
-                "sentiment_analysis": {"score": 0.8, "confidence": 0.9}
+            response = provider.generate_response(
+                system_prompt="Analyze market sentiment",
+                user_prompt=f"Analyze sentiment for {state['market_data']}"
+            )
+            parsed_response = json.loads(response)
+            state["sentiment_analysis"] = {
+                "score": parsed_response["confidence"],
+                "sentiment": parsed_response["sentiment"],
+                "analysis": parsed_response["analysis"]
             }
+            return state
         except Exception as e:
-            return {
-                **state,
-                "error": str(e)
+            state["error"] = str(e)
+            return state
+
+    def risk_node(state: WorkflowState) -> WorkflowState:
+        """Process risk assessment."""
+        if "error" in state:
+            return state
+        try:
+            response = provider.generate_response(
+                system_prompt="Assess trading risk",
+                user_prompt=f"Assess risk based on {state}"
+            )
+            parsed_response = json.loads(response)
+            state["risk_assessment"] = {
+                "level": parsed_response["risk_level"],
+                "limit": parsed_response["position_limit"]
             }
+            return state
+        except Exception as e:
+            state["error"] = str(e)
+            return state
 
-    def risk_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    def portfolio_node(state: WorkflowState) -> WorkflowState:
+        """Process portfolio decisions."""
         if "error" in state:
             return state
-        return {
-            **state,
-            "risk_assessment": {"level": "moderate", "limit": 1000}
-        }
-
-    def portfolio_node(state: Dict[str, Any]) -> Dict[str, Any]:
-        if "error" in state:
+        try:
+            response = provider.generate_response(
+                system_prompt="Make trading decision",
+                user_prompt=f"Make decision based on {state}"
+            )
+            parsed_response = json.loads(response)
+            state["trading_decision"] = {
+                "action": parsed_response["action"],
+                "quantity": parsed_response["quantity"]
+            }
             return state
-        return {
-            **state,
-            "trading_decision": {"action": "buy", "quantity": 500}
-        }
+        except Exception as e:
+            state["error"] = str(e)
+            return state
 
-    # Add nodes to workflow
+    # Create workflow
+    workflow = StateGraph(WorkflowState)
+
+    # Add nodes
     workflow.add_node("sentiment", sentiment_node)
     workflow.add_node("risk", risk_node)
     workflow.add_node("portfolio", portfolio_node)
 
-    # Define edges
+    # Add edges
     workflow.add_edge("sentiment", "risk")
     workflow.add_edge("risk", "portfolio")
 
-    # Set entry and exit points
+    # Set entry and exit
     workflow.set_entry_point("sentiment")
     workflow.set_finish_point("portfolio")
 
-    # Compile workflow
-    app = workflow.compile()
-    return app
+    return workflow.compile()
 
 def validate_workflow_result(result: Dict[str, Any]) -> bool:
     """Validate workflow execution result."""
@@ -190,19 +213,19 @@ def test_workflow_error_handling(provider_config, mock_openai_client, mock_anthr
     )
 
     # Simulate API error
+    error_msg = "API Error"
     if ProviderClass == OpenAIProvider:
-        mock_openai_client.return_value.generate.side_effect = Exception("API Error")
+        mock_openai_client.chat.completions.create.side_effect = Exception(error_msg)
     else:
-        mock_anthropic_client.invoke.side_effect = Exception("API Error")
+        mock_client.invoke.side_effect = Exception(error_msg)
 
     # Execute workflow and verify error handling
     result = app.invoke(initial_state)
     assert result is not None
     assert "error" in result
-    assert "API Error" in result["error"]
-    assert "sentiment_analysis" not in result
-    assert "risk_assessment" not in result
-    assert "trading_decision" not in result
+    assert error_msg in result["error"]
+    assert result.get("sentiment_analysis") is None
+    assert result.get("trading_decision") is None
 
 @pytest.mark.parametrize("provider_config", [
     (OpenAIProvider, "gpt-4", "mock_openai_client", {"model_name": "gpt-4"}),
@@ -215,6 +238,24 @@ def test_workflow_state_transitions(provider_config, mock_openai_client, mock_an
     """Test state transitions between agents with different providers."""
     ProviderClass, model, mock_fixture, provider_args = provider_config
     mock_client = request.getfixturevalue(mock_fixture)
+
+    # Set up mock responses
+    sentiment_response = {"sentiment": "positive", "confidence": 0.8, "analysis": "Strong buy signals"}
+    risk_response = {"risk_level": "moderate", "position_limit": 1000}
+    trading_response = {"action": "buy", "quantity": 500}
+
+    if ProviderClass == OpenAIProvider:
+        mock_openai_client.chat.completions.create.side_effect = [
+            Mock(choices=[Mock(message=Mock(content=json.dumps(sentiment_response)))]),
+            Mock(choices=[Mock(message=Mock(content=json.dumps(risk_response)))]),
+            Mock(choices=[Mock(message=Mock(content=json.dumps(trading_response)))])
+        ]
+    else:
+        mock_client.invoke.side_effect = [
+            Mock(content=json.dumps(sentiment_response)),
+            Mock(content=json.dumps(risk_response)),
+            Mock(content=json.dumps(trading_response))
+        ]
 
     provider = ProviderClass(**provider_args)
     app = create_test_workflow(provider)
@@ -233,3 +274,7 @@ def test_workflow_state_transitions(provider_config, mock_openai_client, mock_an
     assert result.get("sentiment_analysis") is not None
     assert result.get("risk_assessment") is not None
     assert result.get("trading_decision") is not None
+    assert result["sentiment_analysis"]["sentiment"] == "positive"
+    assert result["sentiment_analysis"]["score"] == 0.8
+    assert result["trading_decision"]["action"] == "buy"
+    assert result["trading_decision"]["quantity"] == 500

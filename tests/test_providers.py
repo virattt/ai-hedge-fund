@@ -146,7 +146,7 @@ def test_anthropic_provider_response_generation(mock_chat_anthropic):
         model_name="claude-3-opus-20240229",
         settings={'temperature': 0.7}
     )
-    response = provider.generate("Test prompt")
+    response = provider.generate_response("System prompt", "Test prompt")
 
     assert response == "Test response"
     mock_client.invoke.assert_called_once()
@@ -165,19 +165,19 @@ def test_anthropic_provider_error_handling(mock_chat_anthropic):
     # Test authentication error
     mock_client.invoke.side_effect = Exception("authentication failed")
     with pytest.raises(ProviderAuthenticationError):
-        provider.generate("Test prompt")
+        provider.generate_response("System prompt", "Test prompt")
 
     # Test rate limit error
     mock_client.invoke.side_effect = Exception("rate limit exceeded")
     with pytest.raises(ProviderQuotaError):
-        provider.generate("Test prompt")
+        provider.generate_response("System prompt", "Test prompt")
 
     # Test connection error
     mock_client.invoke.side_effect = Exception("connection failed")
     with pytest.raises(ProviderConnectionError):
-        provider.generate("Test prompt")
+        provider.generate_response("System prompt", "Test prompt")
 
     # Test generic error
     mock_client.invoke.side_effect = Exception("unknown error")
     with pytest.raises(ModelProviderError):
-        provider.generate("Test prompt")
+        provider.generate_response("System prompt", "Test prompt")
