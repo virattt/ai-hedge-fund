@@ -7,11 +7,8 @@ from typing import Dict, Any, Optional
 import os
 import yaml
 from ..providers import (
-    ModelProvider,
-    OpenAIProvider,
-    AnthropicProvider,
-    GeminiProvider,
-    MistralProvider,
+    BaseProvider,
+    OpenAIProvider
 )
 
 class ConfigurationError(Exception):
@@ -21,17 +18,17 @@ class ConfigurationError(Exception):
 class ModelConfig:
     """Manages model configurations for different AI providers."""
 
-    def __init__(self, config_path: str):
+    def __init__(self, config_path: Optional[str] = None):
         """
         Initialize model configuration from YAML file.
 
         Args:
-            config_path: Path to YAML configuration file
+            config_path: Path to YAML configuration file (optional)
 
         Raises:
             ConfigurationError: If configuration loading or validation fails
         """
-        self.config_path = config_path
+        self.config_path = config_path or os.path.join("config", "models.yaml")
         self.config = self._load_config()
         self._validate_config()
 
@@ -107,18 +104,18 @@ class ModelConfig:
 def get_model_provider(
     provider_name: str = "openai",
     model: Optional[str] = None,
-    config_path: str = "config/models.yaml"
-) -> ModelProvider:
+    config_path: Optional[str] = None
+) -> BaseProvider:
     """
     Factory function to create model provider instance.
 
     Args:
         provider_name: Name of the provider (default: "openai")
         model: Model identifier (optional)
-        config_path: Path to configuration file
+        config_path: Path to configuration file (optional)
 
     Returns:
-        ModelProvider instance
+        BaseProvider instance
 
     Raises:
         ConfigurationError: If provider creation fails
@@ -128,16 +125,12 @@ def get_model_provider(
         provider_config = config.get_provider_config(provider_name)
         model_name = model or provider_config['default_model']
 
-        providers = {
-            "openai": OpenAIProvider,
-            "anthropic": AnthropicProvider,
-            "gemini": GeminiProvider,
-            "mistral": MistralProvider,
-        }
-
-        if provider_name not in providers:
+        if provider_name == "openai":
+            return OpenAIProvider(
+                model_name=model_name,
+                settings=provider_config.get('settings', {})
+            )
+        else:
             raise ConfigurationError(f"Unsupported provider: {provider_name}")
-
-        return providers[provider_name](model=model_name)
     except Exception as e:
         raise ConfigurationError(f"Failed to create provider {provider_name}: {str(e)}")

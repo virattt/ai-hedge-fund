@@ -14,7 +14,6 @@ from src.providers.base import (
     ProviderQuotaError
 )
 from src.providers.openai_provider import OpenAIProvider
-from src.config import get_model_provider
 
 def test_openai_provider_initialization():
     """Test OpenAI provider initialization."""
