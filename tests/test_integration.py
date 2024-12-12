@@ -26,17 +26,15 @@ class WorkflowState(TypedDict):
 @pytest.fixture
 def mock_openai_client():
     """Mock OpenAI client for testing."""
-    with patch('src.providers.openai_provider.OpenAI') as mock:
+    with patch('src.providers.openai_provider.ChatOpenAI') as mock:
         mock_client = Mock()
         mock_response = Mock()
-        mock_response.choices = [
-            Mock(message=Mock(content=json.dumps({
-                "sentiment": "positive",
-                "confidence": 0.8,
-                "analysis": "Strong buy signals detected"
-            })))
-        ]
-        mock_client.chat.completions.create.return_value = mock_response
+        mock_response.content = json.dumps({
+            "sentiment": "positive",
+            "confidence": 0.8,
+            "analysis": "Strong buy signals detected"
+        })
+        mock_client.invoke.return_value = mock_response
         mock.return_value = mock_client
         yield mock_client
 
@@ -58,68 +56,31 @@ def mock_anthropic_client():
 def create_test_workflow(provider: Any) -> Callable:
     """Create a test workflow with the specified provider."""
     from src.agents.specialized import (
-        sentiment_analysis_agent,
-        risk_management_agent,
-        portfolio_management_agent
+        SentimentAgent,
+        RiskManagementAgent,
+        PortfolioManagementAgent
     )
 
     def sentiment_node(state: WorkflowState) -> WorkflowState:
         """Process sentiment analysis."""
-        try:
-            response = provider.generate_response(
-                system_prompt="Analyze market sentiment",
-                user_prompt=f"Analyze sentiment for {state['market_data']}"
-            )
-            parsed_response = json.loads(response)
-            state["sentiment_analysis"] = {
-                "score": parsed_response["confidence"],
-                "sentiment": parsed_response["sentiment"],
-                "analysis": parsed_response["analysis"]
-            }
-            return state
-        except Exception as e:
-            state["error"] = str(e)
-            return state
+        agent = SentimentAgent(provider)
+        return agent.analyze_sentiment(state)
 
     def risk_node(state: WorkflowState) -> WorkflowState:
         """Process risk assessment."""
         if "error" in state:
             return state
-        try:
-            response = provider.generate_response(
-                system_prompt="Assess trading risk",
-                user_prompt=f"Assess risk based on {state}"
-            )
-            parsed_response = json.loads(response)
-            state["risk_assessment"] = {
-                "level": parsed_response["risk_level"],
-                "limit": parsed_response["position_limit"]
-            }
-            return state
-        except Exception as e:
-            state["error"] = str(e)
-            return state
+        agent = RiskManagementAgent(provider)
+        return agent.evaluate_risk(state)
 
     def portfolio_node(state: WorkflowState) -> WorkflowState:
         """Process portfolio decisions."""
         if "error" in state:
             return state
-        try:
-            response = provider.generate_response(
-                system_prompt="Make trading decision",
-                user_prompt=f"Make decision based on {state}"
-            )
-            parsed_response = json.loads(response)
-            state["trading_decision"] = {
-                "action": parsed_response["action"],
-                "quantity": parsed_response["quantity"]
-            }
-            return state
-        except Exception as e:
-            state["error"] = str(e)
-            return state
+        agent = PortfolioManagementAgent(provider)
+        return agent.make_decision(state)
 
-    # Create workflow
+    # Create workflow graph
     workflow = StateGraph(WorkflowState)
 
     # Add nodes
@@ -133,7 +94,7 @@ def create_test_workflow(provider: Any) -> Callable:
 
     # Set entry and exit
     workflow.set_entry_point("sentiment")
-    workflow.set_finish_point("portfolio")
+    workflow.set_exit_point("portfolio")
 
     return workflow.compile()
 
