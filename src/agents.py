@@ -1,3 +1,7 @@
+"""
+AI-powered hedge fund trading system with multi-agent workflow.
+"""
+
 import argparse
 import json
 import operator
@@ -6,15 +10,13 @@ from typing import Annotated, Any, Dict, Sequence, TypedDict
 
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai.chat_models import ChatOpenAI
 from langgraph.graph import END, StateGraph
 
 from src.tools import (calculate_bollinger_bands, calculate_macd,
-                       calculate_obv, calculate_rsi, get_financial_metrics,
-                       get_insider_trades, get_prices, prices_to_df)
-
-llm = ChatOpenAI(model="gpt-4o")
-
+                      calculate_obv, calculate_rsi, get_financial_metrics,
+                      get_insider_trades, get_prices, prices_to_df)
+from src.agents.specialized import SentimentAgent, RiskManagementAgent, PortfolioManagementAgent
+from src.config import get_model_provider
 
 def merge_dicts(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
     return {**a, **b}
@@ -357,51 +359,9 @@ def sentiment_agent(state: AgentState):
     insider_trades = data["insider_trades"]
     show_reasoning = state["metadata"]["show_reasoning"]
 
-    # Create the prompt template
-    template = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                """
-                You are a market sentiment analyst.
-                Your job is to analyze the insider trades of a company and provide a sentiment analysis.
-                The insider trades are a list of transactions made by company insiders.
-                - If the insider is buying, the sentiment may be bullish. 
-                - If the insider is selling, the sentiment may be bearish.
-                - If the insider is neutral, the sentiment may be neutral.
-                The sentiment is amplified if the insider is buying or selling a large amount of shares.
-                Also, the sentiment is amplified if the insider is a high-level executive (e.g. CEO, CFO, etc.) or board member.
-                For each insider trade, provide the following in your output (as a JSON):
-                "sentiment": <bullish | bearish | neutral>,
-                "reasoning": <concise explanation of the decision>
-                """,
-            ),
-            (
-                "human",
-                """
-                Based on the following insider trades, provide your sentiment analysis.
-                {insider_trades}
-
-                Only include the sentiment and reasoning in your JSON output.  Do not include any JSON markdown.
-                """,
-            ),
-        ]
-    )
-
-    # Generate the prompt
-    prompt = template.invoke({"insider_trades": insider_trades})
-
-    # Invoke the LLM
-    result = llm.invoke(prompt)
-
-    # Extract the sentiment and reasoning from the result, safely
-    try:
-        message_content = json.loads(result.content)
-    except json.JSONDecodeError:
-        message_content = {
-            "sentiment": "neutral",
-            "reasoning": "Unable to parse JSON output of market sentiment analysis",
-        }
+    # Create sentiment agent with default provider
+    agent = SentimentAgent()
+    message_content = agent.analyze_sentiment(insider_trades)
 
     # Create the market sentiment message
     message = HumanMessage(
@@ -418,14 +378,13 @@ def sentiment_agent(state: AgentState):
         "data": data,
     }
 
-
 ##### Risk Management Agent #####
 def risk_management_agent(state: AgentState):
     """Evaluates portfolio risk and sets position limits"""
     show_reasoning = state["metadata"]["show_reasoning"]
     portfolio = state["data"]["portfolio"]
 
-    # Find the quant message by looking for the message with name "quant_agent"
+    # Get agent messages
     quant_message = next(msg for msg in state["messages"] if msg.name == "quant_agent")
     fundamentals_message = next(
         msg for msg in state["messages"] if msg.name == "fundamentals_agent"
@@ -433,63 +392,34 @@ def risk_management_agent(state: AgentState):
     sentiment_message = next(
         msg for msg in state["messages"] if msg.name == "sentiment_agent"
     )
-    # Create the prompt template
-    template = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                """You are a risk management specialist.
-                Your job is to take a look at the trading analysis and
-                evaluate portfolio exposure and recommend position sizing.
-                Provide the following in your output (as a JSON):
-                "max_position_size": <float greater than 0>,
-                "risk_score": <integer between 1 and 10>,
-                "trading_action": <buy | sell | hold>,
-                "reasoning": <concise explanation of the decision>
-                """,
-            ),
-            (
-                "human",
-                """Based on the trading analysis below, provide your risk assessment.
 
-                Quant Analysis Trading Signal: {quant_message}
-                Fundamental Analysis Trading Signal: {fundamentals_message}
-                Sentiment Analysis Trading Signal: {sentiment_message}
-                Here is the current portfolio:
-                Portfolio:
-                Cash: {portfolio_cash}
-                Current Position: {portfolio_stock} shares
-                
-                Only include the max position size, risk score, trading action, and reasoning in your JSON output.  Do not include any JSON markdown.
-                """,
-            ),
-        ]
+    # Create risk management agent with default provider
+    agent = RiskManagementAgent()
+
+    # Parse message contents
+    quant_signal = eval(quant_message.content)
+    fundamental_signal = eval(fundamentals_message.content)
+    sentiment_signal = eval(sentiment_message.content)
+
+    # Generate risk assessment
+    result = agent.evaluate_risk(
+        quant_signal,
+        fundamental_signal,
+        sentiment_signal,
+        portfolio
     )
 
-    # Generate the prompt
-    prompt = template.invoke(
-        {
-            "quant_message": quant_message.content,
-            "fundamentals_message": fundamentals_message.content,
-            "sentiment_message": sentiment_message.content,
-            "portfolio_cash": f"{portfolio['cash']:.2f}",
-            "portfolio_stock": portfolio["stock"],
-        }
-    )
-
-    # Invoke the LLM
-    result = llm.invoke(prompt)
+    # Create message
     message = HumanMessage(
-        content=result.content,
+        content=str(result),
         name="risk_management_agent",
     )
 
     # Print the decision if the flag is set
     if show_reasoning:
-        show_agent_reasoning(message.content, "Risk Management Agent")
+        show_agent_reasoning(result, "Risk Management Agent")
 
     return {"messages": state["messages"] + [message]}
-
 
 ##### Portfolio Management Agent #####
 def portfolio_management_agent(state: AgentState):
@@ -497,7 +427,7 @@ def portfolio_management_agent(state: AgentState):
     show_reasoning = state["metadata"]["show_reasoning"]
     portfolio = state["data"]["portfolio"]
 
-    # Get the quant agent, fundamentals agent, and risk management agent messages
+    # Get agent messages
     quant_message = next(msg for msg in state["messages"] if msg.name == "quant_agent")
     fundamentals_message = next(
         msg for msg in state["messages"] if msg.name == "fundamentals_agent"
@@ -509,72 +439,35 @@ def portfolio_management_agent(state: AgentState):
         msg for msg in state["messages"] if msg.name == "risk_management_agent"
     )
 
-    # Create the prompt template
-    template = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                """You are a portfolio manager making final trading decisions.
-                Your job is to make a trading decision based on the team's analysis.
-                Provide the following in your output:
-                - "action": "buy" | "sell" | "hold",
-                - "quantity": <positive integer>
-                - "reasoning": <concise explanation of the decision>
-                Only buy if you have available cash.
-                The quantity that you buy must be less than or equal to the max position size.
-                Only sell if you have shares in the portfolio to sell.
-                The quantity that you sell must be less than or equal to the current position.""",
-            ),
-            (
-                "human",
-                """Based on the team's analysis below, make your trading decision.
+    # Create portfolio management agent with default provider
+    agent = PortfolioManagementAgent()
 
-                Quant Analysis Trading Signal: {quant_message}
-                Fundamental Analysis Trading Signal: {fundamentals_message}
-                Sentiment Analysis Trading Signal: {sentiment_message}
-                Risk Management Trading Signal: {risk_message}
+    # Parse message contents
+    quant_signal = eval(quant_message.content)
+    fundamental_signal = eval(fundamentals_message.content)
+    sentiment_signal = eval(sentiment_message.content)
+    risk_signal = eval(risk_message.content)
 
-                Here is the current portfolio:
-                Portfolio:
-                Cash: {portfolio_cash}
-                Current Position: {portfolio_stock} shares
-
-                Only include the action, quantity, and reasoning in your output as JSON.  Do not include any JSON markdown.
-
-                Remember, the action must be either buy, sell, or hold.
-                You can only buy if you have available cash.
-                You can only sell if you have shares in the portfolio to sell.
-                """,
-            ),
-        ]
+    # Generate trading decision
+    result = agent.make_decision(
+        quant_signal,
+        fundamental_signal,
+        sentiment_signal,
+        risk_signal,
+        portfolio
     )
 
-    # Generate the prompt
-    prompt = template.invoke(
-        {
-            "quant_message": quant_message.content,
-            "fundamentals_message": fundamentals_message.content,
-            "sentiment_message": sentiment_message.content,
-            "risk_message": risk_message.content,
-            "portfolio_cash": f"{portfolio['cash']:.2f}",
-            "portfolio_stock": portfolio["stock"],
-        }
-    )
-    # Invoke the LLM
-    result = llm.invoke(prompt)
-
-    # Create the portfolio management message
+    # Create message
     message = HumanMessage(
-        content=result.content,
+        content=str(result),
         name="portfolio_management",
     )
 
     # Print the decision if the flag is set
     if show_reasoning:
-        show_agent_reasoning(message.content, "Portfolio Management Agent")
+        show_agent_reasoning(result, "Portfolio Management Agent")
 
     return {"messages": state["messages"] + [message]}
-
 
 def show_agent_reasoning(output, agent_name):
     print(f"\n{'=' * 10} {agent_name.center(28)} {'=' * 10}")
