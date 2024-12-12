@@ -2,156 +2,139 @@
 Specialized agent implementations that inherit from BaseAgent.
 """
 
-from typing import Dict, Any, Optional, List
-from ..providers import ModelProvider
-from .base import BaseAgent
-from langchain_core.messages import HumanMessage
+from typing import Dict, Any
 import json
+from .base import BaseAgent
+from ..providers import BaseProvider
 
 class SentimentAgent(BaseAgent):
     """Analyzes market sentiment using configurable AI providers."""
 
-    def analyze_sentiment(self, insider_trades: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def analyze_sentiment(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Analyze sentiment from insider trades.
+        Analyze sentiment from market data and insider trades.
 
         Args:
-            insider_trades: List of insider trading data
+            state: Current workflow state containing market data
 
         Returns:
-            Dict containing sentiment analysis
+            Updated state with sentiment analysis
         """
         system_prompt = """
         You are a market sentiment analyst.
-        Your job is to analyze the insider trades of a company and provide a sentiment analysis.
-        The insider trades are a list of transactions made by company insiders.
-        - If the insider is buying, the sentiment may be bullish.
-        - If the insider is selling, the sentiment may be bearish.
-        - If the insider is neutral, the sentiment may be neutral.
-        The sentiment is amplified if the insider is buying or selling a large amount of shares.
-        Also, the sentiment is amplified if the insider is a high-level executive (e.g. CEO, CFO, etc.) or board member.
-        For each insider trade, provide the following in your output (as a JSON):
-        "sentiment": <bullish | bearish | neutral>,
-        "reasoning": <concise explanation of the decision>
+        Analyze the market data and insider trades to provide sentiment analysis.
+        Return your analysis as JSON with the following fields:
+        - sentiment_score: float between -1 (bearish) and 1 (bullish)
+        - confidence: float between 0 and 1
+        - reasoning: string explaining the analysis
         """
 
         user_prompt = f"""
-        Based on the following insider trades, provide your sentiment analysis.
-        {insider_trades}
-
-        Only include the sentiment and reasoning in your JSON output. Do not include any JSON markdown.
+        Analyze the following market data and insider trades:
+        Market Data: {state.get('market_data', {})}
         """
 
         try:
-            result = self.generate_response(system_prompt, user_prompt)
-            return json.loads(result)
-        except json.JSONDecodeError:
-            return {
-                "sentiment": "neutral",
-                "reasoning": "Unable to parse JSON output of market sentiment analysis",
+            response = self.generate_response(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt
+            )
+            analysis = self.validate_response(response)
+            state['sentiment_analysis'] = analysis
+            return state
+        except Exception as e:
+            state['sentiment_analysis'] = {
+                'sentiment_score': 0,
+                'confidence': 0,
+                'reasoning': f'Error analyzing sentiment: {str(e)}'
             }
+            return state
 
 class RiskManagementAgent(BaseAgent):
     """Evaluates portfolio risk using configurable AI providers."""
 
-    def evaluate_risk(
-        self,
-        quant_signal: Dict[str, Any],
-        fundamental_signal: Dict[str, Any],
-        sentiment_signal: Dict[str, Any],
-        portfolio: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def evaluate_risk(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Evaluate portfolio risk and recommend position sizing.
+        Evaluate trading risk based on market conditions.
 
         Args:
-            quant_signal: Signal from quantitative analysis
-            fundamental_signal: Signal from fundamental analysis
-            sentiment_signal: Signal from sentiment analysis
-            portfolio: Current portfolio state
+            state: Current workflow state with market data and sentiment
 
         Returns:
-            Dict containing risk assessment
+            Updated state with risk assessment
         """
-        system_prompt = """You are a risk management specialist.
-        Your job is to take a look at the trading analysis and
-        evaluate portfolio exposure and recommend position sizing.
-        Provide the following in your output (as a JSON):
-        "max_position_size": <float greater than 0>,
-        "risk_score": <integer between 1 and 10>,
-        "trading_action": <buy | sell | hold>,
-        "reasoning": <concise explanation of the decision>
-        """
-
-        user_prompt = f"""Based on the trading analysis below, provide your risk assessment.
-
-        Quant Analysis Trading Signal: {quant_signal}
-        Fundamental Analysis Trading Signal: {fundamental_signal}
-        Sentiment Analysis Trading Signal: {sentiment_signal}
-        Here is the current portfolio:
-        Portfolio:
-        Cash: {portfolio['cash']:.2f}
-        Current Position: {portfolio['stock']} shares
-
-        Only include the max position size, risk score, trading action, and reasoning in your JSON output. Do not include any JSON markdown.
+        system_prompt = """
+        You are a risk management specialist.
+        Evaluate trading risk based on market data and sentiment analysis.
+        Return your assessment as JSON with the following fields:
+        - risk_level: string (low, moderate, high)
+        - position_limit: integer (maximum position size)
+        - reasoning: string explaining the assessment
         """
 
-        result = self.generate_response(system_prompt, user_prompt)
-        return json.loads(result)
+        user_prompt = f"""
+        Evaluate risk based on:
+        Market Data: {state.get('market_data', {})}
+        Sentiment Analysis: {state.get('sentiment_analysis', {})}
+        """
+
+        try:
+            response = self.generate_response(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt
+            )
+            assessment = self.validate_response(response)
+            state['risk_assessment'] = assessment
+            return state
+        except Exception as e:
+            state['risk_assessment'] = {
+                'risk_level': 'high',
+                'position_limit': 0,
+                'reasoning': f'Error evaluating risk: {str(e)}'
+            }
+            return state
 
 class PortfolioManagementAgent(BaseAgent):
     """Makes final trading decisions using configurable AI providers."""
 
-    def make_decision(
-        self,
-        quant_signal: Dict[str, Any],
-        fundamental_signal: Dict[str, Any],
-        sentiment_signal: Dict[str, Any],
-        risk_signal: Dict[str, Any],
-        portfolio: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def make_decision(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Make final trading decision based on all signals.
 
         Args:
-            quant_signal: Signal from quantitative analysis
-            fundamental_signal: Signal from fundamental analysis
-            sentiment_signal: Signal from sentiment analysis
-            risk_signal: Signal from risk management
-            portfolio: Current portfolio state
+            state: Current workflow state with all analyses
 
         Returns:
-            Dict containing trading decision
+            Updated state with trading decision
         """
-        system_prompt = """You are a portfolio manager making final trading decisions.
-        Your job is to make a trading decision based on the team's analysis.
-        Provide the following in your output:
-        - "action": "buy" | "sell" | "hold",
-        - "quantity": <positive integer>
-        - "reasoning": <concise explanation of the decision>
-        Only buy if you have available cash.
-        The quantity that you buy must be less than or equal to the max position size.
-        Only sell if you have shares in the portfolio to sell.
-        The quantity that you sell must be less than or equal to the current position."""
-
-        user_prompt = f"""Based on the team's analysis below, make your trading decision.
-
-        Quant Analysis Trading Signal: {quant_signal}
-        Fundamental Analysis Trading Signal: {fundamental_signal}
-        Sentiment Analysis Trading Signal: {sentiment_signal}
-        Risk Management Trading Signal: {risk_signal}
-
-        Here is the current portfolio:
-        Portfolio:
-        Cash: {portfolio['cash']:.2f}
-        Current Position: {portfolio['stock']} shares
-
-        Only include the action, quantity, and reasoning in your output as JSON. Do not include any JSON markdown.
-
-        Remember, the action must be either buy, sell, or hold.
-        You can only buy if you have available cash.
-        You can only sell if you have shares in the portfolio to sell.
+        system_prompt = """
+        You are a portfolio manager making final trading decisions.
+        Make a decision based on market data, sentiment, and risk assessment.
+        Return your decision as JSON with the following fields:
+        - action: string (buy, sell, hold)
+        - quantity: integer
+        - reasoning: string explaining the decision
         """
 
-        result = self.generate_response(system_prompt, user_prompt)
-        return json.loads(result)
+        user_prompt = f"""
+        Make trading decision based on:
+        Market Data: {state.get('market_data', {})}
+        Sentiment Analysis: {state.get('sentiment_analysis', {})}
+        Risk Assessment: {state.get('risk_assessment', {})}
+        """
+
+        try:
+            response = self.generate_response(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt
+            )
+            decision = self.validate_response(response)
+            state['trading_decision'] = decision
+            return state
+        except Exception as e:
+            state['trading_decision'] = {
+                'action': 'hold',
+                'quantity': 0,
+                'reasoning': f'Error making decision: {str(e)}'
+            }
+            return state
