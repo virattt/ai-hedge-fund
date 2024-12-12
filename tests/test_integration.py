@@ -1,6 +1,6 @@
 """
 Integration tests for AI hedge fund system.
-Tests the complete workflow with OpenAI provider.
+Tests the complete workflow with multiple providers.
 """
 from typing import Dict, Any, TypedDict, Optional, Callable
 import pytest
@@ -13,6 +13,7 @@ from src.providers.base import (
     ProviderConnectionError
 )
 from src.providers.openai_provider import OpenAIProvider
+from src.providers.anthropic_provider import AnthropicProvider
 from langgraph.graph import StateGraph
 
 class WorkflowState(TypedDict):
@@ -32,8 +33,22 @@ def mock_openai_client(monkeypatch):
         "risk_assessment": {"level": "moderate", "limit": 1000},
         "trading_decision": {"action": "buy", "quantity": 500}
     })
-    mock_client.generate.return_value = [mock_response]  # Return list of responses
+    mock_client.generate.return_value = [mock_response]
     monkeypatch.setattr("src.providers.openai_provider.ChatOpenAI", lambda *args, **kwargs: mock_client)
+    return mock_client
+
+@pytest.fixture
+def mock_anthropic_client(monkeypatch):
+    """Mock Anthropic client for testing."""
+    mock_client = Mock()
+    mock_response = Mock()
+    mock_response.content = json.dumps({
+        "sentiment_analysis": {"score": 0.75, "confidence": 0.85},
+        "risk_assessment": {"level": "low", "limit": 800},
+        "trading_decision": {"action": "buy", "quantity": 400}
+    })
+    mock_client.invoke.return_value = mock_response
+    monkeypatch.setattr("src.providers.anthropic_provider.ChatAnthropicMessages", lambda *args, **kwargs: mock_client)
     return mock_client
 
 def create_test_workflow(provider: Any) -> Callable:
@@ -117,9 +132,16 @@ def mock_market_data():
         ]
     }
 
-def test_workflow_with_openai_provider(mock_openai_client, mock_market_data):
-    """Test complete workflow with OpenAI provider."""
-    provider = OpenAIProvider(model_name="gpt-4")
+@pytest.mark.parametrize("provider_config", [
+    (OpenAIProvider, "gpt-4", "mock_openai_client"),
+    (AnthropicProvider, "claude-3-opus-20240229", "mock_anthropic_client")
+])
+def test_workflow_execution(provider_config, mock_openai_client, mock_anthropic_client, mock_market_data, request):
+    """Test complete workflow with different providers."""
+    ProviderClass, model, mock_fixture = provider_config
+    mock_client = request.getfixturevalue(mock_fixture)
+
+    provider = ProviderClass(model_name=model if ProviderClass == OpenAIProvider else model)
     app = create_test_workflow(provider)
 
     # Initialize workflow state
@@ -139,11 +161,18 @@ def test_workflow_with_openai_provider(mock_openai_client, mock_market_data):
         assert "trading_decision" in result
         validate_workflow_result(result)
     except Exception as e:
-        pytest.fail(f"Workflow execution failed: {str(e)}")
+        pytest.fail(f"Workflow execution failed with {provider.__class__.__name__}: {str(e)}")
 
-def test_workflow_error_handling(mock_openai_client, mock_market_data):
-    """Test error handling in workflow execution."""
-    provider = OpenAIProvider(model_name="gpt-4")
+@pytest.mark.parametrize("provider_config", [
+    (OpenAIProvider, "gpt-4", "mock_openai_client"),
+    (AnthropicProvider, "claude-3-opus-20240229", "mock_anthropic_client")
+])
+def test_workflow_error_handling(provider_config, mock_openai_client, mock_anthropic_client, mock_market_data, request):
+    """Test error handling in workflow execution with different providers."""
+    ProviderClass, model, mock_fixture = provider_config
+    mock_client = request.getfixturevalue(mock_fixture)
+
+    provider = ProviderClass(model_name=model if ProviderClass == OpenAIProvider else model)
     app = create_test_workflow(provider)
 
     # Initialize workflow state
@@ -154,8 +183,11 @@ def test_workflow_error_handling(mock_openai_client, mock_market_data):
         trading_decision=None
     )
 
-    # Execute workflow with error simulation
-    mock_openai_client.return_value.generate.side_effect = Exception("API Error")
+    # Simulate API error
+    if ProviderClass == OpenAIProvider:
+        mock_openai_client.return_value.generate.side_effect = Exception("API Error")
+    else:
+        mock_anthropic_client.invoke.side_effect = Exception("API Error")
 
     # Execute workflow and verify error handling
     result = app.invoke(initial_state)
@@ -166,9 +198,16 @@ def test_workflow_error_handling(mock_openai_client, mock_market_data):
     assert "risk_assessment" not in result
     assert "trading_decision" not in result
 
-def test_workflow_state_transitions(mock_openai_client):
-    """Test state transitions between agents in the workflow."""
-    provider = OpenAIProvider(model_name="gpt-4")
+@pytest.mark.parametrize("provider_config", [
+    (OpenAIProvider, "gpt-4", "mock_openai_client"),
+    (AnthropicProvider, "claude-3-opus-20240229", "mock_anthropic_client")
+])
+def test_workflow_state_transitions(provider_config, mock_openai_client, mock_anthropic_client, request):
+    """Test state transitions between agents with different providers."""
+    ProviderClass, model, mock_fixture = provider_config
+    mock_client = request.getfixturevalue(mock_fixture)
+
+    provider = ProviderClass(model_name=model if ProviderClass == OpenAIProvider else model)
     app = create_test_workflow(provider)
 
     # Initialize workflow state with minimal data
