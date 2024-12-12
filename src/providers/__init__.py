@@ -10,6 +10,13 @@ from .base import (
     ProviderQuotaError
 )
 from .openai_provider import OpenAIProvider
+from .anthropic_provider import AnthropicProvider
+
+# Provider implementation mapping
+PROVIDER_MAP = {
+    'openai': OpenAIProvider,
+    'anthropic': AnthropicProvider,
+}
 
 __all__ = [
     'BaseProvider',
@@ -18,5 +25,7 @@ __all__ = [
     'ProviderConnectionError',
     'ProviderAuthenticationError',
     'ProviderQuotaError',
-    'OpenAIProvider'
+    'OpenAIProvider',
+    'AnthropicProvider',
+    'PROVIDER_MAP'
 ]
