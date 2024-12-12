@@ -12,7 +12,6 @@ packages = [
 python = "^3.9"
 langchain = "0.3.0"
 langchain-openai = "0.2.11"
-langchain-anthropic = "^0.1.1"
 langgraph = "0.2.56"
 pandas = "^2.1.0"
 numpy = "^1.24.0"

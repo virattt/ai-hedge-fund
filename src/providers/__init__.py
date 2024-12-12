@@ -10,7 +10,6 @@ from .base import (
     ProviderQuotaError
 )
 from .openai_provider import OpenAIProvider
-from .anthropic_provider import AnthropicProvider
 
 __all__ = [
     'BaseProvider',
@@ -19,6 +18,5 @@ __all__ = [
     'ProviderConnectionError',
     'ProviderAuthenticationError',
     'ProviderQuotaError',
-    'OpenAIProvider',
-    'AnthropicProvider'
+    'OpenAIProvider'
 ]
