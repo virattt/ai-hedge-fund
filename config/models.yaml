@@ -1,0 +1,19 @@
+providers:
+  openai:
+    default_model: gpt-4
+    models:
+      - gpt-4
+      - gpt-4-turbo
+    settings:
+      temperature: 0.7
+      max_tokens: 2048
+      top_p: 1.0
+  anthropic:
+    default_model: claude-3-opus-20240229
+    models:
+      - claude-3-opus-20240229
+      - claude-3-sonnet-20240229
+    settings:
+      temperature: 0.7
+      max_tokens: 4096
+      top_p: 1.0
