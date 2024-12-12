@@ -28,13 +28,3 @@ providers:
       temperature: 0.7
       max_tokens: 2048
       top_p: 1.0
-
-  mistral:
-    default_model: mistral-large
-    models:
-      - mistral-large
-      - mistral-medium
-    settings:
-      temperature: 0.7
-      max_tokens: 2048
-      top_p: 1.0
