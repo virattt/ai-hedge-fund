@@ -40,6 +40,9 @@ class SentimentAgent(BaseAgent):
                 user_prompt=user_prompt
             )
             analysis = self.validate_response(response)
+            if "error" in analysis:
+                state["error"] = analysis["error"]
+                return state
             state['sentiment_analysis'] = analysis
             return state
         except Exception as e:
@@ -84,6 +87,9 @@ class RiskManagementAgent(BaseAgent):
                 user_prompt=user_prompt
             )
             assessment = self.validate_response(response)
+            if "error" in assessment:
+                state["error"] = assessment["error"]
+                return state
             state['risk_assessment'] = assessment
             return state
         except Exception as e:
@@ -129,6 +135,9 @@ class PortfolioManagementAgent(BaseAgent):
                 user_prompt=user_prompt
             )
             decision = self.validate_response(response)
+            if "error" in decision:
+                state["error"] = decision["error"]
+                return state
             state['trading_decision'] = decision
             return state
         except Exception as e:

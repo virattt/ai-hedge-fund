@@ -94,7 +94,7 @@ def create_test_workflow(provider: Any) -> Callable:
 
     # Set entry and exit
     workflow.set_entry_point("sentiment")
-    workflow.set_exit_point("portfolio")
+    workflow.set_finish_point("portfolio")
 
     return workflow.compile()
 
@@ -146,7 +146,9 @@ def test_workflow_execution(provider_config, mock_openai_client, mock_anthropic_
         assert "sentiment_analysis" in result
         assert "risk_assessment" in result
         assert "trading_decision" in result
-        validate_workflow_result(result)
+        assert result["sentiment_analysis"]["sentiment_score"] == 0.8
+        assert result["risk_assessment"]["risk_level"] == "moderate"
+        assert result["trading_decision"]["action"] == "buy"
     except Exception as e:
         pytest.fail(f"Workflow execution failed with {provider.__class__.__name__}: {str(e)}")
 
@@ -183,10 +185,21 @@ def test_workflow_error_handling(provider_config, mock_openai_client, mock_anthr
     # Execute workflow and verify error handling
     result = app.invoke(initial_state)
     assert result is not None
-    assert "error" in result
-    assert error_msg in result["error"]
-    assert result.get("sentiment_analysis") is None
-    assert result.get("trading_decision") is None
+
+    # Verify error state propagation in sentiment analysis
+    assert "Error analyzing sentiment" in str(result["sentiment_analysis"]["reasoning"])
+    assert result["sentiment_analysis"]["confidence"] == 0
+    assert result["sentiment_analysis"]["sentiment_score"] == 0
+
+    # Verify error propagation to risk assessment
+    assert "Error evaluating risk" in str(result["risk_assessment"]["reasoning"])
+    assert result["risk_assessment"]["risk_level"] == "high"
+    assert result["risk_assessment"]["position_limit"] == 0
+
+    # Verify error propagation to trading decision
+    assert "Error making decision" in str(result["trading_decision"]["reasoning"])
+    assert result["trading_decision"]["action"] == "hold"
+    assert result["trading_decision"]["quantity"] == 0
 
 @pytest.mark.parametrize("provider_config", [
     (OpenAIProvider, "gpt-4", "mock_openai_client", {"model_name": "gpt-4"}),
@@ -201,9 +214,21 @@ def test_workflow_state_transitions(provider_config, mock_openai_client, mock_an
     mock_client = request.getfixturevalue(mock_fixture)
 
     # Set up mock responses
-    sentiment_response = {"sentiment": "positive", "confidence": 0.8, "analysis": "Strong buy signals"}
-    risk_response = {"risk_level": "moderate", "position_limit": 1000}
-    trading_response = {"action": "buy", "quantity": 500}
+    sentiment_response = {
+        "sentiment_score": 0.8,
+        "confidence": 0.8,
+        "reasoning": "Strong buy signals detected"
+    }
+    risk_response = {
+        "risk_level": "moderate",
+        "position_limit": 1000,
+        "reasoning": "Moderate risk based on market conditions"
+    }
+    trading_response = {
+        "action": "buy",
+        "quantity": 500,
+        "reasoning": "Strong buy recommendation based on signals"
+    }
 
     if ProviderClass == OpenAIProvider:
         mock_openai_client.chat.completions.create.side_effect = [
@@ -235,7 +260,15 @@ def test_workflow_state_transitions(provider_config, mock_openai_client, mock_an
     assert result.get("sentiment_analysis") is not None
     assert result.get("risk_assessment") is not None
     assert result.get("trading_decision") is not None
-    assert result["sentiment_analysis"]["sentiment"] == "positive"
-    assert result["sentiment_analysis"]["score"] == 0.8
+
+    # Verify sentiment analysis
+    assert result["sentiment_analysis"]["sentiment_score"] == 0.8
+    assert result["sentiment_analysis"]["confidence"] == 0.8
+
+    # Verify risk assessment
+    assert result["risk_assessment"]["risk_level"] == "moderate"
+    assert result["risk_assessment"]["position_limit"] == 1000
+
+    # Verify trading decision
     assert result["trading_decision"]["action"] == "buy"
     assert result["trading_decision"]["quantity"] == 500
