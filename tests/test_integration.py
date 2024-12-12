@@ -14,6 +14,14 @@ from src.providers.openai_provider import OpenAIProvider
 from langgraph.graph import StateGraph
 from typing import Dict, Any
 
+@pytest.fixture
+def mock_openai_client():
+    """Fixture for mocked OpenAI client."""
+    with patch('src.providers.openai_provider.ChatOpenAI') as mock_chat_openai:
+        mock_client = Mock()
+        mock_chat_openai.return_value = mock_client
+        yield mock_client
+
 def create_test_workflow(provider: Any) -> StateGraph:
     """Create a test workflow with the specified provider."""
     from src.agents.specialized import (
@@ -58,40 +66,38 @@ def mock_market_data():
         ]
     }
 
-def test_workflow_with_openai_provider(mock_market_data):
+def test_workflow_with_openai_provider(mock_openai_client, mock_market_data):
     """Test complete workflow with OpenAI provider."""
     provider = OpenAIProvider(model_name="gpt-4")
     workflow = create_test_workflow(provider)
 
-    with patch('src.providers.openai_provider.OpenAIProvider.generate_response') as mock_generate:
-        mock_generate.side_effect = [
-            '{"sentiment_score": 0.8, "confidence": 0.9}',
-            '{"risk_level": "moderate", "position_limit": 1000}',
-            '{"action": "buy", "quantity": 500, "price_limit": 155.0}'
-        ]
+    mock_openai_client.invoke.side_effect = [
+        Mock(content='{"sentiment_score": 0.8, "confidence": 0.9}'),
+        Mock(content='{"risk_level": "moderate", "position_limit": 1000}'),
+        Mock(content='{"action": "buy", "quantity": 500, "price_limit": 155.0}')
+    ]
 
-        result = workflow.run({"market_data": mock_market_data})
-        assert validate_workflow_result(result)
-        assert "trading_decision" in result
-        assert result["risk_level"] == "moderate"
+    result = workflow.run({"market_data": mock_market_data})
+    assert validate_workflow_result(result)
+    assert "trading_decision" in result
+    assert result["risk_level"] == "moderate"
 
-def test_workflow_error_handling(mock_market_data):
+def test_workflow_error_handling(mock_openai_client, mock_market_data):
     """Test error handling in workflow execution."""
     provider = OpenAIProvider(model_name="gpt-4")
     workflow = create_test_workflow(provider)
 
-    with patch('src.providers.openai_provider.OpenAIProvider.generate_response') as mock_generate:
-        mock_generate.side_effect = [
-            ProviderQuotaError("Rate limit exceeded", provider="OpenAI"),
-            ProviderConnectionError("Connection failed", provider="OpenAI"),
-            ModelProviderError("Unknown error", provider="OpenAI")
-        ]
+    mock_openai_client.invoke.side_effect = [
+        Exception("Rate limit exceeded"),
+        Exception("Connection failed"),
+        Exception("Unknown error")
+    ]
 
-        for _ in range(3):
-            with pytest.raises((ProviderQuotaError, ProviderConnectionError, ModelProviderError)):
-                workflow.run({"market_data": mock_market_data})
+    for expected_error in [ProviderQuotaError, ProviderConnectionError, ModelProviderError]:
+        with pytest.raises(expected_error):
+            workflow.run({"market_data": mock_market_data})
 
-def test_workflow_state_transitions():
+def test_workflow_state_transitions(mock_openai_client):
     """Test state transitions between agents in the workflow."""
     provider = OpenAIProvider(model_name="gpt-4")
     workflow = create_test_workflow(provider)
