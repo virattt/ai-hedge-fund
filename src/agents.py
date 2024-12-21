@@ -402,6 +402,7 @@ def risk_management_agent(state: AgentState):
     data = state["data"]
 
     prices_df = prices_to_df(data["prices"])
+    current_price = prices_df['close'].iloc[-1]
 
     # Fetch messages from other agents
     quant_message = next(msg for msg in state["messages"] if msg.name == "quant_agent")
@@ -416,7 +417,6 @@ def risk_management_agent(state: AgentState):
         fundamental_signals = ast.literal_eval(fundamentals_message.content)
         technical_signals = ast.literal_eval(quant_message.content)
         sentiment_signals = ast.literal_eval(sentiment_message.content)
-
 
     print(f"fundamental_signals: {fundamental_signals}")
     print(f"technical_signals: {technical_signals}")
@@ -459,7 +459,7 @@ def risk_management_agent(state: AgentState):
 
     # 3. Position Size Limits
     # Consider total portfolio value, not just cash
-    current_stock_value = portfolio['stock'] * prices_df['close'].iloc[-1]
+    current_stock_value = portfolio['stock'] * current_price
     total_portfolio_value = portfolio['cash'] + current_stock_value
 
     base_position_size = total_portfolio_value * 0.25  # Start with 25% max position of total portfolio
@@ -474,7 +474,30 @@ def risk_management_agent(state: AgentState):
         # Keep base size for low risk
         max_position_size = base_position_size
 
-    # 4. Stress Testing
+    # 4. Stop-Loss and Take-Profit Check
+    stop_loss_triggered = False
+    take_profit_triggered = False
+    price_action_signal = "hold"
+    stop_loss_price = None
+    take_profit_price = None
+
+    if portfolio['stock'] > 0 and portfolio['entry_price'] is not None:
+        # Calculate current return
+        current_return = (current_price - portfolio['entry_price']) / portfolio['entry_price']
+        
+        # Check stop-loss
+        if current_return <= -portfolio['stop_loss']:
+            stop_loss_triggered = True
+            price_action_signal = "sell"
+            stop_loss_price = portfolio['entry_price'] * (1 - portfolio['stop_loss'])
+        
+        # Check take-profit
+        elif current_return >= portfolio['take_profit']:
+            take_profit_triggered = True
+            price_action_signal = "sell"
+            take_profit_price = portfolio['entry_price'] * (1 + portfolio['take_profit'])
+
+    # 5. Stress Testing
     stress_test_scenarios = {
         "market_crash": -0.20,
         "moderate_decline": -0.10,
@@ -492,7 +515,7 @@ def risk_management_agent(state: AgentState):
             "portfolio_impact": portfolio_impact
         }
 
-    # 5. Risk-Adjusted Signals Analysis
+    # 6. Risk-Adjusted Signals Analysis
     # Convert all confidences to numeric for proper comparison
     def parse_confidence(conf_str):
         return float(conf_str.replace('%', '')) / 100.0
@@ -511,10 +534,12 @@ def risk_management_agent(state: AgentState):
     # Cap risk score at 10
     risk_score = min(round(risk_score), 10)
 
-    # 6. Generate Trading Action
+    # 7. Generate Trading Action
     # If risk is very high, hold. If moderately high, consider reducing.
     # Else, follow fundamental signal as a baseline.
-    if risk_score >= 8:
+    if stop_loss_triggered or take_profit_triggered:
+        trading_action = price_action_signal
+    elif risk_score >= 8:
         trading_action = "hold"
     elif risk_score >= 6:
         trading_action = "reduce"
@@ -530,11 +555,20 @@ def risk_management_agent(state: AgentState):
             "value_at_risk_95": float(var_95),
             "max_drawdown": float(max_drawdown),
             "market_risk_score": market_risk_score,
-            "stress_test_results": stress_test_results
+            "stress_test_results": stress_test_results,
+            "stop_loss_triggered": stop_loss_triggered,
+            "take_profit_triggered": take_profit_triggered,
+            "stop_loss_price": stop_loss_price,
+            "take_profit_price": take_profit_price,
+            "current_price": current_price
         },
-        "reasoning": f"Risk Score {risk_score}/10: Market Risk={market_risk_score}, "
-                     f"Volatility={volatility:.2%}, VaR={var_95:.2%}, "
-                     f"Max Drawdown={max_drawdown:.2%}"
+        "reasoning": (
+            f"Risk Score {risk_score}/10: Market Risk={market_risk_score}, "
+            f"Volatility={volatility:.2%}, VaR={var_95:.2%}, "
+            f"Max Drawdown={max_drawdown:.2%}"
+            + (f", Stop-Loss Triggered at {stop_loss_price:.2f}" if stop_loss_triggered else "")
+            + (f", Take-Profit Triggered at {take_profit_price:.2f}" if take_profit_triggered else "")
+        )
     }
 
     # Create the risk management message
@@ -554,6 +588,11 @@ def portfolio_management_agent(state: AgentState):
     """Makes final trading decisions and generates orders"""
     show_reasoning = state["metadata"]["show_reasoning"]
     portfolio = state["data"]["portfolio"]
+    data = state["data"]
+    
+    # Get current price
+    prices_df = prices_to_df(data["prices"])
+    current_price = prices_df['close'].iloc[-1]
 
     # Get the quant agent, fundamentals agent, and risk management agent messages
     quant_message = next(msg for msg in state["messages"] if msg.name == "quant_agent")
@@ -574,6 +613,7 @@ def portfolio_management_agent(state: AgentState):
                 - You MUST NOT exceed the max_position_size specified by the risk manager
                 - You MUST follow the trading_action (buy/sell/hold) recommended by risk management
                 - These are hard constraints that cannot be overridden by other signals
+                - If stop-loss or take-profit is triggered, you MUST execute the sell order
 
                 When weighing the different signals for direction and timing:
                 1. Fundamental Analysis (50% weight)
@@ -589,7 +629,7 @@ def portfolio_management_agent(state: AgentState):
                    - Can influence sizing within risk limits
                 
                 The decision process should be:
-                1. First check risk management constraints
+                1. First check risk management constraints and stop-loss/take-profit
                 2. Then evaluate fundamental outlook
                 3. Use technical analysis for timing
                 4. Consider sentiment for final adjustment
@@ -606,7 +646,8 @@ def portfolio_management_agent(state: AgentState):
                 - Only buy if you have available cash
                 - Only sell if you have shares to sell
                 - Quantity must be ≤ current position for sells
-                - Quantity must be ≤ max_position_size from risk management"""
+                - Quantity must be ≤ max_position_size from risk management
+                - If stop-loss or take-profit triggered, sell entire position"""
             ),
             (
                 "human",
@@ -621,6 +662,8 @@ def portfolio_management_agent(state: AgentState):
                 Portfolio:
                 Cash: {portfolio_cash}
                 Current Position: {portfolio_stock} shares
+                Current Price: {current_price}
+                Entry Price: {entry_price}
 
                 Only include the action, quantity, reasoning, confidence, and agent_signals in your output as JSON.  Do not include any JSON markdown.
 
@@ -640,15 +683,31 @@ def portfolio_management_agent(state: AgentState):
             "sentiment_message": sentiment_message.content,
             "risk_message": risk_message.content,
             "portfolio_cash": f"{portfolio['cash']:.2f}",
-            "portfolio_stock": portfolio["stock"]
+            "portfolio_stock": portfolio["stock"],
+            "current_price": f"{current_price:.2f}",
+            "entry_price": f"{portfolio['entry_price']:.2f}" if portfolio['entry_price'] is not None else "None"
         }
     )
+
     # Invoke the LLM
     result = llm.invoke(prompt)
 
+    # Parse the decision
+    try:
+        decision = json.loads(result.content)
+        # Update entry price if buying into a new position
+        if decision["action"] == "buy" and portfolio["stock"] == 0:
+            portfolio["entry_price"] = current_price
+        # Reset entry price if selling entire position
+        elif decision["action"] == "sell" and decision["quantity"] >= portfolio["stock"]:
+            portfolio["entry_price"] = None
+    except Exception as e:
+        print(f"Error parsing decision: {e}")
+        decision = {"action": "hold", "quantity": 0, "confidence": 0.0, "reasoning": "Error parsing decision"}
+
     # Create the portfolio management message
     message = HumanMessage(
-        content=result.content,
+        content=json.dumps(decision),
         name="portfolio_management",
     )
 
@@ -726,6 +785,8 @@ if __name__ == "__main__":
     parser.add_argument('--start-date', type=str, help='Start date (YYYY-MM-DD). Defaults to 3 months before end date')
     parser.add_argument('--end-date', type=str, help='End date (YYYY-MM-DD). Defaults to today')
     parser.add_argument('--show-reasoning', action='store_true', help='Show reasoning from each agent')
+    parser.add_argument('--stop-loss', type=float, default=0.05, help='Stop loss percentage (default: 5%%)')
+    parser.add_argument('--take-profit', type=float, default=0.15, help='Take profit percentage (default: 15%%)')
     
     args = parser.parse_args()
     
@@ -742,10 +803,21 @@ if __name__ == "__main__":
         except ValueError:
             raise ValueError("End date must be in YYYY-MM-DD format")
     
+    # Validate stop-loss and take-profit
+    if not (0 < args.stop_loss < 1):
+        raise ValueError("Stop loss must be between 0 and 1 (e.g., 0.05 for 5%)")
+    if not (0 < args.take_profit < 1):
+        raise ValueError("Take profit must be between 0 and 1 (e.g., 0.15 for 15%)")
+    if args.take_profit <= args.stop_loss:
+        raise ValueError("Take profit must be greater than stop loss")
+    
     # Sample portfolio - you might want to make this configurable too
     portfolio = {
         "cash": 100000.0,  # $100,000 initial cash
-        "stock": 0         # No initial stock position
+        "stock": 0,        # No initial stock position
+        "stop_loss": args.stop_loss,
+        "take_profit": args.take_profit,
+        "entry_price": None  # Will be set when a position is opened
     }
     
     result = run_hedge_fund(

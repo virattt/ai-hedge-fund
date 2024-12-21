@@ -76,11 +76,19 @@ You can also specify a `--show-reasoning` flag to print the reasoning of each ag
 ```bash
 poetry run python src/agents.py --ticker AAPL --show-reasoning
 ```
+
 You can optionally specify the start and end dates to make decisions for a specific time period.
 
 ```bash
 poetry run python src/agents.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01 
 ```
+
+Risk management parameters can be configured using:
+```bash
+poetry run python src/agents.py --ticker AAPL --stop-loss 0.05 --take-profit 0.15
+```
+- `--stop-loss`: Stop loss percentage (default: 5%)
+- `--take-profit`: Take profit percentage (default: 15%)
 
 ### Running the Backtester
 
