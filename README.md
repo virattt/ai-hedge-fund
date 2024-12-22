@@ -32,6 +32,7 @@ By using this software, you agree to use it solely for learning purposes.
 - [Usage](#usage)
   - [Running the Hedge Fund](#running-the-hedge-fund)
   - [Running the Backtester](#running-the-backtester)
+- [Docker](#docker)
 - [Project Structure](#project-structure)
 - [Contributing](#contributing)
 - [License](#license)
@@ -79,7 +80,7 @@ poetry run python src/agents.py --ticker AAPL --show-reasoning
 You can optionally specify the start and end dates to make decisions for a specific time period.
 
 ```bash
-poetry run python src/agents.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01 
+poetry run python src/agents.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
 ```
 
 ### Running the Backtester
@@ -108,7 +109,35 @@ You can optionally specify the start and end dates to backtest over a specific t
 poetry run python src/backtester.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
 ```
 
-## Project Structure 
+## Docker
+
+You can also build and run the project using Docker.
+
+1. Build the Docker image:
+```bash
+docker build -t ai-hedge-fund .
+```
+
+2. Run the Hedge Fund system:
+```bash
+docker run -it --env-file .env ai-hedge-fund python src/agents.py --ticker AAPL
+```
+
+3. Run the Backtester:
+```bash
+docker run -it --env-file .env ai-hedge-fund python src/backtester.py --ticker AAPL
+```
+
+4. Run with additional options (e.g., reasoning and date range):
+```bash
+docker run -it --env-file .env ai-hedge-fund python src/agents.py \
+--ticker AAPL \
+--start-date 2024-01-01 \
+--end-date 2024-03-01 \
+--show-reasoning
+```
+
+## Project Structure
 ```
 ai-hedge-fund/
 ├── src/
@@ -131,3 +160,4 @@ ai-hedge-fund/
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
