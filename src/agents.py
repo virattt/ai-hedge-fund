@@ -354,30 +354,40 @@ def sentiment_agent(state: AgentState):
     # Loop through the insider trades, if transaction_shares is negative, then it is a sell, which is bearish, if positive, then it is a buy, which is bullish
     signals = []
     for trade in insider_trades:
+        if trade["transaction_shares"] is None:
+            continue
         if trade["transaction_shares"] < 0:
             signals.append("bearish")
         else:
             signals.append("bullish")
 
-    # Determine overall signal
-    bullish_signals = signals.count("bullish")
-    bearish_signals = signals.count("bearish")
-    if bullish_signals > bearish_signals:
-        overall_signal = "bullish"
-    elif bearish_signals > bullish_signals:
-        overall_signal = "bearish"
+    # If no valid signals, return neutral
+    if not signals:
+        message_content = {
+            "signal": "neutral",
+            "confidence": "0%",
+            "reasoning": "No valid insider trading data available"
+        }
     else:
-        overall_signal = "neutral"
+        # Determine overall signal
+        bullish_signals = signals.count("bullish")
+        bearish_signals = signals.count("bearish")
+        if bullish_signals > bearish_signals:
+            overall_signal = "bullish"
+        elif bearish_signals > bullish_signals:
+            overall_signal = "bearish"
+        else:
+            overall_signal = "neutral"
 
-    # Calculate confidence level based on the proportion of indicators agreeing
-    total_signals = len(signals)
-    confidence = max(bullish_signals, bearish_signals) / total_signals
+        # Calculate confidence level based on the proportion of indicators agreeing
+        total_signals = len(signals)
+        confidence = max(bullish_signals, bearish_signals) / total_signals
 
-    message_content = {
-        "signal": overall_signal,
-        "confidence": f"{round(confidence * 100)}%",
-        "reasoning": f"Bullish signals: {bullish_signals}, Bearish signals: {bearish_signals}"
-    }
+        message_content = {
+            "signal": overall_signal,
+            "confidence": f"{round(confidence * 100)}%",
+            "reasoning": f"Bullish signals: {bullish_signals}, Bearish signals: {bearish_signals}"
+        }
 
     # Print the reasoning if the flag is set
     if show_reasoning:
