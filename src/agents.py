@@ -1,20 +1,31 @@
+import argparse
+import ast
+import json
 import math
+import operator
+import os
+from datetime import datetime
 from typing import Annotated, Any, Dict, Sequence, TypedDict
 
-import operator
+from dotenv import load_dotenv
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai.chat_models import ChatOpenAI
 from langgraph.graph import END, StateGraph
 
-from src.tools import calculate_bollinger_bands, calculate_intrinsic_value, calculate_macd, calculate_obv, calculate_rsi, search_line_items, get_financial_metrics, get_insider_trades, get_market_cap, get_prices, prices_to_df
-
-import argparse
-from datetime import datetime
-import json
-import ast
-import os
-from dotenv import load_dotenv
+from src.tools import (
+    calculate_bollinger_bands,
+    calculate_intrinsic_value,
+    calculate_macd,
+    calculate_obv,
+    calculate_rsi,
+    get_financial_metrics,
+    get_insider_trades,
+    get_market_cap,
+    get_prices,
+    prices_to_df,
+    search_line_items,
+)
 
 load_dotenv()  # Load environment variables from .env file
 
