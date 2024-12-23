@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    volumes:
+      - .:/app
+    entrypoint: python src/agents.py
+    command: --ticker AAPL
+    networks:
+      - ai-hedge-fund
+
+  backtester:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    volumes:
+      - .:/app
+    entrypoint: python src/backtester.py
+    command: --ticker AAPL
+    networks:
+      - ai-hedge-fund
+
+networks:
+  ai-hedge-fund:
+    driver: bridge

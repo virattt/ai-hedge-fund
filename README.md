@@ -111,31 +111,23 @@ poetry run python src/backtester.py --ticker AAPL --start-date 2024-01-01 --end-
 
 ## Docker
 
-You can also build and run the project using Docker.
+You can run the project easily using Docker Compose.
 
-1. Build the Docker image:
+1. Run the agent with custom parameters:
 ```bash
-docker build -t ai-hedge-fund .
+docker compose run agent --ticker AAPL
 ```
 
-2. Run the Hedge Fund system:
+2. Run the backtester with custom parameters:
 ```bash
-docker run -it --env-file .env ai-hedge-fund python src/agents.py --ticker AAPL
+docker compose run backtester --ticker AAPL
 ```
 
-3. Run the Backtester:
-```bash
-docker run -it --env-file .env ai-hedge-fund python src/backtester.py --ticker AAPL
-```
-
-4. Run with additional options (e.g., reasoning and date range):
-```bash
-docker run -it --env-file .env ai-hedge-fund python src/agents.py \
---ticker AAPL \
---start-date 2024-01-01 \
---end-date 2024-03-01 \
---show-reasoning
-```
+Note: 
+- The `.env` file will be automatically loaded by Docker Compose
+- Use `docker-compose up` to run with default parameters defined in docker-compose.yml
+- Use `docker-compose run` to pass custom parameters - no need to specify the python command
+- All arguments after the service name are passed directly to the script
 
 ## Project Structure
 ```
