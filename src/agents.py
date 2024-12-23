@@ -363,7 +363,10 @@ def sentiment_agent(state: AgentState):
     # Loop through the insider trades, if transaction_shares is negative, then it is a sell, which is bearish, if positive, then it is a buy, which is bullish
     signals = []
     for trade in insider_trades:
-        if trade["transaction_shares"] < 0:
+        transaction_shares = trade.get("transaction_shares")
+        if transaction_shares is None:
+            continue
+        if transaction_shares < 0:
             signals.append("bearish")
         else:
             signals.append("bullish")
