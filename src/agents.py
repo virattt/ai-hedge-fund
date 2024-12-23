@@ -416,9 +416,17 @@ def risk_management_agent(state: AgentState):
     prices_df = prices_to_df(data["prices"])
 
     # Fetch messages from other agents
-    quant_message = next(msg for msg in state["messages"] if msg.name == "quant_agent")
-    fundamentals_message = next(msg for msg in state["messages"] if msg.name == "fundamentals_agent")
-    sentiment_message = next(msg for msg in state["messages"] if msg.name == "sentiment_agent")
+    try:
+        quant_message = next(msg for msg in state["messages"] if msg.name == "quant_agent")
+        fundamentals_message = next(msg for msg in state["messages"] if msg.name == "fundamentals_agent")
+        sentiment_message = next(msg for msg in state["messages"] if msg.name == "sentiment_agent")
+    except StopIteration as e:
+        error_message = f"Error fetching messages from other agents: {str(e)}"
+        print(error_message)
+        return {
+            "messages": state["messages"],
+            "data": {**data, "error": error_message}
+        }
 
     try:
         fundamental_signals = json.loads(fundamentals_message.content)
@@ -568,10 +576,18 @@ def portfolio_management_agent(state: AgentState):
     portfolio = state["data"]["portfolio"]
 
     # Get the quant agent, fundamentals agent, and risk management agent messages
-    quant_message = next(msg for msg in state["messages"] if msg.name == "quant_agent")
-    fundamentals_message = next(msg for msg in state["messages"] if msg.name == "fundamentals_agent")
-    sentiment_message = next(msg for msg in state["messages"] if msg.name == "sentiment_agent")
-    risk_message = next(msg for msg in state["messages"] if msg.name == "risk_management_agent")
+    try:
+        quant_message = next(msg for msg in state["messages"] if msg.name == "quant_agent")
+        fundamentals_message = next(msg for msg in state["messages"] if msg.name == "fundamentals_agent")
+        sentiment_message = next(msg for msg in state["messages"] if msg.name == "sentiment_agent")
+        risk_message = next(msg for msg in state["messages"] if msg.name == "risk_management_agent")
+    except StopIteration as e:
+        error_message = f"Error fetching messages from other agents: {str(e)}"
+        print(error_message)
+        return {
+            "messages": state["messages"],
+            "data": {**state["data"], "error": error_message}
+        }
 
     # Create the prompt template
     template = ChatPromptTemplate.from_messages(
@@ -687,25 +703,30 @@ def show_agent_reasoning(output, agent_name):
 
 ##### Run the Hedge Fund #####
 def run_hedge_fund(ticker: str, start_date: str, end_date: str, portfolio: dict, show_reasoning: bool = False):
-    final_state = app.invoke(
-        {
-            "messages": [
-                HumanMessage(
-                    content="Make a trading decision based on the provided data.",
-                )
-            ],
-            "data": {
-                "ticker": ticker,
-                "portfolio": portfolio,
-                "start_date": start_date,
-                "end_date": end_date,
+    try:
+        final_state = app.invoke(
+            {
+                "messages": [
+                    HumanMessage(
+                        content="Make a trading decision based on the provided data.",
+                    )
+                ],
+                "data": {
+                    "ticker": ticker,
+                    "portfolio": portfolio,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                },
+                "metadata": {
+                    "show_reasoning": show_reasoning,
+                }
             },
-            "metadata": {
-                "show_reasoning": show_reasoning,
-            }
-        },
-    )
-    return final_state["messages"][-1].content
+        )
+        return final_state["messages"][-1].content
+    except Exception as e:
+        error_message = f"Error running hedge fund: {str(e)}"
+        print(error_message)
+        return error_message
 
 # Define the new workflow
 workflow = StateGraph(AgentState)
