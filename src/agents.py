@@ -13,6 +13,10 @@ import argparse
 from datetime import datetime
 import json
 import ast
+import os
+from dotenv import load_dotenv
+
+load_dotenv()  # Load environment variables from .env file
 
 llm = ChatOpenAI(model="gpt-4o")
 
