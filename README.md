@@ -7,7 +7,7 @@ This system employs several agents working together:
 1. Market Data Analyst - Gathers and preprocesses market data
 2. Sentiment Agent - Analyzes market sentiment and generates trading signals
 3. Fundamentals Agent - Analyzes fundamental data and generates trading signals
-4. Quant Analyst - Analyzes technical indicators and generates trading signals
+4. Technical Analyst - Analyzes technical indicators and generates trading signals
 5. Risk Manager - Calculates risk metrics and sets position limits
 6. Portfolio Manager - Makes final trading decisions and generates orders
 
@@ -144,10 +144,18 @@ poetry run python src/backtester.py --ticker AAPL --start-date 2024-01-01 --end-
 ## Project Structure
 ```
 ai-hedge-fund/
-├── src/
-│   ├── agents.py # Main agent definitions and workflow
-│   ├── backtester.py # Backtesting functionality
-│   ├── tools.py # Agent tools
+├── agents/ # Agent definitions and workflow
+│   ├── fundamentals.py # Fundamental analysis agent
+│   ├── market_data.py # Market data agent
+│   ├── portfolio_manager.py # Portfolio management agent
+│   ├── risk_manager.py # Risk management agent
+│   ├── sentiment.py # Sentiment analysis agent
+│   ├── state.py # Agent state
+│   ├── technicals.py # Technical analysis agent
+├── tools/ # Agent tools
+│   ├── api.py # API tools
+├── backtester.py # Backtesting tools
+├── main.py # Main entry point
 ├── pyproject.toml # Poetry configuration
 ├── .env.example # Environment variables
 └── README.md # Documentation

@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from src.tools import get_price_data
-from src.agents import run_hedge_fund
+from main import run_hedge_fund
+from tools.api import get_price_data
 
 class Backtester:
     def __init__(self, agent, ticker, start_date, end_date, initial_capital):
