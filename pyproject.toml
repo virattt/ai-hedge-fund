@@ -14,8 +14,8 @@ langchain-openai = "0.2.11"
 langgraph = "0.2.56"
 pandas = "^2.1.0"
 numpy = "^1.24.0"
-python-dotenv = "1.0.0"
 matplotlib = "^3.9.2"
+python-dotenv = "^1.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
