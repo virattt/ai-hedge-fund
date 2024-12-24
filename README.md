@@ -11,7 +11,7 @@ This system employs several agents working together:
 5. Risk Manager - Calculates risk metrics and sets position limits
 6. Portfolio Manager - Makes final trading decisions and generates orders
 
-<img width="1025" alt="Screenshot 2024-12-11 at 12 20 37 AM" src="https://github.com/user-attachments/assets/a03aed40-46cc-45a2-92c5-2a34acb27fd2">
+![image](https://github.com/user-attachments/assets/e7cd0f4c-3ca3-4e2e-addc-006bc31d76aa)
 
 Note: the system simulates trading decisions, it does not actually trade.
 
@@ -101,18 +101,18 @@ The Docker setup uses a lightweight Python 3.9 base image and installs only the 
 ### Running the Hedge Fund
 
 ```bash
-poetry run python src/agents.py --ticker AAPL
+poetry run python src/main.py --ticker AAPL
 ```
 
 You can also specify a `--show-reasoning` flag to print the reasoning of each agent to the console.
 
 ```bash
-poetry run python src/agents.py --ticker AAPL --show-reasoning
+poetry run python src/main.py --ticker AAPL --show-reasoning
 ```
 You can optionally specify the start and end dates to make decisions for a specific time period.
 
 ```bash
-poetry run python src/agents.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
+poetry run python src/main.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01 
 ```
 
 ### Running the Backtester
@@ -144,21 +144,21 @@ poetry run python src/backtester.py --ticker AAPL --start-date 2024-01-01 --end-
 ## Project Structure
 ```
 ai-hedge-fund/
-├── agents/ # Agent definitions and workflow
-│   ├── fundamentals.py # Fundamental analysis agent
-│   ├── market_data.py # Market data agent
-│   ├── portfolio_manager.py # Portfolio management agent
-│   ├── risk_manager.py # Risk management agent
-│   ├── sentiment.py # Sentiment analysis agent
-│   ├── state.py # Agent state
-│   ├── technicals.py # Technical analysis agent
-├── tools/ # Agent tools
-│   ├── api.py # API tools
-├── backtester.py # Backtesting tools
-├── main.py # Main entry point
-├── pyproject.toml # Poetry configuration
-├── .env.example # Environment variables
-└── README.md # Documentation
+├── src/
+│   ├── agents/                   # Agent definitions and workflow
+│   │   ├── fundamentals.py       # Fundamental analysis agent
+│   │   ├── market_data.py        # Market data agent
+│   │   ├── portfolio_manager.py  # Portfolio management agent
+│   │   ├── risk_manager.py       # Risk management agent
+│   │   ├── sentiment.py          # Sentiment analysis agent
+│   │   ├── state.py              # Agent state
+│   │   ├── technicals.py         # Technical analysis agent
+│   ├── tools/                    # Agent tools
+│   │   ├── api.py                # API tools
+│   ├── backtester.py             # Backtesting tools
+│   ├── main.py # Main entry point
+├── pyproject.toml
+├── ...
 ```
 
 ## Contributing
