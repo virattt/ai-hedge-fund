@@ -2,9 +2,7 @@ version: '3.8'
 
 services:
   agent:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/virattt/ai-hedge-fund:main
     env_file: .env
     volumes:
       - .:/app
@@ -14,9 +12,7 @@ services:
       - ai-hedge-fund
 
   backtester:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/virattt/ai-hedge-fund:main
     env_file: .env
     volumes:
       - .:/app
