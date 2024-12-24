@@ -6,7 +6,7 @@ services:
     env_file: .env
     volumes:
       - .:/app
-    entrypoint: python src/agents.py
+    entrypoint: python src/main.py
     command: --ticker AAPL
     networks:
       - ai-hedge-fund
