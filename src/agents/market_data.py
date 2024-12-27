@@ -1,12 +1,7 @@
-
-from langchain_openai.chat_models import ChatOpenAI
-
 from agents.state import AgentState
 from tools.api import search_line_items, get_financial_metrics, get_insider_trades, get_market_cap, get_prices
 
 from datetime import datetime
-
-llm = ChatOpenAI(model="gpt-4o")
 
 def market_data_agent(state: AgentState):
     """Responsible for gathering and preprocessing market data"""
