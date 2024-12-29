@@ -21,20 +21,23 @@ def risk_management_agent(state: AgentState):
     technical_message = next(msg for msg in state["messages"] if msg.name == "technical_analyst_agent")
     fundamentals_message = next(msg for msg in state["messages"] if msg.name == "fundamentals_agent")
     sentiment_message = next(msg for msg in state["messages"] if msg.name == "sentiment_agent")
-
+    valuation_message = next(msg for msg in state["messages"] if msg.name == "valuation_agent")
     try:
         fundamental_signals = json.loads(fundamentals_message.content)
         technical_signals = json.loads(technical_message.content)
         sentiment_signals = json.loads(sentiment_message.content)
+        valuation_signals = json.loads(valuation_message.content)
     except Exception as e:
         fundamental_signals = ast.literal_eval(fundamentals_message.content)
         technical_signals = ast.literal_eval(technical_message.content)
         sentiment_signals = ast.literal_eval(sentiment_message.content)
+        valuation_signals = ast.literal_eval(valuation_message.content)
         
     agent_signals = {
         "fundamental": fundamental_signals,
         "technical": technical_signals,
-        "sentiment": sentiment_signals
+        "sentiment": sentiment_signals,
+        "valuation": valuation_signals
     }
 
     # 1. Calculate Risk Metrics
@@ -122,13 +125,13 @@ def risk_management_agent(state: AgentState):
 
     # 6. Generate Trading Action
     # If risk is very high, hold. If moderately high, consider reducing.
-    # Else, follow fundamental signal as a baseline.
+    # Else, follow valuation signal as a baseline.
     if risk_score >= 8:
         trading_action = "hold"
     elif risk_score >= 6:
         trading_action = "reduce"
     else:
-        trading_action = agent_signals['fundamental']['signal']
+        trading_action = agent_signals['valuation']['signal']
 
     message_content = {
         "max_position_size": float(max_position_size),

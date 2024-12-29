@@ -2,6 +2,8 @@ import json
 from typing import Dict, Any, List
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
+import pandas as pd
+import numpy as np
 from langchain_core.messages import HumanMessage
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -52,24 +54,19 @@ def analyze_article_sentiment(article: Dict[str, Any], llm: ChatOpenAI) -> Dict[
         }
 
 def process_insider_trades(trades: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Process insider trading sentiment."""
-    insider_signals = []
-    for trade in trades:
-        transaction_shares = trade["transaction_shares"]
-        if not transaction_shares:
-            continue
-        if transaction_shares < 0:
-            insider_signals.append("bearish")
-        else:
-            insider_signals.append("bullish")
-
-    bullish_insider = insider_signals.count("bullish")
-    bearish_insider = insider_signals.count("bearish")
-    total_insider = len(insider_signals)
+    """Process insider trading sentiment using pandas."""
+    # Convert to pandas series and process
+    transaction_shares = pd.Series([t['transaction_shares'] for t in trades]).dropna()
+    bearish_condition = transaction_shares < 0
+    signals = np.where(bearish_condition, "bearish", "bullish").tolist()
     
-    if total_insider > 0:
-        sentiment = "bullish" if bullish_insider > bearish_insider else "bearish" if bearish_insider > bullish_insider else "neutral"
-        confidence = max(bullish_insider, bearish_insider) / total_insider
+    bullish_signals = signals.count("bullish")
+    bearish_signals = signals.count("bearish")
+    total_signals = len(signals)
+    
+    if total_signals > 0:
+        sentiment = "bullish" if bullish_signals > bearish_signals else "bearish" if bearish_signals > bullish_signals else "neutral"
+        confidence = max(bullish_signals, bearish_signals) / total_signals
     else:
         sentiment = "neutral"
         confidence = 0.0
@@ -77,8 +74,8 @@ def process_insider_trades(trades: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {
         "signal": sentiment,
         "confidence": confidence,
-        "bullish_trades": bullish_insider,
-        "bearish_trades": bearish_insider
+        "bullish_trades": bullish_signals,
+        "bearish_trades": bearish_signals
     }
 
 def process_news_sentiment(news_data: List[Dict[str, Any]], llm: ChatOpenAI) -> Dict[str, Any]:

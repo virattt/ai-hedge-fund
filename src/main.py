@@ -1,4 +1,3 @@
-
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
 
@@ -9,6 +8,7 @@ from agents.technicals import technical_analyst_agent
 from agents.risk_manager import risk_management_agent
 from agents.sentiment import sentiment_agent
 from agents.state import AgentState
+from agents.valuation import valuation_agent
 
 import argparse
 from datetime import datetime
@@ -46,15 +46,18 @@ workflow.add_node("fundamentals_agent", fundamentals_agent)
 workflow.add_node("sentiment_agent", sentiment_agent)
 workflow.add_node("risk_management_agent", risk_management_agent)
 workflow.add_node("portfolio_management_agent", portfolio_management_agent)
+workflow.add_node("valuation_agent", valuation_agent)
 
 # Define the workflow
 workflow.set_entry_point("market_data_agent")
 workflow.add_edge("market_data_agent", "technical_analyst_agent")
 workflow.add_edge("market_data_agent", "fundamentals_agent")
 workflow.add_edge("market_data_agent", "sentiment_agent")
+workflow.add_edge("market_data_agent", "valuation_agent")
 workflow.add_edge("technical_analyst_agent", "risk_management_agent")
 workflow.add_edge("fundamentals_agent", "risk_management_agent")
 workflow.add_edge("sentiment_agent", "risk_management_agent")
+workflow.add_edge("valuation_agent", "risk_management_agent")
 workflow.add_edge("risk_management_agent", "portfolio_management_agent")
 workflow.add_edge("portfolio_management_agent", END)
 

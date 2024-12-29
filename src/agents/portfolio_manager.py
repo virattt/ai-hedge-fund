@@ -1,4 +1,3 @@
-
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai.chat_models import ChatOpenAI
@@ -16,6 +15,7 @@ def portfolio_management_agent(state: AgentState):
     technical_message = next(msg for msg in state["messages"] if msg.name == "technical_analyst_agent")
     fundamentals_message = next(msg for msg in state["messages"] if msg.name == "fundamentals_agent")
     sentiment_message = next(msg for msg in state["messages"] if msg.name == "sentiment_agent")
+    valuation_message = next(msg for msg in state["messages"] if msg.name == "valuation_agent")
     risk_message = next(msg for msg in state["messages"] if msg.name == "risk_management_agent")
 
     # Create the prompt template
@@ -33,23 +33,28 @@ def portfolio_management_agent(state: AgentState):
                 - These are hard constraints that cannot be overridden by other signals
 
                 When weighing the different signals for direction and timing:
-                1. Fundamental Analysis (50% weight)
-                   - Primary driver of trading decisions
-                   - Should determine overall direction
+                1. Valuation Analysis (35% weight)
+                   - Primary driver of fair value assessment
+                   - Determines if price offers good entry/exit point
                 
-                2. Technical Analysis (35% weight)
+                2. Fundamental Analysis (30% weight)
+                   - Business quality and growth assessment
+                   - Determines conviction in long-term potential
+                
+                3. Technical Analysis (25% weight)
                    - Secondary confirmation
                    - Helps with entry/exit timing
                 
-                3. Sentiment Analysis (15% weight)
+                4. Sentiment Analysis (10% weight)
                    - Final consideration
                    - Can influence sizing within risk limits
                 
                 The decision process should be:
                 1. First check risk management constraints
-                2. Then evaluate fundamental outlook
-                3. Use technical analysis for timing
-                4. Consider sentiment for final adjustment
+                2. Then evaluate valuation signal
+                3. Then evaluate fundamentals signal
+                4. Use technical analysis for timing
+                5. Consider sentiment for final adjustment
                 
                 Provide the following in your output:
                 - "action": "buy" | "sell" | "hold",
@@ -72,6 +77,7 @@ def portfolio_management_agent(state: AgentState):
                 Technical Analysis Trading Signal: {technical_message}
                 Fundamental Analysis Trading Signal: {fundamentals_message}
                 Sentiment Analysis Trading Signal: {sentiment_message}
+                Valuation Analysis Trading Signal: {valuation_message}
                 Risk Management Trading Signal: {risk_message}
 
                 Here is the current portfolio:
@@ -95,6 +101,7 @@ def portfolio_management_agent(state: AgentState):
             "technical_message": technical_message.content, 
             "fundamentals_message": fundamentals_message.content,
             "sentiment_message": sentiment_message.content,
+            "valuation_message": valuation_message.content,
             "risk_message": risk_message.content,
             "portfolio_cash": f"{portfolio['cash']:.2f}",
             "portfolio_stock": portfolio["stock"]
