@@ -6,7 +6,14 @@ from tools.api import search_line_items, get_financial_metrics, get_insider_trad
 
 from datetime import datetime
 
-llm = ChatOpenAI(model="gpt-4o")
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from the .env file
+load_dotenv()
+
+# Invoke the LLM
+llm = ChatOpenAI(model=os.getenv("OPENAI_MODEL"), api_key=os.getenv("OPENAI_API_KEY"))
 
 def market_data_agent(state: AgentState):
     """Responsible for gathering and preprocessing market data"""
