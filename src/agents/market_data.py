@@ -54,9 +54,9 @@ def market_data_agent(state: AgentState):
     # Get the line_items
     financial_line_items = search_line_items(
         ticker=data["ticker"], 
-        line_items=["free_cash_flow"],
+        line_items=["free_cash_flow", "net_income", "depreciation_and_amortization", "capital_expenditure", "working_capital"],
         period='ttm',
-        limit=1,
+        limit=2,
     )
 
     return {

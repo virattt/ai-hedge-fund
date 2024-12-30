@@ -5,13 +5,14 @@ This is a proof concept for an AI-powered hedge fund.  The goal of this project 
 This system employs several agents working together:
 
 1. Market Data Analyst - Gathers and preprocesses market data
-2. Sentiment Agent - Analyzes market sentiment and generates trading signals
-3. Fundamentals Agent - Analyzes fundamental data and generates trading signals
-4. Technical Analyst - Analyzes technical indicators and generates trading signals
-5. Risk Manager - Calculates risk metrics and sets position limits
-6. Portfolio Manager - Makes final trading decisions and generates orders
+2. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
+3. Sentiment Agent - Analyzes market sentiment and generates trading signals
+4. Fundamentals Agent - Analyzes fundamental data and generates trading signals
+5. Technical Analyst - Analyzes technical indicators and generates trading signals
+6. Risk Manager - Calculates risk metrics and sets position limits
+7. Portfolio Manager - Makes final trading decisions and generates orders
 
-![image](https://github.com/user-attachments/assets/e7cd0f4c-3ca3-4e2e-addc-006bc31d76aa)
+![Screenshot 2024-12-27 at 5 49 56 PM](https://github.com/user-attachments/assets/c281b8c3-d8e6-431e-a05e-d309d306e967)
 
 Note: the system simulates trading decisions, it does not actually trade.
 
@@ -120,6 +121,7 @@ ai-hedge-fund/
 │   │   ├── sentiment.py          # Sentiment analysis agent
 │   │   ├── state.py              # Agent state
 │   │   ├── technicals.py         # Technical analysis agent
+│   │   ├── valuation.py          # Valuation analysis agent
 │   ├── tools/                    # Agent tools
 │   │   ├── api.py                # API tools
 │   ├── backtester.py             # Backtesting tools

@@ -1,4 +1,3 @@
-
 from langchain_core.messages import HumanMessage
 
 from agents.state import AgentState, show_agent_reasoning
@@ -11,8 +10,6 @@ def fundamentals_agent(state: AgentState):
     show_reasoning = state["metadata"]["show_reasoning"]
     data = state["data"]
     metrics = data["financial_metrics"][0]
-    financial_line_item = data["financial_line_items"][0]
-    market_cap = data["market_cap"]
 
     # Initialize signals list for different fundamental aspects
     signals = []
@@ -28,7 +25,7 @@ def fundamentals_agent(state: AgentState):
         profitability_score += 1
         
     signals.append('bullish' if profitability_score >= 2 else 'bearish' if profitability_score == 0 else 'neutral')
-    reasoning["Profitability"] = {
+    reasoning["profitability_signal"] = {
         "signal": signals[0],
         "details": f"ROE: {metrics['return_on_equity']:.2%}, Net Margin: {metrics['net_margin']:.2%}, Op Margin: {metrics['operating_margin']:.2%}"
     }
@@ -43,7 +40,7 @@ def fundamentals_agent(state: AgentState):
         growth_score += 1
         
     signals.append('bullish' if growth_score >= 2 else 'bearish' if growth_score == 0 else 'neutral')
-    reasoning["Growth"] = {
+    reasoning["growth_signal"] = {
         "signal": signals[1],
         "details": f"Revenue Growth: {metrics['revenue_growth']:.2%}, Earnings Growth: {metrics['earnings_growth']:.2%}"
     }
@@ -58,7 +55,7 @@ def fundamentals_agent(state: AgentState):
         health_score += 1
         
     signals.append('bullish' if health_score >= 2 else 'bearish' if health_score == 0 else 'neutral')
-    reasoning["Financial_Health"] = {
+    reasoning["financial_health_signal"] = {
         "signal": signals[2],
         "details": f"Current Ratio: {metrics['current_ratio']:.2f}, D/E: {metrics['debt_to_equity']:.2f}"
     }
@@ -77,28 +74,9 @@ def fundamentals_agent(state: AgentState):
         price_ratio_score += 1
         
     signals.append('bullish' if price_ratio_score >= 2 else 'bearish' if price_ratio_score == 0 else 'neutral')
-    reasoning["Price_Ratios"] = {
+    reasoning["price_ratios_signal"] = {
         "signal": signals[3],
         "details": f"P/E: {pe_ratio:.2f}, P/B: {pb_ratio:.2f}, P/S: {ps_ratio:.2f}"
-    }
-
-    # 5. Calculate intrinsic value and compare to market cap
-    free_cash_flow = financial_line_item.get('free_cash_flow')
-    intrinsic_value = calculate_intrinsic_value(
-        free_cash_flow=free_cash_flow,
-        growth_rate=metrics["earnings_growth"],
-        discount_rate=0.10,
-        terminal_growth_rate=0.03,
-        num_years=5,
-    )
-    if market_cap < intrinsic_value:
-        signals.append('bullish')
-    else:
-        signals.append('bearish')
-
-    reasoning["Intrinsic_Value"] = {
-        "signal": signals[4],
-        "details": f"Intrinsic Value: ${intrinsic_value:,.2f}, Market Cap: ${market_cap:,.2f}"
     }
     
     # Determine overall signal
@@ -136,32 +114,3 @@ def fundamentals_agent(state: AgentState):
         "messages": [message],
         "data": data,
     }
-
-def calculate_intrinsic_value(
-    free_cash_flow: float,
-    growth_rate: float = 0.05,
-    discount_rate: float = 0.10,
-    terminal_growth_rate: float = 0.02,
-    num_years: int = 5,
-) -> float:
-    """
-    Computes the discounted cash flow (DCF) for a given company based on the current free cash flow.
-    Use this function to calculate the intrinsic value of a stock.
-    """
-    # Estimate the future cash flows based on the growth rate
-    cash_flows = [free_cash_flow * (1 + growth_rate) ** i for i in range(num_years)]
-
-    # Calculate the present value of projected cash flows
-    present_values = []
-    for i in range(num_years):
-        present_value = cash_flows[i] / (1 + discount_rate) ** (i + 1)
-        present_values.append(present_value)
-
-    # Calculate the terminal value
-    terminal_value = cash_flows[-1] * (1 + terminal_growth_rate) / (discount_rate - terminal_growth_rate)
-    terminal_present_value = terminal_value / (1 + discount_rate) ** num_years
-
-    # Sum up the present values and terminal value
-    dcf_value = sum(present_values) + terminal_present_value
-
-    return dcf_value
