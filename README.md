@@ -59,6 +59,7 @@ poetry install
 ```bash
 # Create .env file for your API keys
 cp .env.example .env
+# Update the .env file to include your API keys or export the variables in your current terminal:
 
 export OPENAI_API_KEY='your-api-key-here' # Get a key from https://platform.openai.com/
 export FINANCIAL_DATASETS_API_KEY='your-api-key-here' # Get a key from https://financialdatasets.ai/
