@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file
 
 from datetime import datetime
+from dateutil.relativedelta import relativedelta  # Add this import
 
 from langchain_openai.chat_models import ChatOpenAI
 
@@ -25,11 +26,10 @@ def market_data_agent(state: AgentState):
     # Set default dates
     end_date = data["end_date"] or datetime.now().strftime('%Y-%m-%d')
     if not data["start_date"]:
-        # Calculate 3 months before end_date
+        # Calculate 3 months before end_date using relativedelta
         end_date_obj = datetime.strptime(end_date, '%Y-%m-%d')
-        start_date = end_date_obj.replace(month=end_date_obj.month - 3) if end_date_obj.month > 3 else \
-            end_date_obj.replace(year=end_date_obj.year - 1, month=end_date_obj.month + 9)
-        start_date = start_date.strftime('%Y-%m-%d')
+        start_date_obj = end_date_obj - relativedelta(months=3)
+        start_date = start_date_obj.strftime('%Y-%m-%d')
     else:
         start_date = data["start_date"]
 

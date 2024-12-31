@@ -16,6 +16,7 @@ pandas = "^2.1.0"
 numpy = "^1.24.0"
 python-dotenv = "1.0.0"
 matplotlib = "^3.9.2"
+python-dateutil = "^2.8.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
