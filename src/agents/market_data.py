@@ -3,8 +3,8 @@ from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file
 
 from datetime import datetime
-from dateutil.relativedelta import relativedelta
 
+from dateutil.relativedelta import relativedelta
 from langchain_openai.chat_models import ChatOpenAI
 
 from agents.state import AgentState

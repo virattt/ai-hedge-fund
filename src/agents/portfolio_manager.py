@@ -12,11 +12,23 @@ def portfolio_management_agent(state: AgentState):
     portfolio = state["data"]["portfolio"]
 
     # Get the technical analyst, fundamentals agent, and risk management agent messages
-    technical_message = next(msg for msg in state["messages"] if msg.name == "technical_analyst_agent")
-    fundamentals_message = next(msg for msg in state["messages"] if msg.name == "fundamentals_agent")
-    sentiment_message = next(msg for msg in state["messages"] if msg.name == "sentiment_agent")
-    valuation_message = next(msg for msg in state["messages"] if msg.name == "valuation_agent")
-    risk_message = next(msg for msg in state["messages"] if msg.name == "risk_management_agent")
+    technical_message = next(
+        msg
+        for msg in state["messages"]
+        if msg.name == "technical_analyst_agent"
+    )
+    fundamentals_message = next(
+        msg for msg in state["messages"] if msg.name == "fundamentals_agent"
+    )
+    sentiment_message = next(
+        msg for msg in state["messages"] if msg.name == "sentiment_agent"
+    )
+    valuation_message = next(
+        msg for msg in state["messages"] if msg.name == "valuation_agent"
+    )
+    risk_message = next(
+        msg for msg in state["messages"] if msg.name == "risk_management_agent"
+    )
 
     # Create the prompt template
     template = ChatPromptTemplate.from_messages(
@@ -36,26 +48,26 @@ def portfolio_management_agent(state: AgentState):
                 1. Valuation Analysis (35% weight)
                    - Primary driver of fair value assessment
                    - Determines if price offers good entry/exit point
-                
+
                 2. Fundamental Analysis (30% weight)
                    - Business quality and growth assessment
                    - Determines conviction in long-term potential
-                
+
                 3. Technical Analysis (25% weight)
                    - Secondary confirmation
                    - Helps with entry/exit timing
-                
+
                 4. Sentiment Analysis (10% weight)
                    - Final consideration
                    - Can influence sizing within risk limits
-                
+
                 The decision process should be:
                 1. First check risk management constraints
                 2. Then evaluate valuation signal
                 3. Then evaluate fundamentals signal
                 4. Use technical analysis for timing
                 5. Consider sentiment for final adjustment
-                
+
                 Provide the following in your output:
                 - "action": "buy" | "sell" | "hold",
                 - "quantity": <positive integer>
@@ -68,7 +80,7 @@ def portfolio_management_agent(state: AgentState):
                 - Only buy if you have available cash
                 - Only sell if you have shares to sell
                 - Quantity must be ≤ current position for sells
-                - Quantity must be ≤ max_position_size from risk management"""
+                - Quantity must be ≤ max_position_size from risk management""",
             ),
             (
                 "human",
@@ -90,7 +102,7 @@ def portfolio_management_agent(state: AgentState):
                 Remember, the action must be either buy, sell, or hold.
                 You can only buy if you have available cash.
                 You can only sell if you have shares in the portfolio to sell.
-                """
+                """,
             ),
         ]
     )
@@ -98,13 +110,13 @@ def portfolio_management_agent(state: AgentState):
     # Generate the prompt
     prompt = template.invoke(
         {
-            "technical_message": technical_message.content, 
+            "technical_message": technical_message.content,
             "fundamentals_message": fundamentals_message.content,
             "sentiment_message": sentiment_message.content,
             "valuation_message": valuation_message.content,
             "risk_message": risk_message.content,
             "portfolio_cash": f"{portfolio['cash']:.2f}",
-            "portfolio_stock": portfolio["stock"]
+            "portfolio_stock": portfolio["stock"],
         }
     )
     # Invoke the LLM
