@@ -106,7 +106,7 @@ Date         Ticker Action Quantity    Price         Cash    Stock  Total Value
 You can optionally specify the start and end dates to backtest over a specific time period.
 
 ```bash
-poetry run python src/backtester.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
+poetry run python src/backtester.py --ticker AAPL --start_date 2024-01-01 --end_date 2024-03-01
 ```
 
 ## Project Structure 
