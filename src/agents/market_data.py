@@ -4,7 +4,7 @@ from langchain_openai.chat_models import ChatOpenAI
 from agents.state import AgentState
 from tools.api import search_line_items, get_financial_metrics, get_insider_trades, get_market_cap, get_prices
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 llm = ChatOpenAI(model="gpt-4o")
 
@@ -13,16 +13,26 @@ def market_data_agent(state: AgentState):
     messages = state["messages"]
     data = state["data"]
 
-    # Set default dates
+    # Default end_date to current date if not provided
     end_date = data["end_date"] or datetime.now().strftime('%Y-%m-%d')
+
     if not data["start_date"]:
         # Calculate 3 months before end_date
         end_date_obj = datetime.strptime(end_date, '%Y-%m-%d')
-        start_date = end_date_obj.replace(month=end_date_obj.month - 3) if end_date_obj.month > 3 else \
-            end_date_obj.replace(year=end_date_obj.year - 1, month=end_date_obj.month + 9)
-        start_date = start_date.strftime('%Y-%m-%d')
-    else:
-        start_date = data["start_date"]
+
+        if end_date_obj.month > 3:
+            # Adjust month directly if valid
+            month = end_date_obj.month - 3
+            year = end_date_obj.year
+        else:
+            # Handle year wrap-around
+            month = end_date_obj.month + 9
+            year = end_date_obj.year - 1
+
+        # Adjust day safely
+        day = min(end_date_obj.day, (datetime(year, month + 1, 1) - timedelta(days=1)).day)
+
+        start_date = datetime(year, month, day).strftime('%Y-%m-%d')
 
     # Get the historical price data
     prices = get_prices(
