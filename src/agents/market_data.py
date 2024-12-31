@@ -1,10 +1,19 @@
+from dotenv import load_dotenv
+
+load_dotenv()  # Load environment variables from .env file
+
+from datetime import datetime
 
 from langchain_openai.chat_models import ChatOpenAI
 
 from agents.state import AgentState
-from tools.api import search_line_items, get_financial_metrics, get_insider_trades, get_market_cap, get_prices
-
-from datetime import datetime
+from tools.api import (
+    get_financial_metrics,
+    get_insider_trades,
+    get_market_cap,
+    get_prices,
+    search_line_items,
+)
 
 llm = ChatOpenAI(model="gpt-4o")
 
@@ -26,22 +35,22 @@ def market_data_agent(state: AgentState):
 
     # Get the historical price data
     prices = get_prices(
-        ticker=data["ticker"], 
-        start_date=start_date, 
+        ticker=data["ticker"],
+        start_date=start_date,
         end_date=end_date,
     )
 
     # Get the financial metrics
     financial_metrics = get_financial_metrics(
-        ticker=data["ticker"], 
-        report_period=end_date, 
-        period='ttm', 
+        ticker=data["ticker"],
+        report_period=end_date,
+        period='ttm',
         limit=1,
     )
 
     # Get the insider trades
     insider_trades = get_insider_trades(
-        ticker=data["ticker"], 
+        ticker=data["ticker"],
         end_date=end_date,
         limit=5,
     )
@@ -53,7 +62,7 @@ def market_data_agent(state: AgentState):
 
     # Get the line_items
     financial_line_items = search_line_items(
-        ticker=data["ticker"], 
+        ticker=data["ticker"],
         line_items=["free_cash_flow", "net_income", "depreciation_and_amortization", "capital_expenditure", "working_capital"],
         period='ttm',
         limit=2,
@@ -62,9 +71,9 @@ def market_data_agent(state: AgentState):
     return {
         "messages": messages,
         "data": {
-            **data, 
-            "prices": prices, 
-            "start_date": start_date, 
+            **data,
+            "prices": prices,
+            "start_date": start_date,
             "end_date": end_date,
             "financial_metrics": financial_metrics,
             "insider_trades": insider_trades,
