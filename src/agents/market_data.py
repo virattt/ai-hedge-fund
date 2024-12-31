@@ -18,18 +18,19 @@ from tools.api import (
 
 llm = ChatOpenAI(model="gpt-4o")
 
+
 def market_data_agent(state: AgentState):
     """Responsible for gathering and preprocessing market data"""
     messages = state["messages"]
     data = state["data"]
 
     # Set default dates
-    end_date = data["end_date"] or datetime.now().strftime('%Y-%m-%d')
+    end_date = data["end_date"] or datetime.now().strftime("%Y-%m-%d")
     if not data["start_date"]:
         # Calculate 3 months before end_date using relativedelta
-        end_date_obj = datetime.strptime(end_date, '%Y-%m-%d')
+        end_date_obj = datetime.strptime(end_date, "%Y-%m-%d")
         start_date_obj = end_date_obj - relativedelta(months=3)
-        start_date = start_date_obj.strftime('%Y-%m-%d')
+        start_date = start_date_obj.strftime("%Y-%m-%d")
     else:
         start_date = data["start_date"]
 
@@ -44,7 +45,7 @@ def market_data_agent(state: AgentState):
     financial_metrics = get_financial_metrics(
         ticker=data["ticker"],
         report_period=end_date,
-        period='ttm',
+        period="ttm",
         limit=1,
     )
 
@@ -63,8 +64,14 @@ def market_data_agent(state: AgentState):
     # Get the line_items
     financial_line_items = search_line_items(
         ticker=data["ticker"],
-        line_items=["free_cash_flow", "net_income", "depreciation_and_amortization", "capital_expenditure", "working_capital"],
-        period='ttm',
+        line_items=[
+            "free_cash_flow",
+            "net_income",
+            "depreciation_and_amortization",
+            "capital_expenditure",
+            "working_capital",
+        ],
+        period="ttm",
         limit=2,
     )
 
@@ -79,5 +86,5 @@ def market_data_agent(state: AgentState):
             "insider_trades": insider_trades,
             "market_cap": market_cap,
             "financial_line_items": financial_line_items,
-        }
+        },
     }
