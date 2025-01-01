@@ -9,7 +9,7 @@ import json
 import pandas as pd
 import numpy as np
 
-from tools.api import prices_to_df
+from tools.api.financial_dataset import FinancialDatasetAPI
 
 
 ##### Technical Analyst #####
@@ -25,7 +25,7 @@ def technical_analyst_agent(state: AgentState):
     show_reasoning = state["metadata"]["show_reasoning"]
     data = state["data"]
     prices = data["prices"]
-    prices_df = prices_to_df(prices)
+    prices_df = FinancialDatasetAPI.prices_to_df(prices)
     
     # Calculate indicators
     # 1. MACD (Moving Average Convergence Divergence)
