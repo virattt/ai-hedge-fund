@@ -4,6 +4,8 @@ from langchain_openai.chat_models import ChatOpenAI
 
 from agents.state import AgentState, show_agent_reasoning
 
+from dotenv import load_dotenv
+import os
 
 ##### Portfolio Management Agent #####
 def portfolio_management_agent(state: AgentState):
@@ -107,8 +109,12 @@ def portfolio_management_agent(state: AgentState):
             "portfolio_stock": portfolio["stock"]
         }
     )
+
+    # Load environment variables from the .env file
+    load_dotenv()
+
     # Invoke the LLM
-    llm = ChatOpenAI(model="gpt-4o")
+    llm = ChatOpenAI(model=os.getenv("OPENAI_MODEL"), api_key=os.getenv("OPENAI_API_KEY"))
     result = llm.invoke(prompt)
 
     # Create the portfolio management message
