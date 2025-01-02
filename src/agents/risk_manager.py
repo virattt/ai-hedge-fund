@@ -1,12 +1,12 @@
+import ast
+import json
 import math
 
 from langchain_core.messages import HumanMessage
 
 from agents.state import AgentState, show_agent_reasoning
-from tools.api import prices_to_df
+from tools.api.financial_dataset import FinancialDatasetAPI
 
-import json
-import ast
 
 ##### Risk Management Agent #####
 def risk_management_agent(state: AgentState):
@@ -15,7 +15,7 @@ def risk_management_agent(state: AgentState):
     portfolio = state["data"]["portfolio"]
     data = state["data"]
 
-    prices_df = prices_to_df(data["prices"])
+    prices_df = FinancialDatasetAPI.prices_to_df(data["prices"])
 
     # Fetch messages from other agents
     technical_message = next(msg for msg in state["messages"] if msg.name == "technical_analyst_agent")

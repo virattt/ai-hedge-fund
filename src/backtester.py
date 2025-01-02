@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from main import run_hedge_fund
-from tools.api import get_price_data
+from tools.api.financial_dataset import FinancialDatasetAPI
 
 class Backtester:
     def __init__(self, agent, ticker, start_date, end_date, initial_capital):
@@ -70,7 +70,7 @@ class Backtester:
             )
 
             action, quantity = self.parse_action(agent_output)
-            df = get_price_data(self.ticker, lookback_start, current_date_str)
+            df = FinancialDatasetAPI().get_prices(self.ticker, lookback_start, current_date_str)
             current_price = df.iloc[-1]['close']
 
             # Execute the trade with validation
