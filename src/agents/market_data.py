@@ -5,6 +5,7 @@ from agents.state import AgentState
 from tools.api import search_line_items, get_financial_metrics, get_insider_trades, get_market_cap, get_prices
 
 from datetime import datetime
+import calendar
 
 llm = ChatOpenAI(model="gpt-4o")
 
@@ -16,11 +17,20 @@ def market_data_agent(state: AgentState):
     # Set default dates
     end_date = data["end_date"] or datetime.now().strftime('%Y-%m-%d')
     if not data["start_date"]:
-        # Calculate 3 months before end_date
         end_date_obj = datetime.strptime(end_date, '%Y-%m-%d')
-        start_date = end_date_obj.replace(month=end_date_obj.month - 3) if end_date_obj.month > 3 else \
-            end_date_obj.replace(year=end_date_obj.year - 1, month=end_date_obj.month + 9)
-        start_date = start_date.strftime('%Y-%m-%d')
+        
+        # Calculate 3 months before end_date
+        new_month = (end_date_obj.month - 3) % 12 or 12
+        new_year = end_date_obj.year - 1 if end_date_obj.month <= 3 else end_date_obj.year
+        # Get the last day of the new month to handle edge cases like December 31
+        last_day_of_month = calendar.monthrange(new_year, new_month)[1]
+        new_day = min(end_date_obj.day, last_day_of_month)
+        
+        # Create the new date
+        start_date_obj = end_date_obj.replace(year=new_year, month=new_month, day=new_day)
+        
+        # Format the start_date as a string
+        start_date = start_date_obj.strftime('%Y-%m-%d')
     else:
         start_date = data["start_date"]
 
