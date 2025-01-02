@@ -6,7 +6,7 @@ This system employs several agents working together:
 
 1. Market Data Analyst - Gathers and preprocesses market data
 2. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
-3. Sentiment Agent - Analyzes market sentiment and generates trading signals
+3. Sentiment Agent - Analyzes market and news sentiment and generates trading signals
 4. Fundamentals Agent - Analyzes fundamental data and generates trading signals
 5. Technical Analyst - Analyzes technical indicators and generates trading signals
 6. Risk Manager - Calculates risk metrics and sets position limits
@@ -62,6 +62,7 @@ cp .env.example .env
 
 export OPENAI_API_KEY='your-api-key-here' # Get a key from https://platform.openai.com/
 export FINANCIAL_DATASETS_API_KEY='your-api-key-here' # Get a key from https://financialdatasets.ai/
+export NEWS_API_KEY='your-api-key-here' # Get a key from https://newsapi.org/account/
 ```
 
 ## Usage
