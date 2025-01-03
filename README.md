@@ -44,6 +44,17 @@ git clone https://github.com/virattt/ai-hedge-fund.git
 cd ai-hedge-fund
 ```
 
+### System Requirements
+- CPU: Any modern CPU (last 5 years)
+- RAM: 2GB minimum, 4GB recommended
+- Storage: 1GB free space
+- Internet: Stable connection required
+- No GPU required
+
+The system is lightweight as it primarily manages workflows between APIs (OpenAI and financial data) without running any local AI models.
+
+### Option 1: Local Setup
+
 1. Install Poetry (if not already installed):
 ```bash
 curl -sSL https://install.python-poetry.org | python3 -
@@ -62,6 +73,28 @@ cp .env.example .env
 export OPENAI_API_KEY='your-api-key-here' # Get a key from https://platform.openai.com/
 export FINANCIAL_DATASETS_API_KEY='your-api-key-here' # Get a key from https://financialdatasets.ai/
 ```
+
+### Option 2: Docker Setup
+
+You can either build the image locally or use our official image from GitHub Container Registry:
+
+#### Using the Official Image
+
+1. Create and configure your `.env` file as explained above.
+
+2. Pull and run the official image using docker compose:
+```bash
+# Run the trading agent
+docker compose run agent --ticker AAPL
+
+# Run the backtester
+docker compose run backtester --ticker AAPL
+
+# Run with custom parameters
+docker compose run agent --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01 --show-reasoning
+```
+
+The Docker setup uses a lightweight Python 3.9 base image and installs only the required dependencies.
 
 ## Usage
 
@@ -108,7 +141,7 @@ You can optionally specify the start and end dates to backtest over a specific t
 poetry run python src/backtester.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
 ```
 
-## Project Structure 
+## Project Structure
 ```
 ai-hedge-fund/
 ├── src/
@@ -138,3 +171,4 @@ ai-hedge-fund/
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+

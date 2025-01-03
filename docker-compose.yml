@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  agent:
+    image: ghcr.io/virattt/ai-hedge-fund:main
+    env_file: .env
+    volumes:
+      - .:/app
+    entrypoint: python src/main.py
+    command: --ticker AAPL
+    networks:
+      - ai-hedge-fund
+
+  backtester:
+    image: ghcr.io/virattt/ai-hedge-fund:main
+    env_file: .env
+    volumes:
+      - .:/app
+    entrypoint: python src/backtester.py
+    command: --ticker AAPL
+    networks:
+      - ai-hedge-fund
+
+networks:
+  ai-hedge-fund:
+    driver: bridge
