@@ -6,6 +6,9 @@ import pandas as pd
 from main import run_hedge_fund
 from tools.api import get_price_data
 
+from dotenv import load_dotenv
+load_dotenv()
+
 class Backtester:
     def __init__(self, agent, ticker, start_date, end_date, initial_capital):
         self.agent = agent

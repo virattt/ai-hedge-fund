@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
 
