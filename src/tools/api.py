@@ -37,8 +37,6 @@ def get_financial_metrics(
     if not financial_metrics:
         raise ValueError("No financial metrics returned")
         
-    # Store in memory cache
-    _financial_metrics_cache[cache_key] = financial_metrics
     return financial_metrics
 
 def search_line_items(
@@ -154,8 +152,6 @@ def get_prices(
     if not prices:
         raise ValueError("No price data returned")
         
-    # Store in memory cache
-    _prices_cache[cache_key] = prices
     return prices
 
 def prices_to_df(prices: List[Dict[str, Any]]) -> pd.DataFrame:
