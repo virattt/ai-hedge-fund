@@ -7,7 +7,7 @@ import requests
 
 from utils.cache import cache_api_response
 
-@cache_api_response(ttl=300)  # Cache for 5 minutes
+@cache_api_response(ttl=3600)  # Cache for 1 hour since financial data changes slowly
 def get_financial_metrics(
     ticker: str,
     report_period: str,
@@ -67,7 +67,7 @@ def search_line_items(
         raise ValueError("No search results returned")
     return search_results
 
-@cache_api_response(ttl=300)  # Cache for 5 minutes
+@cache_api_response(ttl=3600)  # Cache for 1 hour since insider trades change slowly
 def get_insider_trades(
     ticker: str,
     end_date: str,
@@ -121,7 +121,7 @@ def get_market_cap(
         raise ValueError("No company facts returned")
     return company_facts.get('market_cap')
 
-@cache_api_response(ttl=300)  # Cache for 5 minutes
+@cache_api_response(ttl=1800)  # Cache for 30 minutes since prices change more frequently
 def get_prices(
     ticker: str,
     start_date: str,
