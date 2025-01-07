@@ -108,8 +108,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--show-reasoning", action="store_true", help="Show reasoning from each agent"
     )
+    parser.add_argument(
+        "--debug-cache", action="store_true", help="Show cache hits/misses"
+    )
 
     args = parser.parse_args()
+    
+    # Configure cache debugging
+    from utils.cache import set_debug
+    set_debug(args.debug_cache)
 
     # Validate dates if provided
     if args.start_date:

@@ -8,6 +8,14 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Global debug flag
+DEBUG = False
+
+def set_debug(enabled: bool):
+    """Enable or disable cache debugging"""
+    global DEBUG
+    DEBUG = enabled
+
 class Cache:
     """Thread-safe cache implementation with TTL and LRU eviction."""
     
@@ -72,13 +80,15 @@ def cache_api_response(ttl: int = 300):
                 # Try to get from cache first
                 cached_value = _cache.get(key)
                 if cached_value is not None:
-                    logger.debug(f"Cache hit for {key}")
+                    if DEBUG:
+                        logger.info(f"🎯 Cache HIT for {key}")
                     return cached_value
                     
                 # If not in cache, call function and cache result
                 result = func(*args, **kwargs)
                 _cache.set(key, result)
-                logger.debug(f"Cached result for {key}")
+                if DEBUG:
+                    logger.info(f"💾 Cache MISS - stored new result for {key}")
                 return result
                 
             except Exception as e:
