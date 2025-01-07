@@ -7,9 +7,6 @@ import requests
 
 from utils.cache import cache_api_response
 
-# Global cache for financial metrics
-_financial_metrics_cache = {}
-
 @cache_api_response(ttl=3600)  # Cache for 1 hour since financial data changes slowly
 def get_financial_metrics(
     ticker: str,
@@ -18,10 +15,6 @@ def get_financial_metrics(
     limit: int = 1
 ) -> List[Dict[str, Any]]:
     """Fetch financial metrics from the API with caching."""
-    # Check in-memory cache first
-    cache_key = f"{ticker}:{report_period}:{period}:{limit}"
-    if cache_key in _financial_metrics_cache:
-        return _financial_metrics_cache[cache_key]
         
     headers = {}
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
@@ -132,9 +125,6 @@ def get_market_cap(
         raise ValueError("No company facts returned")
     return company_facts.get('market_cap')
 
-# Global cache for price data
-_prices_cache = {}
-
 @cache_api_response(ttl=1800)  # Cache for 30 minutes since prices change more frequently
 def get_prices(
     ticker: str,
@@ -142,11 +132,6 @@ def get_prices(
     end_date: str
 ) -> List[Dict[str, Any]]:
     """Fetch price data from the API with caching."""
-    # Check in-memory cache first
-    cache_key = f"{ticker}:{start_date}:{end_date}"
-    if cache_key in _prices_cache:
-        return _prices_cache[cache_key]
-        
     headers = {}
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
         headers["X-API-KEY"] = api_key

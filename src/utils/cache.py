@@ -63,6 +63,34 @@ class Cache:
 # Global cache instance
 _cache = Cache()
 
+def normalize_cache_key_args(*args, **kwargs) -> str:
+    """Normalize arguments for consistent cache keys."""
+    # Convert args to a list for modification
+    args_list = list(args)
+    
+    # Normalize date strings to YYYY-MM-DD format
+    for i, arg in enumerate(args_list):
+        if isinstance(arg, str) and len(arg) == 10 and arg[4] == '-':
+            try:
+                date = datetime.strptime(arg, "%Y-%m-%d")
+                args_list[i] = date.strftime("%Y-%m-%d")
+            except ValueError:
+                pass
+    
+    # Sort kwargs by key for consistent ordering
+    sorted_kwargs = dict(sorted(kwargs.items()))
+    
+    # Normalize date strings in kwargs
+    for key, value in sorted_kwargs.items():
+        if isinstance(value, str) and len(value) == 10 and value[4] == '-':
+            try:
+                date = datetime.strptime(value, "%Y-%m-%d")
+                sorted_kwargs[key] = date.strftime("%Y-%m-%d")
+            except ValueError:
+                pass
+                
+    return f"{tuple(args_list)}:{sorted_kwargs}"
+
 def cache_api_response(ttl: int = 300):
     """
     Decorator to cache API responses.
@@ -73,26 +101,27 @@ def cache_api_response(ttl: int = 300):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            # Create cache key from function name and arguments
-            key = f"{func.__name__}:{str(args)}:{str(kwargs)}"
+            # Create normalized cache key
+            normalized_args = normalize_cache_key_args(*args, **kwargs)
+            key = f"{func.__name__}:{normalized_args}"
             
             try:
                 # Try to get from cache first
                 cached_value = _cache.get(key)
                 if cached_value is not None:
                     if DEBUG:
-                        logger.info(f"🎯 Cache HIT for {key}")
+                        logger.info(f"🎯 Cache HIT for {func.__name__} with args {normalized_args}")
                     return cached_value
                     
                 # If not in cache, call function and cache result
                 result = func(*args, **kwargs)
                 _cache.set(key, result)
                 if DEBUG:
-                    logger.info(f"💾 Cache MISS - stored new result for {key}")
+                    logger.info(f"💾 Cache MISS - stored new result for {func.__name__} with args {normalized_args}")
                 return result
                 
             except Exception as e:
-                logger.error(f"Cache error for {key}: {str(e)}")
+                logger.error(f"Cache error for {func.__name__} with args {normalized_args}: {str(e)}")
                 # On cache error, call function directly
                 return func(*args, **kwargs)
                 
