@@ -4,6 +4,17 @@ from langchain_openai.chat_models import ChatOpenAI
 
 from graph.state import AgentState, show_agent_reasoning
 
+from dotenv import load_dotenv
+import os
+
+# Load variables from the .env file
+load_dotenv()
+
+# Read environment variables
+is_openai = os.getenv("OPENAI", "true").lower() != "false"
+api_key = os.getenv("OPENAI_API_KEY")  # API key for OpenAI or compatible service
+api_base = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")  # API base URL (default to OpenAI)
+model_name = os.getenv("MODEL_NAME", "gpt-4")  # Model name (default to GPT-4)
 
 ##### Portfolio Management Agent #####
 def portfolio_management_agent(state: AgentState):
@@ -69,8 +80,16 @@ def portfolio_management_agent(state: AgentState):
             "portfolio_stock": portfolio["stock"],
         }
     )
-    # Invoke the LLM
-    llm = ChatOpenAI(model="gpt-4o")
+    # Invoke the LLM 
+    if is_openai:
+        llm = ChatOpenAI(model=model_name)
+    else:
+        llm = ChatOpenAI(
+            model=model_name,
+            openai_api_key=api_key,
+            openai_api_base=api_base
+        )
+	
     result = llm.invoke(prompt)
 
     # Create the portfolio management message
