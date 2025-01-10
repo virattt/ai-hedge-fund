@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
+import questionary
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -14,12 +15,13 @@ init(autoreset=True)
 
 
 class Backtester:
-    def __init__(self, agent, ticker, start_date, end_date, initial_capital):
+    def __init__(self, agent, ticker, start_date, end_date, initial_capital, selected_analysts=None):
         self.agent = agent
         self.ticker = ticker
         self.start_date = start_date
         self.end_date = end_date
         self.initial_capital = initial_capital
+        self.selected_analysts = selected_analysts
         self.portfolio = {"cash": initial_capital, "stock": 0}
         self.portfolio_values = []
 
@@ -74,6 +76,7 @@ class Backtester:
                 start_date=lookback_start,
                 end_date=current_date_str,
                 portfolio=self.portfolio,
+                selected_analysts=self.selected_analysts,
             )
 
             agent_decision = output["decision"]
@@ -88,11 +91,15 @@ class Backtester:
             total_value = self.portfolio["cash"] + self.portfolio["stock"] * current_price
             self.portfolio["portfolio_value"] = total_value
 
-            # Count signals
+            # Count signals from selected analysts only
             analyst_signals = output["analyst_signals"]
-            bullish_count = len([s for s in analyst_signals.values() if s.get("signal") == "bullish"])
-            bearish_count = len([s for s in analyst_signals.values() if s.get("signal") == "bearish"])
-            neutral_count = len([s for s in analyst_signals.values() if s.get("signal") == "neutral"])
+
+            # Count signals
+            bullish_count = len([s for s in analyst_signals.values() if s.get("signal", "").lower() == "bullish"])
+            bearish_count = len([s for s in analyst_signals.values() if s.get("signal", "").lower() == "bearish"])
+            neutral_count = len([s for s in analyst_signals.values() if s.get("signal", "").lower() == "neutral"])
+            
+            print(f"Signal counts - Bullish: {bullish_count}, Bearish: {bearish_count}, Neutral: {neutral_count}")
 
             # Format and add row
             table_rows.append(format_backtest_row(
@@ -181,6 +188,32 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    selected_analysts = None
+    choices = questionary.checkbox(
+        "Use the Space bar to select/unselect analysts.",
+        choices=[
+            questionary.Choice("Technical Analyst", value="technical_analyst"),
+            questionary.Choice("Fundamentals Analyst", value="fundamentals_analyst"),
+            questionary.Choice("Sentiment Analyst", value="sentiment_analyst"),
+            questionary.Choice("Valuation Analyst", value="valuation_analyst"),
+        ],
+        instruction="\n\nPress 'a' to toggle all.\n\nPress Enter when done to run the hedge fund.",
+        validate=lambda x: len(x) > 0 or "You must select at least one analyst.",
+        style=questionary.Style([
+            ('checkbox-selected', 'fg:green'),       
+            ('selected', 'fg:green noinherit'),
+            ('highlighted', 'noinherit'),  
+            ('pointer', 'noinherit'),             
+        ])
+    ).ask()
+    
+    if not choices:
+        print("You must select at least one analyst. Using all analysts by default.")
+        selected_analysts = None
+    else:
+        selected_analysts = choices
+        print(f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}")
+
     # Create an instance of Backtester
     backtester = Backtester(
         agent=run_hedge_fund,
@@ -188,6 +221,7 @@ if __name__ == "__main__":
         start_date=args.start_date,
         end_date=args.end_date,
         initial_capital=args.initial_capital,
+        selected_analysts=selected_analysts,
     )
 
     # Run the backtesting process
