@@ -5,13 +5,17 @@ import requests
 
 import requests
 
+from utils.cache import cache_api_response
+
+@cache_api_response(ttl=3600)  # Cache for 1 hour since financial data changes slowly
 def get_financial_metrics(
     ticker: str,
     report_period: str,
     period: str = 'ttm',
     limit: int = 1
 ) -> List[Dict[str, Any]]:
-    """Fetch financial metrics from the API."""
+    """Fetch financial metrics from the API with caching."""
+        
     headers = {}
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
         headers["X-API-KEY"] = api_key
@@ -32,6 +36,7 @@ def get_financial_metrics(
     financial_metrics = data.get("financial_metrics")
     if not financial_metrics:
         raise ValueError("No financial metrics returned")
+        
     return financial_metrics
 
 def search_line_items(
@@ -64,13 +69,14 @@ def search_line_items(
         raise ValueError("No search results returned")
     return search_results
 
+@cache_api_response(ttl=3600)  # Cache for 1 hour since insider trades change slowly
 def get_insider_trades(
     ticker: str,
     end_date: str,
     limit: int = 5,
 ) -> List[Dict[str, Any]]:
     """
-    Fetch insider trades for a given ticker and date range.
+    Fetch insider trades for a given ticker and date range with caching.
     """
     headers = {}
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
@@ -117,12 +123,13 @@ def get_market_cap(
         raise ValueError("No company facts returned")
     return company_facts.get('market_cap')
 
+@cache_api_response(ttl=1800)  # Cache for 30 minutes since prices change more frequently
 def get_prices(
     ticker: str,
     start_date: str,
     end_date: str
 ) -> List[Dict[str, Any]]:
-    """Fetch price data from the API."""
+    """Fetch price data from the API with caching."""
     headers = {}
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
         headers["X-API-KEY"] = api_key
@@ -144,6 +151,7 @@ def get_prices(
     prices = data.get("prices")
     if not prices:
         raise ValueError("No price data returned")
+        
     return prices
 
 def prices_to_df(prices: List[Dict[str, Any]]) -> pd.DataFrame:
