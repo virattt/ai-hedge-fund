@@ -14,8 +14,10 @@ def get_chat_model(provider: Literal["openai", "groq"] = "openai", model: str = 
         ValueError: If an invalid provider is specified
     """
     if provider == "groq":
-        # Default to LLaMA2-70b-chat for Groq if no model specified
-        model_name = model or "llama2-70b-chat"
+        # Default to mixtral-8x7b-32768 for Groq if no model specified
+        # llama2-70b-4096
+        # gemma-7b-it
+        model_name = model or "mixtral-8x7b-32768"
         return ChatGroq(
             model_name=model_name,
             temperature=0.7,
