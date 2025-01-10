@@ -65,6 +65,9 @@ Set the API keys in the .env file:
 # Get your OpenAI API key from https://platform.openai.com/
 OPENAI_API_KEY=your-openai-api-key
 
+# Get your Groq API key from https://console.groq.com/
+GROQ_API_KEY=your-groq-api-key
+
 # Get your Financial Datasets API key from https://financialdatasets.ai/
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
@@ -109,6 +112,21 @@ You can optionally specify the start and end dates to backtest over a specific t
 
 ```bash
 poetry run python src/backtester.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
+```
+
+### Model Selection
+You can choose between OpenAI and Groq as the model provider, defaults to OpenAI:
+
+```bash
+
+# Use OpenAI
+poetry run python src/main.py --ticker AAPL 
+
+# Use Groq
+poetry run python src/main.py --ticker AAPL --model-provider groq
+
+# Specify a particular model
+poetry run python src/main.py --ticker AAPL --model-provider groq --model-name llama2-70b-chat
 ```
 
 ## Project Structure 

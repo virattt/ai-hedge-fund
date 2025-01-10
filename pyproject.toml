@@ -8,16 +8,17 @@ packages = [
     { include = "src", from = "." }
 ]
 [tool.poetry.dependencies]
-python = "^3.9"
-langchain = "0.3.0"
-langchain-openai = "0.2.11"
-langgraph = "0.2.56"
+python = "^3.13"
+langchain = "*"
+langchain-openai = "*"
+langgraph = "*"
 pandas = "^2.1.0"
 numpy = "^1.24.0"
-python-dotenv = "1.0.0"
+python-dotenv = "*"
 matplotlib = "^3.9.2"
 tabulate = "^0.9.0"
 colorama = "^0.4.6"
+langchain-groq = "*"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
