@@ -1,6 +1,7 @@
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai.chat_models import ChatOpenAI
+from config.models import get_chat_model
 
 from graph.state import AgentState, show_agent_reasoning
 
@@ -69,8 +70,12 @@ def portfolio_management_agent(state: AgentState):
             "portfolio_stock": portfolio["stock"],
         }
     )
+    # Get the model provider from metadata or default to openai
+    provider = state["metadata"].get("model_provider", "openai")
+    model = state["metadata"].get("model_name")
+    
     # Invoke the LLM
-    llm = ChatOpenAI(model="gpt-4o")
+    llm = get_chat_model(provider=provider, model=model)
     result = llm.invoke(prompt)
 
     # Create the portfolio management message

@@ -5,6 +5,7 @@ from graph.state import AgentState, show_agent_reasoning
 import json
 
 from tools.api import get_financial_metrics
+from config.models import get_chat_model
 
 
 ##### Fundamental Agent #####
@@ -205,6 +206,11 @@ def fundamentals_agent(state: AgentState):
         "confidence": confidence,
         "reasoning": reasoning,
     }
+
+    # Add any LLM calls using the llm variable
+    provider = state["metadata"].get("model_provider", "openai")
+    model = state["metadata"].get("model_name")
+    llm = get_chat_model(provider=provider, model=model)
 
     return {
         "messages": [message],

@@ -129,6 +129,22 @@ poetry run python src/main.py --ticker AAPL --model-provider groq
 poetry run python src/main.py --ticker AAPL --model-provider groq --model-name llama2-70b-chat
 ```
 
+## Testing 
+
+### Run only unit tests
+pytest -m unit
+
+### Run only integration tests
+pytest -m integration
+
+### Run all tests
+pytest
+
+### Run everything except integration tests
+pytest -m "not integration"
+
+
+
 ## Project Structure 
 ```
 ai-hedge-fund/

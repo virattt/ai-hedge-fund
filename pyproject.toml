@@ -29,3 +29,9 @@ flake8 = "^6.1.0"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+markers = [
+    "unit: marks tests as unit tests",
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+]
