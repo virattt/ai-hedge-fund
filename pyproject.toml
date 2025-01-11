@@ -9,9 +9,9 @@ packages = [
 ]
 [tool.poetry.dependencies]
 python = "^3.9"
-langchain = "*"
-langchain-openai = "*"
-langgraph = "*"
+langchain = "0.3.0"
+langchain-openai = "0.3"
+langgraph = "0.2.56"
 pandas = "^2.1.0"
 numpy = "^1.24.0"
 python-dotenv = "*"

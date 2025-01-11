@@ -2,7 +2,7 @@ from langchain_openai import ChatOpenAI
 from langchain_groq import ChatGroq
 from typing import Literal
 
-def get_chat_model(provider: Literal["openai", "groq"] = "openai", model: str = None):
+def get_chat_model(provider: Literal["openai", "groq"] = "openai", model: str = None, structure=None):
     """
     Get the appropriate chat model based on provider and model name.
     
@@ -25,11 +25,13 @@ def get_chat_model(provider: Literal["openai", "groq"] = "openai", model: str = 
         )
     elif provider == "openai":
         # Default to gpt-4 for OpenAI if no model specified
-        model_name = model or "gpt-4"
-        return ChatOpenAI(
+        model_name = model or "gpt-4o"
+        llm =  ChatOpenAI(
             model_name=model_name,
             temperature=0.7,
         )
+        if structure: 
+            return llm.with_structured_output(structure)
     else:
         raise ValueError(f"Invalid provider: {provider}. Must be one of: openai, groq")
 

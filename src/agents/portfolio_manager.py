@@ -1,9 +1,18 @@
+import json
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai.chat_models import ChatOpenAI
 from config.models import get_chat_model
 
 from graph.state import AgentState, show_agent_reasoning
+from pydantic import BaseModel, Field
+from typing import Literal
+
+class PortfolioManagerOutput(BaseModel):
+    action: Literal["buy", "sell", "hold"]
+    quantity: int = Field(ge=0)
+    confidence: float = Field(ge=0.0, le=1.0)
+    reasoning: str
 
 
 ##### Portfolio Management Agent #####
@@ -17,12 +26,6 @@ def portfolio_management_agent(state: AgentState):
                 "system",
                 """You are a portfolio manager making final trading decisions.
                 Your job is to make a trading decision based on the team's analysis.
-
-                Provide the following in your output:
-                - "action": "buy" | "sell" | "hold",
-                - "quantity": <positive integer>
-                - "confidence": <float between 0 and 1>
-                - "reasoning": <concise explanation of the decision including how you weighted the signals>
 
                 Trading Rules:
                 - Only buy if you have available cash
@@ -43,12 +46,6 @@ def portfolio_management_agent(state: AgentState):
                 Portfolio:
                 Cash: {portfolio_cash}
                 Current Position: {portfolio_stock} shares
-
-                Only include the action, quantity, reasoning, and confidence in your output as JSON.  Do not include any JSON markdown.
-
-                Remember, the action must be either buy, sell, or hold.
-                You can only buy if you have available cash.
-                You can only sell if you have shares in the portfolio to sell.
                 """,
             ),
         ]
@@ -75,12 +72,19 @@ def portfolio_management_agent(state: AgentState):
     model = state["metadata"].get("model_name")
     
     # Invoke the LLM
-    llm = get_chat_model(provider=provider, model=model)
+    llm = get_chat_model(provider=provider, model=model, structure=PortfolioManagerOutput)
     result = llm.invoke(prompt)
+
+    message_content = {
+        "action": result.action.lower(),
+        "quantity": int(result.quantity),
+        "confidence": float(result.confidence),
+        "reasoning": result.reasoning
+    }
 
     # Create the portfolio management message
     message = HumanMessage(
-        content=result.content,
+        content=json.dumps(message_content),
         name="portfolio_management",
     )
 
