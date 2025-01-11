@@ -71,10 +71,11 @@ def portfolio_management_agent(state: AgentState):
     provider = state["metadata"].get("model_provider", "openai")
     model = state["metadata"].get("model_name")
     
-    # Invoke the LLM
+    # Create the LLM
     llm = get_chat_model(provider=provider, model=model, structure=PortfolioManagerOutput)
     
     try:
+        # Invoke the LLM
         result = llm.invoke(prompt)
     except Exception as e:
         # Try again with same prompt
