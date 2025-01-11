@@ -15,7 +15,6 @@ def valuation_agent(state: AgentState):
         ticker=data["ticker"],
         end_date=end_date,
         period="ttm",
-        limit=1,
     )
 
     # Pull the most recent financial metrics

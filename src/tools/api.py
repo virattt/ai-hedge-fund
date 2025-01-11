@@ -1,64 +1,12 @@
-from datetime import datetime
 import os
-from typing import Dict, Any, List, Optional
-from matplotlib.dates import relativedelta
+from typing import Dict, Any, List
 import pandas as pd
 import requests
 
-class Cache:
-    """In-memory cache for API responses."""
-    def __init__(self):
-        self._prices_cache: Dict[str, Dict[str, Any]] = {}
-        self._financial_metrics_cache: Dict[str, Dict[str, Any]] = {}
-        self._line_items_cache: Dict[str, Dict[str, Any]] = {}
-        self._insider_trades_cache: Dict[str, Dict[str, Any]] = {}
-    
-    def _make_key(self, **kwargs) -> str:
-        """Create a cache key from the parameters."""
-        return "_".join(f"{k}:{v}" for k, v in sorted(kwargs.items()))
-    
-    def get_prices(self, ticker: str, start_date: str, end_date: str) -> Optional[List[Dict[str, Any]]]:
-        """Get cached price data if available."""
-        key = self._make_key(ticker=ticker, start_date=start_date, end_date=end_date)
-        return self._prices_cache.get(key)
-    
-    def set_prices(self, ticker: str, start_date: str, end_date: str, data: List[Dict[str, Any]]):
-        """Cache price data."""
-        key = self._make_key(ticker=ticker, start_date=start_date, end_date=end_date)
-        self._prices_cache[key] = data
-    
-    def get_financial_metrics(self, ticker: str, end_date: str, period: str = 'ttm', limit: int = 1) -> Optional[List[Dict[str, Any]]]:
-        """Get cached financial metrics if available."""
-        key = self._make_key(ticker=ticker, end_date=end_date, period=period, limit=limit)
-        return self._financial_metrics_cache.get(key)
-    
-    def set_financial_metrics(self, ticker: str, end_date: str, period: str, limit: int, data: List[Dict[str, Any]]):
-        """Cache financial metrics data."""
-        key = self._make_key(ticker=ticker, end_date=end_date, period=period, limit=limit)
-        self._financial_metrics_cache[key] = data
-    
-    def get_line_items(self, ticker: str, line_items: List[str], end_date: str, period: str = 'ttm', limit: int = 1) -> Optional[List[Dict[str, Any]]]:
-        """Get cached line items if available."""
-        key = self._make_key(ticker=ticker, end_date=end_date, period=period, limit=limit, line_items=",".join(sorted(line_items)))
-        return self._line_items_cache.get(key)
-    
-    def set_line_items(self, ticker: str, line_items: List[str], end_date: str, period: str, limit: int, data: List[Dict[str, Any]]):
-        """Cache line items data."""
-        key = self._make_key(ticker=ticker, end_date=end_date, period=period, limit=limit, line_items=",".join(sorted(line_items)))
-        self._line_items_cache[key] = data
-    
-    def get_insider_trades(self, ticker: str, end_date: str, limit: int = 5) -> Optional[List[Dict[str, Any]]]:
-        """Get cached insider trades if available."""
-        key = self._make_key(ticker=ticker, end_date=end_date, limit=limit)
-        return self._insider_trades_cache.get(key)
-    
-    def set_insider_trades(self, ticker: str, end_date: str, limit: int, data: List[Dict[str, Any]]):
-        """Cache insider trades data."""
-        key = self._make_key(ticker=ticker, end_date=end_date, limit=limit)
-        self._insider_trades_cache[key] = data
+from data.cache import get_cache
 
 # Global cache instance
-_cache = Cache()
+_cache = get_cache()
 
 def get_prices(
     ticker: str,
@@ -67,10 +15,16 @@ def get_prices(
 ) -> List[Dict[str, Any]]:
     """Fetch price data from cache or API."""
     # Check cache first
-    if cached_data := _cache.get_prices(ticker, start_date, end_date):
-        return cached_data
+    if cached_data := _cache.get_prices(ticker):
+        # Filter cached data by date range
+        filtered_data = [
+            price for price in cached_data 
+            if start_date <= price["time"] <= end_date
+        ]
+        if filtered_data:
+            return filtered_data
         
-    # If not in cache, fetch from API
+    # If not in cache or no data in range, fetch from API
     headers = {}
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
         headers["X-API-KEY"] = api_key
@@ -94,20 +48,28 @@ def get_prices(
         raise ValueError("No price data returned")
     
     # Cache the results
-    _cache.set_prices(ticker, start_date, end_date, prices)
+    _cache.set_prices(ticker, prices)
     return prices
 
 def get_financial_metrics(
     ticker: str,
     end_date: str,
     period: str = 'ttm',
-    limit: int = 1
+    limit: int = 10,
 ) -> List[Dict[str, Any]]:
     """Fetch financial metrics from cache or API."""
     # Check cache first
     if cached_data := _cache.get_financial_metrics(ticker):
-        return cached_data
+        # Filter cached data by date and limit
+        filtered_data = [
+            metric for metric in cached_data 
+            if metric["report_period"] <= end_date
+        ]
+        filtered_data.sort(key=lambda x: x["report_period"], reverse=True)
+        if filtered_data:
+            return filtered_data[:limit]
     
+    # If not in cache or insufficient data, fetch from API
     headers = {}
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
         headers["X-API-KEY"] = api_key
@@ -130,21 +92,29 @@ def get_financial_metrics(
         raise ValueError("No financial metrics returned")
     
     # Cache the results
-    _cache.set_financial_metrics(ticker, end_date, period, limit, financial_metrics)
-    return financial_metrics
+    _cache.set_financial_metrics(ticker, financial_metrics)
+    return financial_metrics[:limit]
 
 def search_line_items(
     ticker: str,
     line_items: List[str],
     end_date: str,
     period: str = 'ttm',
-    limit: int = 1
+    limit: int = 10,
 ) -> List[Dict[str, Any]]:
     """Fetch line items from cache or API."""
     # Check cache first
-    if cached_data := _cache.get_line_items(ticker, line_items, end_date, period, limit):
-        return cached_data
+    if cached_data := _cache.get_line_items(ticker):
+        # Filter cached data by date and limit
+        filtered_data = [
+            item for item in cached_data 
+            if item["report_period"] <= end_date
+        ]
+        filtered_data.sort(key=lambda x: x["report_period"], reverse=True)
+        if filtered_data:
+            return filtered_data[:limit]
     
+    # If not in cache or insufficient data, fetch from API
     headers = {}
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
         headers["X-API-KEY"] = api_key
@@ -169,19 +139,31 @@ def search_line_items(
         raise ValueError("No search results returned")
     
     # Cache the results
-    _cache.set_line_items(ticker, line_items, end_date, period, limit, search_results)
-    return search_results
+    _cache.set_line_items(ticker, search_results)
+    return search_results[:limit]
 
 def get_insider_trades(
     ticker: str,
     end_date: str,
-    limit: int = 5,
+    limit: int = 1000,
 ) -> List[Dict[str, Any]]:
     """Fetch insider trades from cache or API."""
     # Check cache first
-    if cached_data := _cache.get_insider_trades(ticker, end_date, limit):
-        return cached_data
+    if cached_data := _cache.get_insider_trades(ticker):
+        # Filter cached data by date and limit
+        filtered_data = [
+            trade for trade in cached_data 
+            if (trade.get("transaction_date") or trade["filing_date"]) <= end_date
+        ]
+        # Sort by transaction_date if available, otherwise filing_date
+        filtered_data.sort(
+            key=lambda x: x.get("transaction_date") or x["filing_date"],
+            reverse=True
+        )
+        if filtered_data:
+            return filtered_data[:limit]
     
+    # If not in cache or insufficient data, fetch from API
     headers = {}
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
         headers["X-API-KEY"] = api_key
@@ -203,8 +185,8 @@ def get_insider_trades(
         raise ValueError("No insider trades returned")
     
     # Cache the results
-    _cache.set_insider_trades(ticker, end_date, limit, insider_trades)
-    return insider_trades
+    _cache.set_insider_trades(ticker, insider_trades)
+    return insider_trades[:limit]
 
 def get_market_cap(
     ticker: str,

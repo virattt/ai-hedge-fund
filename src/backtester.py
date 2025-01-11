@@ -8,7 +8,13 @@ from tabulate import tabulate
 from colorama import Fore, Back, Style, init
 
 from main import run_hedge_fund
-from tools.api import get_price_data
+from tools.api import (
+    get_price_data,
+    get_prices,
+    get_financial_metrics,
+    get_insider_trades,
+    search_line_items,
+)
 from utils.display import print_backtest_results, format_backtest_row
 
 init(autoreset=True)
@@ -24,6 +30,41 @@ class Backtester:
         self.selected_analysts = selected_analysts
         self.portfolio = {"cash": initial_capital, "stock": 0}
         self.portfolio_values = []
+
+    def prefetch_data(self):
+        """Pre-fetch all data needed for the backtest period."""
+        print("\nPre-fetching data for the entire backtest period...")
+        
+        # Convert end_date string to datetime, perform arithmetic, then back to string
+        end_date_dt = datetime.strptime(self.end_date, "%Y-%m-%d")
+        start_date_dt = end_date_dt - relativedelta(years=1)
+        start_date_str = start_date_dt.strftime("%Y-%m-%d")
+        
+        # Fetch price data for the entire period, plus 1 year 
+        get_prices(self.ticker, start_date_str, self.end_date)
+        
+        # Fetch financial metrics
+        get_financial_metrics(self.ticker, self.end_date, limit=10)
+        
+        # Fetch insider trades
+        get_insider_trades(self.ticker, self.end_date, limit=1000)
+        
+        # Fetch common line items used by valuation agent
+        search_line_items(
+            self.ticker,
+            [
+                "free_cash_flow",
+                "net_income",
+                "depreciation_and_amortization",
+                "capital_expenditure",
+                "working_capital",
+            ],
+            self.end_date,
+            period="ttm",
+            limit=2,  # Need current and previous for working capital change
+        )
+        
+        print("Data pre-fetch complete.")
 
     def parse_agent_response(self, agent_output):
         try:
@@ -62,6 +103,9 @@ class Backtester:
         return 0
 
     def run_backtest(self):
+        # Pre-fetch all data at the start
+        self.prefetch_data()
+        
         dates = pd.date_range(self.start_date, self.end_date, freq="B")
         table_rows = []
         
@@ -166,7 +210,7 @@ if __name__ == "__main__":
 
     # Set up argument parser
     parser = argparse.ArgumentParser(description="Run backtesting simulation")
-    parser.add_argument("--ticker", type=str, default="AAPL", help="Stock ticker symbol (e.g., AAPL)")
+    parser.add_argument("--ticker", type=str, help="Stock ticker symbol (e.g., AAPL)")
     parser.add_argument(
         "--end-date",
         type=str,
