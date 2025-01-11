@@ -12,7 +12,7 @@ from typing import Literal
 class PortfolioManagerOutput(BaseModel):
     action: Literal["buy", "sell", "hold"]
     quantity: int = Field(description="Number of shares to trade")
-    confidence: float = Field(description="Confidence in the decision, between 0.0 and 1.0")
+    confidence: float = Field(description="Confidence in the decision, between 0.0 and 100.0")
     reasoning: str = Field(description="Reasoning for the decision")
 
 
