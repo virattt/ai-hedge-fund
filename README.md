@@ -180,7 +180,7 @@ ai-hedge-fund/
 4. Push to the branch
 5. Create a Pull Request
 
-**Important**: Please keep your pull requests small and focused.  Try to keep each suggestion atomic.  This will make it easier to review and merge.
+**Important**: Please keep your pull requests small and focused.  This will make it easier to review and merge.
 
 ## License
 
