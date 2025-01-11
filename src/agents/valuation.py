@@ -13,7 +13,7 @@ def valuation_agent(state: AgentState):
     # Fetch the financial metrics
     financial_metrics = get_financial_metrics(
         ticker=data["ticker"],
-        report_period=end_date,
+        end_date=end_date,
         period="ttm",
         limit=1,
     )

@@ -7,7 +7,7 @@ import requests
 
 def get_financial_metrics(
     ticker: str,
-    report_period: str,
+    end_date: str,
     period: str = 'ttm',
     limit: int = 1
 ) -> List[Dict[str, Any]]:
@@ -19,7 +19,7 @@ def get_financial_metrics(
     url = (
         f"https://api.financialdatasets.ai/financial-metrics/"
         f"?ticker={ticker}"
-        f"&report_period_lte={report_period}"
+        f"&report_period_lte={end_date}"
         f"&limit={limit}"
         f"&period={period}"
     )
