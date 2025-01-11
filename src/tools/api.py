@@ -37,6 +37,7 @@ def get_financial_metrics(
 def search_line_items(
     ticker: str,
     line_items: List[str],
+    end_date: str,
     period: str = 'ttm',
     limit: int = 1
 ) -> List[Dict[str, Any]]:
@@ -50,6 +51,7 @@ def search_line_items(
     body = {
         "tickers": [ticker],
         "line_items": line_items,
+        "end_date": end_date,
         "period": period,
         "limit": limit
     }
