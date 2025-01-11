@@ -73,7 +73,12 @@ def portfolio_management_agent(state: AgentState):
     
     # Invoke the LLM
     llm = get_chat_model(provider=provider, model=model, structure=PortfolioManagerOutput)
-    result = llm.invoke(prompt)
+    
+    try:
+        result = llm.invoke(prompt)
+    except Exception as e:
+        # Try again with same prompt
+        result = llm.invoke(prompt)
 
     message_content = {
         "action": result.action.lower(),
