@@ -10,7 +10,7 @@ This system employs several agents working together:
 4. Technical Analyst - Analyzes technical indicators and generates trading signals
 5. Risk Manager - Calculates risk metrics and sets position limits
 6. Portfolio Manager - Makes final trading decisions and generates orders
-   
+
 <img width="1060" alt="Screenshot 2025-01-03 at 5 39 25 PM" src="https://github.com/user-attachments/assets/4611aace-27d0-43b2-9a70-385b40336e3f" />
 
 Note: the system simulates trading decisions, it does not actually trade.
@@ -62,6 +62,9 @@ cp .env.example .env
 
 Set the API keys in the .env file:
 ```
+# Get your LangsSmith API key from https://smith.langchain.com/settings
+LANGCHAIN_API_KEY=your-langsmith-api-key
+
 # Get your OpenAI API key from https://platform.openai.com/
 OPENAI_API_KEY=your-openai-api-key
 
@@ -69,11 +72,13 @@ OPENAI_API_KEY=your-openai-api-key
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
-**Important**: You must to set the OpenAI API key for the hedge fund to work.
+**Important**: You must set the OpenAI API key for the hedge fund to work.
 
 Financial data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key.
 
 For any other ticker, you will need to set the `FINANCIAL_DATASETS_API_KEY` in the .env file.
+
+The LangSmith API key is not mandatory but provides valuable visual data for tracking LangGraph.
 
 ## Usage
 
@@ -93,7 +98,7 @@ poetry run python src/main.py --ticker AAPL --show-reasoning
 You can optionally specify the start and end dates to make decisions for a specific time period.
 
 ```bash
-poetry run python src/main.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01 
+poetry run python src/main.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
 ```
 
 ### Running the Backtester
@@ -111,7 +116,7 @@ You can optionally specify the start and end dates to backtest over a specific t
 poetry run python src/backtester.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
 ```
 
-## Project Structure 
+## Project Structure
 ```
 ai-hedge-fund/
 ├── src/
