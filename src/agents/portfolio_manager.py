@@ -90,7 +90,7 @@ def portfolio_management_agent(state: AgentState):
 
     # Print the decision if the flag is set
     if state["metadata"]["show_reasoning"]:
-        show_agent_reasoning(message.content, "Portfolio Management Agent")
+        show_agent_reasoning(message_content, "Portfolio Management Agent")
 
     return {
         "messages": state["messages"] + [message],
