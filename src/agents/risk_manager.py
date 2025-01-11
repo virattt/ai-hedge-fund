@@ -1,4 +1,3 @@
-import math
 
 from langchain_core.messages import HumanMessage
 
@@ -6,7 +5,6 @@ from graph.state import AgentState, show_agent_reasoning
 from tools.api import get_prices, prices_to_df
 
 import json
-import ast
 
 
 ##### Risk Management Agent #####

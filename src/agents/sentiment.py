@@ -7,8 +7,6 @@ import json
 from tools.api import get_insider_trades
 
 ##### Sentiment Agent #####
-
-
 def sentiment_agent(state: AgentState):
     """Analyzes market sentiment and generates trading signals."""
     data = state.get("data", {})
