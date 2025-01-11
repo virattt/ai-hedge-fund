@@ -12,19 +12,12 @@ from agents.sentiment import sentiment_agent
 from graph.state import AgentState
 from agents.valuation import valuation_agent
 from utils.display import print_trading_output
+from utils.analysts import ANALYST_ORDER
 
 import argparse
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from tabulate import tabulate
-
-# Define analyst order
-ANALYST_ORDER = [
-    ("Technical Analyst", "technical_analyst"),
-    ("Fundamentals Analyst", "fundamentals_analyst"),
-    ("Sentiment Analyst", "sentiment_analyst"),
-    ("Valuation Analyst", "valuation_analyst"),
-]
 
 # Load environment variables from .env file
 load_dotenv()

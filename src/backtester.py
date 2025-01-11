@@ -7,7 +7,8 @@ import pandas as pd
 from tabulate import tabulate
 from colorama import Fore, Back, Style, init
 
-from main import ANALYST_ORDER, run_hedge_fund
+from utils.analysts import ANALYST_ORDER
+from main import run_hedge_fund
 from tools.api import get_price_data
 from utils.display import print_backtest_results, format_backtest_row
 

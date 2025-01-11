@@ -1,7 +1,7 @@
 from colorama import Fore, Style
 from tabulate import tabulate
 from typing import List, Dict
-from ..main import ANALYST_ORDER
+from .analysts import ANALYST_ORDER
 
 def sort_analyst_signals(signals):
     """Sort analyst signals in a consistent order."""
@@ -24,7 +24,7 @@ def print_trading_output(result: dict) -> None:
         return
 
     # Prepare analyst signals table
-    analyst_signals = []
+    table_data = []
     for agent, signal in result.get("analyst_signals", {}).items():
         agent_name = agent.replace("_agent", "").replace("_", " ").title()
         signal_type = signal.get("signal", "").upper()
@@ -35,7 +35,7 @@ def print_trading_output(result: dict) -> None:
             "NEUTRAL": Fore.YELLOW,
         }.get(signal_type, Fore.WHITE)
 
-        analyst_signals.append(
+        table_data.append(
             [
                 f"{Fore.CYAN}{agent_name}{Style.RESET_ALL}",
                 f"{signal_color}{signal_type}{Style.RESET_ALL}",
@@ -44,12 +44,12 @@ def print_trading_output(result: dict) -> None:
         )
 
     # Sort the signals according to the predefined order
-    analyst_signals = sort_analyst_signals(analyst_signals)
+    table_data = sort_analyst_signals(table_data)
 
     print(f"\n{Fore.WHITE}{Style.BRIGHT}ANALYST SIGNALS:{Style.RESET_ALL}")
     print(
         tabulate(
-            analyst_signals,
+            table_data,
             headers=[f"{Fore.WHITE}Analyst", "Signal", "Confidence"],
             tablefmt="grid",
             colalign=("left", "center", "right"),
@@ -103,7 +103,7 @@ def print_backtest_results(table_rows: List[List], clear_screen: bool = True) ->
     ]
 
     # Clear screen if requested
-    if (clear_screen):
+    if clear_screen:
         print("\033[H\033[J")
 
     # Display colored table
