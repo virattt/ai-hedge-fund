@@ -18,6 +18,14 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from tabulate import tabulate
 
+# Define analyst order
+ANALYST_ORDER = [
+    ("Technical Analyst", "technical_analyst"),
+    ("Fundamentals Analyst", "fundamentals_analyst"),
+    ("Sentiment Analyst", "sentiment_analyst"),
+    ("Valuation Analyst", "valuation_analyst"),
+]
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -85,11 +93,11 @@ def create_workflow(selected_analysts=None):
     """Create the workflow with selected analysts."""
     workflow = StateGraph(AgentState)
     workflow.add_node("start_node", start)
-    
+
     # Default to all analysts if none selected
     if selected_analysts is None:
         selected_analysts = ["technical_analyst", "fundamentals_analyst", "sentiment_analyst", "valuation_analyst"]
-    
+
     # Dictionary of all available analysts
     analyst_nodes = {
         "technical_analyst": ("technical_analyst_agent", technical_analyst_agent),
@@ -97,25 +105,25 @@ def create_workflow(selected_analysts=None):
         "sentiment_analyst": ("sentiment_agent", sentiment_agent),
         "valuation_analyst": ("valuation_agent", valuation_agent),
     }
-    
+
     # Add selected analyst nodes
     for analyst_key in selected_analysts:
         node_name, node_func = analyst_nodes[analyst_key]
         workflow.add_node(node_name, node_func)
         workflow.add_edge("start_node", node_name)
-    
+
     # Always add risk and portfolio management
     workflow.add_node("risk_management_agent", risk_management_agent)
     workflow.add_node("portfolio_management_agent", portfolio_management_agent)
-    
+
     # Connect selected analysts to risk management
     for analyst_key in selected_analysts:
         node_name = analyst_nodes[analyst_key][0]
         workflow.add_edge(node_name, "risk_management_agent")
-    
+
     workflow.add_edge("risk_management_agent", "portfolio_management_agent")
     workflow.add_edge("portfolio_management_agent", END)
-    
+
     workflow.set_entry_point("start_node")
     return workflow
 
@@ -156,21 +164,18 @@ if __name__ == "__main__":
     choices = questionary.checkbox(
         "Select your AI analysts.",
         choices=[
-            questionary.Choice("Technical Analyst", value="technical_analyst"),
-            questionary.Choice("Fundamentals Analyst", value="fundamentals_analyst"),
-            questionary.Choice("Sentiment Analyst", value="sentiment_analyst"),
-            questionary.Choice("Valuation Analyst", value="valuation_analyst"),
+            questionary.Choice(display, value=value) for display, value in ANALYST_ORDER
         ],
         instruction="\n\nInstructions: \n1. Press Space to select/unselect analysts.\n2. Press 'a' to select/unselect all.\n3. Press Enter when done to run the hedge fund.\n",
         validate=lambda x: len(x) > 0 or "You must select at least one analyst.",
         style=questionary.Style([
-            ('checkbox-selected', 'fg:green'),       
+            ('checkbox-selected', 'fg:green'),
             ('selected', 'fg:green noinherit'),
-            ('highlighted', 'noinherit'),  
-            ('pointer', 'noinherit'),             
+            ('highlighted', 'noinherit'),
+            ('pointer', 'noinherit'),
         ])
     ).ask()
-    
+
     if not choices:
         print("You must select at least one analyst. Using all analysts by default.")
         selected_analysts = None

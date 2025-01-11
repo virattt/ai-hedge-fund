@@ -1,17 +1,13 @@
 from colorama import Fore, Style
 from tabulate import tabulate
 from typing import List, Dict
+from ..main import ANALYST_ORDER
 
 def sort_analyst_signals(signals):
     """Sort analyst signals in a consistent order."""
-    # Define the desired order of analysts
-    analyst_order = {
-        'Technical Analyst': 1,
-        'Fundamentals': 2,
-        'Sentiment': 3,
-        'Valuation': 4,
-        'Risk Management': 5
-    }
+    # Create order mapping from ANALYST_ORDER
+    analyst_order = {display: idx for idx, (display, _) in enumerate(ANALYST_ORDER)}
+    analyst_order['Risk Management'] = len(ANALYST_ORDER)  # Add Risk Management at the end
 
     return sorted(signals, key=lambda x: analyst_order.get(x[0], 999))
 
@@ -107,7 +103,7 @@ def print_backtest_results(table_rows: List[List], clear_screen: bool = True) ->
     ]
 
     # Clear screen if requested
-    if clear_screen:
+    if (clear_screen):
         print("\033[H\033[J")
 
     # Display colored table

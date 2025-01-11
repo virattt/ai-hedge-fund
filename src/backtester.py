@@ -7,14 +7,8 @@ import pandas as pd
 from tabulate import tabulate
 from colorama import Fore, Back, Style, init
 
-from main import run_hedge_fund
-from tools.api import (
-    get_price_data,
-    get_prices,
-    get_financial_metrics,
-    get_insider_trades,
-    search_line_items,
-)
+from main import ANALYST_ORDER, run_hedge_fund
+from tools.api import get_price_data
 from utils.display import print_backtest_results, format_backtest_row
 
 init(autoreset=True)
@@ -108,7 +102,7 @@ class Backtester:
         
         dates = pd.date_range(self.start_date, self.end_date, freq="B")
         table_rows = []
-        
+
         print("\nStarting backtest...")
 
         for current_date in dates:
@@ -142,7 +136,7 @@ class Backtester:
             bullish_count = len([s for s in analyst_signals.values() if s.get("signal", "").lower() == "bullish"])
             bearish_count = len([s for s in analyst_signals.values() if s.get("signal", "").lower() == "bearish"])
             neutral_count = len([s for s in analyst_signals.values() if s.get("signal", "").lower() == "neutral"])
-            
+
             print(f"Signal counts - Bullish: {bullish_count}, Bearish: {bearish_count}, Neutral: {neutral_count}")
 
             # Format and add row
@@ -236,21 +230,18 @@ if __name__ == "__main__":
     choices = questionary.checkbox(
         "Use the Space bar to select/unselect analysts.",
         choices=[
-            questionary.Choice("Technical Analyst", value="technical_analyst"),
-            questionary.Choice("Fundamentals Analyst", value="fundamentals_analyst"),
-            questionary.Choice("Sentiment Analyst", value="sentiment_analyst"),
-            questionary.Choice("Valuation Analyst", value="valuation_analyst"),
+            questionary.Choice(display, value=value) for display, value in ANALYST_ORDER
         ],
         instruction="\n\nPress 'a' to toggle all.\n\nPress Enter when done to run the hedge fund.",
         validate=lambda x: len(x) > 0 or "You must select at least one analyst.",
         style=questionary.Style([
-            ('checkbox-selected', 'fg:green'),       
+            ('checkbox-selected', 'fg:green'),
             ('selected', 'fg:green noinherit'),
-            ('highlighted', 'noinherit'),  
-            ('pointer', 'noinherit'),             
+            ('highlighted', 'noinherit'),
+            ('pointer', 'noinherit'),
         ])
     ).ask()
-    
+
     if not choices:
         print("You must select at least one analyst. Using all analysts by default.")
         selected_analysts = None
