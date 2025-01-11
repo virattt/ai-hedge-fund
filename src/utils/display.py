@@ -2,6 +2,18 @@ from colorama import Fore, Style
 from tabulate import tabulate
 from typing import List, Dict
 
+def sort_analyst_signals(signals):
+    """Sort analyst signals in a consistent order."""
+    # Define the desired order of analysts
+    analyst_order = {
+        'Technical Analyst': 1,
+        'Fundamentals': 2,
+        'Sentiment': 3,
+        'Valuation': 4,
+        'Risk Management': 5
+    }
+
+    return sorted(signals, key=lambda x: analyst_order.get(x[0], 999))
 
 def print_trading_output(result: dict) -> None:
     """
@@ -15,8 +27,8 @@ def print_trading_output(result: dict) -> None:
         print(f"{Fore.RED}No trading decision available{Style.RESET_ALL}")
         return
 
-    # Print Analyst Signals Table
-    table_data = []
+    # Prepare analyst signals table
+    analyst_signals = []
     for agent, signal in result.get("analyst_signals", {}).items():
         agent_name = agent.replace("_agent", "").replace("_", " ").title()
         signal_type = signal.get("signal", "").upper()
@@ -27,7 +39,7 @@ def print_trading_output(result: dict) -> None:
             "NEUTRAL": Fore.YELLOW,
         }.get(signal_type, Fore.WHITE)
 
-        table_data.append(
+        analyst_signals.append(
             [
                 f"{Fore.CYAN}{agent_name}{Style.RESET_ALL}",
                 f"{signal_color}{signal_type}{Style.RESET_ALL}",
@@ -35,10 +47,13 @@ def print_trading_output(result: dict) -> None:
             ]
         )
 
+    # Sort the signals according to the predefined order
+    analyst_signals = sort_analyst_signals(analyst_signals)
+
     print(f"\n{Fore.WHITE}{Style.BRIGHT}ANALYST SIGNALS:{Style.RESET_ALL}")
     print(
         tabulate(
-            table_data,
+            analyst_signals,
             headers=[f"{Fore.WHITE}Analyst", "Signal", "Confidence"],
             tablefmt="grid",
             colalign=("left", "center", "right"),
