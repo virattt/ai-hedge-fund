@@ -34,6 +34,7 @@ By using this software, you agree to use it solely for learning purposes.
   - [Running the Backtester](#running-the-backtester)
 - [Project Structure](#project-structure)
 - [Contributing](#contributing)
+- [Feature Requests](#feature-requests)
 - [License](#license)
 
 ## Setup
@@ -181,6 +182,10 @@ ai-hedge-fund/
 5. Create a Pull Request
 
 **Important**: Please keep your pull requests small and focused.  This will make it easier to review and merge.
+
+## Feature Requests
+
+If you have a feature request, please open an [issue](https://github.com/virattt/ai-hedge-fund/issues) and make it is tagged with `enhancement`.
 
 ## License
 
