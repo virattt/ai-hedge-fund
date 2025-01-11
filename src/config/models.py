@@ -31,7 +31,7 @@ def get_chat_model(provider: Literal["openai", "groq"] = "openai", model: str = 
             temperature=0.7,
         )
         if structure: 
-            return llm.with_structured_output(structure)
+            return llm.with_structured_output(structure, method="function_calling")
     else:
         raise ValueError(f"Invalid provider: {provider}. Must be one of: openai, groq")
 
