@@ -166,7 +166,7 @@ if __name__ == "__main__":
 
     # Set up argument parser
     parser = argparse.ArgumentParser(description="Run backtesting simulation")
-    parser.add_argument("--ticker", type=str, help="Stock ticker symbol (e.g., AAPL)")
+    parser.add_argument("--ticker", type=str, default="AAPL", help="Stock ticker symbol (e.g., AAPL)")
     parser.add_argument(
         "--end-date",
         type=str,

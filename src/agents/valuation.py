@@ -66,7 +66,7 @@ def valuation_agent(state: AgentState):
     )
 
     # Get the market cap
-    market_cap = get_market_cap(ticker=data["ticker"])
+    market_cap = get_market_cap(ticker=data["ticker"], end_date=end_date)
 
     # Calculate combined valuation gap (average of both methods)
     dcf_gap = (dcf_value - market_cap) / market_cap

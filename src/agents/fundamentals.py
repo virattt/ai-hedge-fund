@@ -17,7 +17,7 @@ def fundamentals_agent(state: AgentState):
     # Get the financial metrics
     financial_metrics = get_financial_metrics(
         ticker=data["ticker"],
-        report_period=end_date,
+        end_date=end_date,
         period="ttm",
         limit=1,
     )

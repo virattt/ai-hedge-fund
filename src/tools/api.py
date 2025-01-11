@@ -1,5 +1,7 @@
+from datetime import datetime
 import os
 from typing import Dict, Any, List
+from matplotlib.dates import relativedelta
 import pandas as pd
 import requests
 
@@ -97,27 +99,15 @@ def get_insider_trades(
 
 def get_market_cap(
     ticker: str,
+    end_date: str,
 ) -> List[Dict[str, Any]]:
     """Fetch market cap from the API."""
-    headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
-
-    url = (
-        f'https://api.financialdatasets.ai/company/facts'
-        f'?ticker={ticker}'
-    )
-
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise Exception(
-            f"Error fetching data: {response.status_code} - {response.text}"
-        )
-    data = response.json()
-    company_facts = data.get('company_facts')
-    if not company_facts:
-        raise ValueError("No company facts returned")
-    return company_facts.get('market_cap')
+    financial_metrics = get_financial_metrics(ticker, end_date)
+    market_cap = financial_metrics[0].get('market_cap')
+    if not market_cap:
+        raise ValueError("No market cap returned")
+    
+    return market_cap
 
 def get_prices(
     ticker: str,
