@@ -1,37 +1,38 @@
+
 from colorama import Fore, Style
 from tabulate import tabulate
-from typing import List, Dict
 
+from src.models.outputs import RootResultModel, Signal_Type
 
-def print_trading_output(result: dict) -> None:
+SIGNAL_COLOR_MAP: dict[Signal_Type, Fore] = {
+    "bullish": Fore.GREEN,
+    "bearish": Fore.RED,
+    "neutral": Fore.YELLOW,
+}
+
+def print_trading_output(result: RootResultModel) -> None:
     """
     Print formatted trading results with colored tables.
 
     Args:
-        result (dict): Dictionary containing decision and analyst signals
+        result (RootResultModel): Root result model
     """
-    decision = result.get("decision")
+    decision = result.decision
     if not decision:
         print(f"{Fore.RED}No trading decision available{Style.RESET_ALL}")
         return
 
     # Print Analyst Signals Table
     table_data = []
-    for agent, signal in result.get("analyst_signals", {}).items():
-        agent_name = agent.replace("_agent", "").replace("_", " ").title()
-        signal_type = signal.get("signal", "").upper()
+    for agent in result.analyst_signals.signals:
+        signal_color = SIGNAL_COLOR_MAP.get(agent.signal, Fore.WHITE)
 
-        signal_color = {
-            "BULLISH": Fore.GREEN,
-            "BEARISH": Fore.RED,
-            "NEUTRAL": Fore.YELLOW,
-        }.get(signal_type, Fore.WHITE)
-
+        confidence_formatted = f"{agent.confidence:.1f}%" if agent.confidence else "-"
         table_data.append(
             [
-                f"{Fore.CYAN}{agent_name}{Style.RESET_ALL}",
-                f"{signal_color}{signal_type}{Style.RESET_ALL}",
-                f"{Fore.YELLOW}{signal.get('confidence')}%{Style.RESET_ALL}",
+                f"{Fore.CYAN}{str(agent)}{Style.RESET_ALL}",
+                f"{signal_color}{agent.signal.upper()}{Style.RESET_ALL}",
+                f"{Fore.YELLOW}{confidence_formatted}{Style.RESET_ALL}",
             ]
         )
 
@@ -46,17 +47,17 @@ def print_trading_output(result: dict) -> None:
     )
 
     # Print Trading Decision Table
-    action = decision.get("action", "").upper()
+    action = decision.action.upper()
     action_color = {"BUY": Fore.GREEN, "SELL": Fore.RED, "HOLD": Fore.YELLOW}.get(
         action, Fore.WHITE
     )
 
     decision_data = [
         ["Action", f"{action_color}{action}{Style.RESET_ALL}"],
-        ["Quantity", f"{action_color}{decision.get('quantity')}{Style.RESET_ALL}"],
+        ["Quantity", f"{action_color}{decision.quantity}{Style.RESET_ALL}"],
         [
             "Confidence",
-            f"{Fore.YELLOW}{decision.get('confidence'):.1f}%{Style.RESET_ALL}",
+            f"{Fore.YELLOW}{decision.confidence:.1f}%{Style.RESET_ALL}",
         ],
     ]
 
@@ -65,11 +66,11 @@ def print_trading_output(result: dict) -> None:
 
     # Print Reasoning
     print(
-        f"\n{Fore.WHITE}{Style.BRIGHT}Reasoning:{Style.RESET_ALL} {Fore.CYAN}{decision.get('reasoning')}{Style.RESET_ALL}"
+        f"\n{Fore.WHITE}{Style.BRIGHT}Reasoning:{Style.RESET_ALL} {Fore.CYAN}{decision.reasoning}{Style.RESET_ALL}"
     )
 
 
-def print_backtest_results(table_rows: List[List], clear_screen: bool = True) -> None:
+def print_backtest_results(table_rows: list[list], clear_screen: bool = True) -> None:
     """
     Print formatted backtest results with colored tables.
 
@@ -111,7 +112,7 @@ def format_backtest_row(
     bullish_count: int,
     bearish_count: int,
     neutral_count: int,
-) -> List:
+) -> list:
     """
     Format a single row of backtest data with appropriate colors.
 

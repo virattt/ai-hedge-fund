@@ -1,22 +1,22 @@
+import argparse
+from datetime import datetime
+
+import questionary
+from colorama import Fore, Style, init
+from dateutil.relativedelta import relativedelta
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
-from colorama import Fore, Back, Style, init
-import questionary
 
 from agents.fundamentals import fundamentals_agent
 from agents.portfolio_manager import portfolio_management_agent
-from agents.technicals import technical_analyst_agent
 from agents.risk_manager import risk_management_agent
 from agents.sentiment import sentiment_agent
-from graph.state import AgentState
+from agents.technicals import technical_analyst_agent
 from agents.valuation import valuation_agent
+from graph.state import AgentState
+from src.models.outputs import RootResultModel, Analysts
 from utils.display import print_trading_output
-
-import argparse
-from datetime import datetime
-from dateutil.relativedelta import relativedelta
-from tabulate import tabulate
 
 # Load environment variables from .env file
 load_dotenv()
@@ -38,8 +38,8 @@ def run_hedge_fund(
     end_date: str,
     portfolio: dict,
     show_reasoning: bool = False,
-    selected_analysts: list = None,
-):
+    selected_analysts: list[Analysts] = None,
+) -> RootResultModel:
     # Create a new workflow if analysts are customized
     if selected_analysts is not None:
         workflow = create_workflow(selected_analysts)
@@ -66,10 +66,10 @@ def run_hedge_fund(
             },
         },
     )
-    return {
+    return RootResultModel.model_validate({
         "decision": parse_hedge_fund_response(final_state["messages"][-1].content),
         "analyst_signals": final_state["data"]["analyst_signals"],
-    }
+    })
 
 
 def start(state: AgentState):

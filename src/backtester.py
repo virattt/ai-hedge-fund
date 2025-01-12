@@ -1,13 +1,15 @@
 from datetime import datetime, timedelta
+from typing import Protocol
+
 from dateutil.relativedelta import relativedelta
 import questionary
 
 import matplotlib.pyplot as plt
 import pandas as pd
-from tabulate import tabulate
-from colorama import Fore, Back, Style, init
+from colorama import Fore, Style, init
 
 from main import run_hedge_fund
+from src.models.outputs import Analysts, RootResultModel
 from tools.api import (
     get_price_data,
     get_prices,
@@ -20,8 +22,13 @@ from utils.display import print_backtest_results, format_backtest_row
 init(autoreset=True)
 
 
+class AgentFn(Protocol):
+    def __call__(self, ticker: str, start_date: str, end_date: str, portfolio: dict, show_reasoning: bool = False, selected_analysts: list[Analysts] | None = None) -> RootResultModel:
+        ...
+
+
 class Backtester:
-    def __init__(self, agent, ticker, start_date, end_date, initial_capital, selected_analysts=None):
+    def __init__(self, agent: AgentFn, ticker: str, start_date: str, end_date: str, initial_capital: float, selected_analysts: list[Analysts] | None = None):
         self.agent = agent
         self.ticker = ticker
         self.start_date = start_date
@@ -123,8 +130,8 @@ class Backtester:
                 selected_analysts=self.selected_analysts,
             )
 
-            agent_decision = output["decision"]
-            action, quantity = agent_decision["action"], agent_decision["quantity"]
+            agent_decision = output.decision
+            action, quantity = agent_decision.action, agent_decision.quantity
             df = get_price_data(self.ticker, lookback_start, current_date_str)
             current_price = df.iloc[-1]["close"]
 
@@ -136,12 +143,12 @@ class Backtester:
             self.portfolio["portfolio_value"] = total_value
 
             # Count signals from selected analysts only
-            analyst_signals = output["analyst_signals"]
+            analyst_signals = output.analyst_signals.signals
 
             # Count signals
-            bullish_count = len([s for s in analyst_signals.values() if s.get("signal", "").lower() == "bullish"])
-            bearish_count = len([s for s in analyst_signals.values() if s.get("signal", "").lower() == "bearish"])
-            neutral_count = len([s for s in analyst_signals.values() if s.get("signal", "").lower() == "neutral"])
+            bullish_count = len([s for s in analyst_signals if s.signal == "bullish"])
+            bearish_count = len([s for s in analyst_signals if s.signal == "bearish"])
+            neutral_count = len([s for s in analyst_signals if s.signal == "neutral"])
             
             print(f"Signal counts - Bullish: {bullish_count}, Bearish: {bearish_count}, Neutral: {neutral_count}")
 
