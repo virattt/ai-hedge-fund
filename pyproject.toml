@@ -7,6 +7,7 @@ readme = "README.md"
 packages = [
     { include = "src", from = "." }
 ]
+
 [tool.poetry.dependencies]
 python = "^3.9"
 langchain = "0.3.0"
@@ -26,6 +27,10 @@ pytest = "^7.4.0"
 black = "^23.7.0"
 isort = "^5.12.0"
 flake8 = "^6.1.0"
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
 
 [build-system]
 requires = ["poetry-core"]
