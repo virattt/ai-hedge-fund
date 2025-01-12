@@ -10,6 +10,7 @@ Analysts = Literal[
     "valuation_agent",
 ]
 
+
 class Signal(BaseModel):
     confidence: float
     signal: Signal_Type
@@ -25,7 +26,6 @@ class ReasoningAgent(BaseModel):
     growth_signal: DetailsSignal | None = None
     price_ratios_signal: DetailsSignal | None = None
     profitability_signal: DetailsSignal | None = None
-
 
 
 class MeanReversionMetrics(BaseModel):
@@ -81,11 +81,11 @@ class VolatilityTechnicalSignal(Signal):
 
 
 class ReasoningTechnical(BaseModel):
-    mean_reversion:  MeanReversionTechnicalSignal | None = None
-    momentum:  MomentumTechnicalSignal | None = None
-    statistical_arbitrage:  StatisticalArbitrageTechnicalSignal | None = None
-    trend_following:  TrendFollowingTechnicalSignal | None = None
-    volatility:  VolatilityTechnicalSignal | None = None
+    mean_reversion: MeanReversionTechnicalSignal | None = None
+    momentum: MomentumTechnicalSignal | None = None
+    statistical_arbitrage: StatisticalArbitrageTechnicalSignal | None = None
+    trend_following: TrendFollowingTechnicalSignal | None = None
+    volatility: VolatilityTechnicalSignal | None = None
 
 
 class ValuationDetails(BaseModel):
@@ -96,8 +96,6 @@ class ValuationDetails(BaseModel):
 class ReasoningValuation(BaseModel):
     dcf_analysis: ValuationDetails | None = None
     owner_earnings_analysis: ValuationDetails | None = None
-
-
 
 
 class FundamentalsAgent(Signal):
@@ -145,8 +143,16 @@ class AnalystSignals(BaseModel):
 
     @property
     def signals(self) -> list[Signal]:
-        return [agent for agent in [self.fundamentals_agent, self.sentiment_agent,
-                                    self.technical_analyst_agent, self.valuation_agent] if agent]
+        return [
+            agent
+            for agent in [
+                self.fundamentals_agent,
+                self.sentiment_agent,
+                self.technical_analyst_agent,
+                self.valuation_agent,
+            ]
+            if agent
+        ]
 
 
 class Decision(BaseModel):
