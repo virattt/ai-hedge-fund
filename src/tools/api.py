@@ -3,7 +3,7 @@ from typing import Dict, Any, List
 import pandas as pd
 import requests
 
-from src.data.cache import get_cache
+from data.cache import get_cache
 
 # Global cache instance
 _cache = get_cache()

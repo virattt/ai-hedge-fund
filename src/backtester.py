@@ -8,8 +8,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from colorama import Fore, Style, init
 
+from utils.analysts import ANALYST_ORDER
 from main import run_hedge_fund
-from src.models.outputs import Analysts, RootResultModel
+from models.outputs import Analysts, RootResultModel
 from tools.api import (
     get_price_data,
     get_prices,
@@ -115,7 +116,7 @@ class Backtester:
         
         dates = pd.date_range(self.start_date, self.end_date, freq="B")
         table_rows = []
-        
+
         print("\nStarting backtest...")
 
         for current_date in dates:
@@ -243,21 +244,18 @@ if __name__ == "__main__":
     choices = questionary.checkbox(
         "Use the Space bar to select/unselect analysts.",
         choices=[
-            questionary.Choice("Technical Analyst", value="technical_analyst"),
-            questionary.Choice("Fundamentals Analyst", value="fundamentals_analyst"),
-            questionary.Choice("Sentiment Analyst", value="sentiment_analyst"),
-            questionary.Choice("Valuation Analyst", value="valuation_analyst"),
+            questionary.Choice(display, value=value) for display, value in ANALYST_ORDER
         ],
         instruction="\n\nPress 'a' to toggle all.\n\nPress Enter when done to run the hedge fund.",
         validate=lambda x: len(x) > 0 or "You must select at least one analyst.",
         style=questionary.Style([
-            ('checkbox-selected', 'fg:green'),       
+            ('checkbox-selected', 'fg:green'),
             ('selected', 'fg:green noinherit'),
-            ('highlighted', 'noinherit'),  
-            ('pointer', 'noinherit'),             
+            ('highlighted', 'noinherit'),
+            ('pointer', 'noinherit'),
         ])
     ).ask()
-    
+
     if not choices:
         print("You must select at least one analyst. Using all analysts by default.")
         selected_analysts = None

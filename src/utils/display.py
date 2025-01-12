@@ -1,14 +1,15 @@
 
 from colorama import Fore, Style
 from tabulate import tabulate
-
-from src.models.outputs import RootResultModel, Signal_Type
+from .analysts import ANALYST_ORDER
+from models.outputs import RootResultModel, Signal_Type
 
 SIGNAL_COLOR_MAP: dict[Signal_Type, Fore] = {
     "bullish": Fore.GREEN,
     "bearish": Fore.RED,
     "neutral": Fore.YELLOW,
 }
+
 
 def print_trading_output(result: RootResultModel) -> None:
     """
@@ -22,7 +23,7 @@ def print_trading_output(result: RootResultModel) -> None:
         print(f"{Fore.RED}No trading decision available{Style.RESET_ALL}")
         return
 
-    # Print Analyst Signals Table
+    # Prepare analyst signals table
     table_data = []
     for agent in result.analyst_signals.signals:
         signal_color = SIGNAL_COLOR_MAP.get(agent.signal, Fore.WHITE)
@@ -35,6 +36,9 @@ def print_trading_output(result: RootResultModel) -> None:
                 f"{Fore.YELLOW}{confidence_formatted}{Style.RESET_ALL}",
             ]
         )
+
+    # Sort the signals according to the predefined order
+    table_data = _sort_analyst_signals(table_data)
 
     print(f"\n{Fore.WHITE}{Style.BRIGHT}ANALYST SIGNALS:{Style.RESET_ALL}")
     print(
@@ -69,13 +73,12 @@ def print_trading_output(result: RootResultModel) -> None:
         f"\n{Fore.WHITE}{Style.BRIGHT}Reasoning:{Style.RESET_ALL} {Fore.CYAN}{decision.reasoning}{Style.RESET_ALL}"
     )
 
-
 def print_backtest_results(table_rows: list[list], clear_screen: bool = True) -> None:
     """
     Print formatted backtest results with colored tables.
 
     Args:
-        table_rows (List[List]): List of rows containing backtest data
+        table_rows (list[list]): List of rows containing backtest data
         clear_screen (bool): Whether to clear the screen before printing
     """
     headers = [
@@ -149,3 +152,11 @@ def format_backtest_row(
         f"{Fore.RED}{bearish_count}{Style.RESET_ALL}",
         f"{Fore.BLUE}{neutral_count}{Style.RESET_ALL}",
     ]
+
+
+def _sort_analyst_signals(signals: list[list[str]]) -> list[list[str]]:
+    """Sort analyst signals in a consistent order."""
+    # Create order mapping from ANALYST_ORDER
+    analyst_order = {display: idx for idx, (display, _) in enumerate(ANALYST_ORDER)}
+
+    return sorted(signals, key=lambda x: analyst_order.get(x[0], 999))
