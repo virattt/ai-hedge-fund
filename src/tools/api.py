@@ -3,7 +3,7 @@ import pandas as pd
 import requests
 
 from data.cache import get_cache
-from data.models import FinancialMetrics, FinancialMetricsResponse
+from data.models import FinancialMetrics, FinancialMetricsResponse, Price, PriceResponse
 
 # Global cache instance
 _cache = get_cache()
@@ -12,13 +12,13 @@ def get_prices(
     ticker: str,
     start_date: str,
     end_date: str
-) -> list[dict[str, any]]:
+) -> list[Price]:
     """Fetch price data from cache or API."""
     # Check cache first
     if cached_data := _cache.get_prices(ticker):
-        # Filter cached data by date range
+        # Filter cached data by date range and convert to Price objects
         filtered_data = [
-            price for price in cached_data 
+            Price(**price) for price in cached_data 
             if start_date <= price["time"] <= end_date
         ]
         if filtered_data:
@@ -42,13 +42,16 @@ def get_prices(
         raise Exception(
             f"Error fetching data: {response.status_code} - {response.text}"
         )
-    data = response.json()
-    prices = data.get("prices")
+    
+    # Parse response with Pydantic model
+    price_response = PriceResponse(**response.json())
+    prices = price_response.prices
+    
     if not prices:
         raise ValueError("No price data returned")
     
-    # Cache the results
-    _cache.set_prices(ticker, prices)
+    # Cache the results as dicts
+    _cache.set_prices(ticker, [p.model_dump() for p in prices])
     return prices
 
 def get_financial_metrics(
@@ -195,7 +198,7 @@ def get_insider_trades(
 def get_market_cap(
     ticker: str,
     end_date: str,
-) -> list[dict[str, any]]:
+) -> float | None:
     """Fetch market cap from the API."""
     financial_metrics = get_financial_metrics(ticker, end_date)
     market_cap = financial_metrics[0].market_cap
@@ -204,9 +207,9 @@ def get_market_cap(
     
     return market_cap
 
-def prices_to_df(prices: list[dict[str, any]]) -> pd.DataFrame:
+def prices_to_df(prices: list[Price]) -> pd.DataFrame:
     """Convert prices to a DataFrame."""
-    df = pd.DataFrame(prices)
+    df = pd.DataFrame([p.model_dump() for p in prices])
     df["Date"] = pd.to_datetime(df["time"])
     df.set_index("Date", inplace=True)
     numeric_cols = ["open", "close", "high", "low", "volume"]

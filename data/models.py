@@ -1,5 +1,18 @@
 from pydantic import BaseModel
 
+
+class Price(BaseModel):
+    open: float
+    close: float
+    high: float
+    low: float
+    volume: int
+    time: str
+
+class PriceResponse(BaseModel):
+    ticker: str
+    prices: list[Price] 
+    
 class FinancialMetrics(BaseModel):
     ticker: str
     calendar_date: str
