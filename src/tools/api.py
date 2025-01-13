@@ -1,5 +1,4 @@
 import os
-from typing import Dict, Any, List
 import pandas as pd
 import requests
 
@@ -12,7 +11,7 @@ def get_prices(
     ticker: str,
     start_date: str,
     end_date: str
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, any]]:
     """Fetch price data from cache or API."""
     # Check cache first
     if cached_data := _cache.get_prices(ticker):
@@ -56,7 +55,7 @@ def get_financial_metrics(
     end_date: str,
     period: str = 'ttm',
     limit: int = 10,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, any]]:
     """Fetch financial metrics from cache or API."""
     # Check cache first
     if cached_data := _cache.get_financial_metrics(ticker):
@@ -97,11 +96,11 @@ def get_financial_metrics(
 
 def search_line_items(
     ticker: str,
-    line_items: List[str],
+    line_items: list[str],
     end_date: str,
     period: str = 'ttm',
     limit: int = 10,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, any]]:
     """Fetch line items from cache or API."""
     # Check cache first
     if cached_data := _cache.get_line_items(ticker):
@@ -146,7 +145,7 @@ def get_insider_trades(
     ticker: str,
     end_date: str,
     limit: int = 1000,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, any]]:
     """Fetch insider trades from cache or API."""
     # Check cache first
     if cached_data := _cache.get_insider_trades(ticker):
@@ -191,7 +190,7 @@ def get_insider_trades(
 def get_market_cap(
     ticker: str,
     end_date: str,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, any]]:
     """Fetch market cap from the API."""
     financial_metrics = get_financial_metrics(ticker, end_date)
     market_cap = financial_metrics[0].get('market_cap')
@@ -200,7 +199,7 @@ def get_market_cap(
     
     return market_cap
 
-def prices_to_df(prices: List[Dict[str, Any]]) -> pd.DataFrame:
+def prices_to_df(prices: list[dict[str, any]]) -> pd.DataFrame:
     """Convert prices to a DataFrame."""
     df = pd.DataFrame(prices)
     df["Date"] = pd.to_datetime(df["time"])

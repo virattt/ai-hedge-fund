@@ -1,4 +1,4 @@
-from typing import Annotated, Any, Dict, Sequence, TypedDict
+from typing_extensions import Annotated, Sequence, TypedDict
 
 import operator
 from langchain_core.messages import BaseMessage
@@ -7,14 +7,14 @@ from langchain_core.messages import BaseMessage
 import json
 
 
-def merge_dicts(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
+def merge_dicts(a: dict[str, any], b: dict[str, any]) -> dict[str, any]:
     return {**a, **b}
 
 # Define agent state
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], operator.add]
-    data: Annotated[Dict[str, Any], merge_dicts]
-    metadata: Annotated[Dict[str, Any], merge_dicts]
+    data: Annotated[dict[str, any], merge_dicts]
+    metadata: Annotated[dict[str, any], merge_dicts]
 
 
 

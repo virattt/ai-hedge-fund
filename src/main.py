@@ -120,9 +120,6 @@ def create_workflow(selected_analysts=None):
     workflow.set_entry_point("start_node")
     return workflow
 
-# # Initialize app as None - it will be set in __main__
-# app = None
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the hedge fund trading system")

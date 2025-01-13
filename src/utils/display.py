@@ -1,6 +1,5 @@
 from colorama import Fore, Style
 from tabulate import tabulate
-from typing import List, Dict
 from .analysts import ANALYST_ORDER
 
 def sort_analyst_signals(signals):
@@ -80,12 +79,12 @@ def print_trading_output(result: dict) -> None:
     )
 
 
-def print_backtest_results(table_rows: List[List], clear_screen: bool = True) -> None:
+def print_backtest_results(table_rows: list[list[any]], clear_screen: bool = True) -> None:
     """
     Print formatted backtest results with colored tables.
 
     Args:
-        table_rows (List[List]): List of rows containing backtest data
+        table_rows (list[list[any]]): List of rows containing backtest data
         clear_screen (bool): Whether to clear the screen before printing
     """
     headers = [
@@ -122,7 +121,7 @@ def format_backtest_row(
     bullish_count: int,
     bearish_count: int,
     neutral_count: int,
-) -> List:
+) -> list[any]:
     """
     Format a single row of backtest data with appropriate colors.
 
@@ -140,7 +139,7 @@ def format_backtest_row(
         neutral_count (int): Number of neutral signals
 
     Returns:
-        List: Formatted row with color codes
+        list[any]: Formatted row with color codes
     """
     action_color = {"buy": Fore.GREEN, "sell": Fore.RED, "hold": Fore.YELLOW}.get(
         action.lower(), ""

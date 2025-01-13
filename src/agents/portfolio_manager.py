@@ -6,7 +6,7 @@ from config.models import get_chat_model
 
 from graph.state import AgentState, show_agent_reasoning
 from pydantic import BaseModel, Field
-from typing import Literal
+from typing_extensions import Literal
 
 
 class PortfolioManagerOutput(BaseModel):
