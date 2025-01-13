@@ -61,3 +61,35 @@ class FinancialMetrics(BaseModel):
 
 class FinancialMetricsResponse(BaseModel):
     financial_metrics: list[FinancialMetrics] 
+
+class LineItem(BaseModel):
+    ticker: str
+    report_period: str
+    period: str
+    currency: str
+    
+    # Allow additional fields dynamically
+    model_config = {
+        "extra": "allow"
+    }
+
+class LineItemResponse(BaseModel):
+    search_results: list[LineItem] 
+
+class InsiderTrade(BaseModel):
+    ticker: str
+    issuer: str | None
+    name: str | None
+    title: str | None
+    is_board_director: bool | None
+    transaction_date: str | None
+    transaction_shares: float | None
+    transaction_price_per_share: float | None
+    transaction_value: float | None
+    shares_owned_before_transaction: float | None
+    shares_owned_after_transaction: float | None
+    security_title: str | None
+    filing_date: str
+
+class InsiderTradeResponse(BaseModel):
+    insider_trades: list[InsiderTrade] 

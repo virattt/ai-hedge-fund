@@ -6,6 +6,7 @@ import json
 
 from tools.api import get_insider_trades
 
+
 ##### Sentiment Agent #####
 def sentiment_agent(state: AgentState):
     """Analyzes market sentiment and generates trading signals."""
@@ -22,7 +23,7 @@ def sentiment_agent(state: AgentState):
 
     # Get the signals from the insider trades
     transaction_shares = pd.Series(
-        [t.get("transaction_shares") for t in insider_trades]
+        [t.transaction_shares for t in insider_trades]
     ).dropna()
     bearish_condition = transaction_shares < 0
     signals = np.where(bearish_condition, "bearish", "bullish").tolist()
@@ -41,7 +42,9 @@ def sentiment_agent(state: AgentState):
     total_signals = len(signals)
     confidence = 0  # Default confidence when there are no signals
     if total_signals > 0:
-        confidence = round(max(bullish_signals, bearish_signals) / total_signals, 2) * 100
+        confidence = (
+            round(max(bullish_signals, bearish_signals) / total_signals, 2) * 100
+        )
     reasoning = (
         f"Bullish signals: {bullish_signals}, Bearish signals: {bearish_signals}"
     )
