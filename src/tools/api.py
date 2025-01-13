@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 
 from data.cache import get_cache
+from data.models import FinancialMetrics, FinancialMetricsResponse
 
 # Global cache instance
 _cache = get_cache()
@@ -55,16 +56,16 @@ def get_financial_metrics(
     end_date: str,
     period: str = 'ttm',
     limit: int = 10,
-) -> list[dict[str, any]]:
+) -> list[FinancialMetrics]:
     """Fetch financial metrics from cache or API."""
     # Check cache first
     if cached_data := _cache.get_financial_metrics(ticker):
         # Filter cached data by date and limit
         filtered_data = [
-            metric for metric in cached_data 
+            FinancialMetrics(**metric) for metric in cached_data 
             if metric["report_period"] <= end_date
         ]
-        filtered_data.sort(key=lambda x: x["report_period"], reverse=True)
+        filtered_data.sort(key=lambda x: x.report_period, reverse=True)
         if filtered_data:
             return filtered_data[:limit]
     
@@ -85,14 +86,18 @@ def get_financial_metrics(
         raise Exception(
             f"Error fetching data: {response.status_code} - {response.text}"
         )
-    data = response.json()
-    financial_metrics = data.get("financial_metrics")
+    
+    # Parse response with Pydantic model
+    metrics_response = FinancialMetricsResponse(**response.json())
+    # Return the FinancialMetrics objects directly instead of converting to dict
+    financial_metrics = metrics_response.financial_metrics
+    
     if not financial_metrics:
         raise ValueError("No financial metrics returned")
     
-    # Cache the results
-    _cache.set_financial_metrics(ticker, financial_metrics)
-    return financial_metrics[:limit]
+    # Cache the results as dicts
+    _cache.set_financial_metrics(ticker, [m.model_dump() for m in financial_metrics])
+    return financial_metrics
 
 def search_line_items(
     ticker: str,
@@ -193,7 +198,7 @@ def get_market_cap(
 ) -> list[dict[str, any]]:
     """Fetch market cap from the API."""
     financial_metrics = get_financial_metrics(ticker, end_date)
-    market_cap = financial_metrics[0].get('market_cap')
+    market_cap = financial_metrics[0].market_cap
     if not market_cap:
         raise ValueError("No market cap returned")
     
