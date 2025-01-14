@@ -24,7 +24,7 @@ def get_chat_model(provider: Literal["openai", "groq"] = "openai", model: str = 
             max_tokens=1024,
         )
     elif provider == "openai":
-        # Default to gpt-4 for OpenAI if no model specified
+        # Default to gpt-4o for OpenAI if no model specified
         model_name = model or "gpt-4o"
         llm =  ChatOpenAI(
             model_name=model_name,
