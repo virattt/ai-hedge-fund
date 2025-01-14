@@ -3,13 +3,15 @@ from tabulate import tabulate
 from .analysts import ANALYST_ORDER
 import os
 
+
 def sort_analyst_signals(signals):
     """Sort analyst signals in a consistent order."""
     # Create order mapping from ANALYST_ORDER
     analyst_order = {display: idx for idx, (display, _) in enumerate(ANALYST_ORDER)}
-    analyst_order['Risk Management'] = len(ANALYST_ORDER)  # Add Risk Management at the end
+    analyst_order["Risk Management"] = len(ANALYST_ORDER)  # Add Risk Management at the end
 
     return sorted(signals, key=lambda x: analyst_order.get(x[0], 999))
+
 
 def print_trading_output(result: dict) -> None:
     """
@@ -33,7 +35,7 @@ def print_trading_output(result: dict) -> None:
         for agent, signals in result.get("analyst_signals", {}).items():
             if ticker not in signals:
                 continue
-                
+
             signal = signals[ticker]
             agent_name = agent.replace("_agent", "").replace("_", " ").title()
             signal_type = signal.get("signal", "").upper()
@@ -67,9 +69,7 @@ def print_trading_output(result: dict) -> None:
 
         # Print Trading Decision Table
         action = decision.get("action", "").upper()
-        action_color = {"BUY": Fore.GREEN, "SELL": Fore.RED, "HOLD": Fore.YELLOW}.get(
-            action, Fore.WHITE
-        )
+        action_color = {"BUY": Fore.GREEN, "SELL": Fore.RED, "HOLD": Fore.YELLOW}.get(action, Fore.WHITE)
 
         decision_data = [
             ["Action", f"{action_color}{action}{Style.RESET_ALL}"],
@@ -84,18 +84,14 @@ def print_trading_output(result: dict) -> None:
         print(tabulate(decision_data, tablefmt="grid", colalign=("left", "right")))
 
         # Print Reasoning
-        print(
-            f"\n{Fore.WHITE}{Style.BRIGHT}Reasoning:{Style.RESET_ALL} {Fore.CYAN}{decision.get('reasoning')}{Style.RESET_ALL}"
-        )
+        print(f"\n{Fore.WHITE}{Style.BRIGHT}Reasoning:{Style.RESET_ALL} {Fore.CYAN}{decision.get('reasoning')}{Style.RESET_ALL}")
 
     # Print Portfolio Summary
     print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
     portfolio_data = []
     for ticker, decision in decisions.items():
         action = decision.get("action", "").upper()
-        action_color = {"BUY": Fore.GREEN, "SELL": Fore.RED, "HOLD": Fore.YELLOW}.get(
-            action, Fore.WHITE
-        )
+        action_color = {"BUY": Fore.GREEN, "SELL": Fore.RED, "HOLD": Fore.YELLOW}.get(action, Fore.WHITE)
         portfolio_data.append(
             [
                 f"{Fore.CYAN}{ticker}{Style.RESET_ALL}",
@@ -108,12 +104,7 @@ def print_trading_output(result: dict) -> None:
     print(
         tabulate(
             portfolio_data,
-            headers=[
-                f"{Fore.WHITE}Ticker",
-                "Action",
-                "Quantity",
-                "Confidence"
-            ],
+            headers=[f"{Fore.WHITE}Ticker", "Action", "Quantity", "Confidence"],
             tablefmt="grid",
             colalign=("left", "center", "right", "right"),
         )
@@ -123,12 +114,12 @@ def print_trading_output(result: dict) -> None:
 def print_backtest_results(table_rows: list) -> None:
     """Print the backtest results in a nicely formatted table"""
     # Clear the screen
-    os.system('cls' if os.name == 'nt' else 'clear')
+    os.system("cls" if os.name == "nt" else "clear")
 
     # Split rows into ticker rows and summary rows
     ticker_rows = []
     summary_rows = []
-    
+
     for row in table_rows:
         if isinstance(row[1], str) and "PORTFOLIO SUMMARY" in row[1]:
             summary_rows.append(row)
@@ -153,9 +144,9 @@ def print_backtest_results(table_rows: list) -> None:
             ],
             tablefmt="grid",
             colalign=(
-                "left",   # Date
-                "left",   # Ticker
-                "center", # Action
+                "left",  # Date
+                "left",  # Ticker
+                "center",  # Action
                 "right",  # Quantity
                 "right",  # Price
                 "right",  # Shares
@@ -171,12 +162,12 @@ def print_backtest_results(table_rows: list) -> None:
     if summary_rows:
         latest_summary = summary_rows[-1]
         print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
-        
+
         # Extract values and remove commas before converting to float
-        cash_str = latest_summary[7].split('$')[1].split(Style.RESET_ALL)[0].replace(',', '')
-        position_str = latest_summary[6].split('$')[1].split(Style.RESET_ALL)[0].replace(',', '')
-        total_str = latest_summary[8].split('$')[1].split(Style.RESET_ALL)[0].replace(',', '')
-        
+        cash_str = latest_summary[7].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
+        position_str = latest_summary[6].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
+        total_str = latest_summary[8].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
+
         print(f"Cash Balance: {Fore.CYAN}${float(cash_str):,.2f}{Style.RESET_ALL}")
         print(f"Total Position Value: {Fore.YELLOW}${float(position_str):,.2f}{Style.RESET_ALL}")
         print(f"Total Value: {Fore.WHITE}${float(total_str):,.2f}{Style.RESET_ALL}")
@@ -184,6 +175,7 @@ def print_backtest_results(table_rows: list) -> None:
 
     # Add vertical spacing for progress display
     print("\n" * 8)  # Add 8 blank lines for progress display
+
 
 def format_backtest_row(
     date: str,

@@ -37,3 +37,7 @@ markers = [
     "unit: marks tests as unit tests",
     "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
 ]
+[tool.black]
+line-length = 420
+target-version = ['py39']
+include = '\.pyi?$'

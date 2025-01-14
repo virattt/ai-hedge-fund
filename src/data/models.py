@@ -9,10 +9,12 @@ class Price(BaseModel):
     volume: int
     time: str
 
+
 class PriceResponse(BaseModel):
     ticker: str
-    prices: list[Price] 
-    
+    prices: list[Price]
+
+
 class FinancialMetrics(BaseModel):
     ticker: str
     calendar_date: str
@@ -59,22 +61,24 @@ class FinancialMetrics(BaseModel):
     book_value_per_share: float | None
     free_cash_flow_per_share: float | None
 
+
 class FinancialMetricsResponse(BaseModel):
-    financial_metrics: list[FinancialMetrics] 
+    financial_metrics: list[FinancialMetrics]
+
 
 class LineItem(BaseModel):
     ticker: str
     report_period: str
     period: str
     currency: str
-    
+
     # Allow additional fields dynamically
-    model_config = {
-        "extra": "allow"
-    }
+    model_config = {"extra": "allow"}
+
 
 class LineItemResponse(BaseModel):
-    search_results: list[LineItem] 
+    search_results: list[LineItem]
+
 
 class InsiderTrade(BaseModel):
     ticker: str
@@ -91,17 +95,21 @@ class InsiderTrade(BaseModel):
     security_title: str | None
     filing_date: str
 
+
 class InsiderTradeResponse(BaseModel):
-    insider_trades: list[InsiderTrade] 
+    insider_trades: list[InsiderTrade]
+
 
 class Position(BaseModel):
     cash: float = 0.0
     shares: int = 0
     ticker: str
 
+
 class Portfolio(BaseModel):
     positions: dict[str, Position]  # ticker -> Position mapping
     total_cash: float = 0.0
+
 
 class AnalystSignal(BaseModel):
     signal: str | None = None
@@ -109,9 +117,11 @@ class AnalystSignal(BaseModel):
     reasoning: dict | str | None = None
     max_position_size: float | None = None  # For risk management signals
 
+
 class TickerAnalysis(BaseModel):
     ticker: str
     analyst_signals: dict[str, AnalystSignal]  # agent_name -> signal mapping
+
 
 class AgentStateData(BaseModel):
     tickers: list[str]
@@ -120,8 +130,7 @@ class AgentStateData(BaseModel):
     end_date: str
     ticker_analyses: dict[str, TickerAnalysis]  # ticker -> analysis mapping
 
+
 class AgentStateMetadata(BaseModel):
     show_reasoning: bool = False
-    model_config = {
-        "extra": "allow"
-    } 
+    model_config = {"extra": "allow"}

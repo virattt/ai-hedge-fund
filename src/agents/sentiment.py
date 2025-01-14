@@ -20,7 +20,7 @@ def sentiment_agent(state: AgentState):
 
     for ticker in tickers:
         progress.update_status("sentiment_agent", ticker, "Fetching insider trades")
-        
+
         # Get the insider trades
         insider_trades = get_insider_trades(
             ticker=ticker,
@@ -29,11 +29,9 @@ def sentiment_agent(state: AgentState):
         )
 
         progress.update_status("sentiment_agent", ticker, "Analyzing trading patterns")
-        
+
         # Get the signals from the insider trades
-        transaction_shares = pd.Series(
-            [t.transaction_shares for t in insider_trades]
-        ).dropna()
+        transaction_shares = pd.Series([t.transaction_shares for t in insider_trades]).dropna()
         bearish_condition = transaction_shares < 0
         signals = np.where(bearish_condition, "bearish", "bullish").tolist()
 
@@ -51,19 +49,15 @@ def sentiment_agent(state: AgentState):
         total_signals = len(signals)
         confidence = 0  # Default confidence when there are no signals
         if total_signals > 0:
-            confidence = (
-                round(max(bullish_signals, bearish_signals) / total_signals, 2) * 100
-            )
-        reasoning = (
-            f"Bullish signals: {bullish_signals}, Bearish signals: {bearish_signals}"
-        )
+            confidence = round(max(bullish_signals, bearish_signals) / total_signals, 2) * 100
+        reasoning = f"Bullish signals: {bullish_signals}, Bearish signals: {bearish_signals}"
 
         sentiment_analysis[ticker] = {
             "signal": overall_signal,
             "confidence": confidence,
             "reasoning": reasoning,
         }
-        
+
         progress.update_status("sentiment_agent", ticker, "Done")
 
     # Create the sentiment message
