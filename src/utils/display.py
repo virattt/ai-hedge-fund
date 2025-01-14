@@ -133,20 +133,39 @@ def print_backtest_results(table_rows: list[list[any]], clear_screen: bool = Tru
         "Action",
         "Quantity",
         "Price",
+        "Shares",
         "Position Value",
-        "Cash",
-        "Total Value",
-        "Return %",
-        "Signals (B/S/N)",
+        "Bullish",
+        "Bearish",
+        "Neutral"
     ]
 
     # Clear screen if requested
     if clear_screen:
         print("\033[H\033[J")
 
-    # Display colored table
-    print(f"{tabulate(table_rows, headers=headers, tablefmt='grid')}{Style.RESET_ALL}")
-
+    # Split rows into ticker rows and summary rows
+    ticker_rows = []
+    summary_rows = []
+    
+    for row in table_rows:
+        if isinstance(row[1], str) and "PORTFOLIO SUMMARY" in row[1]:
+            summary_rows.append(row)
+        else:
+            ticker_rows.append(row)
+    
+    # Display ticker data
+    print(f"{tabulate(ticker_rows, headers=headers, tablefmt='grid', floatfmt=('.0f', '', '', '.0f', '.2f', '.0f', '.2f', '.0f', '.0f', '.0f'))}{Style.RESET_ALL}")
+    
+    # Display latest portfolio summary
+    if summary_rows:
+        latest_summary = summary_rows[-1]
+        print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
+        print(f"Total Value: {latest_summary[7]}")  # Total Value column
+        print(f"Return: {latest_summary[8]}")  # Return % column
+        
+    # Add vertical spacing for progress display
+    print("\n" * 8)  # Add 8 blank lines for progress display
 
 def format_backtest_row(
     date: str,
@@ -154,16 +173,17 @@ def format_backtest_row(
     action: str,
     quantity: float,
     price: float,
+    shares_owned: float,
     position_value: float,
-    cash: float,
-    total_value: float,
-    return_pct: float,
     bullish_count: int,
     bearish_count: int,
     neutral_count: int,
+    is_summary: bool = False,
+    total_value: float = None,
+    return_pct: float = None,
 ) -> list[any]:
     """
-    Format a single row of backtest data with appropriate colors.
+    Format a row of backtest data with color coding.
 
     Args:
         date (str): The date of the trade
@@ -171,32 +191,43 @@ def format_backtest_row(
         action (str): The trading action (buy/sell/hold)
         quantity (float): The quantity traded
         price (float): The stock price
+        shares_owned (float): Current number of shares owned
         position_value (float): Value of the current position
-        cash (float): Available cash
-        total_value (float): Total portfolio value
-        return_pct (float): Percentage return
         bullish_count (int): Number of bullish signals
         bearish_count (int): Number of bearish signals
         neutral_count (int): Number of neutral signals
-
-    Returns:
-        list[any]: Formatted row with color codes
+        is_summary (bool): Whether this is a summary row
+        total_value (float): Total portfolio value (for summary row)
+        return_pct (float): Portfolio return percentage (for summary row)
     """
     action_color = {"buy": Fore.GREEN, "sell": Fore.RED, "hold": Fore.YELLOW}.get(
         action.lower(), ""
     )
     
-    return_color = Fore.GREEN if return_pct >= 0 else Fore.RED
-
-    return [
-        date,
-        f"{Fore.CYAN}{ticker}{Style.RESET_ALL}",
-        f"{action_color}{action}{Style.RESET_ALL}",
-        f"{action_color}{quantity}{Style.RESET_ALL}",
-        f"{Fore.WHITE}{price:.2f}{Style.RESET_ALL}",
-        f"{Fore.WHITE}{position_value:.2f}{Style.RESET_ALL}",
-        f"{Fore.YELLOW}{cash:.2f}{Style.RESET_ALL}",
-        f"{Fore.YELLOW}{total_value:.2f}{Style.RESET_ALL}",
-        f"{return_color}{return_pct:+.2f}%{Style.RESET_ALL}",
-        f"{Fore.GREEN}{bullish_count}{Style.RESET_ALL}/{Fore.RED}{bearish_count}{Style.RESET_ALL}/{Fore.BLUE}{neutral_count}{Style.RESET_ALL}",
-    ]
+    if is_summary:
+        return_color = Fore.GREEN if return_pct >= 0 else Fore.RED
+        return [
+            date,
+            f"{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY{Style.RESET_ALL}",
+            "",  # Action
+            "",  # Quantity
+            "",  # Price
+            "",  # Shares
+            "",  # Position Value
+            f"{Fore.YELLOW}{total_value:,.2f}{Style.RESET_ALL}",  # Total Value
+            f"{return_color}{return_pct:+.2f}%{Style.RESET_ALL}",  # Return
+            "",  # Signals
+        ]
+    else:
+        return [
+            date,
+            f"{Fore.CYAN}{ticker}{Style.RESET_ALL}",
+            f"{action_color}{action.upper()}{Style.RESET_ALL}",
+            f"{action_color}{quantity:,.0f}{Style.RESET_ALL}",
+            f"{Fore.WHITE}{price:,.2f}{Style.RESET_ALL}",
+            f"{Fore.WHITE}{shares_owned:,.0f}{Style.RESET_ALL}",
+            f"{Fore.YELLOW}{position_value:,.2f}{Style.RESET_ALL}",
+            f"{Fore.GREEN}{bullish_count}{Style.RESET_ALL}",
+            f"{Fore.RED}{bearish_count}{Style.RESET_ALL}",
+            f"{Fore.BLUE}{neutral_count}{Style.RESET_ALL}",
+        ]

@@ -4,8 +4,7 @@ import questionary
 
 import matplotlib.pyplot as plt
 import pandas as pd
-from tabulate import tabulate
-from colorama import Fore, Back, Style, init
+from colorama import Fore, Style, init
 
 from utils.analysts import ANALYST_ORDER
 from main import run_hedge_fund
@@ -125,11 +124,16 @@ class Backtester:
             decisions = output["decisions"]
             analyst_signals = output["analyst_signals"]
             total_value = self.portfolio["cash"]
+            date_rows = []
 
             # Process each ticker's decision
             for ticker in self.tickers:
                 decision = decisions.get(ticker, {"action": "hold", "quantity": 0})
                 action, quantity = decision.get("action", "hold"), decision.get("quantity", 0)
+
+                # Skip if we don't have enough lookback data
+                if lookback_start == current_date_str:
+                  continue
                 
                 # Get current price for the ticker
                 df = get_price_data(ticker, lookback_start, current_date_str)
@@ -139,36 +143,58 @@ class Backtester:
                 executed_quantity = self.execute_trade(ticker, action, quantity, current_price)
 
                 # Calculate position value for this ticker
-                position_value = self.portfolio["positions"][ticker] * current_price
+                shares_owned = self.portfolio["positions"][ticker]
+                position_value = shares_owned * current_price
                 total_value += position_value
 
                 # Count signals for this ticker
-                ticker_signals = analyst_signals.get(ticker, {})
+                ticker_signals = {}
+                for agent, signals in analyst_signals.items():
+                    if ticker in signals:
+                        ticker_signals[agent] = signals[ticker]
+                
                 bullish_count = len([s for s in ticker_signals.values() if s.get("signal", "").lower() == "bullish"])
                 bearish_count = len([s for s in ticker_signals.values() if s.get("signal", "").lower() == "bearish"])
                 neutral_count = len([s for s in ticker_signals.values() if s.get("signal", "").lower() == "neutral"])
 
-                # Calculate return percentage for this ticker
-                initial_position_value = self.initial_capital / len(self.tickers)  # Equal allocation assumption
-                return_pct = ((position_value + self.portfolio["cash"] / len(self.tickers)) / initial_position_value - 1) * 100
-
-                # Format and add row
-                table_rows.append(format_backtest_row(
+                # Add row for this ticker
+                date_rows.append(format_backtest_row(
                     date=current_date_str,
                     ticker=ticker,
                     action=action,
                     quantity=executed_quantity,
                     price=current_price,
+                    shares_owned=shares_owned,
                     position_value=position_value,
-                    cash=self.portfolio["cash"] / len(self.tickers),  # Show proportional cash
-                    total_value=total_value / len(self.tickers),  # Show proportional total value
-                    return_pct=return_pct,
                     bullish_count=bullish_count,
                     bearish_count=bearish_count,
                     neutral_count=neutral_count
                 ))
 
-            # Display the updated table
+            # Calculate overall portfolio return
+            portfolio_return = (total_value / self.initial_capital - 1) * 100
+
+            # Add summary row for this date
+            date_rows.append(format_backtest_row(
+                date=current_date_str,
+                ticker="",  # Will be replaced with "PORTFOLIO SUMMARY"
+                action="",
+                quantity=0,
+                price=0,
+                shares_owned=0,
+                position_value=0,
+                bullish_count=0,
+                bearish_count=0,
+                neutral_count=0,
+                is_summary=True,
+                total_value=total_value,
+                return_pct=portfolio_return
+            ))
+
+            # Add all rows for this date
+            table_rows.extend(date_rows)
+
+            # Temporarily stop progress display, show table, then resume
             print_backtest_results(table_rows)
 
             # Record the portfolio value
