@@ -16,14 +16,17 @@ init(autoreset=True)
 
 
 class Backtester:
-    def __init__(self, agent, ticker, start_date, end_date, initial_capital, selected_analysts=None):
+    def __init__(self, agent, tickers: list[str], start_date, end_date, initial_capital, selected_analysts=None):
         self.agent = agent
-        self.ticker = ticker
+        self.tickers = tickers
         self.start_date = start_date
         self.end_date = end_date
         self.initial_capital = initial_capital
         self.selected_analysts = selected_analysts
-        self.portfolio = {"cash": initial_capital, "stock": 0}
+        self.portfolio = {
+            "cash": initial_capital,
+            "positions": {ticker: 0 for ticker in tickers}
+        }
         self.portfolio_values = []
 
     def prefetch_data(self):
@@ -35,29 +38,30 @@ class Backtester:
         start_date_dt = end_date_dt - relativedelta(years=1)
         start_date_str = start_date_dt.strftime("%Y-%m-%d")
         
-        # Fetch price data for the entire period, plus 1 year 
-        get_prices(self.ticker, start_date_str, self.end_date)
-        
-        # Fetch financial metrics
-        get_financial_metrics(self.ticker, self.end_date, limit=10)
-        
-        # Fetch insider trades
-        get_insider_trades(self.ticker, self.end_date, limit=1000)
-        
-        # Fetch common line items used by valuation agent
-        search_line_items(
-            self.ticker,
-            [
-                "free_cash_flow",
-                "net_income",
-                "depreciation_and_amortization",
-                "capital_expenditure",
-                "working_capital",
-            ],
-            self.end_date,
-            period="ttm",
-            limit=2,  # Need current and previous for working capital change
-        )
+        for ticker in self.tickers:
+            # Fetch price data for the entire period, plus 1 year 
+            get_prices(ticker, start_date_str, self.end_date)
+            
+            # Fetch financial metrics
+            get_financial_metrics(ticker, self.end_date, limit=10)
+            
+            # Fetch insider trades
+            get_insider_trades(ticker, self.end_date, limit=1000)
+            
+            # Fetch common line items used by valuation agent
+            search_line_items(
+                ticker,
+                [
+                    "free_cash_flow",
+                    "net_income",
+                    "depreciation_and_amortization",
+                    "capital_expenditure",
+                    "working_capital",
+                ],
+                self.end_date,
+                period="ttm",
+                limit=2,  # Need current and previous for working capital change
+            )
         
         print("Data pre-fetch complete.")
 
@@ -72,27 +76,27 @@ class Backtester:
             print(f"Error parsing action: {agent_output}")
             return "hold", 0
 
-    def execute_trade(self, action, quantity, current_price):
+    def execute_trade(self, ticker: str, action: str, quantity: float, current_price: float):
         """Validate and execute trades based on portfolio constraints"""
         if action == "buy" and quantity > 0:
             cost = quantity * current_price
             if cost <= self.portfolio["cash"]:
-                self.portfolio["stock"] += quantity
+                self.portfolio["positions"][ticker] += quantity
                 self.portfolio["cash"] -= cost
                 return quantity
             else:
                 # Calculate maximum affordable quantity
                 max_quantity = self.portfolio["cash"] // current_price
                 if max_quantity > 0:
-                    self.portfolio["stock"] += max_quantity
+                    self.portfolio["positions"][ticker] += max_quantity
                     self.portfolio["cash"] -= max_quantity * current_price
                     return max_quantity
                 return 0
         elif action == "sell" and quantity > 0:
-            quantity = min(quantity, self.portfolio["stock"])
+            quantity = min(quantity, self.portfolio["positions"][ticker])
             if quantity > 0:
+                self.portfolio["positions"][ticker] -= quantity
                 self.portfolio["cash"] += quantity * current_price
-                self.portfolio["stock"] -= quantity
                 return quantity
             return 0
         return 0
@@ -111,49 +115,58 @@ class Backtester:
             current_date_str = current_date.strftime("%Y-%m-%d")
 
             output = self.agent(
-                ticker=self.ticker,
+                tickers=self.tickers,
                 start_date=lookback_start,
                 end_date=current_date_str,
                 portfolio=self.portfolio,
                 selected_analysts=self.selected_analysts,
             )
 
-            agent_decision = output["decision"]
-            action, quantity = agent_decision["action"], agent_decision["quantity"]
-            df = get_price_data(self.ticker, lookback_start, current_date_str)
-            current_price = df.iloc[-1]["close"]
-
-            # Execute the trade with validation
-            executed_quantity = self.execute_trade(action, quantity, current_price)
-
-            # Update total portfolio value
-            total_value = self.portfolio["cash"] + self.portfolio["stock"] * current_price
-            self.portfolio["portfolio_value"] = total_value
-
-            # Count signals from selected analysts only
+            decisions = output["decisions"]
             analyst_signals = output["analyst_signals"]
+            total_value = self.portfolio["cash"]
 
-            # Count signals
-            bullish_count = len([s for s in analyst_signals.values() if s.get("signal", "").lower() == "bullish"])
-            bearish_count = len([s for s in analyst_signals.values() if s.get("signal", "").lower() == "bearish"])
-            neutral_count = len([s for s in analyst_signals.values() if s.get("signal", "").lower() == "neutral"])
+            # Process each ticker's decision
+            for ticker in self.tickers:
+                decision = decisions.get(ticker, {"action": "hold", "quantity": 0})
+                action, quantity = decision.get("action", "hold"), decision.get("quantity", 0)
+                
+                # Get current price for the ticker
+                df = get_price_data(ticker, lookback_start, current_date_str)
+                current_price = df.iloc[-1]["close"]
 
-            print(f"Signal counts - Bullish: {bullish_count}, Bearish: {bearish_count}, Neutral: {neutral_count}")
+                # Execute the trade with validation
+                executed_quantity = self.execute_trade(ticker, action, quantity, current_price)
 
-            # Format and add row
-            table_rows.append(format_backtest_row(
-                date=current_date.strftime('%Y-%m-%d'),
-                ticker=self.ticker,
-                action=action,
-                quantity=executed_quantity,
-                price=current_price,
-                cash=self.portfolio['cash'],
-                stock=self.portfolio['stock'],
-                total_value=total_value,
-                bullish_count=bullish_count,
-                bearish_count=bearish_count,
-                neutral_count=neutral_count
-            ))
+                # Calculate position value for this ticker
+                position_value = self.portfolio["positions"][ticker] * current_price
+                total_value += position_value
+
+                # Count signals for this ticker
+                ticker_signals = analyst_signals.get(ticker, {})
+                bullish_count = len([s for s in ticker_signals.values() if s.get("signal", "").lower() == "bullish"])
+                bearish_count = len([s for s in ticker_signals.values() if s.get("signal", "").lower() == "bearish"])
+                neutral_count = len([s for s in ticker_signals.values() if s.get("signal", "").lower() == "neutral"])
+
+                # Calculate return percentage for this ticker
+                initial_position_value = self.initial_capital / len(self.tickers)  # Equal allocation assumption
+                return_pct = ((position_value + self.portfolio["cash"] / len(self.tickers)) / initial_position_value - 1) * 100
+
+                # Format and add row
+                table_rows.append(format_backtest_row(
+                    date=current_date_str,
+                    ticker=ticker,
+                    action=action,
+                    quantity=executed_quantity,
+                    price=current_price,
+                    position_value=position_value,
+                    cash=self.portfolio["cash"] / len(self.tickers),  # Show proportional cash
+                    total_value=total_value / len(self.tickers),  # Show proportional total value
+                    return_pct=return_pct,
+                    bullish_count=bullish_count,
+                    bearish_count=bearish_count,
+                    neutral_count=neutral_count
+                ))
 
             # Display the updated table
             print_backtest_results(table_rows)
@@ -168,17 +181,24 @@ class Backtester:
         performance_df = pd.DataFrame(self.portfolio_values).set_index("Date")
 
         # Calculate total return
-        total_return = (
-            self.portfolio["portfolio_value"] - self.initial_capital
-        ) / self.initial_capital
-        print(f"Total Return: {total_return * 100:.2f}%")
+        total_return = (performance_df["Portfolio Value"].iloc[-1] - self.initial_capital) / self.initial_capital
+        print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO PERFORMANCE SUMMARY:{Style.RESET_ALL}")
+        print(f"Total Return: {Fore.GREEN if total_return >= 0 else Fore.RED}{total_return * 100:.2f}%{Style.RESET_ALL}")
+
+        # Calculate individual ticker returns
+        print(f"\n{Fore.WHITE}{Style.BRIGHT}INDIVIDUAL TICKER RETURNS:{Style.RESET_ALL}")
+        for ticker in self.tickers:
+            position_value = self.portfolio["positions"][ticker] * get_price_data(ticker, self.end_date, self.end_date).iloc[-1]["close"]
+            ticker_return = ((position_value + self.portfolio["cash"] / len(self.tickers)) / (self.initial_capital / len(self.tickers)) - 1)
+            print(f"{Fore.CYAN}{ticker}{Style.RESET_ALL}: {Fore.GREEN if ticker_return >= 0 else Fore.RED}{ticker_return * 100:.2f}%{Style.RESET_ALL}")
 
         # Plot the portfolio value over time
-        performance_df["Portfolio Value"].plot(
-            title="Portfolio Value Over Time", figsize=(12, 6)
-        )
+        plt.figure(figsize=(12, 6))
+        plt.plot(performance_df.index, performance_df["Portfolio Value"], color='blue')
+        plt.title("Portfolio Value Over Time")
         plt.ylabel("Portfolio Value ($)")
         plt.xlabel("Date")
+        plt.grid(True)
         plt.show()
 
         # Compute daily returns
@@ -187,14 +207,14 @@ class Backtester:
         # Calculate Sharpe Ratio (assuming 252 trading days in a year)
         mean_daily_return = performance_df["Daily Return"].mean()
         std_daily_return = performance_df["Daily Return"].std()
-        sharpe_ratio = (mean_daily_return / std_daily_return) * (252**0.5)
-        print(f"Sharpe Ratio: {sharpe_ratio:.2f}")
+        sharpe_ratio = (mean_daily_return / std_daily_return) * (252**0.5) if std_daily_return != 0 else 0
+        print(f"\nSharpe Ratio: {Fore.YELLOW}{sharpe_ratio:.2f}{Style.RESET_ALL}")
 
         # Calculate Maximum Drawdown
         rolling_max = performance_df["Portfolio Value"].cummax()
         drawdown = performance_df["Portfolio Value"] / rolling_max - 1
         max_drawdown = drawdown.min()
-        print(f"Maximum Drawdown: {max_drawdown * 100:.2f}%")
+        print(f"Maximum Drawdown: {Fore.RED}{max_drawdown * 100:.2f}%{Style.RESET_ALL}")
 
         return performance_df
 
@@ -205,7 +225,7 @@ if __name__ == "__main__":
 
     # Set up argument parser
     parser = argparse.ArgumentParser(description="Run backtesting simulation")
-    parser.add_argument("--ticker", type=str, help="Stock ticker symbol (e.g., AAPL)")
+    parser.add_argument("--tickers", type=str, required=True, help="Comma-separated list of stock ticker symbols (e.g., AAPL,MSFT,GOOGL)")
     parser.add_argument(
         "--end-date",
         type=str,
@@ -226,6 +246,9 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+
+    # Parse tickers from comma-separated string
+    tickers = [ticker.strip() for ticker in args.tickers.split(",")]
 
     selected_analysts = None
     choices = questionary.checkbox(
@@ -253,7 +276,7 @@ if __name__ == "__main__":
     # Create an instance of Backtester
     backtester = Backtester(
         agent=run_hedge_fund,
-        ticker=args.ticker,
+        tickers=tickers,
         start_date=args.start_date,
         end_date=args.end_date,
         initial_capital=args.initial_capital,

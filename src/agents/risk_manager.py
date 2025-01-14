@@ -14,6 +14,7 @@ def risk_management_agent(state: AgentState):
     
     # Initialize risk analysis for each ticker
     risk_analysis = {}
+    current_prices = {}  # Store prices here to avoid redundant API calls
     
     for ticker in tickers:
         progress.update_status("risk_management_agent", ticker, "Analyzing price data")
@@ -30,9 +31,13 @@ def risk_management_agent(state: AgentState):
         # Calculate portfolio value
         current_price = prices_df["close"].iloc[-1]
         current_stock_value = portfolio["positions"][ticker] * current_price
+        current_prices[ticker] = current_price  # Store the current price
+        
+        # Calculate total portfolio value using stored prices
         total_portfolio_value = portfolio["cash"] + sum(
-            portfolio["positions"][t] * get_prices(t, data["end_date"], data["end_date"])[0].close
+            portfolio["positions"][t] * current_prices[t]
             for t in portfolio["positions"]
+            if t in current_prices  # Only use prices we've already fetched
         )
 
         # 1. Liquidity Check
