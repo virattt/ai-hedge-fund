@@ -25,7 +25,7 @@ def get_chat_model(provider: Literal["openai", "groq"] = "openai", model: str = 
         )
     elif provider == "openai":
         # Default to gpt-4o for OpenAI if no model specified
-        model_name = model or "gpt-4o"
+        model_name = model or "gpt-4o-mini"
         llm =  ChatOpenAI(
             model_name=model_name,
             temperature=0.7,

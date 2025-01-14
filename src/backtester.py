@@ -24,7 +24,9 @@ class Backtester:
         self.selected_analysts = selected_analysts
         self.portfolio = {
             "cash": initial_capital,
-            "positions": {ticker: 0 for ticker in tickers}
+            "positions": {ticker: 0 for ticker in tickers},
+            "realized_gains": {ticker: 0 for ticker in tickers},  # Track realized gains/losses per ticker
+            "cost_basis": {ticker: 0 for ticker in tickers}  # Track cost basis per ticker
         }
         self.portfolio_values = []
 
@@ -80,22 +82,65 @@ class Backtester:
         if action == "buy" and quantity > 0:
             cost = quantity * current_price
             if cost <= self.portfolio["cash"]:
+                # Calculate new cost basis using weighted average
+                old_shares = self.portfolio["positions"][ticker]
+                old_cost_basis = self.portfolio["cost_basis"][ticker]
+                new_shares = quantity
+                new_cost = cost
+                
+                total_shares = old_shares + new_shares
+                if total_shares > 0:
+                    # Weighted average of old and new cost basis
+                    self.portfolio["cost_basis"][ticker] = ((old_cost_basis * old_shares) + (new_cost * new_shares)) / total_shares
+                
+                # Update position and cash
                 self.portfolio["positions"][ticker] += quantity
                 self.portfolio["cash"] -= cost
+                
                 return quantity
             else:
                 # Calculate maximum affordable quantity
                 max_quantity = self.portfolio["cash"] // current_price
                 if max_quantity > 0:
+                    cost = max_quantity * current_price
+                    
+                    # Calculate new cost basis using weighted average
+                    old_shares = self.portfolio["positions"][ticker]
+                    old_cost_basis = self.portfolio["cost_basis"][ticker]
+                    new_shares = max_quantity
+                    new_cost = cost
+                    
+                    total_shares = old_shares + new_shares
+                    if total_shares > 0:
+                        # Weighted average of old and new cost basis
+                        self.portfolio["cost_basis"][ticker] = ((old_cost_basis * old_shares) + (new_cost * new_shares)) / total_shares
+                    
+                    # Update position and cash
                     self.portfolio["positions"][ticker] += max_quantity
-                    self.portfolio["cash"] -= max_quantity * current_price
+                    self.portfolio["cash"] -= cost
+                    
                     return max_quantity
                 return 0
         elif action == "sell" and quantity > 0:
             quantity = min(quantity, self.portfolio["positions"][ticker])
             if quantity > 0:
+                # Calculate realized gain/loss using average cost per share
+                avg_cost_per_share = self.portfolio["cost_basis"][ticker] / self.portfolio["positions"][ticker] if self.portfolio["positions"][ticker] > 0 else 0
+                realized_gain = (current_price - avg_cost_per_share) * quantity
+                self.portfolio["realized_gains"][ticker] += realized_gain
+                
+                # Update position and cash
                 self.portfolio["positions"][ticker] -= quantity
                 self.portfolio["cash"] += quantity * current_price
+                
+                # Update cost basis - reduce proportionally to shares sold
+                if self.portfolio["positions"][ticker] > 0:
+                    # Cost basis per share stays the same, just reduce total cost basis proportionally
+                    remaining_ratio = (self.portfolio["positions"][ticker] - quantity) / self.portfolio["positions"][ticker]
+                    self.portfolio["cost_basis"][ticker] *= remaining_ratio
+                else:
+                    self.portfolio["cost_basis"][ticker] = 0
+                
                 return quantity
             return 0
         return 0
@@ -123,17 +168,15 @@ class Backtester:
 
             decisions = output["decisions"]
             analyst_signals = output["analyst_signals"]
-            total_value = self.portfolio["cash"]
             date_rows = []
 
-            # Process each ticker's decision
+            # Process each ticker's trades first
             for ticker in self.tickers:
+                if lookback_start == current_date_str:
+                    continue
+                    
                 decision = decisions.get(ticker, {"action": "hold", "quantity": 0})
                 action, quantity = decision.get("action", "hold"), decision.get("quantity", 0)
-
-                # Skip if we don't have enough lookback data
-                if lookback_start == current_date_str:
-                  continue
                 
                 # Get current price for the ticker
                 df = get_price_data(ticker, lookback_start, current_date_str)
@@ -141,6 +184,13 @@ class Backtester:
 
                 # Execute the trade with validation
                 executed_quantity = self.execute_trade(ticker, action, quantity, current_price)
+
+            # Now calculate positions and total value
+            total_value = self.portfolio["cash"]  # Start with cash
+            for ticker in self.tickers:
+                # Get current price for the ticker
+                df = get_price_data(ticker, lookback_start, current_date_str)
+                current_price = df.iloc[-1]["close"]
 
                 # Calculate position value for this ticker
                 shares_owned = self.portfolio["positions"][ticker]
@@ -161,8 +211,8 @@ class Backtester:
                 date_rows.append(format_backtest_row(
                     date=current_date_str,
                     ticker=ticker,
-                    action=action,
-                    quantity=executed_quantity,
+                    action=decision.get("action", "hold"),
+                    quantity=executed_quantity if ticker == ticker else 0,
                     price=current_price,
                     shares_owned=shares_owned,
                     position_value=position_value,
@@ -171,8 +221,12 @@ class Backtester:
                     neutral_count=neutral_count
                 ))
 
-            # Calculate overall portfolio return
-            portfolio_return = (total_value / self.initial_capital - 1) * 100
+            # Calculate overall portfolio return including realized gains
+            total_realized_gains = sum(self.portfolio["realized_gains"].values())
+            portfolio_return = ((total_value + total_realized_gains) / self.initial_capital - 1) * 100
+
+            # Calculate total position value (excluding cash)
+            total_position_value = total_value - self.portfolio["cash"]
 
             # Add summary row for this date
             date_rows.append(format_backtest_row(
@@ -188,7 +242,9 @@ class Backtester:
                 neutral_count=0,
                 is_summary=True,
                 total_value=total_value,
-                return_pct=portfolio_return
+                return_pct=portfolio_return,
+                cash_balance=self.portfolio["cash"],
+                total_position_value=total_position_value
             ))
 
             # Add all rows for this date
@@ -206,17 +262,35 @@ class Backtester:
         # Convert portfolio values to DataFrame
         performance_df = pd.DataFrame(self.portfolio_values).set_index("Date")
 
-        # Calculate total return
-        total_return = (performance_df["Portfolio Value"].iloc[-1] - self.initial_capital) / self.initial_capital
+        # Calculate total return including realized gains
+        final_portfolio_value = performance_df["Portfolio Value"].iloc[-1]
+        total_realized_gains = sum(self.portfolio["realized_gains"].values())
+        total_return = ((final_portfolio_value - self.initial_capital) / self.initial_capital) * 100
+        
         print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO PERFORMANCE SUMMARY:{Style.RESET_ALL}")
-        print(f"Total Return: {Fore.GREEN if total_return >= 0 else Fore.RED}{total_return * 100:.2f}%{Style.RESET_ALL}")
+        print(f"Total Return: {Fore.GREEN if total_return >= 0 else Fore.RED}{total_return:.2f}%{Style.RESET_ALL}")
+        print(f"Total Realized Gains/Losses: {Fore.GREEN if total_realized_gains >= 0 else Fore.RED}${total_realized_gains:,.2f}{Style.RESET_ALL}")
 
         # Calculate individual ticker returns
         print(f"\n{Fore.WHITE}{Style.BRIGHT}INDIVIDUAL TICKER RETURNS:{Style.RESET_ALL}")
         for ticker in self.tickers:
-            position_value = self.portfolio["positions"][ticker] * get_price_data(ticker, self.end_date, self.end_date).iloc[-1]["close"]
-            ticker_return = ((position_value + self.portfolio["cash"] / len(self.tickers)) / (self.initial_capital / len(self.tickers)) - 1)
-            print(f"{Fore.CYAN}{ticker}{Style.RESET_ALL}: {Fore.GREEN if ticker_return >= 0 else Fore.RED}{ticker_return * 100:.2f}%{Style.RESET_ALL}")
+            # Get final position value
+            final_shares = self.portfolio["positions"][ticker]
+            final_price = get_price_data(ticker, self.end_date, self.end_date).iloc[-1]["close"]
+            final_position_value = final_shares * final_price
+            
+            # Get realized gains/losses
+            realized_gains = self.portfolio["realized_gains"][ticker]
+            
+            # Calculate return based on actual trades
+            if realized_gains != 0:
+                # If we had trades, calculate return based on realized gains/losses
+                ticker_return = (realized_gains / self.portfolio["cost_basis"][ticker]) * 100 if self.portfolio["cost_basis"][ticker] > 0 else 0
+                print(f"{Fore.CYAN}{ticker}{Style.RESET_ALL}: {Fore.GREEN if ticker_return >= 0 else Fore.RED}{ticker_return:.2f}%{Style.RESET_ALL}")
+                print(f"  Realized Gains/Losses: {Fore.GREEN if realized_gains >= 0 else Fore.RED}${realized_gains:,.2f}{Style.RESET_ALL}")
+            else:
+                # If no trades, show 0% return
+                print(f"{Fore.CYAN}{ticker}{Style.RESET_ALL}: {Fore.YELLOW}0.00%{Style.RESET_ALL}")
 
         # Plot the portfolio value over time
         plt.figure(figsize=(12, 6))
@@ -227,7 +301,7 @@ class Backtester:
         plt.grid(True)
         plt.show()
 
-        # Compute daily returns
+        # Compute daily returns including realized gains
         performance_df["Daily Return"] = performance_df["Portfolio Value"].pct_change()
 
         # Calculate Sharpe Ratio (assuming 252 trading days in a year)

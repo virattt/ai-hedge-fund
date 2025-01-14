@@ -1,6 +1,7 @@
 from colorama import Fore, Style
 from tabulate import tabulate
 from .analysts import ANALYST_ORDER
+import os
 
 def sort_analyst_signals(signals):
     """Sort analyst signals in a consistent order."""
@@ -119,30 +120,10 @@ def print_trading_output(result: dict) -> None:
     )
 
 
-def print_backtest_results(table_rows: list[list[any]], clear_screen: bool = True) -> None:
-    """
-    Print formatted backtest results with colored tables.
-
-    Args:
-        table_rows (list[list[any]]): List of rows containing backtest data
-        clear_screen (bool): Whether to clear the screen before printing
-    """
-    headers = [
-        "Date",
-        "Ticker",
-        "Action",
-        "Quantity",
-        "Price",
-        "Shares",
-        "Position Value",
-        "Bullish",
-        "Bearish",
-        "Neutral"
-    ]
-
-    # Clear screen if requested
-    if clear_screen:
-        print("\033[H\033[J")
+def print_backtest_results(table_rows: list) -> None:
+    """Print the backtest results in a nicely formatted table"""
+    # Clear the screen
+    os.system('cls' if os.name == 'nt' else 'clear')
 
     # Split rows into ticker rows and summary rows
     ticker_rows = []
@@ -153,17 +134,54 @@ def print_backtest_results(table_rows: list[list[any]], clear_screen: bool = Tru
             summary_rows.append(row)
         else:
             ticker_rows.append(row)
-    
-    # Display ticker data
-    print(f"{tabulate(ticker_rows, headers=headers, tablefmt='grid', floatfmt=('.0f', '', '', '.0f', '.2f', '.0f', '.2f', '.0f', '.0f', '.0f'))}{Style.RESET_ALL}")
-    
+
+    # Print the table with just ticker rows
+    print(
+        tabulate(
+            ticker_rows,
+            headers=[
+                "Date",
+                "Ticker",
+                "Action",
+                "Quantity",
+                "Price",
+                "Shares",
+                "Position Value",
+                "Bullish",
+                "Bearish",
+                "Neutral",
+            ],
+            tablefmt="grid",
+            colalign=(
+                "left",   # Date
+                "left",   # Ticker
+                "center", # Action
+                "right",  # Quantity
+                "right",  # Price
+                "right",  # Shares
+                "right",  # Position Value
+                "right",  # Bullish
+                "right",  # Bearish
+                "right",  # Neutral
+            ),
+        )
+    )
+
     # Display latest portfolio summary
     if summary_rows:
         latest_summary = summary_rows[-1]
         print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
-        print(f"Total Value: {latest_summary[7]}")  # Total Value column
-        print(f"Return: {latest_summary[8]}")  # Return % column
         
+        # Extract values and remove commas before converting to float
+        cash_str = latest_summary[7].split('$')[1].split(Style.RESET_ALL)[0].replace(',', '')
+        position_str = latest_summary[6].split('$')[1].split(Style.RESET_ALL)[0].replace(',', '')
+        total_str = latest_summary[8].split('$')[1].split(Style.RESET_ALL)[0].replace(',', '')
+        
+        print(f"Cash Balance: {Fore.CYAN}${float(cash_str):,.2f}{Style.RESET_ALL}")
+        print(f"Total Position Value: {Fore.YELLOW}${float(position_str):,.2f}{Style.RESET_ALL}")
+        print(f"Total Value: {Fore.WHITE}${float(total_str):,.2f}{Style.RESET_ALL}")
+        print(f"Return: {latest_summary[9]}")
+
     # Add vertical spacing for progress display
     print("\n" * 8)  # Add 8 blank lines for progress display
 
@@ -181,29 +199,17 @@ def format_backtest_row(
     is_summary: bool = False,
     total_value: float = None,
     return_pct: float = None,
+    cash_balance: float = None,
+    total_position_value: float = None,
 ) -> list[any]:
-    """
-    Format a row of backtest data with color coding.
+    """Format a row for the backtest results table"""
+    # Color the action
+    action_color = {
+        "BUY": Fore.GREEN,
+        "SELL": Fore.RED,
+        "HOLD": Fore.YELLOW,
+    }.get(action.upper(), Fore.WHITE)
 
-    Args:
-        date (str): The date of the trade
-        ticker (str): The stock ticker
-        action (str): The trading action (buy/sell/hold)
-        quantity (float): The quantity traded
-        price (float): The stock price
-        shares_owned (float): Current number of shares owned
-        position_value (float): Value of the current position
-        bullish_count (int): Number of bullish signals
-        bearish_count (int): Number of bearish signals
-        neutral_count (int): Number of neutral signals
-        is_summary (bool): Whether this is a summary row
-        total_value (float): Total portfolio value (for summary row)
-        return_pct (float): Portfolio return percentage (for summary row)
-    """
-    action_color = {"buy": Fore.GREEN, "sell": Fore.RED, "hold": Fore.YELLOW}.get(
-        action.lower(), ""
-    )
-    
     if is_summary:
         return_color = Fore.GREEN if return_pct >= 0 else Fore.RED
         return [
@@ -213,10 +219,10 @@ def format_backtest_row(
             "",  # Quantity
             "",  # Price
             "",  # Shares
-            "",  # Position Value
-            f"{Fore.YELLOW}{total_value:,.2f}{Style.RESET_ALL}",  # Total Value
+            f"{Fore.YELLOW}${total_position_value:,.2f}{Style.RESET_ALL}",  # Total Position Value
+            f"{Fore.CYAN}${cash_balance:,.2f}{Style.RESET_ALL}",  # Cash Balance
+            f"{Fore.WHITE}${total_value:,.2f}{Style.RESET_ALL}",  # Total Value
             f"{return_color}{return_pct:+.2f}%{Style.RESET_ALL}",  # Return
-            "",  # Signals
         ]
     else:
         return [
