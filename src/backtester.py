@@ -15,7 +15,15 @@ init(autoreset=True)
 
 
 class Backtester:
-    def __init__(self, agent, tickers: list[str], start_date, end_date, initial_capital, selected_analysts=None):
+    def __init__(
+        self,
+        agent,
+        tickers: list[str],
+        start_date,
+        end_date,
+        initial_capital,
+        selected_analysts=None,
+    ):
         self.agent = agent
         self.tickers = tickers
         self.start_date = start_date
@@ -26,29 +34,29 @@ class Backtester:
             "cash": initial_capital,
             "positions": {ticker: 0 for ticker in tickers},
             "realized_gains": {ticker: 0 for ticker in tickers},  # Track realized gains/losses per ticker
-            "cost_basis": {ticker: 0 for ticker in tickers}  # Track cost basis per ticker
+            "cost_basis": {ticker: 0 for ticker in tickers},  # Track cost basis per ticker
         }
         self.portfolio_values = []
 
     def prefetch_data(self):
         """Pre-fetch all data needed for the backtest period."""
         print("\nPre-fetching data for the entire backtest period...")
-        
+
         # Convert end_date string to datetime, perform arithmetic, then back to string
         end_date_dt = datetime.strptime(self.end_date, "%Y-%m-%d")
         start_date_dt = end_date_dt - relativedelta(years=1)
         start_date_str = start_date_dt.strftime("%Y-%m-%d")
-        
+
         for ticker in self.tickers:
-            # Fetch price data for the entire period, plus 1 year 
+            # Fetch price data for the entire period, plus 1 year
             get_prices(ticker, start_date_str, self.end_date)
-            
+
             # Fetch financial metrics
             get_financial_metrics(ticker, self.end_date, limit=10)
-            
+
             # Fetch insider trades
             get_insider_trades(ticker, self.end_date, limit=1000)
-            
+
             # Fetch common line items used by valuation agent
             search_line_items(
                 ticker,
@@ -63,7 +71,7 @@ class Backtester:
                 period="ttm",
                 limit=2,  # Need current and previous for working capital change
             )
-        
+
         print("Data pre-fetch complete.")
 
     def parse_agent_response(self, agent_output):
@@ -87,38 +95,39 @@ class Backtester:
                 old_cost_basis = self.portfolio["cost_basis"][ticker]
                 new_shares = quantity
                 new_cost = cost
-                
+
                 total_shares = old_shares + new_shares
                 if total_shares > 0:
                     # Weighted average of old and new cost basis
                     self.portfolio["cost_basis"][ticker] = ((old_cost_basis * old_shares) + (new_cost * new_shares)) / total_shares
-                
+
                 # Update position and cash
                 self.portfolio["positions"][ticker] += quantity
                 self.portfolio["cash"] -= cost
-                
+
                 return quantity
             else:
                 # Calculate maximum affordable quantity
                 max_quantity = self.portfolio["cash"] // current_price
                 if max_quantity > 0:
-                    cost = max_quantity * current_price
-                    
-                    # Calculate new cost basis using weighted average
+                    # Get old shares and cost basis
                     old_shares = self.portfolio["positions"][ticker]
                     old_cost_basis = self.portfolio["cost_basis"][ticker]
+
+                    # Get new shares and cost
                     new_shares = max_quantity
-                    new_cost = cost
-                    
+                    new_cost = max_quantity * current_price
+
+                    # Calculate cost basis
                     total_shares = old_shares + new_shares
                     if total_shares > 0:
                         # Weighted average of old and new cost basis
                         self.portfolio["cost_basis"][ticker] = ((old_cost_basis * old_shares) + (new_cost * new_shares)) / total_shares
-                    
+
                     # Update position and cash
                     self.portfolio["positions"][ticker] += max_quantity
-                    self.portfolio["cash"] -= cost
-                    
+                    self.portfolio["cash"] -= new_cost
+
                     return max_quantity
                 return 0
         elif action == "sell" and quantity > 0:
@@ -128,11 +137,11 @@ class Backtester:
                 avg_cost_per_share = self.portfolio["cost_basis"][ticker] / self.portfolio["positions"][ticker] if self.portfolio["positions"][ticker] > 0 else 0
                 realized_gain = (current_price - avg_cost_per_share) * quantity
                 self.portfolio["realized_gains"][ticker] += realized_gain
-                
+
                 # Update position and cash
                 self.portfolio["positions"][ticker] -= quantity
                 self.portfolio["cash"] += quantity * current_price
-                
+
                 # Update cost basis - reduce proportionally to shares sold
                 if self.portfolio["positions"][ticker] > 0:
                     # Cost basis per share stays the same, just reduce total cost basis proportionally
@@ -140,7 +149,7 @@ class Backtester:
                     self.portfolio["cost_basis"][ticker] *= remaining_ratio
                 else:
                     self.portfolio["cost_basis"][ticker] = 0
-                
+
                 return quantity
             return 0
         return 0
@@ -148,7 +157,7 @@ class Backtester:
     def run_backtest(self):
         # Pre-fetch all data at the start
         self.prefetch_data()
-        
+
         dates = pd.date_range(self.start_date, self.end_date, freq="B")
         table_rows = []
 
@@ -171,19 +180,21 @@ class Backtester:
             date_rows = []
 
             # Process each ticker's trades first
+            executed_trades = {}
             for ticker in self.tickers:
                 if lookback_start == current_date_str:
                     continue
-                    
+
                 decision = decisions.get(ticker, {"action": "hold", "quantity": 0})
                 action, quantity = decision.get("action", "hold"), decision.get("quantity", 0)
-                
+
                 # Get current price for the ticker
                 df = get_price_data(ticker, lookback_start, current_date_str)
                 current_price = df.iloc[-1]["close"]
 
                 # Execute the trade with validation
                 executed_quantity = self.execute_trade(ticker, action, quantity, current_price)
+                executed_trades[ticker] = executed_quantity
 
             # Now calculate positions and total value
             total_value = self.portfolio["cash"]  # Start with cash
@@ -202,24 +213,31 @@ class Backtester:
                 for agent, signals in analyst_signals.items():
                     if ticker in signals:
                         ticker_signals[agent] = signals[ticker]
-                
+
                 bullish_count = len([s for s in ticker_signals.values() if s.get("signal", "").lower() == "bullish"])
                 bearish_count = len([s for s in ticker_signals.values() if s.get("signal", "").lower() == "bearish"])
                 neutral_count = len([s for s in ticker_signals.values() if s.get("signal", "").lower() == "neutral"])
 
+                # Get decision for this ticker
+                decision = decisions.get(ticker, {"action": "hold", "quantity": 0})
+                action = decision.get("action", None)
+                quantity = executed_trades.get(ticker, None)
+
                 # Add row for this ticker
-                date_rows.append(format_backtest_row(
-                    date=current_date_str,
-                    ticker=ticker,
-                    action=decision.get("action", "hold"),
-                    quantity=executed_quantity if ticker == ticker else 0,
-                    price=current_price,
-                    shares_owned=shares_owned,
-                    position_value=position_value,
-                    bullish_count=bullish_count,
-                    bearish_count=bearish_count,
-                    neutral_count=neutral_count
-                ))
+                date_rows.append(
+                    format_backtest_row(
+                        date=current_date_str,
+                        ticker=ticker,
+                        action=action,
+                        quantity=quantity,
+                        price=current_price,
+                        shares_owned=shares_owned,
+                        position_value=position_value,
+                        bullish_count=bullish_count,
+                        bearish_count=bearish_count,
+                        neutral_count=neutral_count,
+                    )
+                )
 
             # Calculate overall portfolio return including realized gains
             total_realized_gains = sum(self.portfolio["realized_gains"].values())
@@ -229,23 +247,25 @@ class Backtester:
             total_position_value = total_value - self.portfolio["cash"]
 
             # Add summary row for this date
-            date_rows.append(format_backtest_row(
-                date=current_date_str,
-                ticker="",  # Will be replaced with "PORTFOLIO SUMMARY"
-                action="",
-                quantity=0,
-                price=0,
-                shares_owned=0,
-                position_value=0,
-                bullish_count=0,
-                bearish_count=0,
-                neutral_count=0,
-                is_summary=True,
-                total_value=total_value,
-                return_pct=portfolio_return,
-                cash_balance=self.portfolio["cash"],
-                total_position_value=total_position_value
-            ))
+            date_rows.append(
+                format_backtest_row(
+                    date=current_date_str,
+                    ticker="",
+                    action="",
+                    quantity=0,
+                    price=0,
+                    shares_owned=0,
+                    position_value=0,
+                    bullish_count=0,
+                    bearish_count=0,
+                    neutral_count=0,
+                    is_summary=True,
+                    total_value=total_value,
+                    return_pct=portfolio_return,
+                    cash_balance=self.portfolio["cash"],
+                    total_position_value=total_position_value,
+                )
+            )
 
             # Add all rows for this date
             table_rows.extend(date_rows)
@@ -254,9 +274,7 @@ class Backtester:
             print_backtest_results(table_rows)
 
             # Record the portfolio value
-            self.portfolio_values.append(
-                {"Date": current_date, "Portfolio Value": total_value}
-            )
+            self.portfolio_values.append({"Date": current_date, "Portfolio Value": total_value})
 
     def analyze_performance(self):
         # Convert portfolio values to DataFrame
@@ -266,35 +284,14 @@ class Backtester:
         final_portfolio_value = performance_df["Portfolio Value"].iloc[-1]
         total_realized_gains = sum(self.portfolio["realized_gains"].values())
         total_return = ((final_portfolio_value - self.initial_capital) / self.initial_capital) * 100
-        
+
         print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO PERFORMANCE SUMMARY:{Style.RESET_ALL}")
         print(f"Total Return: {Fore.GREEN if total_return >= 0 else Fore.RED}{total_return:.2f}%{Style.RESET_ALL}")
         print(f"Total Realized Gains/Losses: {Fore.GREEN if total_realized_gains >= 0 else Fore.RED}${total_realized_gains:,.2f}{Style.RESET_ALL}")
 
-        # Calculate individual ticker returns
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}INDIVIDUAL TICKER RETURNS:{Style.RESET_ALL}")
-        for ticker in self.tickers:
-            # Get final position value
-            final_shares = self.portfolio["positions"][ticker]
-            final_price = get_price_data(ticker, self.end_date, self.end_date).iloc[-1]["close"]
-            final_position_value = final_shares * final_price
-            
-            # Get realized gains/losses
-            realized_gains = self.portfolio["realized_gains"][ticker]
-            
-            # Calculate return based on actual trades
-            if realized_gains != 0:
-                # If we had trades, calculate return based on realized gains/losses
-                ticker_return = (realized_gains / self.portfolio["cost_basis"][ticker]) * 100 if self.portfolio["cost_basis"][ticker] > 0 else 0
-                print(f"{Fore.CYAN}{ticker}{Style.RESET_ALL}: {Fore.GREEN if ticker_return >= 0 else Fore.RED}{ticker_return:.2f}%{Style.RESET_ALL}")
-                print(f"  Realized Gains/Losses: {Fore.GREEN if realized_gains >= 0 else Fore.RED}${realized_gains:,.2f}{Style.RESET_ALL}")
-            else:
-                # If no trades, show 0% return
-                print(f"{Fore.CYAN}{ticker}{Style.RESET_ALL}: {Fore.YELLOW}0.00%{Style.RESET_ALL}")
-
         # Plot the portfolio value over time
         plt.figure(figsize=(12, 6))
-        plt.plot(performance_df.index, performance_df["Portfolio Value"], color='blue')
+        plt.plot(performance_df.index, performance_df["Portfolio Value"], color="blue")
         plt.title("Portfolio Value Over Time")
         plt.ylabel("Portfolio Value ($)")
         plt.xlabel("Date")
@@ -325,7 +322,12 @@ if __name__ == "__main__":
 
     # Set up argument parser
     parser = argparse.ArgumentParser(description="Run backtesting simulation")
-    parser.add_argument("--tickers", type=str, required=True, help="Comma-separated list of stock ticker symbols (e.g., AAPL,MSFT,GOOGL)")
+    parser.add_argument(
+        "--tickers",
+        type=str,
+        required=True,
+        help="Comma-separated list of stock ticker symbols (e.g., AAPL,MSFT,GOOGL)",
+    )
     parser.add_argument(
         "--end-date",
         type=str,
@@ -353,17 +355,17 @@ if __name__ == "__main__":
     selected_analysts = None
     choices = questionary.checkbox(
         "Use the Space bar to select/unselect analysts.",
-        choices=[
-            questionary.Choice(display, value=value) for display, value in ANALYST_ORDER
-        ],
+        choices=[questionary.Choice(display, value=value) for display, value in ANALYST_ORDER],
         instruction="\n\nPress 'a' to toggle all.\n\nPress Enter when done to run the hedge fund.",
         validate=lambda x: len(x) > 0 or "You must select at least one analyst.",
-        style=questionary.Style([
-            ('checkbox-selected', 'fg:green'),
-            ('selected', 'fg:green noinherit'),
-            ('highlighted', 'noinherit'),
-            ('pointer', 'noinherit'),
-        ])
+        style=questionary.Style(
+            [
+                ("checkbox-selected", "fg:green"),
+                ("selected", "fg:green noinherit"),
+                ("highlighted", "noinherit"),
+                ("pointer", "noinherit"),
+            ]
+        ),
     ).ask()
 
     if not choices:

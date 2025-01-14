@@ -16,6 +16,7 @@ class PortfolioDecision(BaseModel):
     confidence: float = Field(description="Confidence in the decision, between 0.0 and 100.0")
     reasoning: str = Field(description="Reasoning for the decision")
 
+
 class PortfolioManagerOutput(BaseModel):
     decisions: dict[str, PortfolioDecision] = Field(description="Dictionary of ticker to trading decisions")
 
@@ -31,25 +32,31 @@ def portfolio_management_agent(state: AgentState):
 
     progress.update_status("portfolio_management_agent", None, "Analyzing signals")
 
-    # Format signals by ticker
+    # Get position limits, current prices, and signals for every ticker
+    position_limits = {}
+    current_prices = {}
+    max_shares = {}
     signals_by_ticker = {}
     for ticker in tickers:
         progress.update_status("portfolio_management_agent", ticker, "Processing analyst signals")
+
+        # Get position limits and current prices for the ticker
+        risk_data = analyst_signals.get("risk_management_agent", {}).get(ticker, {})
+        position_limits[ticker] = risk_data.get("remaining_position_limit", 0)
+        current_prices[ticker] = risk_data.get("current_price", 0)
+
+        # Calculate maximum shares allowed based on position limit and price
+        if current_prices[ticker] > 0:
+            max_shares[ticker] = int(position_limits[ticker] / current_prices[ticker])
+        else:
+            max_shares[ticker] = 0
+
+        # Get signals for the ticker
         ticker_signals = {}
         for agent, signals in analyst_signals.items():
             if agent != "risk_management_agent" and ticker in signals:
-                ticker_signals[agent] = {
-                    "signal": signals[ticker]["signal"],
-                    "confidence": signals[ticker]["confidence"]
-                }
+                ticker_signals[agent] = {"signal": signals[ticker]["signal"], "confidence": signals[ticker]["confidence"]}
         signals_by_ticker[ticker] = ticker_signals
-
-    progress.update_status("portfolio_management_agent", None, "Calculating position limits")
-    # Format position limits
-    position_limits = {
-        ticker: analyst_signals.get("risk_management_agent", {}).get(ticker, {}).get("max_position_size", 0)
-        for ticker in tickers
-    }
 
     progress.update_status("portfolio_management_agent", None, "Preparing trading strategy")
     # Create the prompt template
@@ -62,12 +69,19 @@ def portfolio_management_agent(state: AgentState):
 
                 Trading Rules:
                 - Only buy if you have available cash
-                - Only sell if you have shares to sell
-                - Quantity must be ≤ current position for sells
-                - Quantity must be ≤ max_position_size from risk management
-                - Total position value across all tickers should not exceed portfolio limits
+                - Only sell if you have shares to sell, otherwise hold
+                - For sells: quantity must be ≤ current position shares
+                - For buys: quantity must be ≤ max_shares provided for each ticker
+                - The max_shares values are pre-calculated to respect position limits
                 
-                For each ticker, you must return:
+                Inputs:
+                - signals_by_ticker: dictionary of ticker to signals from analysts
+                - max_shares: maximum number of shares allowed for each ticker
+                - portfolio_cash: current cash in portfolio
+                - portfolio_positions: current positions in portfolio
+                - current_prices: current price for each ticker
+                
+                Output:
                 - action: "buy", "sell", or "hold"
                 - quantity: number of shares to trade (integer)
                 - confidence: confidence level between 0-100
@@ -80,8 +94,11 @@ def portfolio_management_agent(state: AgentState):
                 For each ticker, here are the signals:
                 {signals_by_ticker}
 
-                Risk Management Position Limits:
-                {position_limits}
+                Current Prices:
+                {current_prices}
+
+                Maximum Shares Allowed For Any Purchase:
+                {max_shares}
 
                 Here is the current portfolio:
                 Cash: {portfolio_cash}
@@ -109,9 +126,10 @@ def portfolio_management_agent(state: AgentState):
     prompt = template.invoke(
         {
             "signals_by_ticker": json.dumps(signals_by_ticker, indent=2),
-            "position_limits": json.dumps(position_limits, indent=2),
+            "current_prices": json.dumps(current_prices, indent=2),
+            "max_shares": json.dumps(max_shares, indent=2),
             "portfolio_cash": f"{portfolio['cash']:.2f}",
-            "portfolio_positions": json.dumps(portfolio['positions'], indent=2),
+            "portfolio_positions": json.dumps(portfolio["positions"], indent=2),
         }
     )
 
@@ -134,19 +152,13 @@ def portfolio_management_agent(state: AgentState):
 
     # Create the portfolio management message
     message = HumanMessage(
-        content=json.dumps({
-            ticker: decision.model_dump()
-            for ticker, decision in result.decisions.items()
-        }),
+        content=json.dumps({ticker: decision.model_dump() for ticker, decision in result.decisions.items()}),
         name="portfolio_management",
     )
 
     # Print the decision if the flag is set
     if state["metadata"]["show_reasoning"]:
-        show_agent_reasoning({
-            ticker: decision.model_dump()
-            for ticker, decision in result.decisions.items()
-        }, "Portfolio Management Agent")
+        show_agent_reasoning({ticker: decision.model_dump() for ticker, decision in result.decisions.items()}, "Portfolio Management Agent")
 
     progress.update_status("portfolio_management_agent", None, "Done")
 
@@ -154,3 +166,21 @@ def portfolio_management_agent(state: AgentState):
         "messages": state["messages"] + [message],
         "data": state["data"],
     }
+
+
+def make_decision(prompt, tickers):
+    """Attempts to get a decision from the LLM with retry logic"""
+    llm = ChatOpenAI(model="gpt-4o").with_structured_output(
+        PortfolioManagerOutput,
+        method="function_calling",
+    )
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            result = llm.invoke(prompt)
+            return result
+        except Exception as e:
+            progress.update_status("portfolio_management_agent", None, f"Error - retry {attempt + 1}/{max_retries}")
+            if attempt == max_retries - 1:
+                # On final attempt, return a safe default
+                return PortfolioManagerOutput(decisions={ticker: PortfolioDecision(action="hold", quantity=0, confidence=0.0, reasoning="Error in portfolio management, defaulting to hold") for ticker in tickers})

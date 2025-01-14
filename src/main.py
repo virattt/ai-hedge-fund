@@ -25,13 +25,16 @@ load_dotenv()
 
 init(autoreset=True)
 
+
 def parse_hedge_fund_response(response):
     import json
+
     try:
         return json.loads(response)
     except:
         print(f"Error parsing response: {response}")
         return None
+
 
 ##### Run the Hedge Fund #####
 def run_hedge_fund(
@@ -46,7 +49,7 @@ def run_hedge_fund(
 ):
     # Start progress tracking
     progress.start()
-    
+
     try:
         # Create a new workflow if analysts are customized
         if selected_analysts is not None:
@@ -76,7 +79,7 @@ def run_hedge_fund(
                 },
             },
         )
-        
+
         return {
             "decisions": parse_hedge_fund_response(final_state["messages"][-1].content),
             "analyst_signals": final_state["data"]["analyst_signals"],
@@ -138,12 +141,8 @@ if __name__ == "__main__":
         type=str,
         help="Start date (YYYY-MM-DD). Defaults to 3 months before end date",
     )
-    parser.add_argument(
-        "--end-date", type=str, help="End date (YYYY-MM-DD). Defaults to today"
-    )
-    parser.add_argument(
-        "--show-reasoning", action="store_true", help="Show reasoning from each agent"
-    )
+    parser.add_argument("--end-date", type=str, help="End date (YYYY-MM-DD). Defaults to today")
+    parser.add_argument("--show-reasoning", action="store_true", help="Show reasoning from each agent")
     parser.add_argument(
         "--model-provider",
         type=str,
@@ -165,17 +164,17 @@ if __name__ == "__main__":
     selected_analysts = None
     choices = questionary.checkbox(
         "Select your AI analysts.",
-        choices=[
-            questionary.Choice(display, value=value) for display, value in ANALYST_ORDER
-        ],
+        choices=[questionary.Choice(display, value=value) for display, value in ANALYST_ORDER],
         instruction="\n\nInstructions: \n1. Press Space to select/unselect analysts.\n2. Press 'a' to select/unselect all.\n3. Press Enter when done to run the hedge fund.\n",
         validate=lambda x: len(x) > 0 or "You must select at least one analyst.",
-        style=questionary.Style([
-            ('checkbox-selected', 'fg:green'),
-            ('selected', 'fg:green noinherit'),
-            ('highlighted', 'noinherit'),
-            ('pointer', 'noinherit'),
-        ])
+        style=questionary.Style(
+            [
+                ("checkbox-selected", "fg:green"),
+                ("selected", "fg:green noinherit"),
+                ("highlighted", "noinherit"),
+                ("pointer", "noinherit"),
+            ]
+        ),
     ).ask()
 
     if not choices:
