@@ -18,6 +18,7 @@ import argparse
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from tabulate import tabulate
+from utils.visualize import save_graph_as_png
 
 # Load environment variables from .env file
 load_dotenv()
@@ -131,6 +132,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--show-reasoning", action="store_true", help="Show reasoning from each agent"
     )
+    parser.add_argument(
+        "--show-agent-graph", action="store_true", help="Show the agent graph"
+    )
 
     args = parser.parse_args()
 
@@ -160,6 +164,14 @@ if __name__ == "__main__":
     # Create the workflow with selected analysts
     workflow = create_workflow(selected_analysts)
     app = workflow.compile()
+
+    if args.show_agent_graph:
+        file_path = ""
+        if selected_analysts is not None:
+            for selected_analyst in selected_analysts:
+                file_path += selected_analyst + "_"
+            file_path += "graph.png"
+        save_graph_as_png(app, file_path)
 
     # Validate dates if provided
     if args.start_date:
