@@ -139,16 +139,9 @@ def portfolio_management_agent(state: AgentState):
     provider = state["metadata"].get("model_provider", "openai")
     model = state["metadata"].get("model_name")
     
-    # Create the LLM
-    llm = get_chat_model(provider=provider, model=model, structure=PortfolioManagerOutput)
     
-    try:
-        # Invoke the LLM
-        result = llm.invoke(prompt)
-    except Exception as e:
-        progress.update_status("portfolio_management_agent", None, "Error - retrying")
-        # Try again with same prompt
-        result = llm.invoke(prompt)
+
+    result = make_decision(prompt, tickers, provider=provider, model=model)
 
     # Create the portfolio management message
     message = HumanMessage(
@@ -168,12 +161,11 @@ def portfolio_management_agent(state: AgentState):
     }
 
 
-def make_decision(prompt, tickers):
+def make_decision(prompt, tickers, provider, model):
     """Attempts to get a decision from the LLM with retry logic"""
-    llm = ChatOpenAI(model="gpt-4o").with_structured_output(
-        PortfolioManagerOutput,
-        method="function_calling",
-    )
+    # Create the LLM
+    llm = get_chat_model(provider=provider, model=model, structure=PortfolioManagerOutput)
+   
     max_retries = 3
     for attempt in range(max_retries):
         try:

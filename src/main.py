@@ -143,18 +143,14 @@ if __name__ == "__main__":
     )
     parser.add_argument("--end-date", type=str, help="End date (YYYY-MM-DD). Defaults to today")
     parser.add_argument("--show-reasoning", action="store_true", help="Show reasoning from each agent")
-    parser.add_argument(
-        "--model-provider",
+    parser.add_argument("--model-provider",
         type=str,
         choices=["openai", "groq"],
         default="openai",
-        help="Model provider to use (openai or groq)",
-    )
-    parser.add_argument(
-        "--model-name",
+        help="Model provider to use (openai or groq)",)
+    parser.add_argument("--model-name",
         type=str,
-        help="Specific model name to use (optional)",
-    )
+        help="Specific model name to use (optional)",)
 
     args = parser.parse_args()
 

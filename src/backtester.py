@@ -8,7 +8,13 @@ from colorama import Fore, Style, init
 
 from utils.analysts import ANALYST_ORDER
 from main import run_hedge_fund
-from tools.api import get_price_data
+from tools.api import (
+    get_price_data,
+    get_prices,
+    get_financial_metrics,
+    get_insider_trades,
+    search_line_items,
+)
 from utils.display import print_backtest_results, format_backtest_row
 
 init(autoreset=True)
