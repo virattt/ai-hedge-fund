@@ -132,16 +132,24 @@ poetry run python src/main.py --ticker AAPL --model-provider groq --model-name l
 ## Testing 
 
 ### Run only unit tests
+```bash
 pytest -m unit
+```
 
 ### Run only integration tests
+```bash
 pytest -m integration
+```
 
 ### Run all tests
+```bash
 pytest
+```
 
 ### Run everything except integration tests
+```bash
 pytest -m "not integration"
+```
 
 
 
