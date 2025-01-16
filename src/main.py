@@ -12,6 +12,8 @@ from graph.state import AgentState
 from agents.valuation import valuation_agent
 from utils.display import print_trading_output
 
+import os
+from dotenv import load_dotenv
 import argparse
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
@@ -19,6 +21,15 @@ from tabulate import tabulate
 
 init(autoreset=True)
 
+# Now you can access the API key like this:
+openai_api_key = os.getenv("OPENAI_API_KEY")
+
+# Check if the key was loaded (for debugging)
+if openai_api_key:
+    print("OpenAI API Key loaded successfully!")
+else:
+    print("Error: OpenAI API Key not found in .env file.")
+    exit() # Stop execution if the key is not found
 
 def parse_hedge_fund_response(response):
     import json
