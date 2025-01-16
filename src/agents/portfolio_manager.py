@@ -70,7 +70,7 @@ def portfolio_management_agent(state: AgentState):
         }
     )
     # Invoke the LLM
-    llm = ChatOpenAI(model="gpt-4o")
+    llm = ChatOpenAI(model="gpt-4o-mini")
     result = llm.invoke(prompt)
 
     # Create the portfolio management message
