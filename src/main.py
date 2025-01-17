@@ -194,11 +194,47 @@ if __name__ == "__main__":
     else:
         start_date = args.start_date
 
-    # Initialize portfolio with multiple tickers
-    portfolio = {
-        "cash": 100000.0,  # $100,000 initial cash
-        "positions": {ticker: 0 for ticker in tickers},  # No initial stock positions
-    }
+    #Ask if to use default values
+    value_choice = questionary.select(
+        "What do you want to do?",
+        choices=[
+            "Run with default values",
+            "Run with cusom values",],
+    ).ask()
+
+    if value_choice == "Run with default values":
+        portfolio = {
+            "cash": 100000.0,  # $100,000 initial cash
+            "positions": {ticker: 0 for ticker in tickers},
+        }
+
+    else:
+        #Ask initial cash
+        cash = float(questionary.text(
+            "How much initial capital? ($)",
+            #Validate input
+            validate=lambda l: l.replace('.', '', 1).isdigit() or l == ""
+            ).ask())
+        if cash == "":
+            cash = 0
+        
+        #Ask positions
+        positions = {}
+        for ticker in tickers:
+            position_value = int(questionary.text(
+                f"How many shares of {ticker} in the portfolio?",
+                #Validate input
+                validate=lambda l: l.isdigit() or l == ""
+            ).ask())
+            if position_value == "":
+                position_value = 0
+            positions[ticker] = position_value
+        
+        #Init portfolio
+        portfolio = {
+            "cash": cash,
+            "positions": positions,
+        }
 
     # Run the hedge fund
     result = run_hedge_fund(
