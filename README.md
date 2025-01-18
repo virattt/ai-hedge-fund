@@ -5,7 +5,7 @@ This is a proof of concept for an AI-powered hedge fund.  The goal of this proje
 This system employs several agents working together:
 
 1. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
-2. Sentiment Agent - Analyzes market sentiment and generates trading signals
+2. Sentiment Agent - Analyzes market and news sentiments, and generates trading signals
 3. Fundamentals Agent - Analyzes fundamental data and generates trading signals
 4. Technical Analyst - Analyzes technical indicators and generates trading signals
 5. Risk Manager - Calculates risk metrics and sets position limits
@@ -65,9 +65,10 @@ Set the API keys in the .env file:
 ```
 # Get your OpenAI API key from https://platform.openai.com/
 OPENAI_API_KEY=your-openai-api-key
-
 # Get your Financial Datasets API key from https://financialdatasets.ai/
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
+# Get you News Data API key from https://newsapi.org/account/
+NEWS_API_KEY='your-api-key-here'
 ```
 
 **Important**: You must to set the OpenAI API key for the hedge fund to work.

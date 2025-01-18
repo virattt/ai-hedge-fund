@@ -1,3 +1,5 @@
+from datetime import datetime
+from typing import List, Optional
 from pydantic import BaseModel
 
 
@@ -134,3 +136,25 @@ class AgentStateData(BaseModel):
 class AgentStateMetadata(BaseModel):
     show_reasoning: bool = False
     model_config = {"extra": "allow"}
+    
+
+class NewsSource(BaseModel):
+    id: Optional[str] = None
+    name: str
+      
+
+class NewsArticle(BaseModel):
+    source: NewsSource
+    author: Optional[str] = None
+    title: str
+    description: Optional[str] = None
+    url: str
+    urlToImage: Optional[str] = None
+    publishedAt: datetime
+    content: Optional[str] = None
+      
+
+class NewsAPIResponse(BaseModel):
+    status: str
+    totalResults: int
+    articles: List[NewsArticle]

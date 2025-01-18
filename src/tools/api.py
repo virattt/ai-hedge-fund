@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import requests
+import yfinance as yf
 
 from data.cache import get_cache
 from data.models import (
@@ -12,6 +13,7 @@ from data.models import (
     LineItemResponse,
     InsiderTrade,
     InsiderTradeResponse,
+    NewsAPIResponse
 )
 
 # Global cache instance
@@ -195,3 +197,36 @@ def prices_to_df(prices: list[Price]) -> pd.DataFrame:
 def get_price_data(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
     prices = get_prices(ticker, start_date, end_date)
     return prices_to_df(prices)
+
+def get_news_data(ticker: str,
+    start_date: str,
+    end_date: str,
+    sort_by: str
+) -> NewsAPIResponse:
+    """Fetch news articles from NewsAPI."""
+    api_key = os.environ.get("NEWS_API_KEY")
+    if not api_key:
+        raise ValueError("NEWS_API_KEY environment variable not set")
+    
+    # Get company name using yfinance
+    company = yf.Ticker(ticker)
+    company_name = company.info.get('longName', ticker)
+    query = company_name if company_name else ticker
+
+    url = (
+        f"https://newsapi.org/v2/everything"
+        f"?q={query}"
+        f"&from={start_date}"
+        f"&to={end_date}"
+        f"&sortBy={sort_by}"
+        f"&language=en"
+        f"&apiKey={api_key}"
+    )
+    
+    response = requests.get(url)
+    if response.status_code != 200:
+        raise Exception(f"Error fetching news: {response.status_code} - {response.text}")
+        
+    data = response.json()
+    news_response = NewsAPIResponse(**data)
+    return news_response.articles
