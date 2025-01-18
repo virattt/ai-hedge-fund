@@ -136,11 +136,12 @@ class AgentStateData(BaseModel):
 class AgentStateMetadata(BaseModel):
     show_reasoning: bool = False
     model_config = {"extra": "allow"}
-
+    
 
 class NewsSource(BaseModel):
     id: Optional[str] = None
     name: str
+      
 
 class NewsArticle(BaseModel):
     source: NewsSource
@@ -151,6 +152,7 @@ class NewsArticle(BaseModel):
     urlToImage: Optional[str] = None
     publishedAt: datetime
     content: Optional[str] = None
+      
 
 class NewsAPIResponse(BaseModel):
     status: str
