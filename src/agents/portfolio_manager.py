@@ -2,6 +2,7 @@ import json
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai.chat_models import ChatOpenAI
+from config.models import get_chat_model
 
 from graph.state import AgentState, show_agent_reasoning
 from pydantic import BaseModel, Field
@@ -133,8 +134,14 @@ def portfolio_management_agent(state: AgentState):
     )
 
     progress.update_status("portfolio_management_agent", None, "Making trading decisions")
+    
+    
+    provider = state["metadata"].get("model_provider", "openai")
+    model = state["metadata"].get("model_name")
+    
+    
 
-    result = make_decision(prompt, tickers)
+    result = make_decision(prompt, tickers, provider=provider, model=model)
 
     # Create the portfolio management message
     message = HumanMessage(
@@ -154,12 +161,11 @@ def portfolio_management_agent(state: AgentState):
     }
 
 
-def make_decision(prompt, tickers):
+def make_decision(prompt, tickers, provider, model):
     """Attempts to get a decision from the LLM with retry logic"""
-    llm = ChatOpenAI(model="gpt-4o").with_structured_output(
-        PortfolioManagerOutput,
-        method="function_calling",
-    )
+    # Create the LLM
+    llm = get_chat_model(provider=provider, model=model, structure=PortfolioManagerOutput)
+   
     max_retries = 3
     for attempt in range(max_retries):
         try:

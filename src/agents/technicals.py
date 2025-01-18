@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 
 from tools.api import get_prices, prices_to_df
+from config.models import get_chat_model
 from utils.progress import progress
 
 
@@ -507,3 +508,6 @@ def calculate_hurst_exponent(price_series: pd.Series, max_lag: int = 20) -> floa
     except (ValueError, RuntimeWarning):
         # Return 0.5 (random walk) if calculation fails
         return 0.5
+
+
+

@@ -4,6 +4,7 @@ from utils.progress import progress
 import json
 
 from tools.api import get_financial_metrics
+from config.models import get_chat_model
 
 
 ##### Fundamental Agent #####
@@ -152,6 +153,11 @@ def fundamentals_agent(state: AgentState):
 
     # Add the signal to the analyst_signals list
     state["data"]["analyst_signals"]["fundamentals_agent"] = fundamental_analysis
+
+    # Add any LLM calls using the llm variable
+    provider = state["metadata"].get("model_provider", "openai")
+    model = state["metadata"].get("model_name")
+    llm = get_chat_model(provider=provider, model=model)
 
     return {
         "messages": [message],
