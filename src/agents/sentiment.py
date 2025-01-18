@@ -7,10 +7,110 @@ import numpy as np
 from langchain_core.messages import HumanMessage
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from agents.state import AgentState, show_agent_reasoning
-from tools.api import get_news_data
+from graph.state import AgentState, show_agent_reasoning
+from utils.progress import progress
+from tools.api import get_news_data, get_insider_trades
+from data.models import NewsArticle
 
-def analyze_article_sentiment(article: Dict[str, Any], llm: ChatOpenAI) -> Dict[str, Any]:
+def sentiment_agent(state: AgentState):
+    """Analyzes market sentiment and generates trading signals for multiple tickers."""
+    data = state.get("data", {})
+    end_date = data.get("end_date")
+    tickers = data.get("tickers")
+    llm = ChatOpenAI(model="gpt-4o")
+
+    sentiment_analysis = {}
+
+    for ticker in tickers:
+        sentiment_analysis[ticker] = _analyze_ticker_sentiment(ticker, end_date, llm)
+        progress.update_status("sentiment_agent", ticker, "Done")
+
+    message = HumanMessage(
+        content=json.dumps(sentiment_analysis),
+        name="sentiment_agent",
+    )
+
+    if state["metadata"]["show_reasoning"]:
+        show_agent_reasoning(sentiment_analysis, "Sentiment Analysis Agent")
+
+    state["data"]["analyst_signals"]["sentiment_agent"] = sentiment_analysis
+
+    return {
+        "messages": [message],
+        "data": data,
+    }
+
+def _analyze_ticker_sentiment(ticker: str, end_date: str, llm: ChatOpenAI) -> Dict[str, Any]:
+    """Analyze sentiment for a single ticker."""
+    progress.update_status("sentiment_agent", ticker, "Fetching insider trades")
+    insider_trades = get_insider_trades(
+        ticker=ticker,
+        end_date=end_date,
+        limit=1000,
+    )
+
+    if not insider_trades:
+        progress.update_status("sentiment_agent", ticker, "Failed: No insider trades found")
+        return {
+            "signal": "neutral",
+            "confidence": 0,
+            "reasoning": "No insider trades found"
+        }
+
+    progress.update_status("sentiment_agent", ticker, "Analyzing sentiment")
+    
+    with ThreadPoolExecutor() as executor:
+        # Start news API call
+        news_future = executor.submit(
+            get_news_data,
+            ticker=ticker,
+            start_date=(datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'),
+            end_date=end_date,
+            sort_by="relevancy"
+        )
+        
+        # Process insider trades while waiting for news
+        insider_result = _process_insider_trades(insider_trades)
+        
+        # Get news results
+        news_data = news_future.result()
+        news_result = _process_news_sentiment(news_data, llm)
+
+    # Combine sentiments (60% insider, 40% news)
+    weighted_insider = insider_result["confidence"] * 0.6
+    weighted_news = news_result["confidence"] * 0.4
+
+    if news_result["signal"] == insider_result["signal"]:
+        overall_sentiment = news_result["signal"]
+        overall_confidence = weighted_insider + weighted_news
+    else:
+        if weighted_insider > weighted_news:
+            overall_sentiment = insider_result["signal"]
+            overall_confidence = weighted_insider
+        else:
+            overall_sentiment = news_result["signal"]
+            overall_confidence = weighted_news
+
+    return {
+        "signal": overall_sentiment,
+        "confidence": round(overall_confidence * 100, 2),
+        "reasoning": {
+            "insider_sentiment": {
+                "signal": insider_result["signal"],
+                "confidence": round(insider_result["confidence"] * 100, 2),
+                "bullish_trades": insider_result["bullish_trades"],
+                "bearish_trades": insider_result["bearish_trades"]
+            },
+            "news_sentiment": {
+                "signal": news_result["signal"],
+                "confidence": round(news_result["confidence"] * 100, 2),
+                "articles_analyzed": news_result["articles_analyzed"],
+                "key_points": news_result["key_points"]
+            }
+        }
+    }
+
+def _analyze_article_sentiment(article: NewsArticle, llm: ChatOpenAI) -> Dict[str, Any]:
     """Analyze sentiment of a single article using GPT."""
     template = ChatPromptTemplate.from_messages([
         (
@@ -38,25 +138,23 @@ def analyze_article_sentiment(article: Dict[str, Any], llm: ChatOpenAI) -> Dict[
     ])
 
     prompt = template.invoke({
-        "title": article.get("title", ""),
-        "description": article.get("description", ""),
-        "content": article.get("content", "")
+        "title": article.title,
+        "description": article.description or ""
     })
 
     try:
         result = llm.invoke(prompt)
         return json.loads(result.content)
-    except (json.JSONDecodeError, Exception) as e:
+    except (json.JSONDecodeError, Exception):
         return {
             "sentiment": "neutral",
             "confidence": 0.0,
             "key_points": []
         }
 
-def process_insider_trades(trades: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _process_insider_trades(trades: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Process insider trading sentiment using pandas."""
-    # Convert to pandas series and process
-    transaction_shares = pd.Series([t['transaction_shares'] for t in trades]).dropna()
+    transaction_shares = pd.Series([t.transaction_shares for t in trades]).dropna()
     bearish_condition = transaction_shares < 0
     signals = np.where(bearish_condition, "bearish", "bullish").tolist()
     
@@ -78,17 +176,22 @@ def process_insider_trades(trades: List[Dict[str, Any]]) -> Dict[str, Any]:
         "bearish_trades": bearish_signals
     }
 
-def process_news_sentiment(news_data: List[Dict[str, Any]], llm: ChatOpenAI) -> Dict[str, Any]:
+def _process_news_sentiment(news_data: List[NewsArticle], llm: ChatOpenAI) -> Dict[str, Any]:
     """Process news sentiment from articles."""
-    # Analyze top 5 most relevant articles
+    SENTIMENT_VALUES = {
+        "bullish": 1,
+        "bearish": -1,
+        "neutral": 0
+    }
+    
     article_analyses = []
     for article in news_data[:5]:
-        analysis = analyze_article_sentiment(article, llm)
+        analysis = _analyze_article_sentiment(article, llm)
         if analysis["confidence"] > 0:
             article_analyses.append({
-                "title": article.get("title", ""),
-                "source": article.get("source", {}).get("name", ""),
-                "published": article.get("publishedAt", ""),
+                "title": article.title,
+                "source": article.source.name, 
+                "published": article.publishedAt,
                 "analysis": analysis
             })
 
@@ -100,17 +203,12 @@ def process_news_sentiment(news_data: List[Dict[str, Any]], llm: ChatOpenAI) -> 
             "key_points": []
         }
 
-    # Calculate sentiment
     sentiment_scores = []
     total_confidence = 0
     all_key_points = []
     
     for analysis in article_analyses:
-        sentiment_value = {
-            "bullish": 1,
-            "bearish": -1,
-            "neutral": 0
-        }[analysis["analysis"]["sentiment"]]
+        sentiment_value = SENTIMENT_VALUES[analysis["analysis"]["sentiment"]]
         
         confidence = analysis["analysis"]["confidence"]
         sentiment_scores.append(sentiment_value * confidence)
@@ -131,76 +229,4 @@ def process_news_sentiment(news_data: List[Dict[str, Any]], llm: ChatOpenAI) -> 
         "confidence": confidence,
         "articles_analyzed": len(article_analyses),
         "key_points": list(set(all_key_points))
-    }
-
-def sentiment_agent(state: AgentState):
-    """Analyzes market sentiment from news and insider trading."""
-    show_reasoning = state["metadata"]["show_reasoning"]
-    data = state["data"]
-    llm = ChatOpenAI(model="gpt-4o")
-    
-    # Fetch news data with relevancy sorting for the past week
-    news_future = None
-    with ThreadPoolExecutor() as executor:
-        # Start news API call
-        news_future = executor.submit(
-            get_news_data,
-            ticker=data["ticker"],
-            start_date=data["start_date"],
-            end_date=data["end_date"],
-            sort_by="relevancy"
-        )
-        
-        # Process insider trades while waiting for news
-        insider_result = process_insider_trades(data["insider_trades"])
-        
-        # Get news results
-        news_data = news_future.result()
-        news_result = process_news_sentiment(news_data, llm)
-
-    # Combine sentiments (60% insider, 40% news)
-    weighted_insider = insider_result["confidence"] * 0.6
-    weighted_news = news_result["confidence"] * 0.4
-
-    if news_result["signal"] == insider_result["signal"]:
-        overall_sentiment = news_result["signal"]
-        overall_confidence = weighted_insider + weighted_news
-    else:
-        if weighted_insider > weighted_news:
-            overall_sentiment = insider_result["signal"]
-            overall_confidence = weighted_insider
-        else:
-            overall_sentiment = news_result["signal"]
-            overall_confidence = weighted_news
-
-    message_content = {
-        "signal": overall_sentiment,
-        "confidence": f"{round(overall_confidence * 100)}%",
-        "reasoning": {
-            "insider_sentiment": {
-                "signal": insider_result["signal"],
-                "confidence": f"{round(insider_result['confidence'] * 100)}%",
-                "bullish_trades": insider_result["bullish_trades"],
-                "bearish_trades": insider_result["bearish_trades"]
-            },
-            "news_sentiment": {
-                "signal": news_result["signal"],
-                "confidence": f"{round(news_result['confidence'] * 100)}%",
-                "articles_analyzed": news_result["articles_analyzed"],
-                "key_points": news_result["key_points"]
-            }
-        }
-    }
-
-    if show_reasoning:
-        show_agent_reasoning(message_content, "Sentiment Analysis Agent")
-
-    message = HumanMessage(
-        content=json.dumps(message_content),
-        name="sentiment_agent",
-    )
-
-    return {
-        "messages": [message],
-        "data": data,
     }
