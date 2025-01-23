@@ -1,6 +1,6 @@
 # AI Hedge Fund
 
-This is a proof concept for an AI-powered hedge fund.  The goal of this project is to explore the use of AI to make trading decisions.  This project is for **educational** purposes only and is not intended for real trading or investment.
+This is a proof of concept for an AI-powered hedge fund.  The goal of this project is to explore the use of AI to make trading decisions.  This project is for **educational** purposes only and is not intended for real trading or investment.
 
 This system employs several agents working together:
 
@@ -34,6 +34,7 @@ By using this software, you agree to use it solely for learning purposes.
   - [Running the Backtester](#running-the-backtester)
 - [Project Structure](#project-structure)
 - [Contributing](#contributing)
+- [Feature Requests](#feature-requests)
 - [License](#license)
 
 ## Setup
@@ -79,7 +80,7 @@ For any other ticker, you will need to set the `FINANCIAL_DATASETS_API_KEY` in t
 
 ### Running the Hedge Fund
 ```bash
-poetry run python src/main.py --ticker AAPL
+poetry run python src/main.py --ticker AAPL,MSFT,NVDA
 ```
 
 **Example Output:**
@@ -88,18 +89,18 @@ poetry run python src/main.py --ticker AAPL
 You can also specify a `--show-reasoning` flag to print the reasoning of each agent to the console.
 
 ```bash
-poetry run python src/main.py --ticker AAPL --show-reasoning
+poetry run python src/main.py --ticker AAPL,MSFT,NVDA --show-reasoning
 ```
 You can optionally specify the start and end dates to make decisions for a specific time period.
 
 ```bash
-poetry run python src/main.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01 
+poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 
 ```
 
 ### Running the Backtester
 
 ```bash
-poetry run python src/backtester.py --ticker AAPL
+poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
 ```
 
 **Example Output:**
@@ -108,7 +109,7 @@ poetry run python src/backtester.py --ticker AAPL
 You can optionally specify the start and end dates to backtest over a specific time period.
 
 ```bash
-poetry run python src/backtester.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
+poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
 ```
 
 ## Project Structure 
@@ -137,6 +138,12 @@ ai-hedge-fund/
 3. Commit your changes
 4. Push to the branch
 5. Create a Pull Request
+
+**Important**: Please keep your pull requests small and focused.  This will make it easier to review and merge.
+
+## Feature Requests
+
+If you have a feature request, please open an [issue](https://github.com/virattt/ai-hedge-fund/issues) and make it is tagged with `enhancement`.
 
 ## License
 

@@ -1,102 +1,180 @@
 from colorama import Fore, Style
 from tabulate import tabulate
-from typing import List, Dict
+from .analysts import ANALYST_ORDER
+import os
+
+
+def sort_analyst_signals(signals):
+    """Sort analyst signals in a consistent order."""
+    # Create order mapping from ANALYST_ORDER
+    analyst_order = {display: idx for idx, (display, _) in enumerate(ANALYST_ORDER)}
+    analyst_order["Risk Management"] = len(ANALYST_ORDER)  # Add Risk Management at the end
+
+    return sorted(signals, key=lambda x: analyst_order.get(x[0], 999))
 
 
 def print_trading_output(result: dict) -> None:
     """
-    Print formatted trading results with colored tables.
+    Print formatted trading results with colored tables for multiple tickers.
 
     Args:
-        result (dict): Dictionary containing decision and analyst signals
+        result (dict): Dictionary containing decisions and analyst signals for multiple tickers
     """
-    decision = result.get("decision")
-    if not decision:
-        print(f"{Fore.RED}No trading decision available{Style.RESET_ALL}")
+    decisions = result.get("decisions")
+    if not decisions:
+        print(f"{Fore.RED}No trading decisions available{Style.RESET_ALL}")
         return
 
-    # Print Analyst Signals Table
-    table_data = []
-    for agent, signal in result.get("analyst_signals", {}).items():
-        agent_name = agent.replace("_agent", "").replace("_", " ").title()
-        signal_type = signal.get("signal", "").upper()
+    # Print decisions for each ticker
+    for ticker, decision in decisions.items():
+        print(f"\n{Fore.WHITE}{Style.BRIGHT}Analysis for {Fore.CYAN}{ticker}{Style.RESET_ALL}")
+        print(f"{Fore.WHITE}{Style.BRIGHT}{'=' * 50}{Style.RESET_ALL}")
 
-        signal_color = {
-            "BULLISH": Fore.GREEN,
-            "BEARISH": Fore.RED,
-            "NEUTRAL": Fore.YELLOW,
-        }.get(signal_type, Fore.WHITE)
+        # Prepare analyst signals table for this ticker
+        table_data = []
+        for agent, signals in result.get("analyst_signals", {}).items():
+            if ticker not in signals:
+                continue
 
-        table_data.append(
+            signal = signals[ticker]
+            agent_name = agent.replace("_agent", "").replace("_", " ").title()
+            signal_type = signal.get("signal", "").upper()
+
+            signal_color = {
+                "BULLISH": Fore.GREEN,
+                "BEARISH": Fore.RED,
+                "NEUTRAL": Fore.YELLOW,
+            }.get(signal_type, Fore.WHITE)
+
+            table_data.append(
+                [
+                    f"{Fore.CYAN}{agent_name}{Style.RESET_ALL}",
+                    f"{signal_color}{signal_type}{Style.RESET_ALL}",
+                    f"{Fore.YELLOW}{signal.get('confidence')}%{Style.RESET_ALL}",
+                ]
+            )
+
+        # Sort the signals according to the predefined order
+        table_data = sort_analyst_signals(table_data)
+
+        print(f"\n{Fore.WHITE}{Style.BRIGHT}ANALYST SIGNALS:{Style.RESET_ALL} [{Fore.CYAN}{ticker}{Style.RESET_ALL}]")
+        print(
+            tabulate(
+                table_data,
+                headers=[f"{Fore.WHITE}Analyst", "Signal", "Confidence"],
+                tablefmt="grid",
+                colalign=("left", "center", "right"),
+            )
+        )
+
+        # Print Trading Decision Table
+        action = decision.get("action", "").upper()
+        action_color = {"BUY": Fore.GREEN, "SELL": Fore.RED, "HOLD": Fore.YELLOW}.get(action, Fore.WHITE)
+
+        decision_data = [
+            ["Action", f"{action_color}{action}{Style.RESET_ALL}"],
+            ["Quantity", f"{action_color}{decision.get('quantity')}{Style.RESET_ALL}"],
             [
-                f"{Fore.CYAN}{agent_name}{Style.RESET_ALL}",
-                f"{signal_color}{signal_type}{Style.RESET_ALL}",
-                f"{Fore.YELLOW}{signal.get('confidence')}%{Style.RESET_ALL}",
+                "Confidence",
+                f"{Fore.YELLOW}{decision.get('confidence'):.1f}%{Style.RESET_ALL}",
+            ],
+        ]
+
+        print(f"\n{Fore.WHITE}{Style.BRIGHT}TRADING DECISION:{Style.RESET_ALL} [{Fore.CYAN}{ticker}{Style.RESET_ALL}]")
+        print(tabulate(decision_data, tablefmt="grid", colalign=("left", "right")))
+
+        # Print Reasoning
+        print(f"\n{Fore.WHITE}{Style.BRIGHT}Reasoning:{Style.RESET_ALL} {Fore.CYAN}{decision.get('reasoning')}{Style.RESET_ALL}")
+
+    # Print Portfolio Summary
+    print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
+    portfolio_data = []
+    for ticker, decision in decisions.items():
+        action = decision.get("action", "").upper()
+        action_color = {"BUY": Fore.GREEN, "SELL": Fore.RED, "HOLD": Fore.YELLOW}.get(action, Fore.WHITE)
+        portfolio_data.append(
+            [
+                f"{Fore.CYAN}{ticker}{Style.RESET_ALL}",
+                f"{action_color}{action}{Style.RESET_ALL}",
+                f"{action_color}{decision.get('quantity')}{Style.RESET_ALL}",
+                f"{Fore.YELLOW}{decision.get('confidence'):.1f}%{Style.RESET_ALL}",
             ]
         )
 
-    print(f"\n{Fore.WHITE}{Style.BRIGHT}ANALYST SIGNALS:{Style.RESET_ALL}")
     print(
         tabulate(
-            table_data,
-            headers=[f"{Fore.WHITE}Analyst", "Signal", "Confidence"],
+            portfolio_data,
+            headers=[f"{Fore.WHITE}Ticker", "Action", "Quantity", "Confidence"],
             tablefmt="grid",
-            colalign=("left", "center", "right"),
+            colalign=("left", "center", "right", "right"),
         )
     )
 
-    # Print Trading Decision Table
-    action = decision.get("action", "").upper()
-    action_color = {"BUY": Fore.GREEN, "SELL": Fore.RED, "HOLD": Fore.YELLOW}.get(
-        action, Fore.WHITE
-    )
 
-    decision_data = [
-        ["Action", f"{action_color}{action}{Style.RESET_ALL}"],
-        ["Quantity", f"{action_color}{decision.get('quantity')}{Style.RESET_ALL}"],
-        [
-            "Confidence",
-            f"{Fore.YELLOW}{decision.get('confidence'):.1f}%{Style.RESET_ALL}",
-        ],
-    ]
+def print_backtest_results(table_rows: list) -> None:
+    """Print the backtest results in a nicely formatted table"""
+    # Clear the screen
+    os.system("cls" if os.name == "nt" else "clear")
 
-    print(f"\n{Fore.WHITE}{Style.BRIGHT}TRADING DECISION:{Style.RESET_ALL}")
-    print(tabulate(decision_data, tablefmt="grid", colalign=("left", "right")))
+    # Split rows into ticker rows and summary rows
+    ticker_rows = []
+    summary_rows = []
 
-    # Print Reasoning
+    for row in table_rows:
+        if isinstance(row[1], str) and "PORTFOLIO SUMMARY" in row[1]:
+            summary_rows.append(row)
+        else:
+            ticker_rows.append(row)
+
+    # Print the table with just ticker rows
     print(
-        f"\n{Fore.WHITE}{Style.BRIGHT}Reasoning:{Style.RESET_ALL} {Fore.CYAN}{decision.get('reasoning')}{Style.RESET_ALL}"
+        tabulate(
+            ticker_rows,
+            headers=[
+                "Date",
+                "Ticker",
+                "Action",
+                "Quantity",
+                "Price",
+                "Shares",
+                "Position Value",
+                "Bullish",
+                "Bearish",
+                "Neutral",
+            ],
+            tablefmt="grid",
+            colalign=(
+                "left",  # Date
+                "left",  # Ticker
+                "center",  # Action
+                "right",  # Quantity
+                "right",  # Price
+                "right",  # Shares
+                "right",  # Position Value
+                "right",  # Bullish
+                "right",  # Bearish
+                "right",  # Neutral
+            ),
+        )
     )
 
+    # Display latest portfolio summary
+    if summary_rows:
+        latest_summary = summary_rows[-1]
+        print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
 
-def print_backtest_results(table_rows: List[List], clear_screen: bool = True) -> None:
-    """
-    Print formatted backtest results with colored tables.
+        # Extract values and remove commas before converting to float
+        cash_str = latest_summary[7].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
+        position_str = latest_summary[6].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
+        total_str = latest_summary[8].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
 
-    Args:
-        table_rows (List[List]): List of rows containing backtest data
-        clear_screen (bool): Whether to clear the screen before printing
-    """
-    headers = [
-        "Date",
-        "Ticker",
-        "Action",
-        "Quantity",
-        "Price",
-        "Cash",
-        "Stock",
-        "Total Value",
-        "Bullish",
-        "Bearish",
-        "Neutral",
-    ]
+        print(f"Cash Balance: {Fore.CYAN}${float(cash_str):,.2f}{Style.RESET_ALL}")
+        print(f"Total Position Value: {Fore.YELLOW}${float(position_str):,.2f}{Style.RESET_ALL}")
+        print(f"Total Value: {Fore.WHITE}${float(total_str):,.2f}{Style.RESET_ALL}")
+        print(f"Return: {latest_summary[9]}")
 
-    # Clear screen if requested
-    if clear_screen:
-        print("\033[H\033[J")
-
-    # Display colored table
-    print(f"{tabulate(table_rows, headers=headers, tablefmt='grid')}{Style.RESET_ALL}")
+    # Add vertical spacing for progress display
+    print("\n" * 8)  # Add 8 blank lines for progress display
 
 
 def format_backtest_row(
@@ -105,46 +183,49 @@ def format_backtest_row(
     action: str,
     quantity: float,
     price: float,
-    cash: float,
-    stock: int,
-    total_value: float,
+    shares_owned: float,
+    position_value: float,
     bullish_count: int,
     bearish_count: int,
     neutral_count: int,
-) -> List:
-    """
-    Format a single row of backtest data with appropriate colors.
+    is_summary: bool = False,
+    total_value: float = None,
+    return_pct: float = None,
+    cash_balance: float = None,
+    total_position_value: float = None,
+) -> list[any]:
+    """Format a row for the backtest results table"""
+    # Color the action
+    action_color = {
+        "BUY": Fore.GREEN,
+        "SELL": Fore.RED,
+        "HOLD": Fore.YELLOW,
+    }.get(action.upper(), Fore.WHITE)
 
-    Args:
-        date (str): The date of the trade
-        ticker (str): The stock ticker
-        action (str): The trading action (buy/sell/hold)
-        quantity (float): The quantity traded
-        price (float): The stock price
-        cash (float): Available cash
-        stock (int): Stock position
-        total_value (float): Total portfolio value
-        bullish_count (int): Number of bullish signals
-        bearish_count (int): Number of bearish signals
-        neutral_count (int): Number of neutral signals
-
-    Returns:
-        List: Formatted row with color codes
-    """
-    action_color = {"buy": Fore.GREEN, "sell": Fore.RED, "hold": Fore.YELLOW}.get(
-        action.lower(), ""
-    )
-
-    return [
-        date,
-        f"{Fore.CYAN}{ticker}{Style.RESET_ALL}",
-        f"{action_color}{action}{Style.RESET_ALL}",
-        f"{action_color}{quantity}{Style.RESET_ALL}",
-        f"{Fore.WHITE}{price:.2f}{Style.RESET_ALL}",
-        f"{Fore.YELLOW}{cash:.2f}{Style.RESET_ALL}",
-        f"{Fore.WHITE}{stock}{Style.RESET_ALL}",
-        f"{Fore.YELLOW}{total_value:.2f}{Style.RESET_ALL}",
-        f"{Fore.GREEN}{bullish_count}{Style.RESET_ALL}",
-        f"{Fore.RED}{bearish_count}{Style.RESET_ALL}",
-        f"{Fore.BLUE}{neutral_count}{Style.RESET_ALL}",
-    ]
+    if is_summary:
+        return_color = Fore.GREEN if return_pct >= 0 else Fore.RED
+        return [
+            date,
+            f"{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY{Style.RESET_ALL}",
+            "",  # Action
+            "",  # Quantity
+            "",  # Price
+            "",  # Shares
+            f"{Fore.YELLOW}${total_position_value:,.2f}{Style.RESET_ALL}",  # Total Position Value
+            f"{Fore.CYAN}${cash_balance:,.2f}{Style.RESET_ALL}",  # Cash Balance
+            f"{Fore.WHITE}${total_value:,.2f}{Style.RESET_ALL}",  # Total Value
+            f"{return_color}{return_pct:+.2f}%{Style.RESET_ALL}",  # Return
+        ]
+    else:
+        return [
+            date,
+            f"{Fore.CYAN}{ticker}{Style.RESET_ALL}",
+            f"{action_color}{action.upper()}{Style.RESET_ALL}",
+            f"{action_color}{quantity:,.0f}{Style.RESET_ALL}",
+            f"{Fore.WHITE}{price:,.2f}{Style.RESET_ALL}",
+            f"{Fore.WHITE}{shares_owned:,.0f}{Style.RESET_ALL}",
+            f"{Fore.YELLOW}{position_value:,.2f}{Style.RESET_ALL}",
+            f"{Fore.GREEN}{bullish_count}{Style.RESET_ALL}",
+            f"{Fore.RED}{bearish_count}{Style.RESET_ALL}",
+            f"{Fore.BLUE}{neutral_count}{Style.RESET_ALL}",
+        ]
