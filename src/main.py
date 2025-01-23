@@ -1,4 +1,5 @@
 from dotenv import load_dotenv
+import os
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
 from colorama import Fore, Back, Style, init
@@ -15,8 +16,6 @@ from utils.display import print_trading_output
 from utils.analysts import ANALYST_ORDER
 from utils.progress import progress
 
-import os
-from dotenv import load_dotenv
 import argparse
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
