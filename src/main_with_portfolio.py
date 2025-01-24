@@ -15,6 +15,7 @@ from agents.valuation import valuation_agent
 from utils.display import print_trading_output
 from utils.analysts import ANALYST_ORDER
 from utils.progress import progress
+from tools.api import get_price_data
 
 import argparse
 from datetime import datetime
@@ -202,12 +203,21 @@ if __name__ == "__main__":
     if args.portfolio:
         positions = [position.strip() for position in args.portfolio.split(",")]
         _positions = {}
+        _cost_basis = {}
         for ticker, position in zip(tickers, positions):
             _positions[ticker] = position
-        portfolio = {"cash": args.initial_cash, "positions": _positions}  # Initial stock positions
+            prices = get_price_data(
+                ticker=ticker,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            # Calculate portfolio value
+            current_price = prices["close"].iloc[-1]
+            _cost_basis[ticker] = current_price
+        portfolio = {"cash": args.initial_cash, "positions": _positions, "cost_basis": _cost_basis}  # Initial stock positions
 
     else:
-        portfolio = {"cash": args.initial_cash, "positions": {ticker: 0 for ticker in tickers}}  # Initial cash amount  # Initial stock positions
+        portfolio = {"cash": args.initial_cash, "positions": {ticker: 0 for ticker in tickers}, "cost_basis": {ticker: 0 for ticker in tickers}}  # Initial cash amount  # Initial stock positions
 
     # Run the hedge fund
     result = run_hedge_fund(
