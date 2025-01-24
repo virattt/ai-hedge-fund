@@ -9,6 +9,7 @@ from agents.portfolio_manager import portfolio_management_agent
 from agents.technicals import technical_analyst_agent
 from agents.risk_manager import risk_management_agent
 from agents.sentiment import sentiment_agent
+from agents.warren_buffett import warren_buffett_agent
 from graph.state import AgentState
 from agents.valuation import valuation_agent
 from utils.display import print_trading_output
@@ -105,6 +106,7 @@ def create_workflow(selected_analysts=None):
         "fundamentals_analyst": ("fundamentals_agent", fundamentals_agent),
         "sentiment_analyst": ("sentiment_agent", sentiment_agent),
         "valuation_analyst": ("valuation_agent", valuation_agent),
+        "warren_buffett": ("warren_buffett_agent", warren_buffett_agent),
     }
 
     # Add selected analyst nodes
