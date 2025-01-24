@@ -360,8 +360,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Parse tickers from comma-separated string
-    # tickers = [ticker.strip() for ticker in args.tickers.split(",")]
-    tickers = ["AAPL"]
+    tickers = [ticker.strip() for ticker in args.tickers.split(",")]
+    # tickers = ["AAPL"]
     selected_analysts = None
     choices = questionary.checkbox(
         "Use the Space bar to select/unselect analysts.",

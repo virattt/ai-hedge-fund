@@ -169,4 +169,4 @@ def make_decision(prompt, tickers):
             progress.update_status("portfolio_management_agent", None, f"Error - retry {attempt + 1}/{max_retries}")
             if attempt == max_retries - 1:
                 # On final attempt, return a safe default
-                return PortfolioManagerOutput(decisions={ticker: PortfolioDecision(action="hold", quantity=0, confidence=0.0, reasoning="Error in portfolio management, defaulting to hold") for ticker in tickers})
+                return PortfolioManagerOutput(decisions={ticker: PortfolioDecision(action="hold", quantity=0, confidence=0.0, reasoning=f"Error in portfolio management, defaulting to hold - Error: {e}") for ticker in tickers})
