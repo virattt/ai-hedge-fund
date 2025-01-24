@@ -213,7 +213,7 @@ if __name__ == "__main__":
             )
             # Calculate portfolio value
             current_price = prices["close"].iloc[-1]
-            _cost_basis[ticker] = current_price
+            _cost_basis[ticker] = float(current_price)
         portfolio = {"cash": args.initial_cash, "positions": _positions, "cost_basis": _cost_basis}  # Initial stock positions
 
     else:
