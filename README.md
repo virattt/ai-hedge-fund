@@ -15,6 +15,8 @@ This system employs several agents working together:
 
 Note: the system simulates trading decisions, it does not actually trade.
 
+[![Twitter Follow](https://img.shields.io/twitter/follow/virattt?style=social)](https://twitter.com/virattt)
+
 ## Disclaimer
 
 This project is for **educational and research purposes only**.
