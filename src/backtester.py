@@ -67,21 +67,6 @@ class Backtester:
             # Fetch company news for the entire period
             get_company_news(ticker, self.end_date, start_date=self.start_date, limit=1000)
 
-            # Fetch common line items used by valuation agent
-            search_line_items(
-                ticker,
-                [
-                    "free_cash_flow",
-                    "net_income",
-                    "depreciation_and_amortization",
-                    "capital_expenditure",
-                    "working_capital",
-                ],
-                self.end_date,
-                period="ttm",
-                limit=2,  # Need current and previous for working capital change
-            )
-
         print("Data pre-fetch complete.")
 
     def parse_agent_response(self, agent_output):
