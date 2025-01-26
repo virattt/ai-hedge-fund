@@ -96,15 +96,7 @@ def search_line_items(
     period: str = "ttm",
     limit: int = 10,
 ) -> list[LineItem]:
-    """Fetch line items from cache or API."""
-    # Check cache first
-    if cached_data := _cache.get_line_items(ticker):
-        # Filter cached data by date and limit
-        filtered_data = [LineItem(**item) for item in cached_data if item["report_period"] <= end_date]
-        filtered_data.sort(key=lambda x: x.report_period, reverse=True)
-        if filtered_data:
-            return filtered_data[:limit]
-
+    """Fetch line items from API."""
     # If not in cache or insufficient data, fetch from API
     headers = {}
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
@@ -129,7 +121,6 @@ def search_line_items(
         return []
 
     # Cache the results
-    _cache.set_line_items(ticker, [item.model_dump() for item in search_results])
     return search_results[:limit]
 
 
