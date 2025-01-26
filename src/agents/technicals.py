@@ -62,13 +62,17 @@ def technical_analyst_agent(state: AgentState):
         progress.update_status("technical_analyst_agent", ticker, "Statistical analysis")
         stat_arb_signals = calculate_stat_arb_signals(prices_df)
 
+        progress.update_status("technical_analyst_agent", ticker, "Computing VWAP")
+        vwap_ema_signals = compute_vwap_ema_signal(prices_df)
+
         # Combine all signals using a weighted ensemble approach
         strategy_weights = {
-            "trend": 0.25,
+            "trend": 0.20,
             "mean_reversion": 0.20,
-            "momentum": 0.25,
+            "momentum": 0.20,
             "volatility": 0.15,
-            "stat_arb": 0.15,
+            "vwap_ema": 0.15,
+            "stat_arb": 0.10,
         }
 
         progress.update_status("technical_analyst_agent", ticker, "Combining signals")
@@ -78,6 +82,7 @@ def technical_analyst_agent(state: AgentState):
                 "mean_reversion": mean_reversion_signals,
                 "momentum": momentum_signals,
                 "volatility": volatility_signals,
+                "vwap_ema": vwap_ema_signals,
                 "stat_arb": stat_arb_signals,
             },
             strategy_weights,
@@ -107,6 +112,11 @@ def technical_analyst_agent(state: AgentState):
                     "signal": volatility_signals["signal"],
                     "confidence": round(volatility_signals["confidence"] * 100),
                     "metrics": normalize_pandas(volatility_signals["metrics"]),
+                },
+                 "vwap": {
+                    "signal": vwap_ema_signals["signal"],
+                    "confidence": vwap_ema_signals["confidence"],
+                    "metrics": normalize_pandas(vwap_ema_signals["metrics"]),
                 },
                 "statistical_arbitrage": {
                     "signal": stat_arb_signals["signal"],
@@ -380,6 +390,91 @@ def weighted_signal_combination(signals, weights):
         signal = "neutral"
 
     return {"signal": signal, "confidence": abs(final_score)}
+
+
+def compute_vwap_ema_signal(prices_df):
+    """Calculate a technical signal that uses VWAP and EMA."""
+    # Calculate VWAP and Price Above/Below VWAP
+    vwap = calculate_vwap(prices_df)
+    return calculate_ema_vwap_signal(prices_df)
+
+
+def calculate_vwap(prices_df):
+    """
+    Calculate the Volume Weighted Average Price (VWAP) for the given price DataFrame.
+    
+    Args:
+    prices_df (pd.DataFrame): A DataFrame containing 'open', 'high', 'low', 'close', and 'volume' columns.
+    
+    Returns:
+    pd.Series: A pandas Series representing the VWAP values over time.
+    """
+    # Ensure required columns exist
+    required_columns = {"high", "low", "close", "volume"}
+    if not required_columns.issubset(prices_df.columns):
+        raise ValueError(f"DataFrame must contain columns: {required_columns}")
+    
+    # Calculate Typical Price
+    prices_df["typical_price"] = (prices_df["high"] + prices_df["low"] + prices_df["close"]) / 3
+
+    # Cumulative Totals
+    prices_df["cum_price_volume"] = (prices_df["typical_price"] * prices_df["volume"]).cumsum()
+    prices_df["cum_volume"] = prices_df["volume"].cumsum()
+
+    # VWAP Calculation
+    prices_df["vwap"] = prices_df["cum_price_volume"] / prices_df["cum_volume"]
+
+    return prices_df['vwap']
+
+
+def calculate_ema_vwap_signal(prices_df, vwap_column="vwap"):
+    """
+    Compute 9EMA, 20EMA, and generate a combined signal with VWAP.
+
+    Args:
+        prices_df (pd.DataFrame): DataFrame with 'close' prices and computed VWAP.
+        vwap_column (str): The column name for VWAP in prices_df.
+
+    Returns:
+        dict: Signal, confidence, and metrics.
+    """
+    # Calculate EMAs
+    prices_df["9EMA"] = prices_df["close"].ewm(span=9, adjust=False).mean()
+    prices_df["20EMA"] = prices_df["close"].ewm(span=20, adjust=False).mean()
+    
+    # Compare EMAs with VWAP
+    prices_df["9EMA_above_vwap"] = prices_df["9EMA"] > prices_df[vwap_column]
+    prices_df["20EMA_above_vwap"] = prices_df["20EMA"] > prices_df[vwap_column]
+    
+    # Signal generation
+    all_above = prices_df["9EMA_above_vwap"] & prices_df["20EMA_above_vwap"]
+    all_below = ~prices_df["9EMA_above_vwap"] & ~prices_df["20EMA_above_vwap"]
+
+    if all_above.iloc[-1]:
+        signal = "bullish"
+    elif all_below.iloc[-1]:
+        signal = "bearish"
+    else:
+        signal = "neutral"
+
+    # Confidence calculation (percentage of alignment in the lookback period)
+    lookback_period = 20  # Customize this as needed
+    alignment_count = prices_df["9EMA_above_vwap"] & prices_df["20EMA_above_vwap"]
+    misalignment_count = ~prices_df["9EMA_above_vwap"] & ~prices_df["20EMA_above_vwap"]
+    total_signals = alignment_count.sum() + misalignment_count.sum()
+
+    confidence = (alignment_count.sum() / total_signals) * 100 if total_signals > 0 else 0
+
+    return {
+        "signal": signal,
+        "confidence": round(confidence, 2),
+        "metrics": {
+            "9EMA": prices_df["9EMA"].tolist(),
+            "20EMA": prices_df["20EMA"].tolist(),
+            "vwap": prices_df[vwap_column].tolist(),
+            "price": prices_df["close"].tolist(),
+        },
+    }
 
 
 def normalize_pandas(obj):

@@ -1,12 +1,15 @@
 import json
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai.chat_models import ChatOpenAI
+from langchain_ollama import ChatOllama
+from langchain.output_parsers import PydanticOutputParser
+from langchain.prompts import ChatPromptTemplate
 
 from graph.state import AgentState, show_agent_reasoning
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
 from utils.progress import progress
+from utils.llm_utils import parse_llm_response
 
 
 class PortfolioDecision(BaseModel):
@@ -15,10 +18,8 @@ class PortfolioDecision(BaseModel):
     confidence: float = Field(description="Confidence in the decision, between 0.0 and 100.0")
     reasoning: str = Field(description="Reasoning for the decision")
 
-
 class PortfolioManagerOutput(BaseModel):
     decisions: dict[str, PortfolioDecision] = Field(description="Dictionary of ticker to trading decisions")
-
 
 ##### Portfolio Management Agent #####
 def portfolio_management_agent(state: AgentState):
@@ -63,7 +64,7 @@ def portfolio_management_agent(state: AgentState):
         [
             (
                 "system",
-                """You are a portfolio manager making final trading decisions.
+                """You are an expert portfolio manager making final trading decisions.
                 Your job is to make trading decisions based on the team's analysis for multiple tickers.
 
                 Trading Rules:
@@ -104,6 +105,7 @@ def portfolio_management_agent(state: AgentState):
                 Current Positions: {portfolio_positions}
 
                 Return a decision for each ticker in the following format:
+                ```json
                 {{
                     "decisions": {{
                         "TICKER1": {{
@@ -116,6 +118,7 @@ def portfolio_management_agent(state: AgentState):
                         ...
                     }}
                 }}
+                ```
                 """,
             ),
         ]
@@ -153,18 +156,21 @@ def portfolio_management_agent(state: AgentState):
         "data": state["data"],
     }
 
-
 def make_decision(prompt, tickers):
     """Attempts to get a decision from the LLM with retry logic"""
-    llm = ChatOpenAI(model="gpt-4o").with_structured_output(
-        PortfolioManagerOutput,
-        method="function_calling",
+    llm = ChatOllama(
+        model="deepseek-r1:1.5b",
+        temperature=0.1,
     )
+
+    # Create a parser for your PortfolioManagerOutput
+    parser = PydanticOutputParser(pydantic_object=PortfolioManagerOutput)
+    
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            result = llm.invoke(prompt)
-            return result
+            result = llm.invoke(prompt.messages)
+            return parse_llm_response(result, PortfolioManagerOutput)
         except Exception as e:
             progress.update_status("portfolio_management_agent", None, f"Error - retry {attempt + 1}/{max_retries}")
             if attempt == max_retries - 1:

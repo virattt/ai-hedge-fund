@@ -1,4 +1,4 @@
-from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from graph.state import AgentState, show_agent_reasoning
 from tools.api import (
     get_financial_metrics,
@@ -6,11 +6,16 @@ from tools.api import (
     search_line_items
 )
 from langchain_core.prompts import ChatPromptTemplate
+from langchain.output_parsers import PydanticOutputParser
+from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 import json
 from typing_extensions import Literal
 from utils.progress import progress
+from utils.llm_utils import parse_llm_response
+from time import sleep
+import re
 
 
 class BuffettSignal(BaseModel):
@@ -296,6 +301,36 @@ def calculate_intrinsic_value(financial_line_items: list) -> dict[str, any]:
         "details": ["Intrinsic value calculated using DCF model with owner earnings"]
     }
 
+def parse_response(result):
+    try:
+        # Extract JSON block from the raw response by matching the content after ```json
+        json_match = re.search(r'```json\s*(\{.*\})\s*```', result.content, re.DOTALL)
+        
+        if json_match:
+            json_str = json_match.group(1)  # Extract the JSON part
+
+            # Parse the JSON response
+            parsed_result = json.loads(json_str)
+
+            # Convert to BuffettSignal format
+            return BuffettSignal(
+                signal=parsed_result["signal"],
+                confidence=float(parsed_result["confidence"]) / 10.0,  # Convert to 0-1 range
+                reasoning=str(parsed_result["reasoning"])  # Convert reasoning dict to string if needed
+            )
+        else:
+            print("No valid JSON block found in the response.")
+            print("Raw response:", result.content)
+            return None     
+    except json.JSONDecodeError as e:
+        print(f"Failed to parse JSON response: {str(e)}")
+        print("Raw response:", result.content)
+        print("Empty response received, retrying...")
+        return None
+    except Exception as e:
+        print(f"Error on attempt: {str(e)}")
+        return None
+
 def generate_buffett_output(ticker: str, analysis_data: dict[str, any]) -> BuffettSignal:
     """Get investment decision from LLM with Buffett's principles"""
     template = ChatPromptTemplate.from_messages([
@@ -316,46 +351,42 @@ def generate_buffett_output(ticker: str, analysis_data: dict[str, any]) -> Buffe
             - Prefer companies with consistent earnings growth
             - Avoid companies with high debt or poor management
             - Hold good businesses for very long periods
-            - Sell when fundamentals deteriorate or valuation becomes excessive"""
+            - Sell when fundamentals deteriorate or valuation becomes excessive
+            """
         ),
         (
             "human",
-            """Based on the following analysis, create investment signals as Warren Buffett would.
+            """Based on the following analysis, generate an investment signal in **structured JSON format**. 
+            The response **must contain only JSON** and no extra text or commentary.
 
             Analysis Data for {ticker}:
             {analysis_data}
 
-            Return signals for this ticker in this format:
+            Return only a structured JSON object with the following format:
+            ```json
             {{
                 "signal": "bullish/bearish/neutral",
                 "confidence": float (0-100),
-                "reasoning": "Buffett-style explanation"
-            }}"""
+                "reasoning": "brief Buffett-style justification"
+            }}
+            ```
+            """
         )
     ])
 
     # Generate the prompt
-    prompt = template.invoke({
-        "analysis_data": json.dumps(analysis_data, indent=2),
-        "ticker": ticker
-    })
-
-
-    llm = ChatOpenAI(model="gpt-4o").with_structured_output(
-        BuffettSignal,
-        method="function_calling",
+    prompt = template.format_messages(
+        analysis_data=json.dumps(analysis_data, indent=2),
+        ticker=ticker
     )
 
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            result = llm.invoke(prompt)
-            return result
-        except Exception as e:
-            if attempt == max_retries - 1:
-                # On final attempt, return a safe default
-                return BuffettSignal(
-                    signal="hold",
-                    confidence=0.0,
-                    reasoning="Error in analysis, defaulting to hold"
-                )
+    llm = ChatOllama(
+        model="deepseek-r1:1.5b",
+        temperature=0.1,
+    )
+
+    # Create a parser for your PortfolioManagerOutput
+    parser = PydanticOutputParser(pydantic_object=BuffettSignal)
+        
+    result = llm.invoke(prompt)
+    return parse_llm_response(result, BuffettSignal)

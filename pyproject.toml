@@ -9,7 +9,6 @@ packages = [
 ]
 [tool.poetry.dependencies]
 python = "^3.9"
-langchain = "0.3.0"
 langchain-openai = "0.3"
 langgraph = "0.2.56"
 pandas = "^2.1.0"
@@ -20,6 +19,8 @@ tabulate = "^0.9.0"
 colorama = "^0.4.6"
 questionary = "^2.1.0"
 rich = "^13.9.4"
+langchain-community = "^0.3.15"
+langchain-ollama = "^0.2.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
