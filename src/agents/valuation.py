@@ -58,6 +58,13 @@ def valuation_agent(state: AgentState):
         current_financial_line_item = financial_line_items[0]
         previous_financial_line_item = financial_line_items[1]
 
+        capital_change = current_financial_line_item.working_capital
+        cp = previous_financial_line_item.working_capital
+
+        print("************************")
+        print(cp)
+        print(capital_change)
+
         progress.update_status("valuation_agent", ticker, "Calculating owner earnings")
         # Calculate working capital change
         working_capital_change = current_financial_line_item.working_capital - previous_financial_line_item.working_capital

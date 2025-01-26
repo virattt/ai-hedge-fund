@@ -112,6 +112,9 @@ You can optionally specify the start and end dates to backtest over a specific t
 
 ```bash
 poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
+
+
+poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --start-date 2025-01-01 --end-date 2025-01-26
 ```
 
 ## Project Structure 
