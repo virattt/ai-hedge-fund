@@ -72,7 +72,7 @@ def portfolio_management_agent(state: AgentState):
                 - For sells: quantity must be ≤ current position shares
                 - For buys: quantity must be ≤ max_shares provided for each ticker
                 - The max_shares values are pre-calculated to respect position limits
-                - Adding all the buys should not exceed the available cash plus the sum of all the sells
+                - When you adding all the buy descitions, they should not exceed the available cash plus the sum of all the sells, this is TOTALLY required. 
                 
                 Inputs:
                 - signals_by_ticker: dictionary of ticker to signals from analysts
