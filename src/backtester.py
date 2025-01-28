@@ -133,9 +133,9 @@ if __name__ == "__main__":
     # Set up argument parser
     parser = argparse.ArgumentParser(description='Run backtesting simulation')
     parser.add_argument('--ticker', type=str, help='Stock ticker symbol (e.g., AAPL)')
-    parser.add_argument('--end_date', type=str, default=datetime.now().strftime('%Y-%m-%d'), help='End date in YYYY-MM-DD format')
-    parser.add_argument('--start_date', type=str, default=(datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d'), help='Start date in YYYY-MM-DD format')
-    parser.add_argument('--initial_capital', type=float, default=100000, help='Initial capital amount (default: 100000)')
+    parser.add_argument('--end-date', type=str, default=datetime.now().strftime('%Y-%m-%d'), help='End date in YYYY-MM-DD format')
+    parser.add_argument('--start-date', type=str, default=(datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d'), help='Start date in YYYY-MM-DD format')
+    parser.add_argument('--initial-capital', type=float, default=100000, help='Initial capital amount (default: 100000)')
 
     args = parser.parse_args()
 
