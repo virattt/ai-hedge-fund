@@ -355,7 +355,7 @@ def generate_buffett_output(ticker: str, analysis_data: dict[str, any]) -> Buffe
             if attempt == max_retries - 1:
                 # On final attempt, return a safe default
                 return BuffettSignal(
-                    signal="hold",
+                    signal="neutral",
                     confidence=0.0,
                     reasoning="Error in analysis, defaulting to hold"
                 )
