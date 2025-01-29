@@ -59,6 +59,7 @@ def portfolio_management_agent(state: AgentState):
 
     progress.update_status("portfolio_management_agent", None, "Preparing trading strategy")
     # Create the prompt template
+    previous_result = ""
     template = ChatPromptTemplate.from_messages(
         [
             (
@@ -89,7 +90,7 @@ def portfolio_management_agent(state: AgentState):
             ),
             (
                 "human",
-                """Based on the team's analysis below, make your trading decisions.
+                """{previous_result}Based on the team's analysis below, make your trading decisions.
 
                 For each ticker, here are the signals:
                 {signals_by_ticker}
@@ -125,6 +126,7 @@ def portfolio_management_agent(state: AgentState):
     # Generate the prompt
     prompt = template.invoke(
         {
+            "previous_result": previous_result,
             "signals_by_ticker": json.dumps(signals_by_ticker, indent=2),
             "current_prices": json.dumps(current_prices, indent=2),
             "max_shares": json.dumps(max_shares, indent=2),
@@ -135,7 +137,37 @@ def portfolio_management_agent(state: AgentState):
 
     progress.update_status("portfolio_management_agent", None, "Making trading decisions")
 
-    result = make_decision(prompt, tickers)
+    # new logic for portfolio retrys
+    max_retries = 3
+    for attempt in range(max_retries):
+        result = make_decision(prompt, tickers)
+        # Add review from decision, that comply with the rules (mainly available cash) TODO MOVE TO FUNCION OR AGENT
+        new_total_value = portfolio["cash"]
+        for ticker, decision in result.decisions.items():
+            if decision.action == "buy":
+                new_total_value -= decision.quantity * current_prices[ticker]
+            elif decision.action == "sell":
+                new_total_value += decision.quantity * current_prices[ticker]
+        if new_total_value >= 0:
+            break
+        else:
+            progress.update_status("portfolio_management_agent", None, "Error: The total value of the portfolio would be negative, retry {attempt + 1}/{max_retries}")
+            previous_result = f"The previous result needed more cash than it was available resulting in a negative cash need of {new_total_value}. Please adjunt your previous decision {result}\n"
+            prompt = template.invoke(
+                {
+                    "previous_result": previous_result,
+                    "signals_by_ticker": json.dumps(signals_by_ticker, indent=2),
+                    "current_prices": json.dumps(current_prices, indent=2),
+                    "max_shares": json.dumps(max_shares, indent=2),
+                    "portfolio_cash": f"{portfolio['cash']:.2f}",
+                    "portfolio_positions": json.dumps(portfolio["positions"], indent=2),
+                }
+            )
+            if attempt == max_retries - 1:
+                # On final attempt, return a safe default
+                progress.update_status("portfolio_management_agent", None, "Error: The total value of the portfolio would be negative, This was the final try, did not find a solution")
+
+    # result = make_decision(prompt, tickers)
 
     # Create the portfolio management message
     message = HumanMessage(
