@@ -59,8 +59,13 @@ def valuation_agent(state: AgentState):
         previous_financial_line_item = financial_line_items[1]
 
         progress.update_status("valuation_agent", ticker, "Calculating owner earnings")
-        # Calculate working capital change
-        working_capital_change = current_financial_line_item.working_capital - previous_financial_line_item.working_capital
+        # Calculate working capital change with safety checks
+        working_capital_change = 0  # Default to 0 if we can't calculate
+        if (hasattr(current_financial_line_item, 'working_capital') and 
+            hasattr(previous_financial_line_item, 'working_capital') and
+            current_financial_line_item.working_capital is not None and 
+            previous_financial_line_item.working_capital is not None):
+            working_capital_change = current_financial_line_item.working_capital - previous_financial_line_item.working_capital
 
         # Owner Earnings Valuation (Buffett Method)
         owner_earnings_value = calculate_owner_earnings_value(
@@ -74,14 +79,18 @@ def valuation_agent(state: AgentState):
         )
 
         progress.update_status("valuation_agent", ticker, "Calculating DCF value")
-        # DCF Valuation
-        dcf_value = calculate_intrinsic_value(
-            free_cash_flow=current_financial_line_item.free_cash_flow,
-            growth_rate=metrics.earnings_growth,
-            discount_rate=0.10,
-            terminal_growth_rate=0.03,
-            num_years=5,
-        )
+        # DCF Valuation with safety check for free cash flow
+        if (hasattr(current_financial_line_item, 'free_cash_flow') and 
+            current_financial_line_item.free_cash_flow is not None):
+            dcf_value = calculate_intrinsic_value(
+                free_cash_flow=current_financial_line_item.free_cash_flow,
+                growth_rate=metrics.earnings_growth,
+                discount_rate=0.10,
+                terminal_growth_rate=0.03,
+                num_years=5,
+            )
+        else:
+            dcf_value = 0
 
         progress.update_status("valuation_agent", ticker, "Comparing to market value")
         # Get the market cap
@@ -208,6 +217,11 @@ def calculate_intrinsic_value(
     Computes the discounted cash flow (DCF) for a given company based on the current free cash flow.
     Use this function to calculate the intrinsic value of a stock.
     """
+    # Add safety check for None or invalid values
+    if free_cash_flow is None or not isinstance(free_cash_flow, (int, float)) or free_cash_flow <= 0:
+        return 0
+    
+        
     # Estimate the future cash flows based on the growth rate
     cash_flows = [free_cash_flow * (1 + growth_rate) ** i for i in range(num_years)]
 

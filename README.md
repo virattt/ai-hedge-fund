@@ -66,14 +66,26 @@ cp .env.example .env
 
 Set the API keys in the .env file:
 ```
+# Choose your LLM provider
+LLM_PROVIDER=openai  # or anthropic
+
 # Get your OpenAI API key from https://platform.openai.com/
 OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=gpt-4  # or gpt-4-turbo-preview, gpt-3.5-turbo, etc.
+
+# Get your Anthropic API key from https://console.anthropic.com/settings/keys
+ANTHROPIC_API_KEY=your-anthropic-api-key
+ANTHROPIC_MODEL=claude-3-sonnet-20240307  # or claude-3-opus-20240229, etc.
 
 # Get your Financial Datasets API key from https://financialdatasets.ai/
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
-**Important**: You must to set the OpenAI API key for the hedge fund to work.
+**Important**: You must set either the OpenAI API key or Anthropic API key depending on your chosen provider (LLM_PROVIDER).
+
+The system supports two LLM providers:
+- OpenAI (default): Requires OPENAI_API_KEY and optionally OPENAI_MODEL
+- Anthropic: Requires ANTHROPIC_API_KEY and optionally ANTHROPIC_MODEL
 
 Financial data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key.
 

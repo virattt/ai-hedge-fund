@@ -11,6 +11,8 @@ from pydantic import BaseModel
 import json
 from typing_extensions import Literal
 from utils.progress import progress
+from langchain_anthropic import ChatAnthropic
+import os
 
 
 class BuffettSignal(BaseModel):
@@ -251,12 +253,12 @@ def calculate_owner_earnings(financial_line_items: list) -> dict[str, any]:
 def calculate_intrinsic_value(financial_line_items: list) -> dict[str, any]:
     """Calculate intrinsic value using DCF with owner earnings."""
     if not financial_line_items:
-        return {"value": None, "details": ["Insufficient data for valuation"]}
+        return {"intrinsic_value": None, "details": ["Insufficient data for valuation"]}
     
     # Calculate owner earnings
     earnings_data = calculate_owner_earnings(financial_line_items)
     if not earnings_data["owner_earnings"]:
-        return {"value": None, "details": earnings_data["details"]}
+        return {"intrinsic_value": None, "details": earnings_data["details"]}
     
     owner_earnings = earnings_data["owner_earnings"]
     
@@ -265,7 +267,7 @@ def calculate_intrinsic_value(financial_line_items: list) -> dict[str, any]:
     shares_outstanding = latest_financial_line_items.outstanding_shares
     
     if not shares_outstanding:
-        return {"value": None, "details": ["Missing shares outstanding data"]}
+        return {"intrinsic_value": None, "details": ["Missing shares outstanding data"]}
     
     # Buffett's DCF assumptions
     growth_rate = 0.05  # Conservative 5% growth
@@ -340,11 +342,25 @@ def generate_buffett_output(ticker: str, analysis_data: dict[str, any]) -> Buffe
         "ticker": ticker
     })
 
-
-    llm = ChatOpenAI(model="gpt-4o").with_structured_output(
-        BuffettSignal,
-        method="function_calling",
-    )
+    # Allow configurable model choice
+    model_provider = os.getenv("LLM_PROVIDER", "openai").lower()
+    
+    if model_provider == "anthropic":
+        model_name = os.getenv("ANTHROPIC_MODEL", "claude-3-sonnet-20240307")
+        llm = ChatAnthropic(
+            model=model_name
+        ).with_structured_output(
+            BuffettSignal,
+            method="function_calling",
+        )
+    else:  # default to OpenAI
+        model_name = os.getenv("OPENAI_MODEL", "gpt-4")
+        llm = ChatOpenAI(
+            model=model_name
+        ).with_structured_output(
+            BuffettSignal,
+            method="function_calling",
+        )
 
     max_retries = 3
     for attempt in range(max_retries):

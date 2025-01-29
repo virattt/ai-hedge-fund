@@ -2,6 +2,8 @@ import json
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai.chat_models import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
+import os
 
 from graph.state import AgentState, show_agent_reasoning
 from pydantic import BaseModel, Field
@@ -156,10 +158,26 @@ def portfolio_management_agent(state: AgentState):
 
 def make_decision(prompt, tickers):
     """Attempts to get a decision from the LLM with retry logic"""
-    llm = ChatOpenAI(model="gpt-4o").with_structured_output(
-        PortfolioManagerOutput,
-        method="function_calling",
-    )
+    # Allow configurable model choice
+    model_provider = os.getenv("LLM_PROVIDER", "openai").lower()
+    
+    if model_provider == "anthropic":
+        model_name = os.getenv("ANTHROPIC_MODEL", "claude-3-sonnet-20240307")
+        llm = ChatAnthropic(
+            model=model_name
+        ).with_structured_output(
+            PortfolioManagerOutput,
+            method="function_calling",
+        )
+    else:  # default to OpenAI
+        model_name = os.getenv("OPENAI_MODEL", "gpt-4")
+        llm = ChatOpenAI(
+            model=model_name
+        ).with_structured_output(
+            PortfolioManagerOutput,
+            method="function_calling",
+        )
+
     max_retries = 3
     for attempt in range(max_retries):
         try:
