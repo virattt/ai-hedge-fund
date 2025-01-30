@@ -144,6 +144,7 @@ if __name__ == "__main__":
     parser.add_argument("--end-date", type=str, help="End date (YYYY-MM-DD). Defaults to today")
     parser.add_argument("--show-reasoning", action="store_true", help="Show reasoning from each agent")
     parser.add_argument("--portfolio", type=str, help="Comma-separated list of portfolio positions")
+    parser.add_argument("--costbasis", type=str, help="Comma-separated list of portfolio cost basis of holdings")
 
     args = parser.parse_args()
 
@@ -200,7 +201,20 @@ if __name__ == "__main__":
         start_date = args.start_date
 
     # Initialize portfolio with cash amount and stock positions
-    if args.portfolio:
+    if args.portfolio and args.costbasis:
+        positions = [position.strip() for position in args.portfolio.split(",")]
+        cost_basis = [float(costbasis.strip()) for costbasis in args.costbasis.split(",")]
+        if len(tickers) == len(positions) == len(cost_basis):
+            _positions = {}
+            _cost_basis = {}
+            for ticker, position, cb in zip(tickers, positions, cost_basis):
+                _positions[ticker] = position
+                _cost_basis[ticker] = cb
+            portfolio = {"cash": args.initial_cash, "positions": _positions, "cost_basis": _cost_basis}  # Initial stock positions
+        else:
+            raise ValueError("Number of tickers, positions, and cost basis must match")
+
+    elif args.portfolio:
         positions = [position.strip() for position in args.portfolio.split(",")]
         _positions = {}
         _cost_basis = {}

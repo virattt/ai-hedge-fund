@@ -80,6 +80,7 @@ def portfolio_management_agent(state: AgentState):
                 - max_shares: maximum number of shares allowed for each ticker
                 - portfolio_cash: current cash in portfolio
                 - portfolio_positions: current positions in portfolio
+                - portfolio_cost_basis: cost basis for each position that is currently held
                 - current_prices: current price for each ticker
                 
                 Output:
@@ -104,6 +105,7 @@ def portfolio_management_agent(state: AgentState):
                 Here is the current portfolio:
                 Cash: {portfolio_cash}
                 Current Positions: {portfolio_positions}
+                Current Cost Basis: {portfolio_cost_basis}
 
                 Return a decision for each ticker in the following format:
                 {{
@@ -132,6 +134,7 @@ def portfolio_management_agent(state: AgentState):
             "max_shares": json.dumps(max_shares, indent=2),
             "portfolio_cash": f"{portfolio['cash']:.2f}",
             "portfolio_positions": json.dumps(portfolio["positions"], indent=2),
+            "portfolio_cost_basis": json.dumps(portfolio["cost_basis"], indent=2),
         }
     )
 
@@ -151,7 +154,7 @@ def portfolio_management_agent(state: AgentState):
         if new_total_value >= 0:
             break
         else:
-            progress.update_status("portfolio_management_agent", None, "Error: The total value of the portfolio would be negative, retry {attempt + 1}/{max_retries}")
+            progress.update_status("portfolio_management_agent", None, f"Error: The total value of the portfolio would be negative, retry {attempt + 1}/{max_retries}")
             previous_result = f"The previous result needed more cash than it was available resulting in a negative cash need of {new_total_value}. Please adjunt your previous decision {result}\n"
             prompt = template.invoke(
                 {
@@ -161,6 +164,7 @@ def portfolio_management_agent(state: AgentState):
                     "max_shares": json.dumps(max_shares, indent=2),
                     "portfolio_cash": f"{portfolio['cash']:.2f}",
                     "portfolio_positions": json.dumps(portfolio["positions"], indent=2),
+                    "portfolio_cost_basis": json.dumps(portfolio["cost_basis"], indent=2),
                 }
             )
             if attempt == max_retries - 1:
