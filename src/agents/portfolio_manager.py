@@ -1,90 +1,177 @@
-
+import json
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai.chat_models import ChatOpenAI
 
-from agents.state import AgentState, show_agent_reasoning
+from graph.state import AgentState, show_agent_reasoning
+from pydantic import BaseModel, Field
+from typing_extensions import Literal
+from utils.progress import progress
+from utils.llm import call_llm
+
+
+class PortfolioDecision(BaseModel):
+    action: Literal["buy", "sell", "hold"]
+    quantity: int = Field(description="Number of shares to trade")
+    confidence: float = Field(description="Confidence in the decision, between 0.0 and 100.0")
+    reasoning: str = Field(description="Reasoning for the decision")
+
+
+class PortfolioManagerOutput(BaseModel):
+    decisions: dict[str, PortfolioDecision] = Field(description="Dictionary of ticker to trading decisions")
 
 
 ##### Portfolio Management Agent #####
 def portfolio_management_agent(state: AgentState):
-    """Makes final trading decisions and generates orders"""
-    show_reasoning = state["metadata"]["show_reasoning"]
+    """Makes final trading decisions and generates orders for multiple tickers"""
+
+    # Get the portfolio and analyst signals
     portfolio = state["data"]["portfolio"]
+    analyst_signals = state["data"]["analyst_signals"]
+    tickers = state["data"]["tickers"]
 
-    # Get the technical analyst, fundamentals agent, and risk management agent messages
-    technical_message = next(msg for msg in state["messages"] if msg.name == "technical_analyst_agent")
-    fundamentals_message = next(msg for msg in state["messages"] if msg.name == "fundamentals_agent")
-    sentiment_message = next(msg for msg in state["messages"] if msg.name == "sentiment_agent")
-    risk_message = next(msg for msg in state["messages"] if msg.name == "risk_management_agent")
+    progress.update_status("portfolio_management_agent", None, "Analyzing signals")
 
+    # Get position limits, current prices, and signals for every ticker
+    position_limits = {}
+    current_prices = {}
+    max_shares = {}
+    signals_by_ticker = {}
+    for ticker in tickers:
+        progress.update_status("portfolio_management_agent", ticker, "Processing analyst signals")
+
+        # Get position limits and current prices for the ticker
+        risk_data = analyst_signals.get("risk_management_agent", {}).get(ticker, {})
+        position_limits[ticker] = risk_data.get("remaining_position_limit", 0)
+        current_prices[ticker] = risk_data.get("current_price", 0)
+
+        # Calculate maximum shares allowed based on position limit and price
+        if current_prices[ticker] > 0:
+            max_shares[ticker] = int(position_limits[ticker] / current_prices[ticker])
+        else:
+            max_shares[ticker] = 0
+
+        # Get signals for the ticker
+        ticker_signals = {}
+        for agent, signals in analyst_signals.items():
+            if agent != "risk_management_agent" and ticker in signals:
+                ticker_signals[agent] = {"signal": signals[ticker]["signal"], "confidence": signals[ticker]["confidence"]}
+        signals_by_ticker[ticker] = ticker_signals
+
+    progress.update_status("portfolio_management_agent", None, "Making trading decisions")
+
+    # Generate the trading decision
+    result = generate_trading_decision(
+        tickers=tickers,
+        signals_by_ticker=signals_by_ticker,
+        current_prices=current_prices,
+        max_shares=max_shares,
+        portfolio=portfolio,
+        model_name=state["metadata"]["model_name"],
+        model_provider=state["metadata"]["model_provider"],
+    )
+
+    # Create the portfolio management message
+    message = HumanMessage(
+        content=json.dumps({ticker: decision.model_dump() for ticker, decision in result.decisions.items()}),
+        name="portfolio_management",
+    )
+
+    # Print the decision if the flag is set
+    if state["metadata"]["show_reasoning"]:
+        show_agent_reasoning({ticker: decision.model_dump() for ticker, decision in result.decisions.items()}, "Portfolio Management Agent")
+
+    progress.update_status("portfolio_management_agent", None, "Done")
+
+    return {
+        "messages": state["messages"] + [message],
+        "data": state["data"],
+    }
+
+
+def generate_trading_decision(
+    tickers: list[str],
+    signals_by_ticker: dict[str, dict],
+    current_prices: dict[str, float],
+    max_shares: dict[str, int],
+    portfolio: dict[str, float],
+    model_name: str,
+    model_provider: str,
+) -> PortfolioManagerOutput:
+    """Attempts to get a decision from the LLM with retry logic"""
     # Create the prompt template
     template = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
                 """You are a portfolio manager making final trading decisions.
-                Your job is to make a trading decision based on the team's analysis while strictly adhering
-                to risk management constraints.
-
-                RISK MANAGEMENT CONSTRAINTS:
-                - You MUST NOT exceed the max_position_size specified by the risk manager
-                - You MUST follow the trading_action (buy/sell/hold) recommended by risk management
-                - These are hard constraints that cannot be overridden by other signals
-
-                When weighing the different signals for direction and timing:
-                1. Fundamental Analysis (50% weight)
-                   - Primary driver of trading decisions
-                   - Should determine overall direction
-                
-                2. Technical Analysis (35% weight)
-                   - Secondary confirmation
-                   - Helps with entry/exit timing
-                
-                3. Sentiment Analysis (15% weight)
-                   - Final consideration
-                   - Can influence sizing within risk limits
-                
-                The decision process should be:
-                1. First check risk management constraints
-                2. Then evaluate fundamental outlook
-                3. Use technical analysis for timing
-                4. Consider sentiment for final adjustment
-                
-                Provide the following in your output:
-                - "action": "buy" | "sell" | "hold",
-                - "quantity": <positive integer>
-                - "confidence": <float between 0 and 1>
-                - "agent_signals": <list of agent signals including agent name, signal (bullish | bearish | neutral), and their confidence>
-                - "reasoning": <concise explanation of the decision including how you weighted the signals>
+                Your job is to make trading decisions based on the team's analysis for multiple tickers.
 
                 Trading Rules:
-                - Never exceed risk management position limits
                 - Only buy if you have available cash
-                - Only sell if you have shares to sell
-                - Quantity must be ≤ current position for sells
-                - Quantity must be ≤ max_position_size from risk management"""
+                - Only sell if you have shares to sell, otherwise hold
+                - For sells: quantity must be ≤ current position shares
+                - For buys: quantity must be ≤ max_shares provided for each ticker
+                - The max_shares values are pre-calculated to respect position limits
+                
+                Inputs:
+                - signals_by_ticker: dictionary of ticker to signals from analysts
+                - max_shares: maximum number of shares allowed for each ticker
+                - portfolio_cash: current cash in portfolio
+                - portfolio_positions: current positions in portfolio
+                - current_prices: current price for each ticker
+                
+                Output (must be in JSON format):
+                - action: "buy", "sell", or "hold"
+                - quantity: number of shares to trade (integer)
+                - confidence: confidence level between 0-100
+                - reasoning: brief explanation of the decision
+
+                IMPORTANT: Only output the final decision in a JSON format like so:
+                {{
+                    "decisions": {{
+                        "TICKER1": {{
+                            "action": "buy/sell/hold",
+                            "quantity": integer,
+                            "confidence": float,
+                            "reasoning": "string"
+                        }},
+                        "TICKER2": {{ ... }},
+                        ...
+                    }}
+                }}
+                """,
             ),
             (
                 "human",
-                """Based on the team's analysis below, make your trading decision.
+                """Based on the team's analysis below, make your trading decisions.
 
-                Technical Analysis Trading Signal: {technical_message}
-                Fundamental Analysis Trading Signal: {fundamentals_message}
-                Sentiment Analysis Trading Signal: {sentiment_message}
-                Risk Management Trading Signal: {risk_message}
+                For each ticker, here are the signals:
+                {signals_by_ticker}
+
+                Current Prices:
+                {current_prices}
+
+                Maximum Shares Allowed For Any Purchase:
+                {max_shares}
 
                 Here is the current portfolio:
-                Portfolio:
                 Cash: {portfolio_cash}
-                Current Position: {portfolio_stock} shares
+                Current Positions: {portfolio_positions}
 
-                Only include the action, quantity, reasoning, confidence, and agent_signals in your output as JSON.  Do not include any JSON markdown.
-
-                Remember, the action must be either buy, sell, or hold.
-                You can only buy if you have available cash.
-                You can only sell if you have shares in the portfolio to sell.
-                """
+                Return a decision for each ticker in the following format:
+                {{
+                    "decisions": {{
+                        "TICKER1": {{
+                            "action": "buy/sell/hold",
+                            "quantity": integer,
+                            "confidence": float,
+                            "reasoning": "string"
+                        }},
+                        "TICKER2": {{ ... }},
+                        ...
+                    }}
+                }}
+                """,
             ),
         ]
     )
@@ -92,26 +179,32 @@ def portfolio_management_agent(state: AgentState):
     # Generate the prompt
     prompt = template.invoke(
         {
-            "technical_message": technical_message.content, 
-            "fundamentals_message": fundamentals_message.content,
-            "sentiment_message": sentiment_message.content,
-            "risk_message": risk_message.content,
+            "signals_by_ticker": json.dumps(signals_by_ticker, indent=2),
+            "current_prices": json.dumps(current_prices, indent=2),
+            "max_shares": json.dumps(max_shares, indent=2),
             "portfolio_cash": f"{portfolio['cash']:.2f}",
-            "portfolio_stock": portfolio["stock"]
+            "portfolio_positions": json.dumps(portfolio["positions"], indent=2),
         }
     )
-    # Invoke the LLM
-    llm = ChatOpenAI(model="gpt-4o")
-    result = llm.invoke(prompt)
 
-    # Create the portfolio management message
-    message = HumanMessage(
-        content=result.content,
-        name="portfolio_management",
+    # Create default factory for PortfolioManagerOutput
+    def create_default_portfolio_output():
+        return PortfolioManagerOutput(
+            decisions={
+                ticker: PortfolioDecision(
+                    action="hold",
+                    quantity=0,
+                    confidence=0.0,
+                    reasoning="Error in portfolio management, defaulting to hold"
+                ) for ticker in tickers
+            }
+        )
+
+    return call_llm(
+        prompt=prompt,
+        model_name=model_name,
+        model_provider=model_provider,
+        pydantic_model=PortfolioManagerOutput,
+        agent_name="portfolio_management_agent",
+        default_factory=create_default_portfolio_output
     )
-
-    # Print the decision if the flag is set
-    if show_reasoning:
-        show_agent_reasoning(message.content, "Portfolio Management Agent")
-
-    return {"messages": state["messages"] + [message]}
