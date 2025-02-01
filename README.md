@@ -14,7 +14,7 @@ This system employs several agents working together:
    
 <img width="1060" alt="Screenshot 2025-01-03 at 5 39 25 PM" src="https://github.com/user-attachments/assets/4611aace-27d0-43b2-9a70-385b40336e3f" />
 
-Note: the system simulates trading decisions, it does not actually trade.
+**Note**: the system simulates trading decisions, it does not actually trade.
 
 [![Twitter Follow](https://img.shields.io/twitter/follow/virattt?style=social)](https://twitter.com/virattt)
 
@@ -64,16 +64,22 @@ poetry install
 cp .env.example .env
 ```
 
-Set the API keys in the .env file:
-```
+4. Set your API keys:
+```bash
+# For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
 # Get your OpenAI API key from https://platform.openai.com/
 OPENAI_API_KEY=your-openai-api-key
 
+# For running LLMs hosted by groq (deepseek, llama3, etc.)
+# Get your Groq API key from https://groq.com/
+GROQ_API_KEY=your-groq-api-key
+
+# For getting financial data to power the hedge fund
 # Get your Financial Datasets API key from https://financialdatasets.ai/
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
-**Important**: You must to set the OpenAI API key for the hedge fund to work.
+**Important**: You must set `OPENAI_API_KEY` or `GROQ_API_KEY` for the hedge fund to work.  If you want to use LLMs from both providers, you will need to set both API keys.
 
 Financial data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key.
 
@@ -147,7 +153,7 @@ ai-hedge-fund/
 
 ## Feature Requests
 
-If you have a feature request, please open an [issue](https://github.com/virattt/ai-hedge-fund/issues) and make it is tagged with `enhancement`.
+If you have a feature request, please open an [issue](https://github.com/virattt/ai-hedge-fund/issues) and make sure it is tagged with `enhancement`.
 
 ## License
 

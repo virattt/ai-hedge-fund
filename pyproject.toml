@@ -10,6 +10,7 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.9"
 langchain = "0.3.0"
+langchain-groq = "0.2.3"
 langchain-openai = "0.3"
 langgraph = "0.2.56"
 pandas = "^2.1.0"

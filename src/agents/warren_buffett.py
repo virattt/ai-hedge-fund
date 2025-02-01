@@ -2,7 +2,6 @@ import json
 
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 from typing_extensions import Literal
 
@@ -56,6 +55,7 @@ def warren_buffett_agent(state: AgentState):
             limit=5,
         )
 
+
         progress.update_status("warren_buffett_agent", ticker, "Getting market cap")
         # Get current market cap
         market_cap = financial_api.get_market_cap(ticker, end_date)
@@ -63,6 +63,7 @@ def warren_buffett_agent(state: AgentState):
         progress.update_status("warren_buffett_agent", ticker, "Analyzing fundamentals")
         # Analyze fundamentals
         fundamental_analysis = analyze_fundamentals(metrics)
+
 
         progress.update_status("warren_buffett_agent", ticker, "Analyzing consistency")
         consistency_analysis = analyze_consistency(financial_line_items)
@@ -104,6 +105,7 @@ def warren_buffett_agent(state: AgentState):
             "consistency_analysis": consistency_analysis,
             "intrinsic_value_analysis": intrinsic_value_analysis,
             "market_cap": market_cap,
+            "margin_of_safety": margin_of_safety,
             "margin_of_safety": margin_of_safety,
         }
 
@@ -308,6 +310,7 @@ def calculate_intrinsic_value(financial_line_items: list) -> dict[str, any]:
         present_value = future_earnings / (1 + discount_rate) ** year
         future_value += present_value
 
+
     # Add terminal value
     terminal_value = (
         owner_earnings * (1 + growth_rate) ** projection_years * terminal_multiple
@@ -350,11 +353,19 @@ def generate_buffett_output(
             - Prefer companies with consistent earnings growth
             - Avoid companies with high debt or poor management
             - Hold good businesses for very long periods
-            - Sell when fundamentals deteriorate or valuation becomes excessive""",
+            - Sell when fundamentals deteriorate or valuation becomes excessive
+
+            IMPORTANT: Only output the final decision in a JSON format like so:
+            {{
+                "signal": "bullish/bearish/neutral",
+                "confidence": float (0-100),
+                "reasoning": "string"
+            }}
+            """,
             ),
             (
-                "human",
-                """Based on the following analysis, create investment signals as Warren Buffett would.
+              "human",
+              """Based on the following analysis, create investment signals as Warren Buffett would.
 
             Analysis Data for {ticker}:
             {analysis_data}
@@ -363,8 +374,9 @@ def generate_buffett_output(
             {{
                 "signal": "bullish/bearish/neutral",
                 "confidence": float (0-100),
-                "reasoning": "Buffett-style explanation"
-            }}""",
+                "reasoning": "string"
+            }}
+            """,
             ),
         ]
     )
@@ -374,21 +386,19 @@ def generate_buffett_output(
         {"analysis_data": json.dumps(analysis_data, indent=2), "ticker": ticker}
     )
 
-    llm = ChatOpenAI(model="gpt-4o").with_structured_output(
-        BuffettSignal,
-        method="function_calling",
-    )
+    # Create default factory for BuffettSignal
+    def create_default_buffett_signal():
+        return BuffettSignal(
+            signal="neutral",
+            confidence=0.0,
+            reasoning="Error in analysis, defaulting to neutral"
+        )
 
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            result = llm.invoke(prompt)
-            return result
-        except Exception:
-            if attempt == max_retries - 1:
-                # On final attempt, return a safe default
-                return BuffettSignal(
-                    signal="hold",
-                    confidence=0.0,
-                    reasoning="Error in analysis, defaulting to hold",
-                )
+    return call_llm(
+        prompt=prompt,
+        model_name=model_name,
+        model_provider=model_provider,
+        pydantic_model=BuffettSignal,
+        agent_name="warren_buffett_agent",
+        default_factory=create_default_buffett_signal
+    )

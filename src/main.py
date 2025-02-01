@@ -15,6 +15,7 @@ from agents.valuation import valuation_agent
 from utils.display import print_trading_output
 from utils.analysts import ANALYST_ORDER
 from utils.progress import progress
+from llm.models import LLM_ORDER, get_model_info
 
 import argparse
 from datetime import datetime
@@ -44,14 +45,16 @@ def run_hedge_fund(
     end_date: str,
     portfolio: dict,
     show_reasoning: bool = False,
-    selected_analysts: list = None,
+    selected_analysts: list[str] = [],
+    model_name: str = "gpt-4o",
+    model_provider: str = "OpenAI",
 ):
     # Start progress tracking
     progress.start()
 
     try:
         # Create a new workflow if analysts are customized
-        if selected_analysts is not None:
+        if selected_analysts:
             workflow = create_workflow(selected_analysts)
             agent = workflow.compile()
         else:
@@ -73,6 +76,8 @@ def run_hedge_fund(
                 },
                 "metadata": {
                     "show_reasoning": show_reasoning,
+                    "model_name": model_name,
+                    "model_provider": model_provider,
                 },
             },
         )
@@ -153,6 +158,7 @@ if __name__ == "__main__":
     # Parse tickers from comma-separated string
     tickers = [ticker.strip() for ticker in args.tickers.split(",")]
 
+    # Select analysts
     selected_analysts = None
     choices = questionary.checkbox(
         "Select your AI analysts.",
@@ -175,6 +181,32 @@ if __name__ == "__main__":
     else:
         selected_analysts = choices
         print(f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n")
+
+    # Select LLM model
+    model_choice = questionary.select(
+        "Select your LLM model:",
+        choices=[questionary.Choice(display, value=value) for display, value, _ in LLM_ORDER],
+        style=questionary.Style([
+            ("selected", "fg:green bold"),
+            ("pointer", "fg:green bold"),
+            ("highlighted", "fg:green"),
+            ("answer", "fg:green bold"),
+        ])
+    ).ask()
+
+    if not model_choice:
+        print("Using default model: gpt-4o")
+        model_choice = "gpt-4o"
+        model_provider = "OpenAI"
+    else:
+        # Get model info using the helper function
+        model_info = get_model_info(model_choice)
+        if model_info:
+            model_provider = model_info.provider.value
+            print(f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+        else:
+            model_provider = "Unknown"
+            print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
 
     # Create the workflow with selected analysts
     workflow = create_workflow(selected_analysts)
@@ -216,5 +248,7 @@ if __name__ == "__main__":
         portfolio=portfolio,
         show_reasoning=args.show_reasoning,
         selected_analysts=selected_analysts,
+        model_name=model_choice,
+        model_provider=model_provider,
     )
     print_trading_output(result)

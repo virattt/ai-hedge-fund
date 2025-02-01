@@ -5,7 +5,9 @@ import pandas as pd
 import questionary
 from colorama import Fore, Style, init
 from dateutil.relativedelta import relativedelta
+from typing_extensions import Callable
 
+from llm.models import LLM_ORDER, get_model_info
 from main import run_hedge_fund
 from tools.api import FinancialDatasetAPI
 from utils.analysts import ANALYST_ORDER
@@ -17,18 +19,22 @@ init(autoreset=True)
 class Backtester:
     def __init__(
         self,
-        agent,
+        agent: Callable,
         tickers: list[str],
-        start_date,
-        end_date,
-        initial_capital,
-        selected_analysts=None,
+        start_date: str,
+        end_date: str,
+        initial_capital: float,
+        model_name: str = "gpt-4o",
+        model_provider: str = "OpenAI",
+        selected_analysts: list[str] = [],
     ):
         self.agent = agent
         self.tickers = tickers
         self.start_date = start_date
         self.end_date = end_date
         self.initial_capital = initial_capital
+        self.model_name = model_name
+        self.model_provider = model_provider
         self.selected_analysts = selected_analysts
         self.portfolio = {
             "cash": initial_capital,
@@ -182,6 +188,8 @@ class Backtester:
                 start_date=lookback_start,
                 end_date=current_date_str,
                 portfolio=self.portfolio,
+                model_name=self.model_name,
+                model_provider=self.model_provider,
                 selected_analysts=self.selected_analysts,
             )
 
@@ -403,8 +411,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Parse tickers from comma-separated string
-    # tickers = [ticker.strip() for ticker in args.tickers.split(",")]
-    tickers = ["AAPL"]
+    tickers = [ticker.strip() for ticker in args.tickers.split(",")]
     selected_analysts = None
     choices = questionary.checkbox(
         "Use the Space bar to select/unselect analysts.",
@@ -432,6 +439,74 @@ if __name__ == "__main__":
             f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}"
         )
 
+    # Select LLM model
+    model_choice = questionary.select(
+        "Select your LLM model:",
+        choices=[
+            questionary.Choice(display, value=value) for display, value, _ in LLM_ORDER
+        ],
+        style=questionary.Style(
+            [
+                ("selected", "fg:green bold"),
+                ("pointer", "fg:green bold"),
+                ("highlighted", "fg:green"),
+                ("answer", "fg:green bold"),
+            ]
+        ),
+    ).ask()
+
+    if not model_choice:
+        print("Using default model: gpt-4o")
+        model_choice = "gpt-4o"
+        model_provider = "OpenAI"
+    else:
+        # Get model info using the helper function
+        model_info = get_model_info(model_choice)
+        if model_info:
+            model_provider = model_info.provider.value
+            print(
+                f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n"
+            )
+        else:
+            model_provider = "Unknown"
+            print(
+                f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n"
+            )
+
+    # Select LLM model
+    model_choice = questionary.select(
+        "Select your LLM model:",
+        choices=[
+            questionary.Choice(display, value=value) for display, value, _ in LLM_ORDER
+        ],
+        style=questionary.Style(
+            [
+                ("selected", "fg:green bold"),
+                ("pointer", "fg:green bold"),
+                ("highlighted", "fg:green"),
+                ("answer", "fg:green bold"),
+            ]
+        ),
+    ).ask()
+
+    if not model_choice:
+        print("Using default model: gpt-4o")
+        model_choice = "gpt-4o"
+        model_provider = "OpenAI"
+    else:
+        # Get model info using the helper function
+        model_info = get_model_info(model_choice)
+        if model_info:
+            model_provider = model_info.provider.value
+            print(
+                f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n"
+            )
+        else:
+            model_provider = "Unknown"
+            print(
+                f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n"
+            )
+
     # Create an instance of Backtester
     backtester = Backtester(
         agent=run_hedge_fund,
@@ -439,6 +514,8 @@ if __name__ == "__main__":
         start_date=args.start_date,
         end_date=args.end_date,
         initial_capital=args.initial_capital,
+        model_name=model_choice,
+        model_provider=model_provider,
         selected_analysts=selected_analysts,
     )
 

@@ -1,12 +1,12 @@
 import json
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai.chat_models import ChatOpenAI
 
 from graph.state import AgentState, show_agent_reasoning
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
 from utils.progress import progress
+from utils.llm import call_llm
 
 
 class PortfolioDecision(BaseModel):
@@ -57,7 +57,47 @@ def portfolio_management_agent(state: AgentState):
                 ticker_signals[agent] = {"signal": signals[ticker]["signal"], "confidence": signals[ticker]["confidence"]}
         signals_by_ticker[ticker] = ticker_signals
 
-    progress.update_status("portfolio_management_agent", None, "Preparing trading strategy")
+    progress.update_status("portfolio_management_agent", None, "Making trading decisions")
+
+    # Generate the trading decision
+    result = generate_trading_decision(
+        tickers=tickers,
+        signals_by_ticker=signals_by_ticker,
+        current_prices=current_prices,
+        max_shares=max_shares,
+        portfolio=portfolio,
+        model_name=state["metadata"]["model_name"],
+        model_provider=state["metadata"]["model_provider"],
+    )
+
+    # Create the portfolio management message
+    message = HumanMessage(
+        content=json.dumps({ticker: decision.model_dump() for ticker, decision in result.decisions.items()}),
+        name="portfolio_management",
+    )
+
+    # Print the decision if the flag is set
+    if state["metadata"]["show_reasoning"]:
+        show_agent_reasoning({ticker: decision.model_dump() for ticker, decision in result.decisions.items()}, "Portfolio Management Agent")
+
+    progress.update_status("portfolio_management_agent", None, "Done")
+
+    return {
+        "messages": state["messages"] + [message],
+        "data": state["data"],
+    }
+
+
+def generate_trading_decision(
+    tickers: list[str],
+    signals_by_ticker: dict[str, dict],
+    current_prices: dict[str, float],
+    max_shares: dict[str, int],
+    portfolio: dict[str, float],
+    model_name: str,
+    model_provider: str,
+) -> PortfolioManagerOutput:
+    """Attempts to get a decision from the LLM with retry logic"""
     # Create the prompt template
     template = ChatPromptTemplate.from_messages(
         [
@@ -79,12 +119,27 @@ def portfolio_management_agent(state: AgentState):
                 - portfolio_cash: current cash in portfolio
                 - portfolio_positions: current positions in portfolio
                 - current_prices: current price for each ticker
-
-                Output:
+                
+                Output (must be in JSON format):
                 - action: "buy", "sell", or "hold"
                 - quantity: number of shares to trade (integer)
                 - confidence: confidence level between 0-100
-                - reasoning: brief explanation of the decision""",
+                - reasoning: brief explanation of the decision
+
+                IMPORTANT: Only output the final decision in a JSON format like so:
+                {{
+                    "decisions": {{
+                        "TICKER1": {{
+                            "action": "buy/sell/hold",
+                            "quantity": integer,
+                            "confidence": float,
+                            "reasoning": "string"
+                        }},
+                        "TICKER2": {{ ... }},
+                        ...
+                    }}
+                }}
+                """,
             ),
             (
                 "human",
@@ -132,41 +187,24 @@ def portfolio_management_agent(state: AgentState):
         }
     )
 
-    progress.update_status("portfolio_management_agent", None, "Making trading decisions")
+    # Create default factory for PortfolioManagerOutput
+    def create_default_portfolio_output():
+        return PortfolioManagerOutput(
+            decisions={
+                ticker: PortfolioDecision(
+                    action="hold",
+                    quantity=0,
+                    confidence=0.0,
+                    reasoning="Error in portfolio management, defaulting to hold"
+                ) for ticker in tickers
+            }
+        )
 
-    result = make_decision(prompt, tickers)
-
-    # Create the portfolio management message
-    message = HumanMessage(
-        content=json.dumps({ticker: decision.model_dump() for ticker, decision in result.decisions.items()}),
-        name="portfolio_management",
+    return call_llm(
+        prompt=prompt,
+        model_name=model_name,
+        model_provider=model_provider,
+        pydantic_model=PortfolioManagerOutput,
+        agent_name="portfolio_management_agent",
+        default_factory=create_default_portfolio_output
     )
-
-    # Print the decision if the flag is set
-    if state["metadata"]["show_reasoning"]:
-        show_agent_reasoning({ticker: decision.model_dump() for ticker, decision in result.decisions.items()}, "Portfolio Management Agent")
-
-    progress.update_status("portfolio_management_agent", None, "Done")
-
-    return {
-        "messages": state["messages"] + [message],
-        "data": state["data"],
-    }
-
-
-def make_decision(prompt, tickers):
-    """Attempts to get a decision from the LLM with retry logic"""
-    llm = ChatOpenAI(model="gpt-4o").with_structured_output(
-        PortfolioManagerOutput,
-        method="function_calling",
-    )
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            result = llm.invoke(prompt)
-            return result
-        except Exception:
-            progress.update_status("portfolio_management_agent", None, f"Error - retry {attempt + 1}/{max_retries}")
-            if attempt == max_retries - 1:
-                # On final attempt, return a safe default
-                return PortfolioManagerOutput(decisions={ticker: PortfolioDecision(action="hold", quantity=0, confidence=0.0, reasoning="Error in portfolio management, defaulting to hold") for ticker in tickers})
