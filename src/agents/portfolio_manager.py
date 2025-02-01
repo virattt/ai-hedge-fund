@@ -72,14 +72,14 @@ def portfolio_management_agent(state: AgentState):
                 - For sells: quantity must be ≤ current position shares
                 - For buys: quantity must be ≤ max_shares provided for each ticker
                 - The max_shares values are pre-calculated to respect position limits
-                
+
                 Inputs:
                 - signals_by_ticker: dictionary of ticker to signals from analysts
                 - max_shares: maximum number of shares allowed for each ticker
                 - portfolio_cash: current cash in portfolio
                 - portfolio_positions: current positions in portfolio
                 - current_prices: current price for each ticker
-                
+
                 Output:
                 - action: "buy", "sell", or "hold"
                 - quantity: number of shares to trade (integer)
@@ -165,7 +165,7 @@ def make_decision(prompt, tickers):
         try:
             result = llm.invoke(prompt)
             return result
-        except Exception as e:
+        except Exception:
             progress.update_status("portfolio_management_agent", None, f"Error - retry {attempt + 1}/{max_retries}")
             if attempt == max_retries - 1:
                 # On final attempt, return a safe default

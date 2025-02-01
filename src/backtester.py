@@ -1,22 +1,15 @@
 from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
-import questionary
 
 import matplotlib.pyplot as plt
 import pandas as pd
+import questionary
 from colorama import Fore, Style, init
+from dateutil.relativedelta import relativedelta
 
-from utils.analysts import ANALYST_ORDER
 from main import run_hedge_fund
-from tools.api import (
-    get_company_news,
-    get_price_data,
-    get_prices,
-    get_financial_metrics,
-    get_insider_trades,
-    search_line_items,
-)
-from utils.display import print_backtest_results, format_backtest_row
+from tools.api import FinancialDatasetAPI
+from utils.analysts import ANALYST_ORDER
+from utils.display import format_backtest_row, print_backtest_results
 
 init(autoreset=True)
 
@@ -40,10 +33,15 @@ class Backtester:
         self.portfolio = {
             "cash": initial_capital,
             "positions": {ticker: 0 for ticker in tickers},
-            "realized_gains": {ticker: 0 for ticker in tickers},  # Track realized gains/losses per ticker
-            "cost_basis": {ticker: 0 for ticker in tickers},  # Track cost basis per ticker
+            "realized_gains": {
+                ticker: 0 for ticker in tickers
+            },  # Track realized gains/losses per ticker
+            "cost_basis": {
+                ticker: 0 for ticker in tickers
+            },  # Track cost basis per ticker
         }
         self.portfolio_values = []
+        self.financial_api = FinancialDatasetAPI()
 
     def prefetch_data(self):
         """Pre-fetch all data needed for the backtest period."""
@@ -56,16 +54,20 @@ class Backtester:
 
         for ticker in self.tickers:
             # Fetch price data for the entire period, plus 1 year
-            get_prices(ticker, start_date_str, self.end_date)
+            self.financial_api.get_prices(ticker, start_date_str, self.end_date)
 
             # Fetch financial metrics
-            get_financial_metrics(ticker, self.end_date, limit=10)
+            self.financial_api.get_financial_metrics(ticker, self.end_date, limit=10)
 
             # Fetch insider trades for the entire period
-            get_insider_trades(ticker, self.end_date, start_date=self.start_date, limit=1000)
+            self.financial_api.get_insider_trades(
+                ticker, self.end_date, start_date=self.start_date, limit=1000
+            )
 
             # Fetch company news for the entire period
-            get_company_news(ticker, self.end_date, start_date=self.start_date, limit=1000)
+            self.financial_api.get_company_news(
+                ticker, self.end_date, start_date=self.start_date, limit=1000
+            )
 
         print("Data pre-fetch complete.")
 
@@ -76,11 +78,13 @@ class Backtester:
 
             decision = json.loads(agent_output)
             return decision
-        except:
+        except Exception:
             print(f"Error parsing action: {agent_output}")
             return "hold", 0
 
-    def execute_trade(self, ticker: str, action: str, quantity: float, current_price: float):
+    def execute_trade(
+        self, ticker: str, action: str, quantity: float, current_price: float
+    ):
         """Validate and execute trades based on portfolio constraints"""
         if action == "buy" and quantity > 0:
             cost = quantity * current_price
@@ -94,7 +98,9 @@ class Backtester:
                 total_shares = old_shares + new_shares
                 if total_shares > 0:
                     # Weighted average of old and new cost basis
-                    self.portfolio["cost_basis"][ticker] = ((old_cost_basis * old_shares) + (new_cost * new_shares)) / total_shares
+                    self.portfolio["cost_basis"][ticker] = (
+                        (old_cost_basis * old_shares) + (new_cost * new_shares)
+                    ) / total_shares
 
                 # Update position and cash
                 self.portfolio["positions"][ticker] += quantity
@@ -117,7 +123,9 @@ class Backtester:
                     total_shares = old_shares + new_shares
                     if total_shares > 0:
                         # Weighted average of old and new cost basis
-                        self.portfolio["cost_basis"][ticker] = ((old_cost_basis * old_shares) + (new_cost * new_shares)) / total_shares
+                        self.portfolio["cost_basis"][ticker] = (
+                            (old_cost_basis * old_shares) + (new_cost * new_shares)
+                        ) / total_shares
 
                     # Update position and cash
                     self.portfolio["positions"][ticker] += max_quantity
@@ -129,7 +137,12 @@ class Backtester:
             quantity = min(quantity, self.portfolio["positions"][ticker])
             if quantity > 0:
                 # Calculate realized gain/loss using average cost per share
-                avg_cost_per_share = self.portfolio["cost_basis"][ticker] / self.portfolio["positions"][ticker] if self.portfolio["positions"][ticker] > 0 else 0
+                avg_cost_per_share = (
+                    self.portfolio["cost_basis"][ticker]
+                    / self.portfolio["positions"][ticker]
+                    if self.portfolio["positions"][ticker] > 0
+                    else 0
+                )
                 realized_gain = (current_price - avg_cost_per_share) * quantity
                 self.portfolio["realized_gains"][ticker] += realized_gain
 
@@ -140,7 +153,9 @@ class Backtester:
                 # Update cost basis - reduce proportionally to shares sold
                 if self.portfolio["positions"][ticker] > 0:
                     # Cost basis per share stays the same, just reduce total cost basis proportionally
-                    remaining_ratio = (self.portfolio["positions"][ticker] - quantity) / self.portfolio["positions"][ticker]
+                    remaining_ratio = (
+                        self.portfolio["positions"][ticker] - quantity
+                    ) / self.portfolio["positions"][ticker]
                     self.portfolio["cost_basis"][ticker] *= remaining_ratio
                 else:
                     self.portfolio["cost_basis"][ticker] = 0
@@ -181,21 +196,30 @@ class Backtester:
                     continue
 
                 decision = decisions.get(ticker, {"action": "hold", "quantity": 0})
-                action, quantity = decision.get("action", "hold"), decision.get("quantity", 0)
+                action, quantity = (
+                    decision.get("action", "hold"),
+                    decision.get("quantity", 0),
+                )
 
                 # Get current price for the ticker
-                df = get_price_data(ticker, lookback_start, current_date_str)
+                df = self.financial_api.get_prices(
+                    ticker, lookback_start, current_date_str
+                )
                 current_price = df.iloc[-1]["close"]
 
                 # Execute the trade with validation
-                executed_quantity = self.execute_trade(ticker, action, quantity, current_price)
+                executed_quantity = self.execute_trade(
+                    ticker, action, quantity, current_price
+                )
                 executed_trades[ticker] = executed_quantity
 
             # Now calculate positions and total value
             total_value = self.portfolio["cash"]  # Start with cash
             for ticker in self.tickers:
                 # Get current price for the ticker
-                df = get_price_data(ticker, lookback_start, current_date_str)
+                df = self.financial_api.get_prices(
+                    ticker, lookback_start, current_date_str
+                )
                 current_price = df.iloc[-1]["close"]
 
                 # Calculate position value for this ticker
@@ -209,9 +233,27 @@ class Backtester:
                     if ticker in signals:
                         ticker_signals[agent] = signals[ticker]
 
-                bullish_count = len([s for s in ticker_signals.values() if s.get("signal", "").lower() == "bullish"])
-                bearish_count = len([s for s in ticker_signals.values() if s.get("signal", "").lower() == "bearish"])
-                neutral_count = len([s for s in ticker_signals.values() if s.get("signal", "").lower() == "neutral"])
+                bullish_count = len(
+                    [
+                        s
+                        for s in ticker_signals.values()
+                        if s.get("signal", "").lower() == "bullish"
+                    ]
+                )
+                bearish_count = len(
+                    [
+                        s
+                        for s in ticker_signals.values()
+                        if s.get("signal", "").lower() == "bearish"
+                    ]
+                )
+                neutral_count = len(
+                    [
+                        s
+                        for s in ticker_signals.values()
+                        if s.get("signal", "").lower() == "neutral"
+                    ]
+                )
 
                 # Get decision for this ticker
                 decision = decisions.get(ticker, {"action": "hold", "quantity": 0})
@@ -236,7 +278,9 @@ class Backtester:
 
             # Calculate overall portfolio return including realized gains
             total_realized_gains = sum(self.portfolio["realized_gains"].values())
-            portfolio_return = ((total_value + total_realized_gains) / self.initial_capital - 1) * 100
+            portfolio_return = (
+                (total_value + total_realized_gains) / self.initial_capital - 1
+            ) * 100
 
             # Calculate total position value (excluding cash)
             total_position_value = total_value - self.portfolio["cash"]
@@ -269,7 +313,9 @@ class Backtester:
             print_backtest_results(table_rows)
 
             # Record the portfolio value
-            self.portfolio_values.append({"Date": current_date, "Portfolio Value": total_value})
+            self.portfolio_values.append(
+                {"Date": current_date, "Portfolio Value": total_value}
+            )
 
     def analyze_performance(self):
         # Convert portfolio values to DataFrame
@@ -278,11 +324,19 @@ class Backtester:
         # Calculate total return including realized gains
         final_portfolio_value = performance_df["Portfolio Value"].iloc[-1]
         total_realized_gains = sum(self.portfolio["realized_gains"].values())
-        total_return = ((final_portfolio_value - self.initial_capital) / self.initial_capital) * 100
+        total_return = (
+            (final_portfolio_value - self.initial_capital) / self.initial_capital
+        ) * 100
 
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO PERFORMANCE SUMMARY:{Style.RESET_ALL}")
-        print(f"Total Return: {Fore.GREEN if total_return >= 0 else Fore.RED}{total_return:.2f}%{Style.RESET_ALL}")
-        print(f"Total Realized Gains/Losses: {Fore.GREEN if total_realized_gains >= 0 else Fore.RED}${total_realized_gains:,.2f}{Style.RESET_ALL}")
+        print(
+            f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO PERFORMANCE SUMMARY:{Style.RESET_ALL}"
+        )
+        print(
+            f"Total Return: {Fore.GREEN if total_return >= 0 else Fore.RED}{total_return:.2f}%{Style.RESET_ALL}"
+        )
+        print(
+            f"Total Realized Gains/Losses: {Fore.GREEN if total_realized_gains >= 0 else Fore.RED}${total_realized_gains:,.2f}{Style.RESET_ALL}"
+        )
 
         # Plot the portfolio value over time
         plt.figure(figsize=(12, 6))
@@ -299,7 +353,11 @@ class Backtester:
         # Calculate Sharpe Ratio (assuming 252 trading days in a year)
         mean_daily_return = performance_df["Daily Return"].mean()
         std_daily_return = performance_df["Daily Return"].std()
-        sharpe_ratio = (mean_daily_return / std_daily_return) * (252**0.5) if std_daily_return != 0 else 0
+        sharpe_ratio = (
+            (mean_daily_return / std_daily_return) * (252**0.5)
+            if std_daily_return != 0
+            else 0
+        )
         print(f"\nSharpe Ratio: {Fore.YELLOW}{sharpe_ratio:.2f}{Style.RESET_ALL}")
 
         # Calculate Maximum Drawdown
@@ -350,7 +408,9 @@ if __name__ == "__main__":
     selected_analysts = None
     choices = questionary.checkbox(
         "Use the Space bar to select/unselect analysts.",
-        choices=[questionary.Choice(display, value=value) for display, value in ANALYST_ORDER],
+        choices=[
+            questionary.Choice(display, value=value) for display, value in ANALYST_ORDER
+        ],
         instruction="\n\nPress 'a' to toggle all.\n\nPress Enter when done to run the hedge fund.",
         validate=lambda x: len(x) > 0 or "You must select at least one analyst.",
         style=questionary.Style(
@@ -368,7 +428,9 @@ if __name__ == "__main__":
         selected_analysts = None
     else:
         selected_analysts = choices
-        print(f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}")
+        print(
+            f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}"
+        )
 
     # Create an instance of Backtester
     backtester = Backtester(

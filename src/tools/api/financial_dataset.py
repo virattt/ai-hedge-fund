@@ -1,9 +1,23 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Union
+from typing import Any
 
 import pandas as pd
-import requests
+from pydantic import BaseModel
+
+from data.cache import MemoryCache
+from data.models import (
+    CompanyNews,
+    CompanyNewsResponse,
+    FinancialMetrics,
+    FinancialMetricsResponse,
+    InsiderTrade,
+    InsiderTradeResponse,
+    LineItem,
+    LineItemResponse,
+    Price,
+    PriceResponse,
+)
 
 from .base import BaseAPIClient
 from .config import FinancialDatasetAPIConfig
@@ -18,22 +32,55 @@ class Period(str, Enum):
 
 
 class FinancialDatasetAPI(BaseAPIClient):
-    """Client for accessing financial dataset API endpoints."""
+    """Client for accessing financial dataset API endpoints with caching."""
 
-    def __init__(self, config: FinancialDatasetAPIConfig = None):
-        """Initialize API client with optional custom config."""
-        self.config = config if config else FinancialDatasetAPIConfig.from_env()
+    def __init__(self, config: FinancialDatasetAPIConfig | None = None):
+        self.config = config or FinancialDatasetAPIConfig.from_env()
+        self.cache = MemoryCache()
         super().__init__(self.config)
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self) -> dict[str, str]:
         return {"X-API-KEY": self.config.api_key}
 
-    def _handle_response(self, response: requests.Response) -> Dict[str, Any]:
-        response.raise_for_status()
-        return response.json()
+    def _fetch_with_pagination(
+        self,
+        endpoint: str,
+        params: dict,
+        response_model: BaseModel,
+        data_field: str,
+        start_date: str | None = None,
+        date_field: str = "date",
+        limit: int = 1000,
+    ) -> list[Any]:
+        all_data = []
+        current_end_date = params.get("end_date")
+
+        while True:
+            response = self._make_request(
+                endpoint=endpoint, params=params, response_model=response_model
+            )
+
+            batch_data = self._get_data_or_raise(
+                response, data_field, f"No {data_field} found"
+            )
+            all_data.extend(batch_data)
+
+            if not start_date or len(batch_data) < limit:
+                break
+
+            current_end_date = min(
+                getattr(item, date_field) for item in batch_data
+            ).split("T")[0]
+
+            if current_end_date <= start_date:
+                break
+
+            params["end_date"] = current_end_date
+
+        return all_data
 
     @staticmethod
-    def prices_to_df(prices: List[Dict[str, Any]]) -> pd.DataFrame:
+    def _process_price_data(prices: list[dict[str, Any]]) -> pd.DataFrame:
         df = pd.DataFrame(prices)
         df["Date"] = pd.to_datetime(df["time"])
         df.set_index("Date", inplace=True)
@@ -44,25 +91,125 @@ class FinancialDatasetAPI(BaseAPIClient):
 
         return df.sort_index()
 
+    def search_line_items(
+        self,
+        ticker: str,
+        line_items: list[str],
+        end_date: str,
+        period: str = "ttm",
+        limit: int = 10,
+    ) -> list[LineItem]:
+        """
+        Search for specific line items in financial statements.
+        """
+        cache_key = f"line_items:{ticker}_{period}_{'-'.join(sorted(line_items))}"
+
+        if cached_data := self.cache.get(cache_key):
+            filtered_data = [
+                LineItem(**item)
+                for item in cached_data
+                if item["report_period"] <= end_date
+            ]
+            if filtered_data:
+                return sorted(
+                    filtered_data, key=lambda x: x.report_period, reverse=True
+                )[:limit]
+
+        body = {
+            "tickers": [ticker],
+            "line_items": line_items,
+            "end_date": end_date,
+            "period": period,
+            "limit": limit,
+        }
+
+        response = self._make_request(
+            endpoint="/financials/search/line-items",
+            method="POST",
+            json=body,
+            response_model=LineItemResponse,
+        )
+
+        search_results = self._get_data_or_raise(
+            response, "search_results", "No line items found"
+        )
+
+        if search_results:
+            self.cache.set(cache_key, [item.model_dump() for item in search_results])
+
+        return search_results[:limit]
+
+    def get_insider_trades(
+        self,
+        ticker: str,
+        end_date: str,
+        start_date: str | None = None,
+        limit: int = 1000,
+    ) -> list[InsiderTrade]:
+        """
+        Fetch insider trades for a company within a date range.
+        """
+        cache_key = f"insider_trades:{ticker}"
+
+        if cached_data := self.cache.get(cache_key):
+            filtered_data = [
+                InsiderTrade(**trade)
+                for trade in cached_data
+                if (
+                    not start_date
+                    or (trade.get("transaction_date") or trade["filing_date"])
+                    >= start_date
+                )
+                and (trade.get("transaction_date") or trade["filing_date"]) <= end_date
+            ]
+            if filtered_data:
+                return sorted(
+                    filtered_data,
+                    key=lambda x: x.transaction_date or x.filing_date,
+                    reverse=True,
+                )
+
+        params = {"ticker": ticker, "filing_date_lte": end_date, "limit": limit}
+        if start_date:
+            params["filing_date_gte"] = start_date
+
+        trades = self._fetch_with_pagination(
+            endpoint="/insider-trades/",
+            params=params,
+            response_model=InsiderTradeResponse,
+            data_field="insider_trades",
+            start_date=start_date,
+            date_field="filing_date",
+        )
+
+        if trades:
+            self.cache.set(cache_key, [trade.model_dump() for trade in trades])
+
+        return trades
+
     def get_financial_metrics(
         self,
         ticker: str,
-        report_period: Union[str, datetime],
+        report_period: str | datetime,
         period: Period = Period.TTM,
         limit: int = 1,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[FinancialMetrics]:
         """
-        Fetch financial metrics for a given ticker.
-
-        Args:
-            ticker: Stock ticker symbol
-            report_period: End date for the report period
-            period: Reporting period type (TTM, quarterly, annual)
-            limit: Maximum number of records to return
-
-        Returns:
-            List of financial metrics dictionaries
+        Fetch financial metrics for a company.
         """
+        cache_key = f"financial_metrics:{ticker}_{period.value}"
+
+        if cached_data := self.cache.get(cache_key):
+            filtered_data = [
+                FinancialMetrics(**metric)
+                for metric in cached_data
+                if metric["report_period"] <= str(report_period)
+            ]
+            if filtered_data:
+                return sorted(
+                    filtered_data, key=lambda x: x.report_period, reverse=True
+                )[:limit]
+
         params = {
             "ticker": ticker,
             "report_period_lte": report_period,
@@ -70,116 +217,91 @@ class FinancialDatasetAPI(BaseAPIClient):
             "period": period,
         }
 
-        response = self._make_request(endpoint="/financial-metrics/", params=params)
+        response = self._make_request(
+            endpoint="/financial-metrics/",
+            params=params,
+            response_model=FinancialMetricsResponse,
+        )
 
-        return self._get_data_or_raise(
+        metrics = self._get_data_or_raise(
             response, "financial_metrics", "No financial metrics found"
         )
+        self.cache.set(cache_key, [m.model_dump() for m in metrics])
+        return metrics
 
-    def search_line_items(
+    def get_company_news(
         self,
         ticker: str,
-        line_items: List[str],
-        period: Period = Period.TTM,
-        limit: int = 1,
-    ) -> List[Dict[str, Any]]:
+        end_date: str,
+        start_date: str | None = None,
+        limit: int = 1000,
+    ) -> list[CompanyNews]:
         """
-        Search for specific line items in financial statements.
-
-        Args:
-            ticker: Stock ticker symbol
-            line_items: List of line items to search for
-            period: Reporting period type
-            limit: Maximum number of records to return
-        Returns:
-            List of line items dictionaries
+        Fetch company news within a date range.
         """
-        payload = {
-            "tickers": [ticker],
-            "line_items": line_items,
-            "period": period,
-            "limit": limit,
-        }
+        cache_key = f"company_news:{ticker}"
 
-        response = self._make_request(
-            endpoint="/financials/search/line-items", method="POST", json_data=payload
+        if cached_data := self.cache.get(cache_key):
+            filtered_data = [
+                CompanyNews(**news)
+                for news in cached_data
+                if (not start_date or news["date"] >= start_date)
+                and news["date"] <= end_date
+            ]
+            if filtered_data:
+                return sorted(filtered_data, key=lambda x: x.date, reverse=True)
+
+        params = {"ticker": ticker, "end_date": end_date, "limit": limit}
+        if start_date:
+            params["start_date"] = start_date
+
+        news_items = self._fetch_with_pagination(
+            endpoint="/news/",
+            params=params,
+            response_model=CompanyNewsResponse,
+            data_field="news",
+            start_date=start_date,
         )
 
-        return self._get_data_or_raise(
-            response, "search_results", "No line items found"
-        )
-
-    def get_insider_trades(
-        self, ticker: str, end_date: Union[str, datetime], limit: int = 5
-    ) -> List[Dict[str, Any]]:
-        """
-        Fetch insider trading data.
-
-        Args:
-            ticker: Stock ticker symbol
-            end_date: End date for the search period
-            limit: Maximum number of trades to return
-        Returns:
-            List of insider trades dictionaries
-        """
-        params = {"ticker": ticker, "filing_date_lte": end_date, "limit": limit}
-
-        response = self._make_request(endpoint="/insider-trades/", params=params)
-
-        return self._get_data_or_raise(
-            response, "insider_trades", "No insider trades found"
-        )
-
-    def get_market_cap(self, ticker: str) -> float:
-        """
-        Fetch market capitalization for a company.
-
-        Args:
-            ticker: Stock ticker symbol
-        Returns:
-            Market capitalization as a float
-        """
-        response = self._make_request(
-            endpoint="/company/facts", params={"ticker": ticker}
-        )
-
-        company_facts = self._get_data_or_raise(
-            response, "company_facts", "No company facts found"
-        )
-
-        market_cap = company_facts.get("market_cap")
-        if not market_cap:
-            raise Exception("Market cap not available")
-
-        return market_cap
+        self.cache.set(cache_key, [news.model_dump() for news in news_items])
+        return news_items
 
     def get_prices(
         self,
         ticker: str,
-        start_date: Union[str, datetime],
-        end_date: Union[str, datetime],
+        start_date: str | datetime,
+        end_date: str | datetime,
+        interval_multiplier: int = 1,
     ) -> pd.DataFrame:
         """
-        Fetch and format price data as a DataFrame.
-
-        Args:
-            ticker: Stock ticker symbol
-            start_date: Start date for price data
-            end_date: End date for price data
-
-        Returns:
-            DataFrame with price data indexed by date
+        Fetch price data for a company within a date range.
         """
+        cache_key = f"prices:{ticker}"
+
+        if cached_data := self.cache.get(cache_key):
+            filtered_data = [
+                Price(**price)
+                for price in cached_data
+                if start_date <= price["time"] <= end_date
+            ]
+            if filtered_data:
+                return self._process_price_data(
+                    [price.model_dump() for price in filtered_data]
+                )
+
         params = {
             "ticker": ticker,
             "interval": "day",
-            "interval_multiplier": 1,
+            "interval_multiplier": interval_multiplier,
             "start_date": start_date,
             "end_date": end_date,
         }
 
-        response = self._make_request(endpoint="/prices/", params=params)
+        response = self._make_request(
+            endpoint="/prices/", params=params, response_model=PriceResponse
+        )
 
         prices = self._get_data_or_raise(response, "prices", "No price data found")
+        self.cache.set(cache_key, [p.model_dump() for p in prices])
 
-        return FinancialDatasetAPI.prices_to_df(prices)
+        return self._process_price_data([p.model_dump() for p in prices])
