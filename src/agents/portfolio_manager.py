@@ -112,7 +112,7 @@ def generate_trading_decision(
                 - For sells: quantity must be ≤ current position shares
                 - For buys: quantity must be ≤ max_shares provided for each ticker
                 - The max_shares values are pre-calculated to respect position limits
-                
+
                 Inputs:
                 - signals_by_ticker: dictionary of ticker to signals from analysts
                 - max_shares: maximum number of shares allowed for each ticker
