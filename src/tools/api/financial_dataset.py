@@ -305,3 +305,12 @@ class FinancialDatasetAPI(BaseAPIClient):
         self.cache.set(cache_key, [p.model_dump() for p in prices])
 
         return self._process_price_data([p.model_dump() for p in prices])
+
+    def get_market_cap(self, ticker: str, end_date: str | datetime) -> float:
+        """
+        Fetch the market capitalization for a company.
+        """
+        financial_metrics = self.get_financial_metrics(ticker, end_date)
+        market_cap = financial_metrics[0].market_cap
+
+        return market_cap if market_cap else None

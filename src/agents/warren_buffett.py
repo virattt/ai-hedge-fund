@@ -7,6 +7,7 @@ from typing_extensions import Literal
 
 from graph.state import AgentState, show_agent_reasoning
 from tools.api import FinancialDatasetAPI
+from utils.llm import call_llm
 from utils.progress import progress
 
 
@@ -33,9 +34,7 @@ def warren_buffett_agent(state: AgentState):
             "warren_buffett_agent", ticker, "Fetching financial metrics"
         )
         # Fetch required data
-        metrics = financial_api.get_financial_metrics(
-            ticker, end_date, period="ttm", limit=5
-        )
+        metrics = financial_api.get_financial_metrics(ticker, end_date, period="ttm", limit=5)
 
         progress.update_status(
             "warren_buffett_agent", ticker, "Gathering financial line items"
@@ -55,7 +54,6 @@ def warren_buffett_agent(state: AgentState):
             limit=5,
         )
 
-
         progress.update_status("warren_buffett_agent", ticker, "Getting market cap")
         # Get current market cap
         market_cap = financial_api.get_market_cap(ticker, end_date)
@@ -63,7 +61,6 @@ def warren_buffett_agent(state: AgentState):
         progress.update_status("warren_buffett_agent", ticker, "Analyzing fundamentals")
         # Analyze fundamentals
         fundamental_analysis = analyze_fundamentals(metrics)
-
 
         progress.update_status("warren_buffett_agent", ticker, "Analyzing consistency")
         consistency_analysis = analyze_consistency(financial_line_items)
@@ -106,13 +103,17 @@ def warren_buffett_agent(state: AgentState):
             "intrinsic_value_analysis": intrinsic_value_analysis,
             "market_cap": market_cap,
             "margin_of_safety": margin_of_safety,
-            "margin_of_safety": margin_of_safety,
         }
 
         progress.update_status(
             "warren_buffett_agent", ticker, "Generating Buffett analysis"
         )
-        buffett_output = generate_buffett_output(ticker, analysis_data)
+        buffett_output = generate_buffett_output(
+            ticker=ticker,
+            analysis_data=analysis_data,
+            model_name=state["metadata"]["model_name"],
+            model_provider=state["metadata"]["model_provider"],
+        )
 
         # Store analysis in consistent format with other agents
         buffett_analysis[ticker] = {
@@ -143,6 +144,7 @@ def analyze_fundamentals(metrics: list) -> dict[str, any]:
     if not metrics:
         return {"score": 0, "details": "Insufficient fundamental data"}
 
+    # Get latest metrics
     latest_metrics = metrics[0]
 
     score = 0
@@ -310,7 +312,6 @@ def calculate_intrinsic_value(financial_line_items: list) -> dict[str, any]:
         present_value = future_earnings / (1 + discount_rate) ** year
         future_value += present_value
 
-
     # Add terminal value
     terminal_value = (
         owner_earnings * (1 + growth_rate) ** projection_years * terminal_multiple
@@ -331,7 +332,7 @@ def calculate_intrinsic_value(financial_line_items: list) -> dict[str, any]:
 
 
 def generate_buffett_output(
-    ticker: str, analysis_data: dict[str, any]
+    ticker: str, analysis_data: dict[str, any], model_name: str, model_provider: str
 ) -> BuffettSignal:
     """Get investment decision from LLM with Buffett's principles"""
     template = ChatPromptTemplate.from_messages(
@@ -346,7 +347,7 @@ def generate_buffett_output(
             4. Quality Management: Conservative, shareholder-oriented
             5. Financial Strength: Low debt, high returns on equity
             6. Long-term Perspective: Invest in businesses, not stocks
-
+            
             Rules:
             - Only buy when there's a significant margin of safety (>30%)
             - Focus on owner earnings and intrinsic value
@@ -364,8 +365,8 @@ def generate_buffett_output(
             """,
             ),
             (
-              "human",
-              """Based on the following analysis, create investment signals as Warren Buffett would.
+                "human",
+                """Based on the following analysis, create investment signals as Warren Buffett would.
 
             Analysis Data for {ticker}:
             {analysis_data}
@@ -391,7 +392,7 @@ def generate_buffett_output(
         return BuffettSignal(
             signal="neutral",
             confidence=0.0,
-            reasoning="Error in analysis, defaulting to neutral"
+            reasoning="Error in analysis, defaulting to neutral",
         )
 
     return call_llm(
@@ -400,5 +401,5 @@ def generate_buffett_output(
         model_provider=model_provider,
         pydantic_model=BuffettSignal,
         agent_name="warren_buffett_agent",
-        default_factory=create_default_buffett_signal
+        default_factory=create_default_buffett_signal,
     )
