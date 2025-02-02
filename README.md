@@ -111,7 +111,7 @@ Port defaults to 7860
 ```bash
 poetry run python src/gradio_app.py
 ```
-![image](https://res.cloudinary.com/dez3yjolk/image/upload/v1735205244/Screenshot_2024-12-26_at_2.57.13_PM_mbaf8l.png)
+![image](https://res.cloudinary.com/dez3yjolk/image/upload/v1738462316/Screenshot_2025-02-02_at_7.31.34_AM_xgpz0r.png)
 
 ### Running the Backtester
 
