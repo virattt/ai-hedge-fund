@@ -140,7 +140,7 @@ def html_trading_output(result: dict) -> str:
             signal = signals[ticker]
             agent_name = agent.replace("_agent", "").replace("_", " ").title()
             signal_type = signal.get("signal", "").upper() or "N/A"
-            signal_color = COLOR_MAP.get(signal_type, "white")
+            signal_color = COLOR_MAP.get(signal_type, "gray")
             confidence = f"{signal.get('confidence', 'N/A')}%"
             table_data.append([agent_name, color_text(signal_type, signal_color), confidence])
         # Sort signals
