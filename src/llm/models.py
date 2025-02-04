@@ -32,44 +32,49 @@ class LLMModel(BaseModel):
 # Define available models
 AVAILABLE_MODELS = [
     LLMModel(
-        display_name="gpt-4o [openai]",
-        model_name="gpt-4o",
-        provider=ModelProvider.OPENAI
-    ),
-    LLMModel(
-        display_name="gpt-4o-mini [openai]",
-        model_name="gpt-4o-mini",
-        provider=ModelProvider.OPENAI
-    ),
-    LLMModel(
-        display_name="o3-mini [openai]",
-        model_name="o3-mini",
-        provider=ModelProvider.OPENAI
-    ),
-    LLMModel(
-        display_name="deepseek-r1 70b [groq]",
-        model_name="deepseek-r1-distill-llama-70b",
-        provider=ModelProvider.GROQ
-    ),
-    LLMModel(
-        display_name="llama-3.3 70b [groq]",
-        model_name="llama-3.3-70b-versatile",
-        provider=ModelProvider.GROQ
-    ),
-    LLMModel(
-        display_name="claude-3.5-sonnet [anthropic]",
-        model_name="claude-3-5-sonnet-latest",
-        provider=ModelProvider.ANTHROPIC
-    ),
-    LLMModel(
-        display_name="claude-3.5-haiku [anthropic]",
+        display_name="[anthropic] claude-3.5-haiku",
         model_name="claude-3-5-haiku-latest",
         provider=ModelProvider.ANTHROPIC
     ),
     LLMModel(
-        display_name="claude-3-opus [anthropic]",
+        display_name="[anthropic] claude-3.5-sonnet",
+        model_name="claude-3-5-sonnet-latest",
+        provider=ModelProvider.ANTHROPIC
+    ),
+    LLMModel(
+        display_name="[anthropic] claude-3-opus",
         model_name="claude-3-opus-latest",
         provider=ModelProvider.ANTHROPIC
+    ),
+    LLMModel(
+        display_name="[groq] deepseek-r1 70b",
+        model_name="deepseek-r1-distill-llama-70b",
+        provider=ModelProvider.GROQ
+    ),
+    LLMModel(
+        display_name="[groq] llama-3.3 70b",
+        model_name="llama-3.3-70b-versatile",
+        provider=ModelProvider.GROQ
+    ),
+    LLMModel(
+        display_name="[openai] gpt-4o",
+        model_name="gpt-4o",
+        provider=ModelProvider.OPENAI
+    ),
+    LLMModel(
+        display_name="[openai] gpt-4o-mini",
+        model_name="gpt-4o-mini",
+        provider=ModelProvider.OPENAI
+    ),
+    LLMModel(
+        display_name="[openai] o1",
+        model_name="o1",
+        provider=ModelProvider.OPENAI
+    ),
+    LLMModel(
+        display_name="[openai] o3-mini",
+        model_name="o3-mini",
+        provider=ModelProvider.OPENAI
     ),
 ]
 

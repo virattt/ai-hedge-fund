@@ -4,11 +4,7 @@ from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 import json
 from typing_extensions import Literal
-from tools.api import (
-    get_financial_metrics,
-    get_market_cap,
-    search_line_items
-)
+from tools.api import get_financial_metrics, get_market_cap, search_line_items
 from utils.llm import call_llm
 from utils.progress import progress
 
@@ -288,50 +284,48 @@ def calculate_intrinsic_value(financial_line_items: list) -> dict[str, any]:
     }
 
 
-def generate_buffett_output(ticker: str, analysis_data: dict[str, any], model_name: str, model_provider: str) -> BuffettSignal:
+def generate_buffett_output(
+    ticker: str,
+    analysis_data: dict[str, any],
+    model_name: str,
+    model_provider: str,
+) -> BuffettSignal:
     """Get investment decision from LLM with Buffett's principles"""
     template = ChatPromptTemplate.from_messages(
         [
             (
-            "system",
-            """You are a Warren Buffett AI agent, making investment decisions using his principles:
+                "system",
+                """You are a Warren Buffett AI agent. Decide on investment signals based on Warren Buffett’s principles:
 
-            1. Circle of Competence: Only invest in understandable businesses
-            2. Margin of Safety: Buy well below intrinsic value
-            3. Economic Moat: Look for competitive advantages
-            4. Quality Management: Conservative, shareholder-oriented
-            5. Financial Strength: Low debt, high returns on equity
-            6. Long-term Perspective: Invest in businesses, not stocks
-            
-            Rules:
-            - Only buy when there's a significant margin of safety (>30%)
-            - Focus on owner earnings and intrinsic value
-            - Prefer companies with consistent earnings growth
-            - Avoid companies with high debt or poor management
-            - Hold good businesses for very long periods
-            - Sell when fundamentals deteriorate or valuation becomes excessive
+                Circle of Competence: Only invest in businesses you understand
+                Margin of Safety: Buy well below intrinsic value
+                Economic Moat: Prefer companies with lasting advantages
+                Quality Management: Look for conservative, shareholder-oriented teams
+                Financial Strength: Low debt, strong returns on equity
+                Long-term Perspective: Invest in businesses, not just stocks
 
-            IMPORTANT: Only output the final decision in a JSON format like so:
-            {{
-                "signal": "bullish/bearish/neutral",
-                "confidence": float (0-100),
-                "reasoning": "string"
-            }}
-            """,
+                Rules:
+                - Buy only if margin of safety > 30%
+                - Focus on owner earnings and intrinsic value
+                - Prefer consistent earnings growth
+                - Avoid high debt or poor management
+                - Hold good businesses long term
+                - Sell when fundamentals deteriorate or the valuation is too high
+                """,
             ),
             (
-              "human",
-              """Based on the following analysis, create investment signals as Warren Buffett would.
+                "human",
+                """Based on the following data, create the investment signal as Warren Buffett would.
 
-            Analysis Data for {ticker}:
-            {analysis_data}
+                Analysis Data for {ticker}:
+                {analysis_data}
 
-            Return signals for this ticker in this format:
-            {{
-                "signal": "bullish/bearish/neutral",
-                "confidence": float (0-100),
-                "reasoning": "string"
-            }}
+                Return the trading signal in the following JSON format:
+                {{
+                  "signal": "bullish/bearish/neutral",
+                  "confidence": float (0-100),
+                  "reasoning": "string"
+                }}
             """,
             ),
         ]
@@ -342,17 +336,6 @@ def generate_buffett_output(ticker: str, analysis_data: dict[str, any], model_na
 
     # Create default factory for BuffettSignal
     def create_default_buffett_signal():
-        return BuffettSignal(
-            signal="neutral",
-            confidence=0.0,
-            reasoning="Error in analysis, defaulting to neutral"
-        )
+        return BuffettSignal(signal="neutral", confidence=0.0, reasoning="Error in analysis, defaulting to neutral")
 
-    return call_llm(
-        prompt=prompt,
-        model_name=model_name,
-        model_provider=model_provider,
-        pydantic_model=BuffettSignal,
-        agent_name="warren_buffett_agent",
-        default_factory=create_default_buffett_signal
-    )
+    return call_llm(prompt=prompt, model_name=model_name, model_provider=model_provider, pydantic_model=BuffettSignal, agent_name="warren_buffett_agent", default_factory=create_default_buffett_signal)

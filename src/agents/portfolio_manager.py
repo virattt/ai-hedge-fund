@@ -102,76 +102,56 @@ def generate_trading_decision(
     template = ChatPromptTemplate.from_messages(
         [
             (
-                "system",
-                """You are a portfolio manager making final trading decisions.
-                Your job is to make trading decisions based on the team's analysis for multiple tickers.
+              "system",
+              """You are a portfolio manager making final trading decisions based on multiple tickers.
 
-                Trading Rules:
-                - Only buy if you have available cash
-                - Only sell if you have shares to sell, otherwise hold
-                - For sells: quantity must be ≤ current position shares
-                - For buys: quantity must be ≤ max_shares provided for each ticker
-                - The max_shares values are pre-calculated to respect position limits
-                
-                Inputs:
-                - signals_by_ticker: dictionary of ticker to signals from analysts
-                - max_shares: maximum number of shares allowed for each ticker
-                - portfolio_cash: current cash in portfolio
-                - portfolio_positions: current positions in portfolio
-                - current_prices: current price for each ticker
-                
-                Output (must be in JSON format):
-                - action: "buy", "sell", or "hold"
-                - quantity: number of shares to trade (integer)
-                - confidence: confidence level between 0-100
-                - reasoning: brief explanation of the decision
+              Trading Rules:
+              - Only buy if you have available cash.
+              - Only sell if you currently hold shares of that ticker.
+              - Sell quantity must be ≤ current position shares.
+              - Buy quantity must be ≤ max_shares for that ticker.
+              - The max_shares values are pre-calculated to respect position limits.
 
-                IMPORTANT: Only output the final decision in a JSON format like so:
-                {{
-                    "decisions": {{
-                        "TICKER1": {{
-                            "action": "buy/sell/hold",
-                            "quantity": integer,
-                            "confidence": float,
-                            "reasoning": "string"
-                        }},
-                        "TICKER2": {{ ... }},
-                        ...
-                    }}
-                }}
-                """,
+              Inputs:
+              - signals_by_ticker: dictionary of ticker → signals
+              - max_shares: maximum shares allowed per ticker
+              - portfolio_cash: current cash in portfolio
+              - portfolio_positions: current positions in portfolio
+              - current_prices: current prices for each ticker  
+              """,
             ),
             (
-                "human",
-                """Based on the team's analysis below, make your trading decisions.
+              "human",
+              """Based on the team's analysis, make your trading decisions for each ticker.
 
-                For each ticker, here are the signals:
-                {signals_by_ticker}
+              Here are the signals by ticker:
+              {signals_by_ticker}
 
-                Current Prices:
-                {current_prices}
+              Current Prices:
+              {current_prices}
 
-                Maximum Shares Allowed For Any Purchase:
-                {max_shares}
+              Maximum Shares Allowed For Purchases:
+              {max_shares}
 
-                Here is the current portfolio:
-                Cash: {portfolio_cash}
-                Current Positions: {portfolio_positions}
+              Portfolio Cash: {portfolio_cash}
+              Current Positions: {portfolio_positions}
 
-                Return a decision for each ticker in the following format:
-                {{
-                    "decisions": {{
-                        "TICKER1": {{
-                            "action": "buy/sell/hold",
-                            "quantity": integer,
-                            "confidence": float,
-                            "reasoning": "string"
-                        }},
-                        "TICKER2": {{ ... }},
-                        ...
-                    }}
+              Output strictly in JSON with the following structure:
+              {{
+                "decisions": {{
+                  "TICKER1": {{
+                    "action": "buy/sell/hold",
+                    "quantity": integer,
+                    "confidence": float,
+                    "reasoning": "string"
+                  }},
+                  "TICKER2": {{
+                    ...
+                  }},
+                  ...
                 }}
-                """,
+              }}
+              """,
             ),
         ]
     )
@@ -189,22 +169,6 @@ def generate_trading_decision(
 
     # Create default factory for PortfolioManagerOutput
     def create_default_portfolio_output():
-        return PortfolioManagerOutput(
-            decisions={
-                ticker: PortfolioDecision(
-                    action="hold",
-                    quantity=0,
-                    confidence=0.0,
-                    reasoning="Error in portfolio management, defaulting to hold"
-                ) for ticker in tickers
-            }
-        )
+        return PortfolioManagerOutput(decisions={ticker: PortfolioDecision(action="hold", quantity=0, confidence=0.0, reasoning="Error in portfolio management, defaulting to hold") for ticker in tickers})
 
-    return call_llm(
-        prompt=prompt,
-        model_name=model_name,
-        model_provider=model_provider,
-        pydantic_model=PortfolioManagerOutput,
-        agent_name="portfolio_management_agent",
-        default_factory=create_default_portfolio_output
-    )
+    return call_llm(prompt=prompt, model_name=model_name, model_provider=model_provider, pydantic_model=PortfolioManagerOutput, agent_name="portfolio_management_agent", default_factory=create_default_portfolio_output)
