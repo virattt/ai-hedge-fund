@@ -1,3 +1,5 @@
+import sys
+
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
@@ -180,8 +182,8 @@ if __name__ == "__main__":
     ).ask()
 
     if not choices:
-        print("You must select at least one analyst. Using all analysts by default.")
-        selected_analysts = None
+        print("\n\nInterrupt received. Exiting...")
+        sys.exit(0)
     else:
         selected_analysts = choices
         print(f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n")
@@ -199,9 +201,8 @@ if __name__ == "__main__":
     ).ask()
 
     if not model_choice:
-        print("Using default model: gpt-4o")
-        model_choice = "gpt-4o"
-        model_provider = "OpenAI"
+        print("\n\nInterrupt received. Exiting...")
+        sys.exit(0)
     else:
         # Get model info using the helper function
         model_info = get_model_info(model_choice)

@@ -255,6 +255,14 @@ def print_backtest_results(table_rows: list) -> None:
         print(f"Total Position Value: {Fore.YELLOW}${float(position_str):,.2f}{Style.RESET_ALL}")
         print(f"Total Value: {Fore.WHITE}${float(total_str):,.2f}{Style.RESET_ALL}")
         print(f"Return: {latest_summary[9]}")
+        
+        # Display performance metrics if available
+        if latest_summary[10]:  # Sharpe ratio
+            print(f"Sharpe Ratio: {latest_summary[10]}")
+        if latest_summary[11]:  # Sortino ratio
+            print(f"Sortino Ratio: {latest_summary[11]}")
+        if latest_summary[12]:  # Max drawdown
+            print(f"Max Drawdown: {latest_summary[12]}")
 
     # Add vertical spacing for progress display
     print("\n" * 8)  # Add 8 blank lines for progress display
@@ -276,6 +284,9 @@ def format_backtest_row(
     return_pct: float = None,
     cash_balance: float = None,
     total_position_value: float = None,
+    sharpe_ratio: float = None,
+    sortino_ratio: float = None,
+    max_drawdown: float = None,
 ) -> list[any]:
     """Format a row for the backtest results table"""
     # Color the action
@@ -298,6 +309,9 @@ def format_backtest_row(
             f"{Fore.CYAN}${cash_balance:,.2f}{Style.RESET_ALL}",  # Cash Balance
             f"{Fore.WHITE}${total_value:,.2f}{Style.RESET_ALL}",  # Total Value
             f"{return_color}{return_pct:+.2f}%{Style.RESET_ALL}",  # Return
+            f"{Fore.YELLOW}{sharpe_ratio:.2f}{Style.RESET_ALL}" if sharpe_ratio is not None else "",  # Sharpe Ratio
+            f"{Fore.YELLOW}{sortino_ratio:.2f}{Style.RESET_ALL}" if sortino_ratio is not None else "",  # Sortino Ratio
+            f"{Fore.RED}{max_drawdown:.2f}%{Style.RESET_ALL}" if max_drawdown is not None else "",  # Max Drawdown
         ]
     else:
         return [
@@ -311,4 +325,7 @@ def format_backtest_row(
             f"{Fore.GREEN}{bullish_count}{Style.RESET_ALL}",
             f"{Fore.RED}{bearish_count}{Style.RESET_ALL}",
             f"{Fore.BLUE}{neutral_count}{Style.RESET_ALL}",
+            "",  # Sharpe Ratio (empty for non-summary rows)
+            "",  # Sortino Ratio (empty for non-summary rows)
+            "",  # Max Drawdown (empty for non-summary rows)
         ]

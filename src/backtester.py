@@ -1,3 +1,5 @@
+import sys
+
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import questionary
@@ -5,6 +7,8 @@ import questionary
 import matplotlib.pyplot as plt
 import pandas as pd
 from colorama import Fore, Style, init
+import numpy as np
+import itertools
 
 from llm.models import LLM_ORDER, get_model_info
 from utils.analysts import ANALYST_ORDER
@@ -160,8 +164,16 @@ class Backtester:
 
         dates = pd.date_range(self.start_date, self.end_date, freq="B")
         table_rows = []
+        performance_metrics = {
+            'sharpe_ratio': None,  # Initialize as None instead of 0.0
+            'sortino_ratio': None,
+            'max_drawdown': None
+        }
 
         print("\nStarting backtest...")
+
+        # Initialize portfolio values list with initial capital
+        self.portfolio_values = [{"Date": dates[0], "Portfolio Value": self.initial_capital}]
 
         for current_date in dates:
             lookback_start = (current_date - timedelta(days=30)).strftime("%Y-%m-%d")
@@ -248,6 +260,48 @@ class Backtester:
             # Calculate total position value (excluding cash)
             total_position_value = total_value - self.portfolio["cash"]
 
+            # Record the portfolio value for performance metrics
+            self.portfolio_values.append({"Date": current_date, "Portfolio Value": total_value})
+
+            # Calculate performance metrics if we have enough data
+            # We need at least 3 data points to calculate meaningful metrics
+            if len(self.portfolio_values) > 3:
+                # Calculate daily returns
+                values_df = pd.DataFrame(self.portfolio_values).set_index("Date")
+                values_df["Daily Return"] = values_df["Portfolio Value"].pct_change()
+                
+                # Drop any NaN values from returns
+                clean_returns = values_df["Daily Return"].dropna()
+                
+                if len(clean_returns) > 0:
+                    # Calculate Sharpe Ratio
+                    risk_free_rate = 0.0434 / 252  # Daily risk-free rate (4.34% annual)
+                    excess_returns = clean_returns - risk_free_rate
+                    mean_excess_return = excess_returns.mean()
+                    std_excess_return = excess_returns.std()
+                    
+                    if std_excess_return > 0:  # Only calculate if we have meaningful volatility
+                        # Annualize Sharpe Ratio
+                        performance_metrics["sharpe_ratio"] = np.sqrt(252) * mean_excess_return / std_excess_return
+
+                    # Calculate Sortino Ratio
+                    negative_returns = clean_returns[clean_returns < 0]
+                    if len(negative_returns) > 0:
+                        downside_std = negative_returns.std()
+                        if downside_std > 0:  # Only calculate if we have meaningful downside volatility
+                            # Annualize Sortino Ratio
+                            performance_metrics["sortino_ratio"] = np.sqrt(252) * mean_excess_return / downside_std
+                        else:
+                            performance_metrics["sortino_ratio"] = np.inf if mean_excess_return > 0 else 0
+                    else:
+                        # If no negative returns, Sortino ratio depends on mean return
+                        performance_metrics["sortino_ratio"] = np.inf if mean_excess_return > 0 else 0
+
+                    # Calculate Maximum Drawdown
+                    rolling_max = values_df["Portfolio Value"].cummax()
+                    drawdown = (values_df["Portfolio Value"] - rolling_max) / rolling_max
+                    performance_metrics["max_drawdown"] = drawdown.min() * 100  # Convert to percentage
+
             # Add summary row for this date
             date_rows.append(
                 format_backtest_row(
@@ -266,6 +320,9 @@ class Backtester:
                     return_pct=portfolio_return,
                     cash_balance=self.portfolio["cash"],
                     total_position_value=total_position_value,
+                    sharpe_ratio=performance_metrics["sharpe_ratio"],
+                    sortino_ratio=performance_metrics["sortino_ratio"],
+                    max_drawdown=performance_metrics["max_drawdown"],
                 )
             )
 
@@ -275,8 +332,7 @@ class Backtester:
             # Temporarily stop progress display, show table, then resume
             print_backtest_results(table_rows)
 
-            # Record the portfolio value
-            self.portfolio_values.append({"Date": current_date, "Portfolio Value": total_value})
+        return performance_metrics
 
     def analyze_performance(self):
         # Convert portfolio values to DataFrame
@@ -300,20 +356,41 @@ class Backtester:
         plt.grid(True)
         plt.show()
 
-        # Compute daily returns including realized gains
+        # Compute daily returns and risk-free rate (assuming 2% annual risk-free rate)
         performance_df["Daily Return"] = performance_df["Portfolio Value"].pct_change()
+        risk_free_rate = 0.0434 / 252  # Daily risk-free rate (4.34% annual)
 
         # Calculate Sharpe Ratio (assuming 252 trading days in a year)
         mean_daily_return = performance_df["Daily Return"].mean()
         std_daily_return = performance_df["Daily Return"].std()
-        sharpe_ratio = (mean_daily_return / std_daily_return) * (252**0.5) if std_daily_return != 0 else 0
-        print(f"\nSharpe Ratio: {Fore.YELLOW}{sharpe_ratio:.2f}{Style.RESET_ALL}")
+        annualized_sharpe = np.sqrt(252) * (mean_daily_return - risk_free_rate) / std_daily_return if std_daily_return != 0 else 0
+        print(f"\nSharpe Ratio: {Fore.YELLOW}{annualized_sharpe:.2f}{Style.RESET_ALL}")
 
         # Calculate Maximum Drawdown
         rolling_max = performance_df["Portfolio Value"].cummax()
-        drawdown = performance_df["Portfolio Value"] / rolling_max - 1
+        drawdown = (performance_df["Portfolio Value"] - rolling_max) / rolling_max
         max_drawdown = drawdown.min()
-        print(f"Maximum Drawdown: {Fore.RED}{max_drawdown * 100:.2f}%{Style.RESET_ALL}")
+        max_drawdown_date = drawdown.idxmin()
+        print(f"Maximum Drawdown: {Fore.RED}{max_drawdown * 100:.2f}%{Style.RESET_ALL} (on {max_drawdown_date.strftime('%Y-%m-%d')})")
+
+        # Calculate Win Rate
+        winning_days = len(performance_df[performance_df["Daily Return"] > 0])
+        total_days = len(performance_df) - 1  # Subtract 1 to account for the first day with no return
+        win_rate = (winning_days / total_days) * 100 if total_days > 0 else 0
+        print(f"Win Rate: {Fore.GREEN}{win_rate:.2f}%{Style.RESET_ALL}")
+
+        # Calculate Average Win/Loss Ratio
+        avg_win = performance_df[performance_df["Daily Return"] > 0]["Daily Return"].mean()
+        avg_loss = abs(performance_df[performance_df["Daily Return"] < 0]["Daily Return"].mean())
+        win_loss_ratio = avg_win / avg_loss if avg_loss != 0 else float('inf')
+        print(f"Win/Loss Ratio: {Fore.GREEN}{win_loss_ratio:.2f}{Style.RESET_ALL}")
+
+        # Calculate Maximum Consecutive Wins/Losses
+        returns_binary = (performance_df["Daily Return"] > 0).astype(int)
+        max_consecutive_wins = max(len(list(g)) for k, g in itertools.groupby(returns_binary) if k == 1) if len(returns_binary) > 0 else 0
+        max_consecutive_losses = max(len(list(g)) for k, g in itertools.groupby(returns_binary) if k == 0) if len(returns_binary) > 0 else 0
+        print(f"Max Consecutive Wins: {Fore.GREEN}{max_consecutive_wins}{Style.RESET_ALL}")
+        print(f"Max Consecutive Losses: {Fore.RED}{max_consecutive_losses}{Style.RESET_ALL}")
 
         return performance_df
 
@@ -370,8 +447,8 @@ if __name__ == "__main__":
     ).ask()
 
     if not choices:
-        print("You must select at least one analyst. Using all analysts by default.")
-        selected_analysts = None
+        print("\n\nInterrupt received. Exiting...")
+        sys.exit(0)
     else:
         selected_analysts = choices
         print(f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}")
@@ -390,9 +467,8 @@ if __name__ == "__main__":
     ).ask()
 
     if not model_choice:
-        print("Using default model: gpt-4o")
-        model_choice = "gpt-4o"
-        model_provider = "OpenAI"
+        print("\n\nInterrupt received. Exiting...")
+        sys.exit(0)
     else:
         # Get model info using the helper function
         model_info = get_model_info(model_choice)
@@ -416,5 +492,5 @@ if __name__ == "__main__":
     )
 
     # Run the backtesting process
-    backtester.run_backtest()
+    performance_metrics = backtester.run_backtest()
     performance_df = backtester.analyze_performance()
