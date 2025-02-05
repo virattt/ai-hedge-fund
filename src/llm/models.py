@@ -2,6 +2,7 @@ import os
 from langchain_anthropic import ChatAnthropic
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from enum import Enum
 from pydantic import BaseModel
 from typing import Tuple
@@ -12,6 +13,7 @@ class ModelProvider(str, Enum):
     OPENAI = "OpenAI"
     GROQ = "Groq"
     ANTHROPIC = "Anthropic"
+    OLLAMA = "Ollama"
 
 
 class LLMModel(BaseModel):
@@ -23,7 +25,7 @@ class LLMModel(BaseModel):
     def to_choice_tuple(self) -> Tuple[str, str, str]:
         """Convert to format needed for questionary choices"""
         return (self.display_name, self.model_name, self.provider.value)
-    
+
     def is_deepseek(self) -> bool:
         """Check if the model is a DeepSeek model"""
         return self.model_name.startswith("deepseek")
@@ -76,6 +78,12 @@ AVAILABLE_MODELS = [
         model_name="o3-mini",
         provider=ModelProvider.OPENAI
     ),
+    # ollama models, take 'deepseek-r1:14b' for example
+    LLMModel(
+        display_name="[ollama] deepseek-r1:14b",
+        model_name="deepseek-r1:14b",
+        provider=ModelProvider.OLLAMA
+    )
 ]
 
 # Create LLM_ORDER in the format expected by the UI
@@ -107,3 +115,9 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
             print(f"API Key Error: Please make sure ANTHROPIC_API_KEY is set in your .env file.")
             raise ValueError("Anthropic API key not found.  Please make sure ANTHROPIC_API_KEY is set in your .env file.")
         return ChatAnthropic(model=model_name, api_key=api_key)
+    elif model_provider == ModelProvider.OLLAMA:
+        ollama_host = os.getenv('OLLAMA_HOST')
+        if not ollama_host:
+            print(f"Ollama Key Error: Please make sure OLLAMA_HOST is set in your .env file.")
+            raise ValueError("Ollama key not found.  Please make sure OLLAMA_HOST is set in your .env file.")
+        return ChatOllama(model=model_name, base_url=ollama_host)
