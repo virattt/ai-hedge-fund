@@ -147,6 +147,12 @@ if __name__ == "__main__":
         default=100000.0,
         help="Initial cash position. Defaults to 100000.0)"
     )
+    parser.add_argument(
+        "--margin-requirement",
+        type=float,
+        default=0.0,
+        help="Initial margin requirement. Defaults to 0.0"
+    )
     parser.add_argument("--tickers", type=str, required=True, help="Comma-separated list of stock ticker symbols")
     parser.add_argument(
         "--start-date",
@@ -250,7 +256,21 @@ if __name__ == "__main__":
     # Initialize portfolio with cash amount and stock positions
     portfolio = {
         "cash": args.initial_cash,  # Initial cash amount
-        "positions": {ticker: 0 for ticker in tickers}  # Initial stock positions
+        "margin_requirement": args.margin_requirement,  # Initial margin requirement
+        "positions": {
+            ticker: {
+                "long": 0,  # Number of shares held long
+                "short": 0,  # Number of shares held short
+                "long_cost_basis": 0.0,  # Average cost basis for long positions
+                "short_cost_basis": 0.0,  # Average price at which shares were sold short
+            } for ticker in tickers
+        },
+        "realized_gains": {
+            ticker: {
+                "long": 0.0,  # Realized gains from long positions
+                "short": 0.0,  # Realized gains from short positions
+            } for ticker in tickers
+        }
     }
 
     # Run the hedge fund

@@ -10,7 +10,7 @@ from utils.llm import call_llm
 
 
 class PortfolioDecision(BaseModel):
-    action: Literal["buy", "sell", "hold"]
+    action: Literal["buy", "sell", "short", "cover", "hold"]
     quantity: int = Field(description="Number of shares to trade")
     confidence: float = Field(description="Confidence in the decision, between 0.0 and 100.0")
     reasoning: str = Field(description="Reasoning for the decision")
@@ -106,18 +106,36 @@ def generate_trading_decision(
               """You are a portfolio manager making final trading decisions based on multiple tickers.
 
               Trading Rules:
-              - Only buy if you have available cash.
-              - Only sell if you currently hold shares of that ticker.
-              - Sell quantity must be ≤ current position shares.
-              - Buy quantity must be ≤ max_shares for that ticker.
-              - The max_shares values are pre-calculated to respect position limits.
+              - For long positions:
+                * Only buy if you have available cash
+                * Only sell if you currently hold long shares of that ticker
+                * Sell quantity must be ≤ current long position shares
+                * Buy quantity must be ≤ max_shares for that ticker
+              
+              - For short positions:
+                * Only short if you have available margin (50% of position value required)
+                * Only cover if you currently have short shares of that ticker
+                * Cover quantity must be ≤ current short position shares
+                * Short quantity must respect margin requirements
+              
+              - The max_shares values are pre-calculated to respect position limits
+              - Consider both long and short opportunities based on signals
+              - Maintain appropriate risk management with both long and short exposure
+
+              Available Actions:
+              - "buy": Open or add to long position
+              - "sell": Close or reduce long position
+              - "short": Open or add to short position
+              - "cover": Close or reduce short position
+              - "hold": No action
 
               Inputs:
               - signals_by_ticker: dictionary of ticker → signals
               - max_shares: maximum shares allowed per ticker
               - portfolio_cash: current cash in portfolio
-              - portfolio_positions: current positions in portfolio
-              - current_prices: current prices for each ticker  
+              - portfolio_positions: current positions (both long and short)
+              - current_prices: current prices for each ticker
+              - margin_requirement: current margin requirement for short positions
               """,
             ),
             (
@@ -135,12 +153,13 @@ def generate_trading_decision(
 
               Portfolio Cash: {portfolio_cash}
               Current Positions: {portfolio_positions}
+              Current Margin Requirement: {margin_requirement}
 
               Output strictly in JSON with the following structure:
               {{
                 "decisions": {{
                   "TICKER1": {{
-                    "action": "buy/sell/hold",
+                    "action": "buy/sell/short/cover/hold",
                     "quantity": integer,
                     "confidence": float,
                     "reasoning": "string"
@@ -162,8 +181,9 @@ def generate_trading_decision(
             "signals_by_ticker": json.dumps(signals_by_ticker, indent=2),
             "current_prices": json.dumps(current_prices, indent=2),
             "max_shares": json.dumps(max_shares, indent=2),
-            "portfolio_cash": f"{portfolio['cash']:.2f}",
-            "portfolio_positions": json.dumps(portfolio["positions"], indent=2),
+            "portfolio_cash": f"{portfolio.get('cash', 0):.2f}",
+            "portfolio_positions": json.dumps(portfolio.get('positions', {}), indent=2),
+            "margin_requirement": f"{portfolio.get('margin_requirement', 0):.2f}",
         }
     )
 
