@@ -40,3 +40,6 @@ Thumbs.db
 
 # graph
 *.png
+
+# gradio
+.gradio
