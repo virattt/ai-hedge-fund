@@ -25,7 +25,7 @@ def fundamentals_agent(state: AgentState):
         # Get the financial metrics
         financial_metrics = FinancialDatasetAPI().get_financial_metrics(
             ticker=ticker,
-            end_date=end_date,
+            report_period=end_date,
             period="ttm",
             limit=10,
         )

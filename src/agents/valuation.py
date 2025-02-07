@@ -25,7 +25,7 @@ def valuation_agent(state: AgentState):
         # Fetch the financial metrics
         financial_metrics = financial_api.get_financial_metrics(
             ticker=ticker,
-            end_date=end_date,
+            report_period=end_date,
             period="ttm",
         )
 
