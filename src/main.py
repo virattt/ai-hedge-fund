@@ -53,14 +53,6 @@ def run_hedge_fund(
     model_name: str = "gpt-4o",
     model_provider: str = "OpenAI",
 ):
-    # Validate tickers first
-    from tools.api import validate_tickers
-    
-    is_valid, invalid_tickers = validate_tickers(tickers)
-    if not is_valid:
-        print(f"{Fore.RED}Error: The following tickers are invalid: {', '.join(invalid_tickers)}{Style.RESET_ALL}")
-        return None
-
     # Start progress tracking
     progress.start()
 
@@ -179,6 +171,28 @@ if __name__ == "__main__":
     # Parse tickers from comma-separated string
     tickers = [ticker.strip() for ticker in args.tickers.split(",")]
 
+    # Validate tickers before proceeding
+    from tools.api import validate_tickers
+    is_valid, invalid_tickers = validate_tickers(tickers)
+    if not is_valid:
+        valid_tickers = [ticker for ticker in tickers if ticker not in invalid_tickers]
+        if not valid_tickers:
+            print(f"{Fore.RED}Error: All provided tickers are invalid: {', '.join(invalid_tickers)}{Style.RESET_ALL}")
+            sys.exit(1)
+        
+        print(f"{Fore.YELLOW}Warning: The following tickers are invalid: {', '.join(invalid_tickers)}{Style.RESET_ALL}")
+        proceed = questionary.confirm(
+            f"Do you want to proceed with only the valid tickers: {', '.join(valid_tickers)}?",
+            default=True
+        ).ask()
+        
+        if not proceed:
+            print("\nExiting...")
+            sys.exit(0)
+        
+        print(f"\nProceeding with tickers: {', '.join(valid_tickers)}\n")
+        tickers = valid_tickers
+
     # Select analysts
     selected_analysts = None
     choices = questionary.checkbox(
@@ -201,7 +215,7 @@ if __name__ == "__main__":
         sys.exit(0)
     else:
         selected_analysts = choices
-        print(f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n")
+        print(f"\nSelected analysts: {', '.join(choice.title().replace('_', ' ') for choice in choices)}\n")
 
     # Select LLM model
     model_choice = questionary.select(
