@@ -284,16 +284,20 @@ def get_price_data(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
 
 def validate_tickers(tickers: list[str]) -> tuple[bool, list[str]]:
     """
-    Validate a list of tickers against the available tickers list.
+    Validate a list of tickers against the SEC's official tickers list.
     Returns a tuple of (is_valid, invalid_tickers).
     """
     try:
-        response = requests.get("https://virattt.github.io/datasets/financials/available_tickers.json")
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get("https://www.sec.gov/files/company_tickers.json", headers=headers)
         if response.status_code != 200:
             raise Exception(f"Error fetching valid tickers: {response.status_code} - {response.text}")
         
-        valid_tickers = {ticker["symbol"] for ticker in response.json()["tickers"]}
-        invalid_tickers = [ticker for ticker in tickers if ticker not in valid_tickers]
+        # SEC data is in format: {"0":{"cik_str":320193,"ticker":"AAPL","title":"Apple Inc."}, ...}
+        valid_tickers = {company_info['ticker'] for company_info in response.json().values()}
+        invalid_tickers = [ticker for ticker in tickers if ticker.upper() not in valid_tickers]
         
         return len(invalid_tickers) == 0, invalid_tickers
     except Exception as e:
