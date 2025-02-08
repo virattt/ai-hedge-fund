@@ -280,3 +280,21 @@ def prices_to_df(prices: list[Price]) -> pd.DataFrame:
 def get_price_data(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
     prices = get_prices(ticker, start_date, end_date)
     return prices_to_df(prices)
+
+
+def validate_tickers(tickers: list[str]) -> tuple[bool, list[str]]:
+    """
+    Validate a list of tickers against the available tickers list.
+    Returns a tuple of (is_valid, invalid_tickers).
+    """
+    try:
+        response = requests.get("https://virattt.github.io/datasets/financials/available_tickers.json")
+        if response.status_code != 200:
+            raise Exception(f"Error fetching valid tickers: {response.status_code} - {response.text}")
+        
+        valid_tickers = {ticker["symbol"] for ticker in response.json()["tickers"]}
+        invalid_tickers = [ticker for ticker in tickers if ticker not in valid_tickers]
+        
+        return len(invalid_tickers) == 0, invalid_tickers
+    except Exception as e:
+        raise Exception(f"Error validating tickers: {str(e)}")

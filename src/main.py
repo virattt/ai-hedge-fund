@@ -53,6 +53,14 @@ def run_hedge_fund(
     model_name: str = "gpt-4o",
     model_provider: str = "OpenAI",
 ):
+    # Validate tickers first
+    from tools.api import validate_tickers
+    
+    is_valid, invalid_tickers = validate_tickers(tickers)
+    if not is_valid:
+        print(f"{Fore.RED}Error: The following tickers are invalid: {', '.join(invalid_tickers)}{Style.RESET_ALL}")
+        return None
+
     # Start progress tracking
     progress.start()
 
