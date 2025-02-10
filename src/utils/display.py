@@ -91,7 +91,13 @@ def print_trading_output(result: dict) -> None:
     portfolio_data = []
     for ticker, decision in decisions.items():
         action = decision.get("action", "").upper()
-        action_color = {"BUY": Fore.GREEN, "SELL": Fore.RED, "HOLD": Fore.YELLOW}.get(action, Fore.WHITE)
+        action_color = {
+            "BUY": Fore.GREEN,
+            "SELL": Fore.RED,
+            "HOLD": Fore.YELLOW,
+            "COVER": Fore.GREEN,
+            "SHORT": Fore.RED,
+        }.get(action, Fore.WHITE)
         portfolio_data.append(
             [
                 f"{Fore.CYAN}{ticker}{Style.RESET_ALL}",
@@ -126,6 +132,33 @@ def print_backtest_results(table_rows: list) -> None:
         else:
             ticker_rows.append(row)
 
+    
+    # Display latest portfolio summary
+    if summary_rows:
+        latest_summary = summary_rows[-1]
+        print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
+
+        # Extract values and remove commas before converting to float
+        cash_str = latest_summary[7].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
+        position_str = latest_summary[6].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
+        total_str = latest_summary[8].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
+
+        print(f"Cash Balance: {Fore.CYAN}${float(cash_str):,.2f}{Style.RESET_ALL}")
+        print(f"Total Position Value: {Fore.YELLOW}${float(position_str):,.2f}{Style.RESET_ALL}")
+        print(f"Total Value: {Fore.WHITE}${float(total_str):,.2f}{Style.RESET_ALL}")
+        print(f"Return: {latest_summary[9]}")
+        
+        # Display performance metrics if available
+        if latest_summary[10]:  # Sharpe ratio
+            print(f"Sharpe Ratio: {latest_summary[10]}")
+        if latest_summary[11]:  # Sortino ratio
+            print(f"Sortino Ratio: {latest_summary[11]}")
+        if latest_summary[12]:  # Max drawdown
+            print(f"Max Drawdown: {latest_summary[12]}")
+
+    # Add vertical spacing
+    print("\n" * 2)
+
     # Print the table with just ticker rows
     print(
         tabulate(
@@ -158,23 +191,8 @@ def print_backtest_results(table_rows: list) -> None:
         )
     )
 
-    # Display latest portfolio summary
-    if summary_rows:
-        latest_summary = summary_rows[-1]
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
-
-        # Extract values and remove commas before converting to float
-        cash_str = latest_summary[7].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
-        position_str = latest_summary[6].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
-        total_str = latest_summary[8].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
-
-        print(f"Cash Balance: {Fore.CYAN}${float(cash_str):,.2f}{Style.RESET_ALL}")
-        print(f"Total Position Value: {Fore.YELLOW}${float(position_str):,.2f}{Style.RESET_ALL}")
-        print(f"Total Value: {Fore.WHITE}${float(total_str):,.2f}{Style.RESET_ALL}")
-        print(f"Return: {latest_summary[9]}")
-
-    # Add vertical spacing for progress display
-    print("\n" * 8)  # Add 8 blank lines for progress display
+    # Add vertical spacing
+    print("\n" * 4)
 
 
 def format_backtest_row(
@@ -193,12 +211,17 @@ def format_backtest_row(
     return_pct: float = None,
     cash_balance: float = None,
     total_position_value: float = None,
+    sharpe_ratio: float = None,
+    sortino_ratio: float = None,
+    max_drawdown: float = None,
 ) -> list[any]:
     """Format a row for the backtest results table"""
     # Color the action
     action_color = {
         "BUY": Fore.GREEN,
+        "COVER": Fore.GREEN,
         "SELL": Fore.RED,
+        "SHORT": Fore.RED,
         "HOLD": Fore.YELLOW,
     }.get(action.upper(), Fore.WHITE)
 
@@ -215,6 +238,9 @@ def format_backtest_row(
             f"{Fore.CYAN}${cash_balance:,.2f}{Style.RESET_ALL}",  # Cash Balance
             f"{Fore.WHITE}${total_value:,.2f}{Style.RESET_ALL}",  # Total Value
             f"{return_color}{return_pct:+.2f}%{Style.RESET_ALL}",  # Return
+            f"{Fore.YELLOW}{sharpe_ratio:.2f}{Style.RESET_ALL}" if sharpe_ratio is not None else "",  # Sharpe Ratio
+            f"{Fore.YELLOW}{sortino_ratio:.2f}{Style.RESET_ALL}" if sortino_ratio is not None else "",  # Sortino Ratio
+            f"{Fore.RED}{max_drawdown:.2f}%{Style.RESET_ALL}" if max_drawdown is not None else "",  # Max Drawdown
         ]
     else:
         return [

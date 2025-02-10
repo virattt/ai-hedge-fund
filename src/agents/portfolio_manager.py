@@ -10,7 +10,7 @@ from utils.llm import call_llm
 
 
 class PortfolioDecision(BaseModel):
-    action: Literal["buy", "sell", "hold"]
+    action: Literal["buy", "sell", "short", "cover", "hold"]
     quantity: int = Field(description="Number of shares to trade")
     confidence: float = Field(description="Confidence in the decision, between 0.0 and 100.0")
     reasoning: str = Field(description="Reasoning for the decision")
@@ -102,76 +102,75 @@ def generate_trading_decision(
     template = ChatPromptTemplate.from_messages(
         [
             (
-                "system",
-                """You are a portfolio manager making final trading decisions.
-                Your job is to make trading decisions based on the team's analysis for multiple tickers.
+              "system",
+              """You are a portfolio manager making final trading decisions based on multiple tickers.
 
-                Trading Rules:
-                - Only buy if you have available cash
-                - Only sell if you have shares to sell, otherwise hold
-                - For sells: quantity must be ≤ current position shares
-                - For buys: quantity must be ≤ max_shares provided for each ticker
-                - The max_shares values are pre-calculated to respect position limits
+              Trading Rules:
+              - For long positions:
+                * Only buy if you have available cash
+                * Only sell if you currently hold long shares of that ticker
+                * Sell quantity must be ≤ current long position shares
+                * Buy quantity must be ≤ max_shares for that ticker
+              
+              - For short positions:
+                * Only short if you have available margin (50% of position value required)
+                * Only cover if you currently have short shares of that ticker
+                * Cover quantity must be ≤ current short position shares
+                * Short quantity must respect margin requirements
+              
+              - The max_shares values are pre-calculated to respect position limits
+              - Consider both long and short opportunities based on signals
+              - Maintain appropriate risk management with both long and short exposure
 
-                Inputs:
-                - signals_by_ticker: dictionary of ticker to signals from analysts
-                - max_shares: maximum number of shares allowed for each ticker
-                - portfolio_cash: current cash in portfolio
-                - portfolio_positions: current positions in portfolio
-                - current_prices: current price for each ticker
-                
-                Output (must be in JSON format):
-                - action: "buy", "sell", or "hold"
-                - quantity: number of shares to trade (integer)
-                - confidence: confidence level between 0-100
-                - reasoning: brief explanation of the decision
+              Available Actions:
+              - "buy": Open or add to long position
+              - "sell": Close or reduce long position
+              - "short": Open or add to short position
+              - "cover": Close or reduce short position
+              - "hold": No action
 
-                IMPORTANT: Only output the final decision in a JSON format like so:
-                {{
-                    "decisions": {{
-                        "TICKER1": {{
-                            "action": "buy/sell/hold",
-                            "quantity": integer,
-                            "confidence": float,
-                            "reasoning": "string"
-                        }},
-                        "TICKER2": {{ ... }},
-                        ...
-                    }}
-                }}
-                """,
+              Inputs:
+              - signals_by_ticker: dictionary of ticker → signals
+              - max_shares: maximum shares allowed per ticker
+              - portfolio_cash: current cash in portfolio
+              - portfolio_positions: current positions (both long and short)
+              - current_prices: current prices for each ticker
+              - margin_requirement: current margin requirement for short positions
+              """,
             ),
             (
-                "human",
-                """Based on the team's analysis below, make your trading decisions.
+              "human",
+              """Based on the team's analysis, make your trading decisions for each ticker.
 
-                For each ticker, here are the signals:
-                {signals_by_ticker}
+              Here are the signals by ticker:
+              {signals_by_ticker}
 
-                Current Prices:
-                {current_prices}
+              Current Prices:
+              {current_prices}
 
-                Maximum Shares Allowed For Any Purchase:
-                {max_shares}
+              Maximum Shares Allowed For Purchases:
+              {max_shares}
 
-                Here is the current portfolio:
-                Cash: {portfolio_cash}
-                Current Positions: {portfolio_positions}
+              Portfolio Cash: {portfolio_cash}
+              Current Positions: {portfolio_positions}
+              Current Margin Requirement: {margin_requirement}
 
-                Return a decision for each ticker in the following format:
-                {{
-                    "decisions": {{
-                        "TICKER1": {{
-                            "action": "buy/sell/hold",
-                            "quantity": integer,
-                            "confidence": float,
-                            "reasoning": "string"
-                        }},
-                        "TICKER2": {{ ... }},
-                        ...
-                    }}
+              Output strictly in JSON with the following structure:
+              {{
+                "decisions": {{
+                  "TICKER1": {{
+                    "action": "buy/sell/short/cover/hold",
+                    "quantity": integer,
+                    "confidence": float,
+                    "reasoning": "string"
+                  }},
+                  "TICKER2": {{
+                    ...
+                  }},
+                  ...
                 }}
-                """,
+              }}
+              """,
             ),
         ]
     )
@@ -182,29 +181,14 @@ def generate_trading_decision(
             "signals_by_ticker": json.dumps(signals_by_ticker, indent=2),
             "current_prices": json.dumps(current_prices, indent=2),
             "max_shares": json.dumps(max_shares, indent=2),
-            "portfolio_cash": f"{portfolio['cash']:.2f}",
-            "portfolio_positions": json.dumps(portfolio["positions"], indent=2),
+            "portfolio_cash": f"{portfolio.get('cash', 0):.2f}",
+            "portfolio_positions": json.dumps(portfolio.get('positions', {}), indent=2),
+            "margin_requirement": f"{portfolio.get('margin_requirement', 0):.2f}",
         }
     )
 
     # Create default factory for PortfolioManagerOutput
     def create_default_portfolio_output():
-        return PortfolioManagerOutput(
-            decisions={
-                ticker: PortfolioDecision(
-                    action="hold",
-                    quantity=0,
-                    confidence=0.0,
-                    reasoning="Error in portfolio management, defaulting to hold"
-                ) for ticker in tickers
-            }
-        )
+        return PortfolioManagerOutput(decisions={ticker: PortfolioDecision(action="hold", quantity=0, confidence=0.0, reasoning="Error in portfolio management, defaulting to hold") for ticker in tickers})
 
-    return call_llm(
-        prompt=prompt,
-        model_name=model_name,
-        model_provider=model_provider,
-        pydantic_model=PortfolioManagerOutput,
-        agent_name="portfolio_management_agent",
-        default_factory=create_default_portfolio_output
-    )
+    return call_llm(prompt=prompt, model_name=model_name, model_provider=model_provider, pydantic_model=PortfolioManagerOutput, agent_name="portfolio_management_agent", default_factory=create_default_portfolio_output)

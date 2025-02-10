@@ -4,15 +4,17 @@ This is a proof of concept for an AI-powered hedge fund.  The goal of this proje
 
 This system employs several agents working together:
 
-1. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
-2. Sentiment Agent - Analyzes market sentiment and generates trading signals
-3. Fundamentals Agent - Analyzes fundamental data and generates trading signals
-4. Technicals Agent - Analyzes technical indicators and generates trading signals
-5. Warren Buffett Agent - Uses Warren Buffett's principles to generate trading signals
-6. Risk Manager - Calculates risk metrics and sets position limits
-7. Portfolio Manager - Makes final trading decisions and generates orders
-   
-<img width="1060" alt="Screenshot 2025-01-03 at 5 39 25 PM" src="https://github.com/user-attachments/assets/4611aace-27d0-43b2-9a70-385b40336e3f" />
+1. Bill Ackman Agent - Uses Bill Ackman's principles to generate trading signals
+2. Warren Buffett Agent - Uses Warren Buffett's principles to generate trading signals
+3. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
+4. Sentiment Agent - Analyzes market sentiment and generates trading signals
+5. Fundamentals Agent - Analyzes fundamental data and generates trading signals
+6. Technicals Agent - Analyzes technical indicators and generates trading signals
+7. Risk Manager - Calculates risk metrics and sets position limits
+8. Portfolio Manager - Makes final trading decisions and generates orders
+
+<img width="1117" alt="Screenshot 2025-02-09 at 11 26 14 AM" src="https://github.com/user-attachments/assets/16509cc2-4b64-4c67-8de6-00d224893d58" />
+
 
 **Note**: the system simulates trading decisions, it does not actually trade.
 
@@ -79,7 +81,7 @@ GROQ_API_KEY=your-groq-api-key
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
-**Important**: You must set `OPENAI_API_KEY` or `GROQ_API_KEY` for the hedge fund to work.  If you want to use LLMs from both providers, you will need to set both API keys.
+**Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, or `ANTHROPIC_API_KEY` for the hedge fund to work.  If you want to use LLMs from all providers, you will need to set all API keys.
 
 Financial data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key.
 
@@ -126,6 +128,7 @@ poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --start-date 2024-01
 ai-hedge-fund/
 ├── src/
 │   ├── agents/                   # Agent definitions and workflow
+│   │   ├── bill_ackman.py        # Bill Ackman agent
 │   │   ├── fundamentals.py       # Fundamental analysis agent
 │   │   ├── portfolio_manager.py  # Portfolio management agent
 │   │   ├── risk_manager.py       # Risk management agent
