@@ -8,6 +8,7 @@ import json
 from typing_extensions import Literal
 from utils.progress import progress
 from utils.llm import call_llm
+from llm.models import get_model, get_model_info
 
 class BillAckmanSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
@@ -212,7 +213,7 @@ def analyze_financial_discipline(metrics: list, financial_line_items: list) -> d
         }
     
     # 1. Multi-period debt ratio or debt_to_equity
-    # Check if the company’s leverage is stable or improving
+    # Check if the company's leverage is stable or improving
     debt_to_equity_vals = [item.debt_to_equity for item in financial_line_items if item.debt_to_equity is not None]
     
     # If we have multi-year data, see if D/E ratio has gone down or stayed <1 across most periods
@@ -336,6 +337,13 @@ def analyze_valuation(financial_line_items: list, market_cap: float) -> dict:
     }
 
 
+def create_default_bill_ackman_signal():
+    return BillAckmanSignal(
+        signal="neutral",
+        confidence=0.0,
+        reasoning="Error in analysis, defaulting to neutral"
+    )
+
 def generate_ackman_output(
     ticker: str,
     analysis_data: dict[str, any],
@@ -345,6 +353,11 @@ def generate_ackman_output(
     """
     Generates investment decisions in the style of Bill Ackman.
     """
+    # Get the LLM model
+    llm = get_model(model_name, model_provider)
+    if not llm:
+        return create_default_bill_ackman_signal()
+        
     template = ChatPromptTemplate.from_messages([
         (
             "system",
@@ -381,24 +394,14 @@ def generate_ackman_output(
             """
         )
     ])
-
-    prompt = template.invoke({
-        "analysis_data": json.dumps(analysis_data, indent=2),
-        "ticker": ticker
-    })
-
-    def create_default_bill_ackman_signal():
-        return BillAckmanSignal(
-            signal="neutral",
-            confidence=0.0,
-            reasoning="Error in analysis, defaulting to neutral"
-        )
+    
+    prompt = template.format(
+        ticker=ticker,
+        analysis_data=json.dumps(analysis_data, indent=2)
+    )
 
     return call_llm(
-        prompt=prompt, 
-        model_name=model_name, 
-        model_provider=model_provider, 
-        pydantic_model=BillAckmanSignal, 
-        agent_name="bill_ackman_agent", 
-        default_factory=create_default_bill_ackman_signal,
+        llm=llm,
+        prompt=prompt,
+        output_schema=BillAckmanSignal
     )

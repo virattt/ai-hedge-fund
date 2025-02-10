@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from typing_extensions import Literal
 from utils.progress import progress
 from utils.llm import call_llm
+from llm.models import get_model
 
 
 class PortfolioDecision(BaseModel):
@@ -97,98 +98,103 @@ def generate_trading_decision(
     model_name: str,
     model_provider: str,
 ) -> PortfolioManagerOutput:
-    """Attempts to get a decision from the LLM with retry logic"""
-    # Create the prompt template
-    template = ChatPromptTemplate.from_messages(
-        [
-            (
-              "system",
-              """You are a portfolio manager making final trading decisions based on multiple tickers.
+    """
+    Generate trading decisions based on analyst signals and portfolio constraints.
+    """
+    # Get the LLM model
+    llm = get_model(model_name, model_provider)
+    if not llm:
+        return create_default_portfolio_output()
 
-              Trading Rules:
-              - For long positions:
-                * Only buy if you have available cash
-                * Only sell if you currently hold long shares of that ticker
-                * Sell quantity must be ≤ current long position shares
-                * Buy quantity must be ≤ max_shares for that ticker
-              
-              - For short positions:
-                * Only short if you have available margin (50% of position value required)
-                * Only cover if you currently have short shares of that ticker
-                * Cover quantity must be ≤ current short position shares
-                * Short quantity must respect margin requirements
-              
-              - The max_shares values are pre-calculated to respect position limits
-              - Consider both long and short opportunities based on signals
-              - Maintain appropriate risk management with both long and short exposure
+    template = ChatPromptTemplate.from_messages([
+        (
+          "system",
+          """You are a portfolio manager making final trading decisions based on multiple tickers.
 
-              Available Actions:
-              - "buy": Open or add to long position
-              - "sell": Close or reduce long position
-              - "short": Open or add to short position
-              - "cover": Close or reduce short position
-              - "hold": No action
+          Trading Rules:
+          - For long positions:
+            * Only buy if you have available cash
+            * Only sell if you currently hold long shares of that ticker
+            * Sell quantity must be ≤ current long position shares
+            * Buy quantity must be ≤ max_shares for that ticker
+          
+          - For short positions:
+            * Only short if you have available margin (50% of position value required)
+            * Only cover if you currently have short shares of that ticker
+            * Cover quantity must be ≤ current short position shares
+            * Short quantity must respect margin requirements
+          
+          - The max_shares values are pre-calculated to respect position limits
+          - Consider both long and short opportunities based on signals
+          - Maintain appropriate risk management with both long and short exposure
 
-              Inputs:
-              - signals_by_ticker: dictionary of ticker → signals
-              - max_shares: maximum shares allowed per ticker
-              - portfolio_cash: current cash in portfolio
-              - portfolio_positions: current positions (both long and short)
-              - current_prices: current prices for each ticker
-              - margin_requirement: current margin requirement for short positions
-              """,
-            ),
-            (
-              "human",
-              """Based on the team's analysis, make your trading decisions for each ticker.
+          Available Actions:
+          - "buy": Open or add to long position
+          - "sell": Close or reduce long position
+          - "short": Open or add to short position
+          - "cover": Close or reduce short position
+          - "hold": No action
 
-              Here are the signals by ticker:
-              {signals_by_ticker}
+          Inputs:
+          - signals_by_ticker: dictionary of ticker → signals
+          - max_shares: maximum shares allowed per ticker
+          - portfolio_cash: current cash in portfolio
+          - portfolio_positions: current positions (both long and short)
+          - current_prices: current prices for each ticker
+          - margin_requirement: current margin requirement for short positions
+          """,
+        ),
+        (
+          "human",
+          """Based on the team's analysis, make your trading decisions for each ticker.
 
-              Current Prices:
-              {current_prices}
+          Here are the signals by ticker:
+          {signals_by_ticker}
 
-              Maximum Shares Allowed For Purchases:
-              {max_shares}
+          Current Prices:
+          {current_prices}
 
-              Portfolio Cash: {portfolio_cash}
-              Current Positions: {portfolio_positions}
-              Current Margin Requirement: {margin_requirement}
+          Maximum Shares Allowed For Purchases:
+          {max_shares}
 
-              Output strictly in JSON with the following structure:
-              {{
-                "decisions": {{
-                  "TICKER1": {{
-                    "action": "buy/sell/short/cover/hold",
-                    "quantity": integer,
-                    "confidence": float,
-                    "reasoning": "string"
-                  }},
-                  "TICKER2": {{
-                    ...
-                  }},
-                  ...
-                }}
-              }}
-              """,
-            ),
-        ]
-    )
+          Portfolio Cash: {portfolio_cash}
+          Current Positions: {portfolio_positions}
+          Current Margin Requirement: {margin_requirement}
 
-    # Generate the prompt
-    prompt = template.invoke(
-        {
-            "signals_by_ticker": json.dumps(signals_by_ticker, indent=2),
-            "current_prices": json.dumps(current_prices, indent=2),
-            "max_shares": json.dumps(max_shares, indent=2),
-            "portfolio_cash": f"{portfolio.get('cash', 0):.2f}",
-            "portfolio_positions": json.dumps(portfolio.get('positions', {}), indent=2),
-            "margin_requirement": f"{portfolio.get('margin_requirement', 0):.2f}",
-        }
+          Output strictly in JSON with the following structure:
+          {{
+            "decisions": {{
+              "TICKER1": {{
+                "action": "buy/sell/short/cover/hold",
+                "quantity": integer,
+                "confidence": float,
+                "reasoning": "string"
+              }},
+              "TICKER2": {{
+                ...
+              }},
+              ...
+            }}
+          }}
+          """,
+        ),
+    ])
+    
+    prompt = template.format(
+        signals_by_ticker=json.dumps(signals_by_ticker, indent=2),
+        current_prices=json.dumps(current_prices, indent=2),
+        max_shares=json.dumps(max_shares, indent=2),
+        portfolio_cash=f"{portfolio.get('cash', 0):.2f}",
+        portfolio_positions=json.dumps(portfolio.get('positions', {}), indent=2),
+        margin_requirement=f"{portfolio.get('margin_requirement', 0):.2f}",
     )
 
     # Create default factory for PortfolioManagerOutput
     def create_default_portfolio_output():
         return PortfolioManagerOutput(decisions={ticker: PortfolioDecision(action="hold", quantity=0, confidence=0.0, reasoning="Error in portfolio management, defaulting to hold") for ticker in tickers})
 
-    return call_llm(prompt=prompt, model_name=model_name, model_provider=model_provider, pydantic_model=PortfolioManagerOutput, agent_name="portfolio_management_agent", default_factory=create_default_portfolio_output)
+    return call_llm(
+        llm=llm,
+        prompt=prompt,
+        output_schema=PortfolioManagerOutput
+    )
