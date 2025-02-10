@@ -91,7 +91,13 @@ def print_trading_output(result: dict) -> None:
     portfolio_data = []
     for ticker, decision in decisions.items():
         action = decision.get("action", "").upper()
-        action_color = {"BUY": Fore.GREEN, "SELL": Fore.RED, "HOLD": Fore.YELLOW}.get(action, Fore.WHITE)
+        action_color = {
+            "BUY": Fore.GREEN,
+            "SELL": Fore.RED,
+            "HOLD": Fore.YELLOW,
+            "COVER": Fore.GREEN,
+            "SHORT": Fore.RED,
+        }.get(action, Fore.WHITE)
         portfolio_data.append(
             [
                 f"{Fore.CYAN}{ticker}{Style.RESET_ALL}",

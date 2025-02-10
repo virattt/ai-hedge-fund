@@ -345,7 +345,7 @@ class Backtester:
                 }
             except Exception:
                 # If data is missing or there's an API error, skip this day
-                print(f"Error fetching prices for {ticker} between {previous_date_str} and {current_date_str}")
+                print(f"Error fetching prices between {previous_date_str} and {current_date_str}")
                 continue
 
             # ---------------------------------------------------------------

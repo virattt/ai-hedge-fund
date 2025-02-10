@@ -9,7 +9,7 @@ from utils.llm import call_llm
 from utils.progress import progress
 
 
-class BuffettSignal(BaseModel):
+class WarrenBuffettSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
     confidence: float
     reasoning: str
@@ -289,7 +289,7 @@ def generate_buffett_output(
     analysis_data: dict[str, any],
     model_name: str,
     model_provider: str,
-) -> BuffettSignal:
+) -> WarrenBuffettSignal:
     """Get investment decision from LLM with Buffett's principles"""
     template = ChatPromptTemplate.from_messages(
         [
@@ -332,10 +332,20 @@ def generate_buffett_output(
     )
 
     # Generate the prompt
-    prompt = template.invoke({"analysis_data": json.dumps(analysis_data, indent=2), "ticker": ticker})
+    prompt = template.invoke({
+        "analysis_data": json.dumps(analysis_data, indent=2), 
+        "ticker": ticker
+      })
 
-    # Create default factory for BuffettSignal
-    def create_default_buffett_signal():
-        return BuffettSignal(signal="neutral", confidence=0.0, reasoning="Error in analysis, defaulting to neutral")
+    # Create default factory for WarrenBuffettSignal
+    def create_default_warren_buffett_signal():
+        return WarrenBuffettSignal(signal="neutral", confidence=0.0, reasoning="Error in analysis, defaulting to neutral")
 
-    return call_llm(prompt=prompt, model_name=model_name, model_provider=model_provider, pydantic_model=BuffettSignal, agent_name="warren_buffett_agent", default_factory=create_default_buffett_signal)
+    return call_llm(
+        prompt=prompt, 
+        model_name=model_name, 
+        model_provider=model_provider, 
+        pydantic_model=WarrenBuffettSignal, 
+        agent_name="warren_buffett_agent", 
+        default_factory=create_default_warren_buffett_signal,
+        )

@@ -6,6 +6,7 @@ from langgraph.graph import END, StateGraph
 from colorama import Fore, Back, Style, init
 import questionary
 
+from agents.bill_ackman import bill_ackman_agent
 from agents.fundamentals import fundamentals_agent
 from agents.portfolio_manager import portfolio_management_agent
 from agents.technicals import technical_analyst_agent
@@ -104,10 +105,6 @@ def create_workflow(selected_analysts=None):
     workflow = StateGraph(AgentState)
     workflow.add_node("start_node", start)
 
-    # Default to all analysts if none selected
-    if selected_analysts is None:
-        selected_analysts = ["technical_analyst", "fundamentals_analyst", "sentiment_analyst", "valuation_analyst"]
-
     # Dictionary of all available analysts
     analyst_nodes = {
         "technical_analyst": ("technical_analyst_agent", technical_analyst_agent),
@@ -115,8 +112,12 @@ def create_workflow(selected_analysts=None):
         "sentiment_analyst": ("sentiment_agent", sentiment_agent),
         "valuation_analyst": ("valuation_agent", valuation_agent),
         "warren_buffett": ("warren_buffett_agent", warren_buffett_agent),
+        "bill_ackman": ("bill_ackman_agent", bill_ackman_agent),
     }
 
+    # Default to all analysts if none selected
+    if selected_analysts is None:
+        selected_analysts = list(analyst_nodes.keys())
     # Add selected analyst nodes
     for analyst_key in selected_analysts:
         node_name, node_func = analyst_nodes[analyst_key]
