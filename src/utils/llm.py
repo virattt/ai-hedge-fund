@@ -13,6 +13,7 @@ T = TypeVar('T', bound=BaseModel)
 
 def get_llm(provider: str, model_name: str):
     """Get LLM instance based on provider and model name"""
+    provider = provider.lower()
     if provider == "google":
         return ChatGoogleGenerativeAI(model=model_name)
     elif provider == "openai":
