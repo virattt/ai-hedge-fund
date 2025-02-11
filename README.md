@@ -76,16 +76,12 @@ OPENAI_API_KEY=your-openai-api-key
 # Get your Groq API key from https://groq.com/
 GROQ_API_KEY=your-groq-api-key
 
-# For running LLMs hosted by anthropic (claude-3-5-sonnet, claude-3-opus, claude-3-5-haiku)
-# Get your Anthropic API key from https://anthropic.com/
-ANTHROPIC_API_KEY=your-anthropic-api-key
-
 # For getting financial data to power the hedge fund
 # Get your Financial Datasets API key from https://financialdatasets.ai/
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
-**Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, or `ANTHROPIC_API_KEY` for the hedge fund to work.  If you want to use LLMs from all providers, you will need to set all API keys.
+**Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `MISTRAL_API_KEY` for the hedge fund to work.  If you want to use LLMs from all providers, you will need to set all API keys.
 
 Financial data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key.
 
