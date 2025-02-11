@@ -126,7 +126,7 @@ class FinancialDatasetAPI(BaseAPIClient):
         response = self._make_request(
             endpoint="/financials/search/line-items",
             method="POST",
-            json=body,
+            json_data=body,
             response_model=LineItemResponse,
         )
 
@@ -191,13 +191,13 @@ class FinancialDatasetAPI(BaseAPIClient):
         self,
         ticker: str,
         report_period: str | datetime,
-        period: Period = Period.TTM,
+        period: Period | str = Period.TTM,
         limit: int = 1,
     ) -> list[FinancialMetrics]:
         """
         Fetch financial metrics for a company.
         """
-        cache_key = f"financial_metrics:{ticker}_{period.value}"
+        cache_key = f"financial_metrics:{ticker}_{period}"
 
         if cached_data := self.cache.get(cache_key):
             filtered_data = [
