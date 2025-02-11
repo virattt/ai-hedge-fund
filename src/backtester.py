@@ -76,6 +76,7 @@ class Backtester:
                 } for ticker in tickers
             }
         }
+        self.financial_api = FinancialDatasetAPI()
 
     def execute_trade(self, ticker: str, action: str, quantity: float, current_price: float):
         """
