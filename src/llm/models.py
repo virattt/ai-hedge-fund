@@ -58,6 +58,12 @@ AVAILABLE_MODELS = [
         model_name="llama-3.3-70b-versatile",
         provider=ModelProvider.GROQ
     ),
+    # Ollama models: Take 'deepseek-r1:14b' for example, add your custom models here.
+    LLMModel(
+        display_name="[ollama] deepseek-r1:14b",
+        model_name="deepseek-r1:14b",
+        provider=ModelProvider.OLLAMA
+    ),
     LLMModel(
         display_name="[openai] gpt-4o",
         model_name="gpt-4o",
@@ -78,12 +84,6 @@ AVAILABLE_MODELS = [
         model_name="o3-mini",
         provider=ModelProvider.OPENAI
     ),
-    # ollama models, take 'deepseek-r1:14b' for example
-    LLMModel(
-        display_name="[ollama] deepseek-r1:14b",
-        model_name="deepseek-r1:14b",
-        provider=ModelProvider.OLLAMA
-    )
 ]
 
 # Create LLM_ORDER in the format expected by the UI
@@ -93,7 +93,7 @@ def get_model_info(model_name: str) -> LLMModel | None:
     """Get model information by model_name"""
     return next((model for model in AVAILABLE_MODELS if model.model_name == model_name), None)
 
-def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | ChatGroq | None:
+def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | ChatGroq | ChatAnthropic | ChatOllama | None:
     if model_provider == ModelProvider.GROQ:
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
