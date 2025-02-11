@@ -41,5 +41,8 @@ Thumbs.db
 # graph
 *.png
 
+# Txt files
+*.txt
+
 # gradio
 .gradio
