@@ -1,4 +1,5 @@
 import sys
+import json
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
@@ -158,60 +159,98 @@ if __name__ == "__main__":
     parser.add_argument(
         "--show-agent-graph", action="store_true", help="Show the agent graph"
     )
+    parser.add_argument(
+        "--analysts", 
+        type=str,
+        help="Comma-separated list of analysts (e.g., 'technical_analyst,fundamentals_analyst')"
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        help="LLM model name (e.g., 'gpt-4')"
+    )
+    parser.add_argument(
+        "--model-provider",
+        type=str,
+        help="Model provider (e.g., 'OpenAI')"
+    )
+    parser.add_argument(
+        "--initial-positions",
+        type=str,
+        help="JSON string of initial positions (e.g., '{\"AAPL\": {\"long\": 100, \"short\": 0, \"long_cost_basis\": 150.0, \"short_cost_basis\": 0.0}}')"
+    )
 
     args = parser.parse_args()
 
     # Parse tickers from comma-separated string
     tickers = [ticker.strip() for ticker in args.tickers.split(",")]
 
-    # Select analysts
+    # Handle analysts selection
     selected_analysts = None
-    choices = questionary.checkbox(
-        "Select your AI analysts.",
-        choices=[questionary.Choice(display, value=value) for display, value in ANALYST_ORDER],
-        instruction="\n\nInstructions: \n1. Press Space to select/unselect analysts.\n2. Press 'a' to select/unselect all.\n3. Press Enter when done to run the hedge fund.\n",
-        validate=lambda x: len(x) > 0 or "You must select at least one analyst.",
-        style=questionary.Style(
-            [
-                ("checkbox-selected", "fg:green"),
-                ("selected", "fg:green noinherit"),
-                ("highlighted", "noinherit"),
-                ("pointer", "noinherit"),
-            ]
-        ),
-    ).ask()
-
-    if not choices:
-        print("\n\nInterrupt received. Exiting...")
-        sys.exit(0)
+    if args.analysts:
+        if args.analysts.lower() == "all":
+            selected_analysts = [value for _, value in ANALYST_ORDER]
+            print(f"\nSelected all analysts: {', '.join(Fore.GREEN + analyst.title().replace('_', ' ') + Style.RESET_ALL for analyst in selected_analysts)}\n")
+        else:
+            selected_analysts = [analyst.strip() for analyst in args.analysts.split(",")]
+            # Validate analysts
+            valid_analysts = [value for _, value in ANALYST_ORDER]
+            invalid_analysts = [a for a in selected_analysts if a not in valid_analysts]
+            if invalid_analysts:
+                print(f"{Fore.RED}Invalid analysts: {', '.join(invalid_analysts)}")
+                print(f"Valid options are: 'all' or {', '.join(valid_analysts)}{Style.RESET_ALL}")
+                sys.exit(1)
+            print(f"\nSelected analysts: {', '.join(Fore.GREEN + analyst.title().replace('_', ' ') + Style.RESET_ALL for analyst in selected_analysts)}\n")
     else:
+        choices = questionary.checkbox(
+            "Select your AI analysts.",
+            choices=[questionary.Choice(display, value=value) for display, value in ANALYST_ORDER],
+            instruction="\n\nInstructions: \n1. Press Space to select/unselect analysts.\n2. Press 'a' to select/unselect all.\n3. Press Enter when done to run the hedge fund.\n",
+            validate=lambda x: len(x) > 0 or "You must select at least one analyst.",
+            style=questionary.Style(
+                [
+                    ("checkbox-selected", "fg:green"),
+                    ("selected", "fg:green noinherit"),
+                    ("highlighted", "noinherit"),
+                    ("pointer", "noinherit"),
+                ]
+            ),
+        ).ask()
+        if not choices:
+            print("\n\nInterrupt received. Exiting...")
+            sys.exit(0)
         selected_analysts = choices
         print(f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n")
 
-    # Select LLM model
-    model_choice = questionary.select(
-        "Select your LLM model:",
-        choices=[questionary.Choice(display, value=value) for display, value, _ in LLM_ORDER],
-        style=questionary.Style([
-            ("selected", "fg:green bold"),
-            ("pointer", "fg:green bold"),
-            ("highlighted", "fg:green"),
-            ("answer", "fg:green bold"),
-        ])
-    ).ask()
-
-    if not model_choice:
-        print("\n\nInterrupt received. Exiting...")
-        sys.exit(0)
+    # Handle model selection
+    model_choice = args.model
+    model_provider = args.model_provider
+    if model_choice and model_provider:
+        print(f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
     else:
-        # Get model info using the helper function
-        model_info = get_model_info(model_choice)
-        if model_info:
-            model_provider = model_info.provider.value
-            print(f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+        model_choice = questionary.select(
+            "Select your LLM model:",
+            choices=[questionary.Choice(display, value=value) for display, value, _ in LLM_ORDER],
+            style=questionary.Style([
+                ("selected", "fg:green bold"),
+                ("pointer", "fg:green bold"),
+                ("highlighted", "fg:green"),
+                ("answer", "fg:green bold"),
+            ])
+        ).ask()
+
+        if not model_choice:
+            print("\n\nInterrupt received. Exiting...")
+            sys.exit(0)
         else:
-            model_provider = "Unknown"
-            print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+            # Get model info using the helper function
+            model_info = get_model_info(model_choice)
+            if model_info:
+                model_provider = model_info.provider.value
+                print(f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+            else:
+                model_provider = "Unknown"
+                print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
 
     # Create the workflow with selected analysts
     workflow = create_workflow(selected_analysts)
@@ -266,6 +305,19 @@ if __name__ == "__main__":
             } for ticker in tickers
         }
     }
+
+    # Update portfolio with initial positions if provided
+    if args.initial_positions:
+        try:
+            initial_positions = json.loads(args.initial_positions)
+            for ticker, position in initial_positions.items():
+                if ticker in portfolio["positions"]:
+                    portfolio["positions"][ticker].update(position)
+                else:
+                    print(f"{Fore.YELLOW}Warning: Position provided for unknown ticker {ticker}{Style.RESET_ALL}")
+        except json.JSONDecodeError:
+            print(f"{Fore.RED}Error: Invalid JSON format for initial positions{Style.RESET_ALL}")
+            sys.exit(1)
 
     # Run the hedge fund
     result = run_hedge_fund(
