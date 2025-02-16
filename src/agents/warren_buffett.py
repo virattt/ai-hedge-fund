@@ -5,7 +5,7 @@ from pydantic import BaseModel
 import json
 from typing_extensions import Literal
 from tools.api import get_financial_metrics, get_market_cap, search_line_items
-from utils.llm import call_llm
+from utils.llm import call_llm, get_llm
 from utils.progress import progress
 
 
@@ -295,7 +295,7 @@ def generate_buffett_output(
         [
             (
                 "system",
-                """You are a Warren Buffett AI agent. Decide on investment signals based on Warren Buffett’s principles:
+                """You are a Warren Buffett AI agent. Decide on investment signals based on Warren Buffett's principles:
 
                 Circle of Competence: Only invest in businesses you understand
                 Margin of Safety: Buy well below intrinsic value
@@ -341,11 +341,11 @@ def generate_buffett_output(
     def create_default_warren_buffett_signal():
         return WarrenBuffettSignal(signal="neutral", confidence=0.0, reasoning="Error in analysis, defaulting to neutral")
 
+    # Get the LLM based on provider and model name
+    llm = get_llm(model_provider, model_name)
+
     return call_llm(
-        prompt=prompt, 
-        model_name=model_name, 
-        model_provider=model_provider, 
-        pydantic_model=WarrenBuffettSignal, 
-        agent_name="warren_buffett_agent", 
-        default_factory=create_default_warren_buffett_signal,
-        )
+        llm=llm,
+        prompt=prompt,
+        output_schema=WarrenBuffettSignal
+    )
