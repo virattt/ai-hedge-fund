@@ -1,10 +1,12 @@
-from graph.state import AgentState, show_agent_reasoning
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage
-from pydantic import BaseModel
 import json
+
+from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel
 from typing_extensions import Literal
-from tools.api import get_financial_metrics, get_market_cap, search_line_items
+
+from graph.state import AgentState, show_agent_reasoning
+from tools.api import FinancialDatasetAPI
 from utils.llm import call_llm
 from utils.progress import progress
 
@@ -21,17 +23,23 @@ def warren_buffett_agent(state: AgentState):
     end_date = data["end_date"]
     tickers = data["tickers"]
 
+    financial_api = FinancialDatasetAPI()
+
     # Collect all analysis for LLM reasoning
     analysis_data = {}
     buffett_analysis = {}
 
     for ticker in tickers:
-        progress.update_status("warren_buffett_agent", ticker, "Fetching financial metrics")
+        progress.update_status(
+            "warren_buffett_agent", ticker, "Fetching financial metrics"
+        )
         # Fetch required data
-        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=5)
+        metrics = financial_api.get_financial_metrics(ticker, end_date, period="ttm", limit=5)
 
-        progress.update_status("warren_buffett_agent", ticker, "Gathering financial line items")
-        financial_line_items = search_line_items(
+        progress.update_status(
+            "warren_buffett_agent", ticker, "Gathering financial line items"
+        )
+        financial_line_items = financial_api.search_line_items(
             ticker,
             [
                 "capital_expenditure",
@@ -48,7 +56,7 @@ def warren_buffett_agent(state: AgentState):
 
         progress.update_status("warren_buffett_agent", ticker, "Getting market cap")
         # Get current market cap
-        market_cap = get_market_cap(ticker, end_date)
+        market_cap = financial_api.get_market_cap(ticker, end_date)
 
         progress.update_status("warren_buffett_agent", ticker, "Analyzing fundamentals")
         # Analyze fundamentals
@@ -57,7 +65,9 @@ def warren_buffett_agent(state: AgentState):
         progress.update_status("warren_buffett_agent", ticker, "Analyzing consistency")
         consistency_analysis = analyze_consistency(financial_line_items)
 
-        progress.update_status("warren_buffett_agent", ticker, "Calculating intrinsic value")
+        progress.update_status(
+            "warren_buffett_agent", ticker, "Calculating intrinsic value"
+        )
         intrinsic_value_analysis = calculate_intrinsic_value(financial_line_items)
 
         # Calculate total score
@@ -95,7 +105,9 @@ def warren_buffett_agent(state: AgentState):
             "margin_of_safety": margin_of_safety,
         }
 
-        progress.update_status("warren_buffett_agent", ticker, "Generating Buffett analysis")
+        progress.update_status(
+            "warren_buffett_agent", ticker, "Generating Buffett analysis"
+        )
         buffett_output = generate_buffett_output(
             ticker=ticker,
             analysis_data=analysis_data,
@@ -113,7 +125,9 @@ def warren_buffett_agent(state: AgentState):
         progress.update_status("warren_buffett_agent", ticker, "Done")
 
     # Create the message
-    message = HumanMessage(content=json.dumps(buffett_analysis), name="warren_buffett_agent")
+    message = HumanMessage(
+        content=json.dumps(buffett_analysis), name="warren_buffett_agent"
+    )
 
     # Show reasoning if requested
     if state["metadata"]["show_reasoning"]:
@@ -137,7 +151,9 @@ def analyze_fundamentals(metrics: list) -> dict[str, any]:
     reasoning = []
 
     # Check ROE (Return on Equity)
-    if latest_metrics.return_on_equity and latest_metrics.return_on_equity > 0.15:  # 15% ROE threshold
+    if (
+        latest_metrics.return_on_equity and latest_metrics.return_on_equity > 0.15
+    ):  # 15% ROE threshold
         score += 2
         reasoning.append(f"Strong ROE of {latest_metrics.return_on_equity:.1%}")
     elif latest_metrics.return_on_equity:
@@ -150,7 +166,9 @@ def analyze_fundamentals(metrics: list) -> dict[str, any]:
         score += 2
         reasoning.append("Conservative debt levels")
     elif latest_metrics.debt_to_equity:
-        reasoning.append(f"High debt to equity ratio of {latest_metrics.debt_to_equity:.1f}")
+        reasoning.append(
+            f"High debt to equity ratio of {latest_metrics.debt_to_equity:.1f}"
+        )
     else:
         reasoning.append("Debt to equity data not available")
 
@@ -159,7 +177,9 @@ def analyze_fundamentals(metrics: list) -> dict[str, any]:
         score += 2
         reasoning.append("Strong operating margins")
     elif latest_metrics.operating_margin:
-        reasoning.append(f"Weak operating margin of {latest_metrics.operating_margin:.1%}")
+        reasoning.append(
+            f"Weak operating margin of {latest_metrics.operating_margin:.1%}"
+        )
     else:
         reasoning.append("Operating margin data not available")
 
@@ -168,11 +188,17 @@ def analyze_fundamentals(metrics: list) -> dict[str, any]:
         score += 1
         reasoning.append("Good liquidity position")
     elif latest_metrics.current_ratio:
-        reasoning.append(f"Weak liquidity with current ratio of {latest_metrics.current_ratio:.1f}")
+        reasoning.append(
+            f"Weak liquidity with current ratio of {latest_metrics.current_ratio:.1f}"
+        )
     else:
         reasoning.append("Current ratio data not available")
 
-    return {"score": score, "details": "; ".join(reasoning), "metrics": latest_metrics.model_dump()}
+    return {
+        "score": score,
+        "details": "; ".join(reasoning),
+        "metrics": latest_metrics.model_dump(),
+    }
 
 
 def analyze_consistency(financial_line_items: list) -> dict[str, any]:
@@ -184,9 +210,14 @@ def analyze_consistency(financial_line_items: list) -> dict[str, any]:
     reasoning = []
 
     # Check earnings growth trend
-    earnings_values = [item.net_income for item in financial_line_items if item.net_income]
+    earnings_values = [
+        item.net_income for item in financial_line_items if item.net_income
+    ]
     if len(earnings_values) >= 4:
-        earnings_growth = all(earnings_values[i] > earnings_values[i + 1] for i in range(len(earnings_values) - 1))
+        earnings_growth = all(
+            earnings_values[i] > earnings_values[i + 1]
+            for i in range(len(earnings_values) - 1)
+        )
 
         if earnings_growth:
             score += 3
@@ -196,8 +227,12 @@ def analyze_consistency(financial_line_items: list) -> dict[str, any]:
 
         # Calculate growth rate
         if len(earnings_values) >= 2:
-            growth_rate = (earnings_values[0] - earnings_values[-1]) / abs(earnings_values[-1])
-            reasoning.append(f"Total earnings growth of {growth_rate:.1%} over past {len(earnings_values)} periods")
+            growth_rate = (earnings_values[0] - earnings_values[-1]) / abs(
+                earnings_values[-1]
+            )
+            reasoning.append(
+                f"Total earnings growth of {growth_rate:.1%} over past {len(earnings_values)} periods"
+            )
     else:
         reasoning.append("Insufficient earnings data for trend analysis")
 
@@ -211,7 +246,10 @@ def calculate_owner_earnings(financial_line_items: list) -> dict[str, any]:
     """Calculate owner earnings (Buffett's preferred measure of true earnings power).
     Owner Earnings = Net Income + Depreciation - Maintenance CapEx"""
     if not financial_line_items or len(financial_line_items) < 1:
-        return {"owner_earnings": None, "details": ["Insufficient data for owner earnings calculation"]}
+        return {
+            "owner_earnings": None,
+            "details": ["Insufficient data for owner earnings calculation"],
+        }
 
     latest = financial_line_items[0]
 
@@ -221,7 +259,10 @@ def calculate_owner_earnings(financial_line_items: list) -> dict[str, any]:
     capex = latest.capital_expenditure
 
     if not all([net_income, depreciation, capex]):
-        return {"owner_earnings": None, "details": ["Missing components for owner earnings calculation"]}
+        return {
+            "owner_earnings": None,
+            "details": ["Missing components for owner earnings calculation"],
+        }
 
     # Estimate maintenance capex (typically 70-80% of total capex)
     maintenance_capex = capex * 0.75
@@ -230,7 +271,11 @@ def calculate_owner_earnings(financial_line_items: list) -> dict[str, any]:
 
     return {
         "owner_earnings": owner_earnings,
-        "components": {"net_income": net_income, "depreciation": depreciation, "maintenance_capex": maintenance_capex},
+        "components": {
+            "net_income": net_income,
+            "depreciation": depreciation,
+            "maintenance_capex": maintenance_capex,
+        },
         "details": ["Owner earnings calculated successfully"],
     }
 
@@ -268,7 +313,9 @@ def calculate_intrinsic_value(financial_line_items: list) -> dict[str, any]:
         future_value += present_value
 
     # Add terminal value
-    terminal_value = (owner_earnings * (1 + growth_rate) ** projection_years * terminal_multiple) / (1 + discount_rate) ** projection_years
+    terminal_value = (
+        owner_earnings * (1 + growth_rate) ** projection_years * terminal_multiple
+    ) / (1 + discount_rate) ** projection_years
     intrinsic_value = future_value + terminal_value
 
     return {

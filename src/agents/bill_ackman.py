@@ -1,6 +1,6 @@
 from langchain_openai import ChatOpenAI
 from graph.state import AgentState, show_agent_reasoning
-from tools.api import get_financial_metrics, get_market_cap, search_line_items
+from tools.api import FinancialDatasetAPI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
@@ -26,15 +26,17 @@ def bill_ackman_agent(state: AgentState):
     
     analysis_data = {}
     ackman_analysis = {}
+
+    financial_api = FinancialDatasetAPI()
     
     for ticker in tickers:
         progress.update_status("bill_ackman_agent", ticker, "Fetching financial metrics")
         # You can adjust these parameters (period="annual"/"ttm", limit=5/10, etc.)
-        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=5)
+        metrics = financial_api.get_financial_metrics(ticker, end_date, period="annual", limit=5)
         
         progress.update_status("bill_ackman_agent", ticker, "Gathering financial line items")
         # Request multiple periods of data (annual or TTM) for a more robust long-term view.
-        financial_line_items = search_line_items(
+        financial_line_items = financial_api.search_line_items(
             ticker,
             [
                 "revenue",
@@ -52,7 +54,7 @@ def bill_ackman_agent(state: AgentState):
         )
         
         progress.update_status("bill_ackman_agent", ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date)
+        market_cap = financial_api.get_market_cap(ticker, end_date)
         
         progress.update_status("bill_ackman_agent", ticker, "Analyzing business quality")
         quality_analysis = analyze_business_quality(metrics, financial_line_items)

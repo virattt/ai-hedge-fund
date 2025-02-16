@@ -1,27 +1,20 @@
+import itertools
 import sys
-
 from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
-import questionary
 
 import matplotlib.pyplot as plt
-import pandas as pd
-from colorama import Fore, Style, init
 import numpy as np
-import itertools
+import pandas as pd
+import questionary
+from colorama import Fore, Style, init
+from dateutil.relativedelta import relativedelta
+from typing_extensions import Callable
 
 from llm.models import LLM_ORDER, get_model_info
-from utils.analysts import ANALYST_ORDER
 from main import run_hedge_fund
-from tools.api import (
-    get_company_news,
-    get_price_data,
-    get_prices,
-    get_financial_metrics,
-    get_insider_trades,
-)
-from utils.display import print_backtest_results, format_backtest_row
-from typing_extensions import Callable
+from tools.api import FinancialDatasetAPI
+from utils.analysts import ANALYST_ORDER
+from utils.display import format_backtest_row, print_backtest_results
 
 init(autoreset=True)
 
@@ -83,6 +76,7 @@ class Backtester:
                 } for ticker in tickers
             }
         }
+        self.financial_api = FinancialDatasetAPI()
 
     def execute_trade(self, ticker: str, action: str, quantity: float, current_price: float):
         """
@@ -281,16 +275,20 @@ class Backtester:
 
         for ticker in self.tickers:
             # Fetch price data for the entire period, plus 1 year
-            get_prices(ticker, start_date_str, self.end_date)
+            self.financial_api.get_prices(ticker, start_date_str, self.end_date)
 
             # Fetch financial metrics
-            get_financial_metrics(ticker, self.end_date, limit=10)
+            self.financial_api.get_financial_metrics(ticker, self.end_date, limit=10)
 
             # Fetch insider trades
-            get_insider_trades(ticker, self.end_date, start_date=self.start_date, limit=1000)
+            self.financial_api.get_insider_trades(
+                ticker, self.end_date, start_date=self.start_date, limit=1000
+            )
 
             # Fetch company news
-            get_company_news(ticker, self.end_date, start_date=self.start_date, limit=1000)
+            self.financial_api.get_company_news(
+                ticker, self.end_date, start_date=self.start_date, limit=1000
+            )
 
         print("Data pre-fetch complete.")
 
@@ -340,7 +338,7 @@ class Backtester:
             # Get current prices for all tickers
             try:
                 current_prices = {
-                    ticker: get_price_data(ticker, previous_date_str, current_date_str).iloc[-1]["close"]
+                    ticker: FinancialDatasetAPI().get_prices(ticker, previous_date_str, current_date_str).iloc[-1]["close"]
                     for ticker in self.tickers
                 }
             except Exception:
@@ -367,7 +365,10 @@ class Backtester:
             executed_trades = {}
             for ticker in self.tickers:
                 decision = decisions.get(ticker, {"action": "hold", "quantity": 0})
-                action, quantity = decision.get("action", "hold"), decision.get("quantity", 0)
+                action, quantity = (
+                    decision.get("action", "hold"),
+                    decision.get("quantity", 0),
+                )
 
                 executed_quantity = self.execute_trade(ticker, action, quantity, current_prices[ticker])
                 executed_trades[ticker] = executed_quantity
@@ -418,9 +419,27 @@ class Backtester:
                     if ticker in signals:
                         ticker_signals[agent_name] = signals[ticker]
 
-                bullish_count = len([s for s in ticker_signals.values() if s.get("signal", "").lower() == "bullish"])
-                bearish_count = len([s for s in ticker_signals.values() if s.get("signal", "").lower() == "bearish"])
-                neutral_count = len([s for s in ticker_signals.values() if s.get("signal", "").lower() == "neutral"])
+                bullish_count = len(
+                    [
+                        s
+                        for s in ticker_signals.values()
+                        if s.get("signal", "").lower() == "bullish"
+                    ]
+                )
+                bearish_count = len(
+                    [
+                        s
+                        for s in ticker_signals.values()
+                        if s.get("signal", "").lower() == "bearish"
+                    ]
+                )
+                neutral_count = len(
+                    [
+                        s
+                        for s in ticker_signals.values()
+                        if s.get("signal", "").lower() == "neutral"
+                    ]
+                )
 
                 # Calculate net position value
                 pos = self.portfolio["positions"][ticker]
@@ -546,9 +565,15 @@ class Backtester:
         )
         total_return = ((final_portfolio_value - self.initial_capital) / self.initial_capital) * 100
 
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO PERFORMANCE SUMMARY:{Style.RESET_ALL}")
-        print(f"Total Return: {Fore.GREEN if total_return >= 0 else Fore.RED}{total_return:.2f}%{Style.RESET_ALL}")
-        print(f"Total Realized Gains/Losses: {Fore.GREEN if total_realized_gains >= 0 else Fore.RED}${total_realized_gains:,.2f}{Style.RESET_ALL}")
+        print(
+            f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO PERFORMANCE SUMMARY:{Style.RESET_ALL}"
+        )
+        print(
+            f"Total Return: {Fore.GREEN if total_return >= 0 else Fore.RED}{total_return:.2f}%{Style.RESET_ALL}"
+        )
+        print(
+            f"Total Realized Gains/Losses: {Fore.GREEN if total_realized_gains >= 0 else Fore.RED}${total_realized_gains:,.2f}{Style.RESET_ALL}"
+        )
 
         # Plot the portfolio value over time
         plt.figure(figsize=(12, 6))
@@ -659,7 +684,9 @@ if __name__ == "__main__":
     selected_analysts = None
     choices = questionary.checkbox(
         "Use the Space bar to select/unselect analysts.",
-        choices=[questionary.Choice(display, value=value) for display, value in ANALYST_ORDER],
+        choices=[
+            questionary.Choice(display, value=value) for display, value in ANALYST_ORDER
+        ],
         instruction="\n\nPress 'a' to toggle all.\n\nPress Enter when done to run the hedge fund.",
         validate=lambda x: len(x) > 0 or "You must select at least one analyst.",
         style=questionary.Style(
@@ -685,13 +712,17 @@ if __name__ == "__main__":
     # Select LLM model
     model_choice = questionary.select(
         "Select your LLM model:",
-        choices=[questionary.Choice(display, value=value) for display, value, _ in LLM_ORDER],
-        style=questionary.Style([
-            ("selected", "fg:green bold"),
-            ("pointer", "fg:green bold"),
-            ("highlighted", "fg:green"),
-            ("answer", "fg:green bold"),
-        ])
+        choices=[
+            questionary.Choice(display, value=value) for display, value, _ in LLM_ORDER
+        ],
+        style=questionary.Style(
+            [
+                ("selected", "fg:green bold"),
+                ("pointer", "fg:green bold"),
+                ("highlighted", "fg:green"),
+                ("answer", "fg:green bold"),
+            ]
+        ),
     ).ask()
 
     if not model_choice:
@@ -701,10 +732,14 @@ if __name__ == "__main__":
         model_info = get_model_info(model_choice)
         if model_info:
             model_provider = model_info.provider.value
-            print(f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+            print(
+                f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n"
+            )
         else:
             model_provider = "Unknown"
-            print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+            print(
+                f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n"
+            )
 
     # Create and run the backtester
     backtester = Backtester(

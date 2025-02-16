@@ -1,8 +1,10 @@
-from langchain_core.messages import HumanMessage
-from graph.state import AgentState, show_agent_reasoning
-from utils.progress import progress
-from tools.api import get_prices, prices_to_df
 import json
+
+from langchain_core.messages import HumanMessage
+
+from graph.state import AgentState, show_agent_reasoning
+from tools.api import FinancialDatasetAPI
+from utils.progress import progress
 
 
 ##### Risk Management Agent #####
@@ -16,20 +18,21 @@ def risk_management_agent(state: AgentState):
     risk_analysis = {}
     current_prices = {}  # Store prices here to avoid redundant API calls
 
+    financial_api = FinancialDatasetAPI()
+
     for ticker in tickers:
         progress.update_status("risk_management_agent", ticker, "Analyzing price data")
 
-        prices = get_prices(
+        prices_df = financial_api.get_prices(
             ticker=ticker,
             start_date=data["start_date"],
             end_date=data["end_date"],
         )
 
-        if not prices:
+        if prices_df.empty:
             progress.update_status("risk_management_agent", ticker, "Failed: No price data found")
             continue
 
-        prices_df = prices_to_df(prices)
 
         progress.update_status("risk_management_agent", ticker, "Calculating position limits")
 

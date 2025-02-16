@@ -1,14 +1,12 @@
+import json
 import math
 
+import numpy as np
+import pandas as pd
 from langchain_core.messages import HumanMessage
 
 from graph.state import AgentState, show_agent_reasoning
-
-import json
-import pandas as pd
-import numpy as np
-
-from tools.api import get_prices, prices_to_df
+from tools.api import FinancialDatasetAPI
 from utils.progress import progress
 
 
@@ -27,6 +25,8 @@ def technical_analyst_agent(state: AgentState):
     end_date = data["end_date"]
     tickers = data["tickers"]
 
+    financial_api = FinancialDatasetAPI()
+
     # Initialize analysis for each ticker
     technical_analysis = {}
 
@@ -34,18 +34,15 @@ def technical_analyst_agent(state: AgentState):
         progress.update_status("technical_analyst_agent", ticker, "Analyzing price data")
 
         # Get the historical price data
-        prices = get_prices(
+        prices_df = financial_api.get_prices(
             ticker=ticker,
             start_date=start_date,
             end_date=end_date,
         )
 
-        if not prices:
+        if prices_df.empty:
             progress.update_status("technical_analyst_agent", ticker, "Failed: No price data found")
             continue
-
-        # Convert prices to a DataFrame
-        prices_df = prices_to_df(prices)
 
         progress.update_status("technical_analyst_agent", ticker, "Calculating trend signals")
         trend_signals = calculate_trend_signals(prices_df)
