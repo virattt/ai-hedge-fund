@@ -116,6 +116,89 @@ def print_trading_output(result: dict) -> None:
         )
     )
 
+def html_trading_output(result: dict) -> str:
+    """Formatting trading results into HTML for Gradio."""
+    COLOR_MAP = {
+        "BULLISH": "#4CAF50",
+        "BEARISH": "#F44336",
+        "NEUTRAL": "#FF9800",
+        "BUY": "#4CAF50",
+        "SELL": "#D32F2F",
+        "HOLD": "#FFEB3B",
+    }
+
+    def color_text(text, color) -> str:
+        """Wraps text in a HTML span with color."""
+        return f'<span style="color: {color}; font-weight: bold;">{text}</span>'
+
+    output = "<div style='font-family: Arial, sans-serif; font-size: 14px;'>"
+    decisions = result.get("decisions")
+    if not decisions:
+        return "<p style='color: red; font-weight: bold;'>No trading decisions available</p>"
+
+    for ticker, decision in decisions.items():
+        output += f"<h2 style='color: #F87315;'>Analysis for {ticker}</h2>"
+        table_data = []
+        for agent, signals in result.get("analyst_signals", {}).items():
+            if ticker not in signals:
+                continue
+
+            signal = signals[ticker]
+            agent_name = agent.replace("_agent", "").replace("_", " ").title()
+            signal_type = signal.get("signal", "").upper() or "N/A"
+            signal_color = COLOR_MAP.get(signal_type, "gray")
+            confidence = f"{signal.get('confidence', 'N/A')}%"
+            table_data.append([agent_name, color_text(signal_type, signal_color), confidence])
+        # Sort signals
+        table_data = sort_analyst_signals(table_data)
+        output += "<h3>Analyst Signals</h3>"
+        output += "<table border='1' cellpadding='5' cellspacing='0' style='border-collapse: collapse;'>"
+        output += "<tr><th>Analyst</th><th>Signal</th><th>Confidence</th></tr>"
+        for row in table_data:
+            output += f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td></tr>"
+        output += "</table>"
+
+        # Trading decision
+        action = decision.get("action", "N/A").upper()
+        action_color = COLOR_MAP.get(action, "white")
+        quantity = decision.get("quantity", "N/A")
+        confidence = f"{decision.get('confidence', 0.0):.1f}%"
+
+        decision_data = [
+            ["Action", color_text(action, action_color)],
+            ["Quantity", str(quantity)],
+            ["Confidence", confidence],
+        ]
+
+        output += "<h3>Trading Decision</h3>"
+        output += "<table border='1' cellpadding='5' cellspacing='0' style='border-collapse: collapse;'>"
+        output += "<tr><th>Attribute</th><th>Value</th></tr>"
+        for row in decision_data:
+            output += f"<tr><td>{row[0]}</td><td>{row[1]}</td></tr>"
+        output += "</table>"
+        output += f"<h3>Reasoning</h3><p style='color: #F87315'>{decision.get('reasoning', 'N/A')}</p>"
+        output += "<hr>"
+
+    # Portfolio Summary
+    output += "<h2>Portfolio Summary</h2>"
+    portfolio_data = []
+    for ticker, decision in decisions.items():
+        action = decision.get("action", "N/A").upper()
+        action_color = COLOR_MAP.get(action, "white")
+        quantity = decision.get("quantity", "N/A")
+        confidence = f"{decision.get('confidence', 0.0):.1f}%"
+        portfolio_data.append([ticker, color_text(action, action_color), quantity, confidence])
+
+    output += "<table border='1' cellpadding='5' cellspacing='0' style='border-collapse: collapse;'>"
+    output += "<tr><th>Ticker</th><th>Action</th><th>Quantity</th><th>Confidence</th></tr>"
+    for row in portfolio_data:
+        output += f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td></tr>"
+    output += "</table>"
+
+    output += "</div>"
+
+    return output
+
 
 def print_backtest_results(table_rows: list) -> None:
     """Print the backtest results in a nicely formatted table"""

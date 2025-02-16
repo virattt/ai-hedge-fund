@@ -109,6 +109,13 @@ You can optionally specify the start and end dates to make decisions for a speci
 poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 
 ```
 
+You can also run the application with an interactive Gradio interface.
+Port defaults to 7860
+```bash
+poetry run python src/gradio_app.py
+```
+![image](https://res.cloudinary.com/dez3yjolk/image/upload/v1738462316/Screenshot_2025-02-02_at_7.31.34_AM_xgpz0r.png)
+
 ### Running the Backtester
 
 ```bash
