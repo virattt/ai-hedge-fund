@@ -45,3 +45,4 @@ Thumbs.db
 *.txt
 
 .env
+.env.example
