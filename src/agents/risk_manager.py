@@ -86,14 +86,14 @@ def risk_management_agent(state: AgentState):
             Respond with just a number representing the percentage (e.g., "15" for 15%).  Provide a brief 1-2 sentence reasoning for your suggested percentage.[/INST]
             """
 
-        print(f"\n--- LLM Prompt for {ticker} ---")  # Debugging print statement
-        print(prompt)  # Debugging print statement
+        # print(f"\n--- LLM Prompt for {ticker} ---")  # Debugging print statement
+        # print(prompt)  # Debugging print statement
 
         llm_response = llm.invoke([HumanMessage(content=prompt)])
         llm_content = llm_response.content
 
-        print(f"\n--- LLM Response for {ticker} ---")  # Debugging print statement
-        print(llm_content)  # Debugging print statement
+        # print(f"\n--- LLM Response for {ticker} ---")  # Debugging print statement
+        # print(llm_content)  # Debugging print statement
 
         position_limit_percentage = 0.20  # Default value
         llm_reasoning = f"Default position limit of 20% applied due to parsing error." # Default reasoning
@@ -111,9 +111,9 @@ def risk_management_agent(state: AgentState):
             progress.update_status("risk_management_agent", ticker, f"Warning: Error parsing percentage from LLM response. Defaulting to 0.20. Error: {e}")
 
 
-        print(f"\n--- Parsed Percentage and Reasoning for {ticker} ---")  # Debugging print statement
-        print(f"Position Limit Percentage: {position_limit_percentage}")  # Debugging print statement
-        print(f"LLM Reasoning: {llm_reasoning}")  # Debugging print statement
+        # print(f"\n--- Parsed Percentage and Reasoning for {ticker} ---")  # Debugging print statement
+        # print(f"Position Limit Percentage: {position_limit_percentage}")  # Debugging print statement
+        # print(f"LLM Reasoning: {llm_reasoning}")  # Debugging print statement
 
 
         # Calculate position limit based on LLM percentage
@@ -151,8 +151,8 @@ def risk_management_agent(state: AgentState):
         }
 
         progress.update_status("risk_management_agent", ticker, "Done")
-        print(f"\n--- risk_analysis for {ticker} ---") # Debugging print statement
-        print(json.dumps(risk_analysis[ticker], indent=2)) # Debugging print statement
+        # print(f"\n--- risk_analysis for {ticker} ---") # Debugging print statement
+        # print(json.dumps(risk_analysis[ticker], indent=2)) # Debugging print statement
 
 
     message = HumanMessage(

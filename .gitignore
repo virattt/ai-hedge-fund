@@ -43,3 +43,5 @@ Thumbs.db
 
 # Txt files
 *.txt
+
+.env
