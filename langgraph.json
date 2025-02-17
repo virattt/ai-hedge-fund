@@ -1,20 +1,8 @@
 {
-  "dependencies": ["."],
+  "dependencies": ["src"],
   "graphs": {
-    "hedge_fund": "./src/main.py:app"
+    "hedge_fund": "src/main.py:app"
   },
   "env": ".env",
-  "store": {
-    "index": {
-      "embed": "openai:text-embedding-3-small",
-      "dims": 1536,
-      "fields": ["$"]
-    }
-  },
-  "python_version": "3.11",
-  "node_version": "20",
-  "pip_config_file": "./pip.conf",
-  "dockerfile_lines": [
-    "RUN apt-get update && apt-get install -y libgomp1"
-  ]
+  "dockerfile_lines": ["RUN apt-get update && apt-get install -y libgomp1"]
 }

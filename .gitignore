@@ -43,3 +43,4 @@ Thumbs.db
 
 # Txt files
 *.txt
+.langgraph_api
