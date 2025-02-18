@@ -22,7 +22,7 @@ from data.models import (
 _cache = get_cache()
 
 MAX_RETRIES = 5
-BACKOFF_FACTOR = 5
+BACKOFF_FACTOR = 10
 
 
 def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
@@ -146,9 +146,20 @@ def search_line_items(
         "period": period,
         "limit": limit,
     }
-    response = requests.post(url, headers=headers, json=body)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {response.status_code} - {response.text}")
+    # Add initial random wait time between 0 and 2 seconds
+    time.sleep(random.uniform(0, 2))
+    for attempt in range(MAX_RETRIES):
+        response = requests.post(url, headers=headers, json=body)
+        if response.status_code == 429:
+            # Too Many Requests, backoff and retry
+            wait_time = BACKOFF_FACTOR * (2**attempt)
+            print(f"Rate limit exceeded. Retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+        elif response.status_code != 200:
+            raise Exception(f"Error fetching data: {response.status_code} - {response.text}")
+        else:
+            # break for loop if successful
+            break
     data = response.json()
     response_model = LineItemResponse(**data)
     search_results = response_model.search_results
