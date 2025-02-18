@@ -79,7 +79,7 @@ GROQ_API_KEY=your-groq-api-key
 
 # For running LLMS hosted by Deepseek (deepseek-reasoner, deepseek-chat)
 # Get your Deepseek API key from https://platform.deepseek.com/
-DEEPSEEK_API_KEY=your-groq-api-key
+DEEPSEEK_API_KEY=your-deepseek-api-key
 
 # For getting financial data to power the hedge fund
 # Get your Financial Datasets API key from https://financialdatasets.ai/
