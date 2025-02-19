@@ -1,6 +1,7 @@
 import os
 from langchain_anthropic import ChatAnthropic
 from langchain_groq import ChatGroq
+from langchain_mistralai import ChatMistralAI
 from langchain_openai import ChatOpenAI
 from enum import Enum
 from pydantic import BaseModel
@@ -12,7 +13,7 @@ class ModelProvider(str, Enum):
     OPENAI = "OpenAI"
     GROQ = "Groq"
     ANTHROPIC = "Anthropic"
-
+    MISTRAL = "Mistral"
 
 class LLMModel(BaseModel):
     """Represents an LLM model configuration"""
@@ -76,6 +77,11 @@ AVAILABLE_MODELS = [
         model_name="o3-mini",
         provider=ModelProvider.OPENAI
     ),
+    LLMModel(
+        display_name="[mistral] mistral-large-latest",
+        model_name="mistral-large-latest",
+        provider=ModelProvider.MISTRAL
+    ),
 ]
 
 # Create LLM_ORDER in the format expected by the UI
@@ -107,3 +113,10 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
             print(f"API Key Error: Please make sure ANTHROPIC_API_KEY is set in your .env file.")
             raise ValueError("Anthropic API key not found.  Please make sure ANTHROPIC_API_KEY is set in your .env file.")
         return ChatAnthropic(model=model_name, api_key=api_key)
+    elif model_provider == ModelProvider.MISTRAL:
+        api_key = os.getenv("MISTRAL_API_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure MISTRAL_API_KEY is set in your .env file.")
+            raise ValueError("Mistral API key not found.  Please make sure MISTRAL_API_KEY is set in your .env file.")
+        return ChatMistralAI(model=model_name, api_key=api_key)
+    
