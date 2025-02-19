@@ -80,7 +80,7 @@ AVAILABLE_MODELS = [
     ),
     LLMModel(
         display_name="[ollama] deepseek-r1-distill-qwen-7b",
-        model_name="deepseek-r1:7b",
+        model_name="deepseek-r1",
         provider=ModelProvider.OLLAMA
     ),
 ]
