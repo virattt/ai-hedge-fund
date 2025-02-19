@@ -36,6 +36,7 @@ class Backtester:
         initial_capital: float,
         model_name: str = "gpt-4o",
         model_provider: str = "OpenAI",
+        model_display_name: str = "Unknown",
         selected_analysts: list[str] = [],
         initial_margin_requirement: float = 0.0,
     ):
@@ -47,6 +48,7 @@ class Backtester:
         :param initial_capital: Starting portfolio cash.
         :param model_name: Which LLM model name to use (gpt-4, etc).
         :param model_provider: Which LLM provider (OpenAI, etc).
+        :param model_display_name: The display name of the model.
         :param selected_analysts: List of analyst names or IDs to incorporate.
         :param initial_margin_requirement: The margin ratio (e.g. 0.5 = 50%).
         """
@@ -57,6 +59,7 @@ class Backtester:
         self.initial_capital = initial_capital
         self.model_name = model_name
         self.model_provider = model_provider
+        self.model_display_name = model_display_name
         self.selected_analysts = selected_analysts
 
         # Store the margin ratio (e.g. 0.5 means 50% margin required).
@@ -553,7 +556,7 @@ class Backtester:
         # Plot the portfolio value over time
         plt.figure(figsize=(12, 6))
         plt.plot(performance_df.index, performance_df["Portfolio Value"], color="blue")
-        plt.title("Portfolio Value Over Time")
+        plt.title(f"Portfolio Value Over Time ({self.model_display_name})")
         plt.ylabel("Portfolio Value ($)")
         plt.xlabel("Date")
         plt.grid(True)
@@ -701,11 +704,14 @@ if __name__ == "__main__":
         model_info = get_model_info(model_choice)
         if model_info:
             model_provider = model_info.provider.value
+            model_display_name = model_info.display_name
             print(f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
         else:
             model_provider = "Unknown"
+            model_display_name = "Unknown"
             print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
 
+        
     # Create and run the backtester
     backtester = Backtester(
         agent=run_hedge_fund,
@@ -715,6 +721,7 @@ if __name__ == "__main__":
         initial_capital=args.initial_capital,
         model_name=model_choice,
         model_provider=model_provider,
+        model_display_name=model_display_name,
         selected_analysts=selected_analysts,
         initial_margin_requirement=args.margin_requirement,
     )
