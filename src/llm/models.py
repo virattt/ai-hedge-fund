@@ -83,6 +83,11 @@ AVAILABLE_MODELS = [
         model_name="deepseek-r1",
         provider=ModelProvider.OLLAMA
     ),
+    LLMModel(
+        display_name="[ollama] llama3.1:8b",
+        model_name="llama3.1:8b",
+        provider=ModelProvider.OLLAMA
+    ),
 ]
 
 # Create LLM_ORDER in the format expected by the UI

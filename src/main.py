@@ -1,4 +1,5 @@
 import sys
+from time import perf_counter
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
@@ -161,6 +162,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # set perf counter
+    start_time = perf_counter()
+
     # Parse tickers from comma-separated string
     tickers = [ticker.strip() for ticker in args.tickers.split(",")]
 
@@ -279,3 +283,6 @@ if __name__ == "__main__":
         model_provider=model_provider,
     )
     print_trading_output(result)
+
+    # print perf counter
+    print(f"\nTotal execution time: {perf_counter() - start_time:.2f} seconds")
