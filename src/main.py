@@ -1,4 +1,10 @@
+import aiohttp
+import asyncio
+import os 
 import sys
+import time
+from typing import Dict
+from discord import Webhook, Color, Embed
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
@@ -40,6 +46,136 @@ def parse_hedge_fund_response(response):
     except:
         print(f"Error parsing response: {response}")
         return None
+
+
+class RateLimiter:
+    def __init__(self, calls_per_minute: int = 30):  # Discord usually allows 30 messages per minute
+        self.calls_per_minute = calls_per_minute
+        self.interval = 60 / calls_per_minute  # Time between calls in seconds
+        self.last_call = 0
+        self.calls = []  # Track timestamp of each call
+        
+    async def wait(self):
+        now = time.time()
+        
+        # Remove timestamps older than 1 minute
+        self.calls = [call for call in self.calls if now - call < 60]
+        
+        # If we've hit the rate limit, wait
+        if len(self.calls) >= self.calls_per_minute:
+            wait_time = 60 - (now - self.calls[0])
+            if wait_time > 0:
+                await asyncio.sleep(wait_time)
+        
+        # If needed, wait for minimum interval between calls
+        time_since_last = now - self.last_call
+        if time_since_last < self.interval:
+            await asyncio.sleep(self.interval - time_since_last)
+        
+        self.last_call = time.time()
+        self.calls.append(self.last_call)
+
+
+class DiscordNotifier:
+    def __init__(self, webhook_url: str = None, enabled: bool = True, calls_per_minute: int = 30):
+        self.enabled = enabled
+        if not enabled:
+            return
+            
+        self.webhook_url = webhook_url or os.getenv("DISCORD_WEBHOOK")
+        if not self.webhook_url and enabled:
+            raise ValueError("Discord webhook URL not provided and DISCORD_WEBHOOK not found in environment")
+        
+        self.rate_limiter = RateLimiter(calls_per_minute)
+
+    async def send_analysis(self, ticker: str, analyst_signals: Dict, trading_decision: Dict, portfolio_summary: Dict, state: AgentState):
+        if not self.enabled:
+            return
+        
+        # Wait for rate limiter before proceeding
+        await self.rate_limiter.wait()
+        
+        async with aiohttp.ClientSession() as session:
+            webhook = Webhook.from_url(self.webhook_url, session=session)
+
+            # Predefined order of agents
+            agent_order = [
+                'fundamentals_agent', 
+                'technical_analyst_agent', 
+                'valuation_agent', 
+                'sentiment_agent', 
+                'warren_buffett_agent', 
+                'bill_ackman_agent'
+            ]
+
+            # Map to ensure consistent naming
+            name_mapping = {
+                'fundamentals_agent': 'Fundamentals',
+                'technical_analyst_agent': 'Technical Analyst',
+                'valuation_agent': 'Valuation',
+                'sentiment_agent': 'Sentiment',
+                'bill_ackman_agent': 'Bill Ackman',
+                'warren_buffett_agent': 'Warren Buffett'
+            }
+
+            analyst_table = []
+            for agent_name in agent_order:
+                # Skip if agent is not in analyst_signals
+                if agent_name not in analyst_signals:
+                    continue
+                    
+                # Get display name from mapping
+                display_name = name_mapping.get(agent_name, agent_name)
+                
+                # Get agent's specific data for this ticker
+                ticker_data = analyst_signals[agent_name].get(ticker, {})
+                signal = ticker_data.get('signal', 'NEUTRAL').upper()
+                confidence = ticker_data.get('confidence', 0.0)
+                
+                analyst_table.append(
+                    f"{display_name:<20} {signal:<10} {confidence:>6.1f}%"
+                )
+
+            # Retrieve quantity from trading decision
+            quantity = trading_decision.get('quantity', 0)
+            confidence = trading_decision.get('confidence', 0.0)
+
+            message = [
+                f"**TRADING DECISION FOR {ticker}**",
+                "```",
+                f"Action:     {trading_decision.get('action', 'UNKNOWN').upper()}",
+                f"Quantity:   {quantity}",
+                f"Confidence: {confidence:.2f}%",
+                "```",
+                
+                "```",
+                f"{'Analyst':<20} {'Signal':<10} {'Confidence':>8}",
+                "-" * 42,
+                "\n".join(analyst_table),
+                "```",
+            ]
+
+            # Determine color based on trading decision action
+            action = trading_decision.get('action', '').lower()
+            if action == 'buy':
+                color = Color.from_rgb(0, 255, 0)  # Green
+            elif action == 'sell':
+                color = Color.from_rgb(255, 0, 0)  # Red
+            elif action == 'hold':
+                color = Color.from_rgb(255, 174, 0)  # Yellow
+            else:
+                color = Color.from_rgb(128, 128, 128)  # Gray
+
+            embed = Embed(
+                description="\n".join(message),
+                color=color
+            )
+
+            try:
+                await webhook.send(embed=embed)
+                print(f"Analysis sent to Discord for {ticker}")
+            except Exception as e:
+                print(f"Error sending analysis to Discord: {str(e)}")
 
 
 ##### Run the Hedge Fund #####
@@ -86,10 +222,39 @@ def run_hedge_fund(
             },
         )
 
-        return {
-            "decisions": parse_hedge_fund_response(final_state["messages"][-1].content),
-            "analyst_signals": final_state["data"]["analyst_signals"],
+        # Parse the results
+        decisions = parse_hedge_fund_response(final_state["messages"][-1].content)
+        analyst_signals = final_state["data"]["analyst_signals"]
+
+        # Prepare the result dictionary
+        result = {
+            "decisions": decisions,
+            "analyst_signals": analyst_signals,
         }
+
+        # If Discord webhook is configured, send notifications
+        try:
+            discord_notifier = DiscordNotifier()
+            
+            # Iterate through tickers and send Discord notifications
+            for ticker in tickers:
+                # Get specific decision and signals for this ticker
+                ticker_decision = decisions.get(ticker, {})
+                ticker_signals = {agent: signals.get(ticker, {}) for agent, signals in analyst_signals.items()}
+
+                # Run the async Discord notification
+                import asyncio
+                asyncio.run(discord_notifier.send_analysis(
+                    ticker=ticker,
+                    analyst_signals=analyst_signals,
+                    trading_decision=ticker_decision,
+                    portfolio_summary={},
+                    state=final_state
+                ))
+        except Exception as e:
+            print(f"Discord notification error: {e}")
+
+        return result
     finally:
         # Stop progress tracking
         progress.stop()
