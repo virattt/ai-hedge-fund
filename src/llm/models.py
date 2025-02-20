@@ -2,6 +2,7 @@ import os
 from langchain_anthropic import ChatAnthropic
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
+from langchain_openai.chat_models.base import BaseChatOpenAI
 from enum import Enum
 from pydantic import BaseModel
 from typing import Tuple
@@ -12,6 +13,7 @@ class ModelProvider(str, Enum):
     OPENAI = "OpenAI"
     GROQ = "Groq"
     ANTHROPIC = "Anthropic"
+    DEEPSEEK = "Deepseek"
 
 
 class LLMModel(BaseModel):
@@ -76,6 +78,18 @@ AVAILABLE_MODELS = [
         model_name="o3-mini",
         provider=ModelProvider.OPENAI
     ),
+    LLMModel(
+        display_name="[deepseek] Chat",
+        model_name="deepseek-chat",
+        # TODO: add deepseek provider
+        provider=ModelProvider.DEEPSEEK
+    ),
+    LLMModel(
+        display_name="[deepseek] R1",
+        model_name="deepseek-reasoner",
+        # TODO: add deepseek provider
+        provider=ModelProvider.DEEPSEEK
+    )
 ]
 
 # Create LLM_ORDER in the format expected by the UI
@@ -107,3 +121,13 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
             print(f"API Key Error: Please make sure ANTHROPIC_API_KEY is set in your .env file.")
             raise ValueError("Anthropic API key not found.  Please make sure ANTHROPIC_API_KEY is set in your .env file.")
         return ChatAnthropic(model=model_name, api_key=api_key)
+    elif model_provider == ModelProvider.DEEPSEEK:
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure DEEPSEEK is set in your .env file.")
+            raise ValueError("DEEPSEEK API key not found.  Please make sure DEEPSEEK is set in your .env file.")
+        return BaseChatOpenAI(
+            model=model_name,
+            openai_api_key=api_key,
+            openai_api_base='https://api.deepseek.com'
+        )
