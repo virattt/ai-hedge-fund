@@ -7,6 +7,27 @@ from utils.progress import progress
 
 T = TypeVar('T', bound=BaseModel)
 
+def map_signal_to_action(signal: str) -> str:
+    """Maps sentiment/signal words to valid portfolio actions"""
+    signal = signal.lower().strip()
+    if signal in ("bearish", "negative", "sell signal"):
+        return "sell"
+    elif signal in ("bullish", "positive", "buy signal"):
+        return "buy"
+    elif signal in ("neutral", "sideways"):
+        return "hold"
+    return signal  # return as-is if already a valid action
+
+def clean_json_response(data: dict) -> dict:
+    """Clean and validate JSON response data"""
+    if "decisions" in data:
+        for ticker, decision in data["decisions"].items():
+            if "action" in decision:
+                decision["action"] = map_signal_to_action(decision["action"])
+    return data
+
+T = TypeVar('T', bound=BaseModel)
+
 def call_llm(
     prompt: Any,
     model_name: str,
@@ -17,27 +38,17 @@ def call_llm(
     default_factory = None
 ) -> T:
     """
-    Makes an LLM call with retry logic, handling both Deepseek and non-Deepseek models.
-    
-    Args:
-        prompt: The prompt to send to the LLM
-        model_name: Name of the model to use
-        model_provider: Provider of the model
-        pydantic_model: The Pydantic model class to structure the output
-        agent_name: Optional name of the agent for progress updates
-        max_retries: Maximum number of retries (default: 3)
-        default_factory: Optional factory function to create default response on failure
-        
-    Returns:
-        An instance of the specified Pydantic model
+    Makes an LLM call with retry logic, handling different model providers.
     """
     from llm.models import get_model, get_model_info
     
     model_info = get_model_info(model_name)
     llm = get_model(model_name, model_provider)
     
-    # For non-Deepseek models, we can use structured output
-    if not (model_info and model_info.is_deepseek()):
+    needs_manual_parsing = model_info and (model_info.is_deepseek() or model_provider.lower() == 'google')
+    
+    # For models that support structured output
+    if not needs_manual_parsing:
         llm = llm.with_structured_output(
             pydantic_model,
             method="json_mode",
@@ -49,9 +60,13 @@ def call_llm(
             # Call the LLM
             result = llm.invoke(prompt)
             
-            # For Deepseek, we need to extract and parse the JSON manually
-            if model_info and model_info.is_deepseek():
-                parsed_result = extract_json_from_deepseek_response(result.content)
+            # For models needing manual JSON parsing
+            if needs_manual_parsing:
+                if model_info.is_deepseek():
+                    parsed_result = extract_json_from_deepseek_response(result.content)
+                else:  # Google model
+                    parsed_result = extract_json_from_google_response(result.content)
+                    
                 if parsed_result:
                     return pydantic_model(**parsed_result)
             else:
@@ -63,12 +78,10 @@ def call_llm(
             
             if attempt == max_retries - 1:
                 print(f"Error in LLM call after {max_retries} attempts: {e}")
-                # Use default_factory if provided, otherwise create a basic default
                 if default_factory:
                     return default_factory()
                 return create_default_response(pydantic_model)
 
-    # This should never be reached due to the retry logic above
     return create_default_response(pydantic_model)
 
 def create_default_response(model_class: Type[T]) -> T:
@@ -104,4 +117,46 @@ def extract_json_from_deepseek_response(content: str) -> Optional[dict]:
                 return json.loads(json_text)
     except Exception as e:
         print(f"Error extracting JSON from Deepseek response: {e}")
+    return None
+
+def extract_json_from_google_response(content: str) -> Optional[dict]:
+    """Extracts JSON from Google model's response."""
+    try:
+        # First try to parse the entire content as JSON
+        try:
+            data = json.loads(content)
+            return clean_json_response(data)
+        except:
+            pass
+            
+        # Look for JSON-like content within markdown blocks
+        json_start = content.find("```")
+        if json_start != -1:
+            json_text = content[json_start + 3:]
+            json_end = json_text.find("```")
+            if json_end != -1:
+                json_text = json_text[:json_end].strip()
+                # Remove any language identifier if present
+                if json_text.startswith("json"):
+                    json_text = json_text[4:].strip()
+                data = json.loads(json_text)
+                return clean_json_response(data)
+                
+        # Try to find JSON-like content between curly braces
+        start_idx = content.find("{")
+        if start_idx != -1:
+            # Find matching closing brace
+            count = 1
+            for i in range(start_idx + 1, len(content)):
+                if content[i] == "{":
+                    count += 1
+                elif content[i] == "}":
+                    count -= 1
+                if count == 0:
+                    json_text = content[start_idx:i + 1]
+                    data = json.loads(json_text)
+                    return clean_json_response(data)
+                    
+    except Exception as e:
+        print(f"Error extracting JSON from Google response: {e}")
     return None
