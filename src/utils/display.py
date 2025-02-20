@@ -11,14 +11,9 @@ def sort_analyst_signals(signals):
     analyst_order["Risk Management"] = len(ANALYST_ORDER)  # Add Risk Management at the end
 
     return sorted(signals, key=lambda x: analyst_order.get(x[0], 999))
-
-
 def print_trading_output(result: dict) -> None:
     """
     Print formatted trading results with colored tables for multiple tickers.
-
-    Args:
-        result (dict): Dictionary containing decisions and analyst signals for multiple tickers
     """
     decisions = result.get("decisions")
     if not decisions:
@@ -46,28 +41,40 @@ def print_trading_output(result: dict) -> None:
                 "NEUTRAL": Fore.YELLOW,
             }.get(signal_type, Fore.WHITE)
 
+            # Handle Risk Management Agent differently
+            if agent == "risk_management_agent":
+                value_str = f"{Fore.YELLOW}${signal.get('max_position_size'):,.2f}{Style.RESET_ALL} ({Fore.YELLOW}{signal.get('max_position_size_percent'):.2f}%{Style.RESET_ALL} of Portfolio, Limit: ${Fore.YELLOW}{signal.get('position_limit'):,.2f}{Style.RESET_ALL})"
+            else: # For other agents, display confidence as before
+                value_str = f"{Fore.YELLOW}{signal.get('confidence')}%{Style.RESET_ALL}" if signal.get('confidence') is not None else ""
+
+
             table_data.append(
                 [
                     f"{Fore.CYAN}{agent_name}{Style.RESET_ALL}",
                     f"{signal_color}{signal_type}{Style.RESET_ALL}",
-                    f"{Fore.YELLOW}{signal.get('confidence')}%{Style.RESET_ALL}",
+                    value_str, # Use the appropriate value string
                 ]
             )
 
         # Sort the signals according to the predefined order
         table_data = sort_analyst_signals(table_data)
 
+        # Determine headers based on whether Risk Management is present
+        headers = [f"{Fore.WHITE}Analyst", "Signal", "Value"] # Default header
+        if any(row[0].startswith(f"{Fore.CYAN}Risk Management") for row in table_data): # Check if Risk Management is in the table
+            headers = [f"{Fore.WHITE}Analyst", "Signal", "Max Position Size (Percent of Portfolio, Limit)"] # Specific header for Risk Management
+
         print(f"\n{Fore.WHITE}{Style.BRIGHT}ANALYST SIGNALS:{Style.RESET_ALL} [{Fore.CYAN}{ticker}{Style.RESET_ALL}]")
         print(
             tabulate(
                 table_data,
-                headers=[f"{Fore.WHITE}Analyst", "Signal", "Confidence"],
+                headers=headers, # Use the determined headers
                 tablefmt="grid",
-                colalign=("left", "center", "right"),
+                colalign=("left", "center", "left"), # Changed alignment to left for better readability
             )
         )
 
-        # Print Trading Decision Table
+        # Print Trading Decision Table (rest of the function remains the same)
         action = decision.get("action", "").upper()
         action_color = {"BUY": Fore.GREEN, "SELL": Fore.RED, "HOLD": Fore.YELLOW}.get(action, Fore.WHITE)
 
@@ -86,7 +93,7 @@ def print_trading_output(result: dict) -> None:
         # Print Reasoning
         print(f"\n{Fore.WHITE}{Style.BRIGHT}Reasoning:{Style.RESET_ALL} {Fore.CYAN}{decision.get('reasoning')}{Style.RESET_ALL}")
 
-    # Print Portfolio Summary
+    # Print Portfolio Summary (rest of the function remains the same)
     print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
     portfolio_data = []
     for ticker, decision in decisions.items():
@@ -115,7 +122,6 @@ def print_trading_output(result: dict) -> None:
             colalign=("left", "center", "right", "right"),
         )
     )
-
 
 def print_backtest_results(table_rows: list) -> None:
     """Print the backtest results in a nicely formatted table"""

@@ -64,6 +64,8 @@ def run_hedge_fund(
         else:
             agent = app
 
+        analyst_signals = {} # Initialize analyst_signals *outside* agent.invoke()
+
         final_state = agent.invoke(
             {
                 "messages": [
@@ -76,7 +78,7 @@ def run_hedge_fund(
                     "portfolio": portfolio,
                     "start_date": start_date,
                     "end_date": end_date,
-                    "analyst_signals": {},
+                    "analyst_signals": analyst_signals, # Pass the initialized dictionary
                 },
                 "metadata": {
                     "show_reasoning": show_reasoning,
