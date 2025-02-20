@@ -2,6 +2,7 @@ import os
 from langchain_anthropic import ChatAnthropic
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from enum import Enum
 from pydantic import BaseModel
 from typing import Tuple
@@ -12,6 +13,7 @@ class ModelProvider(str, Enum):
     OPENAI = "OpenAI"
     GROQ = "Groq"
     ANTHROPIC = "Anthropic"
+    GOOGLE = "Google"
 
 
 class LLMModel(BaseModel):
@@ -76,6 +78,16 @@ AVAILABLE_MODELS = [
         model_name="o3-mini",
         provider=ModelProvider.OPENAI
     ),
+    LLMModel(
+        display_name="[google] Gemini 2.0 Flash",
+        model_name="gemini-2.0-flash",
+        provider=ModelProvider.GOOGLE
+    ),
+    LLMModel(
+        display_name="[google] Gemini 2.0 Flash Lite",
+        model_name="gemini-2.0-flash-lite-preview-02-05",
+        provider=ModelProvider.GOOGLE
+    ),
 ]
 
 # Create LLM_ORDER in the format expected by the UI
@@ -107,3 +119,9 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
             print(f"API Key Error: Please make sure ANTHROPIC_API_KEY is set in your .env file.")
             raise ValueError("Anthropic API key not found.  Please make sure ANTHROPIC_API_KEY is set in your .env file.")
         return ChatAnthropic(model=model_name, api_key=api_key)
+    elif model_provider == ModelProvider.GOOGLE:
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure GOOGLE_API_KEY is set in your.env file.")
+            raise ValueError("Google API key not found.  Please make sure GOOGLE_API_KEY is set in your.env file.")
+        return ChatGoogleGenerativeAI(model=model_name, api_key=api_key)
