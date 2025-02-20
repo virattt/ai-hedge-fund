@@ -2,6 +2,7 @@ import os
 from langchain_anthropic import ChatAnthropic
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from enum import Enum
 from pydantic import BaseModel
 from typing import Tuple
@@ -12,6 +13,7 @@ class ModelProvider(str, Enum):
     OPENAI = "OpenAI"
     GROQ = "Groq"
     ANTHROPIC = "Anthropic"
+    OLLAMA = "Ollama"
 
 
 class LLMModel(BaseModel):
@@ -76,6 +78,11 @@ AVAILABLE_MODELS = [
         model_name="o3-mini",
         provider=ModelProvider.OPENAI
     ),
+    LLMModel(
+        display_name="[ollama] qwen2.5-3b",
+        model_name="qwen2.5:3b",
+        provider=ModelProvider.OLLAMA
+    ),
 ]
 
 # Create LLM_ORDER in the format expected by the UI
@@ -107,3 +114,11 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
             print(f"API Key Error: Please make sure ANTHROPIC_API_KEY is set in your .env file.")
             raise ValueError("Anthropic API key not found.  Please make sure ANTHROPIC_API_KEY is set in your .env file.")
         return ChatAnthropic(model=model_name, api_key=api_key)
+    elif model_provider == ModelProvider.OLLAMA:
+        # Ollama runs locally, so we don't need an API key
+        try:
+            return ChatOllama(model=model_name)
+        except Exception as e:
+            print(f"Ollama Error: Make sure Ollama is running locally and the model is pulled. Error: {str(e)}")
+            raise ValueError(f"Failed to initialize Ollama model. Make sure Ollama is running and the model is pulled: {str(e)}")
+    return None
