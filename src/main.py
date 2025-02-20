@@ -133,6 +133,11 @@ def create_workflow(selected_analysts=None):
     return workflow
 
 
+# Create a default workflow with all analysts
+workflow = create_workflow()
+app = workflow.compile()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the hedge fund trading system")
     parser.add_argument(

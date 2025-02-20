@@ -1,0 +1,8 @@
+{
+  "dependencies": ["src"],
+  "graphs": {
+    "hedge_fund": "src/main.py:app"
+  },
+  "env": ".env",
+  "dockerfile_lines": ["RUN apt-get update && apt-get install -y libgomp1"]
+}
