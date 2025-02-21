@@ -5,7 +5,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
 from colorama import Fore, Back, Style, init
 import questionary
-
+from agents.ben_graham import ben_graham_agent
 from agents.bill_ackman import bill_ackman_agent
 from agents.fundamentals import fundamentals_agent
 from agents.portfolio_manager import portfolio_management_agent
@@ -16,7 +16,7 @@ from agents.warren_buffett import warren_buffett_agent
 from graph.state import AgentState
 from agents.valuation import valuation_agent
 from utils.display import print_trading_output
-from utils.analysts import ANALYST_ORDER
+from utils.analysts import ANALYST_ORDER, get_analyst_nodes
 from utils.progress import progress
 from llm.models import LLM_ORDER, get_model_info
 
@@ -105,15 +105,8 @@ def create_workflow(selected_analysts=None):
     workflow = StateGraph(AgentState)
     workflow.add_node("start_node", start)
 
-    # Dictionary of all available analysts
-    analyst_nodes = {
-        "technical_analyst": ("technical_analyst_agent", technical_analyst_agent),
-        "fundamentals_analyst": ("fundamentals_agent", fundamentals_agent),
-        "sentiment_analyst": ("sentiment_agent", sentiment_agent),
-        "valuation_analyst": ("valuation_agent", valuation_agent),
-        "warren_buffett": ("warren_buffett_agent", warren_buffett_agent),
-        "bill_ackman": ("bill_ackman_agent", bill_ackman_agent),
-    }
+    # Get analyst nodes from the configuration
+    analyst_nodes = get_analyst_nodes()
 
     # Default to all analysts if none selected
     if selected_analysts is None:

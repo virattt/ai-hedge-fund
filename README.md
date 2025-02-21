@@ -4,14 +4,16 @@ This is a proof of concept for an AI-powered hedge fund.  The goal of this proje
 
 This system employs several agents working together:
 
-1. Bill Ackman Agent - Uses Bill Ackman's principles to generate trading signals
-2. Warren Buffett Agent - Uses Warren Buffett's principles to generate trading signals
-3. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
-4. Sentiment Agent - Analyzes market sentiment and generates trading signals
-5. Fundamentals Agent - Analyzes fundamental data and generates trading signals
-6. Technicals Agent - Analyzes technical indicators and generates trading signals
-7. Risk Manager - Calculates risk metrics and sets position limits
-8. Portfolio Manager - Makes final trading decisions and generates orders
+1. Ben Graham Agent - The godfather of value investing, only buys hidden gems with a margin of safety
+2. Bill Ackman Agent - An activist investors, takes bold positions and pushes for change
+3. Catherine Wood Agent - The queen of growth investing, believes in the power of innovation and disruption
+4. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
+5. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
+6. Sentiment Agent - Analyzes market sentiment and generates trading signals
+7. Fundamentals Agent - Analyzes fundamental data and generates trading signals
+8. Technicals Agent - Analyzes technical indicators and generates trading signals
+9. Risk Manager - Calculates risk metrics and sets position limits
+10. Portfolio Manager - Makes final trading decisions and generates orders
 
 <img width="1117" alt="Screenshot 2025-02-09 at 11 26 14 AM" src="https://github.com/user-attachments/assets/16509cc2-4b64-4c67-8de6-00d224893d58" />
 
