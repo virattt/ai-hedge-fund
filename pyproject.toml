@@ -8,7 +8,7 @@ packages = [
     { include = "src", from = "." }
 ]
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.10"
 langchain = "0.3.0"
 langchain-anthropic = "0.3.5"
 langchain-groq = "0.2.3"
@@ -22,6 +22,7 @@ tabulate = "^0.9.0"
 colorama = "^0.4.6"
 questionary = "^2.1.0"
 rich = "^13.9.4"
+gradio = "^5.9.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
