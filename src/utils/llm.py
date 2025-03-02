@@ -1,9 +1,9 @@
 """Helper functions for LLM"""
 
 import json
+import traceback
 from typing import Any, Optional, Type, TypeVar
 
-from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel
 
 from utils.progress import progress
@@ -41,15 +41,11 @@ def call_llm(
     llm = get_model(model_name, model_provider)
 
     # For non-Deepseek models, we can use structured output
-    if not (model_info and model_info.is_deepseek()):
-        if isinstance(llm, ChatGoogleGenerativeAI):
-            # Use the appropriate method for ChatGoogleGenerativeAI
-            llm = llm.with_structured_output(pydantic_model)
-        else:
-            llm = llm.with_structured_output(
-                pydantic_model,
-                method="json_mode",
-            )
+    if not (model_info and (model_info.is_deepseek() or model_info.is_gemini())):
+        llm = llm.with_structured_output(
+            pydantic_model,
+            method="json_mode",
+        )
 
     # Call the LLM with retries
     for attempt in range(max_retries):
@@ -58,7 +54,7 @@ def call_llm(
             result = llm.invoke(prompt)
 
             # For Deepseek, we need to extract and parse the JSON manually
-            if model_info and model_info.is_deepseek():
+            if model_info and (model_info.is_deepseek() or model_info.is_gemini()):
                 parsed_result = extract_json_from_deepseek_response(result.content)
                 if parsed_result:
                     return pydantic_model(**parsed_result)
@@ -66,6 +62,10 @@ def call_llm(
                 return result
 
         except Exception as e:
+            print(f"Error in LLM call: {e}")
+            print("Full traceback:")
+            print(traceback.format_exc())
+
             if agent_name:
                 progress.update_status(agent_name, None, f"Error - retry {attempt + 1}/{max_retries}")
 

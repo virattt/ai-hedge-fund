@@ -33,6 +33,10 @@ class LLMModel(BaseModel):
         """Check if the model is a DeepSeek model"""
         return self.model_name.startswith("deepseek")
 
+    def is_gemini(self) -> bool:
+        """Check if the model is a Gemini model"""
+        return self.model_name.startswith("gemini")
+
 
 # Define available models
 AVAILABLE_MODELS = [
