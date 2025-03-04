@@ -81,13 +81,11 @@ AVAILABLE_MODELS = [
     LLMModel(
         display_name="[deepseek] Chat",
         model_name="deepseek-chat",
-        # TODO: add deepseek provider
         provider=ModelProvider.DEEPSEEK
     ),
     LLMModel(
         display_name="[deepseek] R1",
         model_name="deepseek-reasoner",
-        # TODO: add deepseek provider
         provider=ModelProvider.DEEPSEEK
     )
 ]
