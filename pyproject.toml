@@ -1,37 +1,46 @@
-[tool.poetry]
+[project]
 name = "ai-hedge-fund"
 version = "0.1.0"
 description = "An AI-powered hedge fund that uses multiple agents to make trading decisions"
-authors = ["Your Name <your.email@example.com>"]
+authors = [{ name = "Your Name", email = "your.email@example.com" }]
+requires-python = "~=3.9"
 readme = "README.md"
-packages = [
-    { include = "src", from = "." }
+dependencies = [
+    "langchain==0.3.0",
+    "langchain-anthropic==0.3.5",
+    "langchain-groq==0.2.3",
+    "langchain-openai==0.3",
+    "langgraph==0.2.56",
+    "pandas>=2.1.0,<3",
+    "numpy>=1.24.0,<2",
+    "python-dotenv==1.0.0",
+    "matplotlib>=3.9.2,<4",
+    "tabulate>=0.9.0,<0.10",
+    "colorama>=0.4.6,<0.5",
+    "questionary>=2.1.0,<3",
+    "rich>=13.9.4,<14",
 ]
-[tool.poetry.dependencies]
-python = "^3.9"
-langchain = "0.3.0"
-langchain-anthropic = "0.3.5"
-langchain-groq = "0.2.3"
-langchain-openai = "0.3"
-langgraph = "0.2.56"
-pandas = "^2.1.0"
-numpy = "^1.24.0"
-python-dotenv = "1.0.0"
-matplotlib = "^3.9.2"
-tabulate = "^0.9.0"
-colorama = "^0.4.6"
-questionary = "^2.1.0"
-rich = "^13.9.4"
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^7.4.0"
-black = "^23.7.0"
-isort = "^5.12.0"
-flake8 = "^6.1.0"
+[dependency-groups]
+dev = [
+    "pytest>=7.4.0,<8",
+    "black>=23.7.0,<24",
+    "isort>=5.12.0,<6",
+    "flake8>=6.1.0,<7",
+]
+
+[tool.hatch.build.targets.sdist]
+include = ["./src"]
+
+[tool.hatch.build.targets.wheel]
+include = ["./src"]
+
+[tool.hatch.build.targets.wheel.sources]
+"./src" = "src"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.black]
 line-length = 420

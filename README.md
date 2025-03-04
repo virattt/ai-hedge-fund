@@ -1,6 +1,6 @@
 # AI Hedge Fund
 
-This is a proof of concept for an AI-powered hedge fund.  The goal of this project is to explore the use of AI to make trading decisions.  This project is for **educational** purposes only and is not intended for real trading or investment.
+This is a proof of concept for an AI-powered hedge fund. The goal of this project is to explore the use of AI to make trading decisions. This project is for **educational** purposes only and is not intended for real trading or investment.
 
 This system employs several agents working together:
 
@@ -16,8 +16,7 @@ This system employs several agents working together:
 10. Risk Manager - Calculates risk metrics and sets position limits
 11. Portfolio Manager - Makes final trading decisions and generates orders
 
-<img width="1117" alt="Screenshot 2025-02-09 at 11 26 14 AM" src="https://github.com/user-attachments/assets/16509cc2-4b64-4c67-8de6-00d224893d58" />
-
+<img width="1117" alt="Screenshot 2025-02-09 at 11 26 14 AM" src="https://github.com/user-attachments/assets/16509cc2-4b64-4c67-8de6-00d224893d58" />
 
 **Note**: the system simulates trading decisions, it does not actually trade.
 
@@ -53,14 +52,19 @@ git clone https://github.com/virattt/ai-hedge-fund.git
 cd ai-hedge-fund
 ```
 
-1. Install Poetry (if not already installed):
+1. Install uv (if not already installed):
 ```bash
-curl -sSL https://install.python-poetry.org | python3 -
+# macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows (PowerShell)
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
 2. Install dependencies:
 ```bash
-poetry install
+# Install dependencies from pyproject.toml
+uv sync
 ```
 
 3. Set up your environment variables:
@@ -84,7 +88,7 @@ GROQ_API_KEY=your-groq-api-key
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
-**Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, or `ANTHROPIC_API_KEY` for the hedge fund to work.  If you want to use LLMs from all providers, you will need to set all API keys.
+**Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, or `ANTHROPIC_API_KEY` for the hedge fund to work. If you want to use LLMs from all providers, you will need to set all API keys.
 
 Financial data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key.
 
@@ -94,39 +98,39 @@ For any other ticker, you will need to set the `FINANCIAL_DATASETS_API_KEY` in t
 
 ### Running the Hedge Fund
 ```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA
+uv run src/main.py --ticker AAPL,MSFT,NVDA
 ```
 
 **Example Output:**
-<img width="992" alt="Screenshot 2025-01-06 at 5 50 17 PM" src="https://github.com/user-attachments/assets/e8ca04bf-9989-4a7d-a8b4-34e04666663b" />
+<img width="992" alt="Screenshot 2025-01-06 at 5 50 17 PM" src="https://github.com/user-attachments/assets/e8ca04bf-9989-4a7d-a8b4-34e04666663b" />
 
 You can also specify a `--show-reasoning` flag to print the reasoning of each agent to the console.
 
 ```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --show-reasoning
+uv run src/main.py --ticker AAPL,MSFT,NVDA --show-reasoning
 ```
 You can optionally specify the start and end dates to make decisions for a specific time period.
 
 ```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 
+uv run src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
 ```
 
 ### Running the Backtester
 
 ```bash
-poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
+uv run src/backtester.py --ticker AAPL,MSFT,NVDA
 ```
 
 **Example Output:**
-<img width="941" alt="Screenshot 2025-01-06 at 5 47 52 PM" src="https://github.com/user-attachments/assets/00e794ea-8628-44e6-9a84-8f8a31ad3b47" />
+<img width="941" alt="Screenshot 2025-01-06 at 5 47 52 PM" src="https://github.com/user-attachments/assets/00e794ea-8628-44e6-9a84-8f8a31ad3b47" />
 
 You can optionally specify the start and end dates to backtest over a specific time period.
 
 ```bash
-poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
+uv run src/backtester.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
 ```
 
-## Project Structure 
+## Project Structure
 ```
 ai-hedge-fund/
 ├── src/
@@ -142,8 +146,9 @@ ai-hedge-fund/
 │   ├── tools/                    # Agent tools
 │   │   ├── api.py                # API tools
 │   ├── backtester.py             # Backtesting tools
-│   ├── main.py # Main entry point
-├── pyproject.toml
+│   ├── main.py                   # Main entry point
+├── pyproject.toml                # Project configuration
+├── uv.lock                       # Dependency lockfile (auto-generated)
 ├── ...
 ```
 
@@ -155,7 +160,7 @@ ai-hedge-fund/
 4. Push to the branch
 5. Create a Pull Request
 
-**Important**: Please keep your pull requests small and focused.  This will make it easier to review and merge.
+**Important**: Please keep your pull requests small and focused. This will make it easier to review and merge.
 
 ## Feature Requests
 
