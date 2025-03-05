@@ -42,8 +42,8 @@ AVAILABLE_MODELS = [
         provider=ModelProvider.ANTHROPIC
     ),
     LLMModel(
-        display_name="[anthropic] claude-3-opus",
-        model_name="claude-3-opus-latest",
+        display_name="[anthropic] claude-3.7-sonnet",
+        model_name="claude-3-7-sonnet-latest",
         provider=ModelProvider.ANTHROPIC
     ),
     LLMModel(
