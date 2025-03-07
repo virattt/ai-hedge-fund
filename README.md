@@ -9,12 +9,13 @@ This system employs several agents working together:
 3. Cathie Wood Agent - The queen of growth investing, believes in the power of innovation and disruption
 4. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
 5. Charlie Munger Agent - Warren Buffett's partner, only buys wonderful businesses at fair prices
-6. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
-7. Sentiment Agent - Analyzes market sentiment and generates trading signals
-8. Fundamentals Agent - Analyzes fundamental data and generates trading signals
-9. Technicals Agent - Analyzes technical indicators and generates trading signals
-10. Risk Manager - Calculates risk metrics and sets position limits
-11. Portfolio Manager - Makes final trading decisions and generates orders
+6. Nancy Pelosi Agent - Analyzes stocks based on policy impacts, government contracts, and regulatory changes
+7. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
+8. Sentiment Agent - Analyzes market sentiment and generates trading signals
+9. Fundamentals Agent - Analyzes fundamental data and generates trading signals
+10. Technicals Agent - Analyzes technical indicators and generates trading signals
+11. Risk Manager - Calculates risk metrics and sets position limits
+12. Portfolio Manager - Makes final trading decisions and generates orders
 
 <img width="1117" alt="Screenshot 2025-02-09 at 11 26 14 AM" src="https://github.com/user-attachments/assets/16509cc2-4b64-4c67-8de6-00d224893d58" />
 
@@ -133,6 +134,7 @@ ai-hedge-fund/
 │   ├── agents/                   # Agent definitions and workflow
 │   │   ├── bill_ackman.py        # Bill Ackman agent
 │   │   ├── fundamentals.py       # Fundamental analysis agent
+│   │   ├── nancy_pelosi.py       # Nancy Pelosi agent
 │   │   ├── portfolio_manager.py  # Portfolio management agent
 │   │   ├── risk_manager.py       # Risk management agent
 │   │   ├── sentiment.py          # Sentiment analysis agent
