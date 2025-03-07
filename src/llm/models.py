@@ -1,5 +1,4 @@
 import os
-from langchain_anthropic import ChatAnthropic
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 from enum import Enum
@@ -11,7 +10,6 @@ class ModelProvider(str, Enum):
     """Enum for supported LLM providers"""
     OPENAI = "OpenAI"
     GROQ = "Groq"
-    ANTHROPIC = "Anthropic"
 
 
 class LLMModel(BaseModel):
@@ -32,49 +30,24 @@ class LLMModel(BaseModel):
 # Define available models
 AVAILABLE_MODELS = [
     LLMModel(
-        display_name="[anthropic] claude-3.5-haiku",
-        model_name="claude-3-5-haiku-latest",
-        provider=ModelProvider.ANTHROPIC
-    ),
-    LLMModel(
-        display_name="[anthropic] claude-3.5-sonnet",
-        model_name="claude-3-5-sonnet-latest",
-        provider=ModelProvider.ANTHROPIC
-    ),
-    LLMModel(
-        display_name="[anthropic] claude-3.7-sonnet",
-        model_name="claude-3-7-sonnet-latest",
-        provider=ModelProvider.ANTHROPIC
-    ),
-    LLMModel(
-        display_name="[groq] deepseek-r1 70b",
-        model_name="deepseek-r1-distill-llama-70b",
-        provider=ModelProvider.GROQ
-    ),
-    LLMModel(
-        display_name="[groq] llama-3.3 70b",
-        model_name="llama-3.3-70b-versatile",
-        provider=ModelProvider.GROQ
-    ),
-    LLMModel(
-        display_name="[openai] gpt-4o",
+        display_name="gpt-4o [OpenAI]",
         model_name="gpt-4o",
         provider=ModelProvider.OPENAI
     ),
     LLMModel(
-        display_name="[openai] gpt-4o-mini",
+        display_name="gpt-4o-mini [OpenAI]",
         model_name="gpt-4o-mini",
         provider=ModelProvider.OPENAI
     ),
     LLMModel(
-        display_name="[openai] o1",
-        model_name="o1",
-        provider=ModelProvider.OPENAI
+        display_name="DeepSeek-R1 70b [Groq]",
+        model_name="deepseek-r1-distill-llama-70b",
+        provider=ModelProvider.GROQ
     ),
     LLMModel(
-        display_name="[openai] o3-mini",
-        model_name="o3-mini",
-        provider=ModelProvider.OPENAI
+        display_name="Llama-3.3 70b [Groq]",
+        model_name="llama-3.3-70b-versatile",
+        provider=ModelProvider.GROQ
     ),
 ]
 
@@ -91,7 +64,7 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
         if not api_key:
             # Print error to console
             print(f"API Key Error: Please make sure GROQ_API_KEY is set in your .env file.")
-            raise ValueError("Groq API key not found.  Please make sure GROQ_API_KEY is set in your .env file.")
+            return None
         return ChatGroq(model=model_name, api_key=api_key)
     elif model_provider == ModelProvider.OPENAI:
         # Get and validate API key
@@ -99,11 +72,7 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
         if not api_key:
             # Print error to console
             print(f"API Key Error: Please make sure OPENAI_API_KEY is set in your .env file.")
-            raise ValueError("OpenAI API key not found.  Please make sure OPENAI_API_KEY is set in your .env file.")
+            return None
         return ChatOpenAI(model=model_name, api_key=api_key)
-    elif model_provider == ModelProvider.ANTHROPIC:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            print(f"API Key Error: Please make sure ANTHROPIC_API_KEY is set in your .env file.")
-            raise ValueError("Anthropic API key not found.  Please make sure ANTHROPIC_API_KEY is set in your .env file.")
-        return ChatAnthropic(model=model_name, api_key=api_key)
+
+
