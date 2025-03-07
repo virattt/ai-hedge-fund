@@ -18,11 +18,11 @@ class NancyPelosiSignal(BaseModel):
 
 def nancy_pelosi_agent(state: AgentState):
     """
-    Analyzes stocks using congressional trading patterns, particularly focusing on:
-    1. Companies likely to benefit from legislation and regulation
-    2. Government contractors and sectors with heavy public spending
-    3. Upcoming policy changes that could impact specific sectors
-    4. Long-term positions in blue-chip companies
+    Analyzes stocks using congressional trading patterns and policy insights:
+    1. Companies likely to benefit from upcoming legislation and regulatory changes
+    2. Government contractors and sectors with significant public sector exposure
+    3. Sectors with active policy discussions and potential regulatory shifts
+    4. Strategic long-term positions in market-leading companies
     """
     data = state["data"]
     end_date = data["end_date"]
@@ -59,13 +59,13 @@ def nancy_pelosi_agent(state: AgentState):
         # Analysis of recent news for policy/regulatory mentions
         company_news = get_company_news(ticker, end_date, limit=50)
         
-        progress.update_status("nancy_pelosi_agent", ticker, "Analyzing legislation impact")
+        progress.update_status("nancy_pelosi_agent", ticker, "Analyzing legislative landscape")
         legislation_analysis = analyze_legislation_impact(company_news, ticker)
         
-        progress.update_status("nancy_pelosi_agent", ticker, "Analyzing government contracts")
+        progress.update_status("nancy_pelosi_agent", ticker, "Analyzing government contract potential")
         gov_contract_analysis = analyze_government_contracts(financial_line_items, company_news)
         
-        progress.update_status("nancy_pelosi_agent", ticker, "Analyzing sector policy trends")
+        progress.update_status("nancy_pelosi_agent", ticker, "Analyzing policy trends")
         policy_analysis = analyze_policy_trends(company_news, ticker)
         
         # Calculate total score
@@ -133,12 +133,12 @@ def nancy_pelosi_agent(state: AgentState):
 
 def analyze_legislation_impact(company_news: list, ticker: str) -> dict:
     """
-    Analyze news to detect mentions of legislation that could impact the company.
+    Analyze potential impact of legislation on company performance.
     
-    Looks for:
-    - Mentions of pending bills or legislation
+    Evaluates:
+    - Mentions of pending bills or legislation relevant to the company
     - Regulatory changes affecting the company's sector
-    - Congressional hearings related to the company or industry
+    - Congressional focus areas that may impact business operations
     """
     score = 0
     details = []
@@ -170,29 +170,29 @@ def analyze_legislation_impact(company_news: list, ticker: str) -> dict:
     # Score based on volume of legislation-related news
     if relevant_news_count > 10:
         score += 2
-        details.append(f"High legislative activity: {relevant_news_count} relevant news items")
+        details.append(f"Significant legislative activity: {relevant_news_count} relevant news items indicating potential policy shifts")
     elif relevant_news_count > 5:
         score += 1
-        details.append(f"Moderate legislative activity: {relevant_news_count} relevant news items")
+        details.append(f"Moderate legislative activity: {relevant_news_count} relevant news items suggesting policy attention")
     
     # Score based on sentiment of legislation-related news
     net_sentiment = positive_legislation_count - negative_legislation_count
     if net_sentiment > 3:
         score += 3
-        details.append(f"Strongly positive legislative sentiment: +{net_sentiment}")
+        details.append(f"Highly favorable legislative outlook: +{net_sentiment} - positions before public awareness advisable")
     elif net_sentiment > 0:
         score += 2
-        details.append(f"Positive legislative sentiment: +{net_sentiment}")
+        details.append(f"Positive legislative outlook: +{net_sentiment} - early strategic positioning recommended")
     elif net_sentiment < -3:
         score -= 2
-        details.append(f"Strongly negative legislative sentiment: {net_sentiment}")
+        details.append(f"Highly unfavorable legislative outlook: {net_sentiment} - consider defensive positioning")
     elif net_sentiment < 0:
         score -= 1
-        details.append(f"Negative legislative sentiment: {net_sentiment}")
+        details.append(f"Negative legislative outlook: {net_sentiment} - portfolio adjustments may be prudent")
     
     return {
         "score": max(0, score),  # Ensure score is not negative
-        "details": "; ".join(details) if details else "No significant legislation impact detected",
+        "details": "; ".join(details) if details else "No significant legislative impacts detected",
         "relevant_news_count": relevant_news_count,
         "positive_legislation_count": positive_legislation_count,
         "negative_legislation_count": negative_legislation_count
@@ -201,10 +201,10 @@ def analyze_legislation_impact(company_news: list, ticker: str) -> dict:
 
 def analyze_government_contracts(financial_line_items: list, company_news: list) -> dict:
     """
-    Analyze potential government contracts and public sector revenue
+    Analyze potential government contract opportunities and public sector revenue
     
-    This would be more accurate with detailed financial data about government contracts,
-    but as a proxy we'll use news mentions of contracts and government agencies.
+    Evaluates company news and financial data for indicators of government
+    contract activity and public sector business relationships.
     """
     score = 0
     details = []
@@ -233,7 +233,7 @@ def analyze_government_contracts(financial_line_items: list, company_news: list)
     # Score based on potential government contracts in news
     if large_contracts > 2:
         score += 4
-        details.append(f"Significant government contract activity: {large_contracts} major contracts mentioned")
+        details.append(f"Significant government contract opportunities: {large_contracts} major contracts mentioned")
     elif contract_news_count > 5:
         score += 2
         details.append(f"Moderate government contract activity: {contract_news_count} contract-related news items")
@@ -253,10 +253,10 @@ def analyze_government_contracts(financial_line_items: list, company_news: list)
 
 def analyze_policy_trends(company_news: list, ticker: str) -> dict:
     """
-    Analyze broader policy trends that might affect the company
+    Analyze broader policy trends that might affect the company's prospects
     
-    This looks at sector-wide policy changes, regulatory environments,
-    and long-term government priorities
+    Examines sector-wide policy changes, regulatory environments,
+    and government priorities that could impact future performance.
     """
     score = 0
     details = []
@@ -287,17 +287,17 @@ def analyze_policy_trends(company_news: list, ticker: str) -> dict:
         if count > 5:
             trending_policy_areas.append(area)
             score += 1
-            details.append(f"Significant {area} policy activity: {count} news items")
+            details.append(f"Significant {area} policy activity: {count} news items - potential strategic advantage")
         elif count > 2:
             trending_policy_areas.append(area)
             score += 0.5
-            details.append(f"Some {area} policy activity: {count} news items")
+            details.append(f"Some {area} policy activity: {count} news items - worth monitoring closely")
     
     # Additional score for sectors with current legislative momentum
     priority_sectors = ['infrastructure', 'technology', 'healthcare', 'energy']
     if any(area in priority_sectors for area in trending_policy_areas):
         score += 2
-        details.append(f"Company in current legislative priority sectors: {[area for area in trending_policy_areas if area in priority_sectors]}")
+        details.append(f"Company in high-priority policy sectors: {[area for area in trending_policy_areas if area in priority_sectors]} - favorable positioning")
     
     return {
         "score": score,
@@ -317,27 +317,27 @@ def generate_pelosi_output(
     template = ChatPromptTemplate.from_messages([
         (
             "system",
-            """You are an AI agent that analyzes stocks based on congressional trading patterns, focusing on:
+            """You are a strategic congressional trading analyst who evaluates stocks based on policy insights:
 
-            1. Companies likely to benefit from legislation and regulation
-            2. Government contractors and sectors with heavy federal spending
-            3. Sectors currently receiving policy attention or funding
-            4. Companies positioned to benefit from upcoming legislative priorities
-            5. Long-term positions in blue-chip companies with significant public sector exposure
+            1. Companies positioned to benefit from upcoming legislation and regulation
+            2. Government contractors and sectors with significant federal spending
+            3. Sectors receiving priority in current policy discussions
+            4. Companies with strategic importance to national initiatives
+            5. Blue-chip companies with strong government relationships
             
-            Key trading principles:
-            - Look for companies positioned to benefit from policy changes and legislation
-            - Prefer companies with government contracts or in sectors with increasing government spending
-            - Focus on sectors currently receiving policy attention
-            - Take positions before major policy announcements when possible
-            - Hold positions through legislative processes
+            Key investment principles:
+            - Identify companies well-positioned for legislative and regulatory tailwinds
+            - Focus on sectors currently receiving policy attention and funding
+            - Recognize early policy signals before they become widely understood
+            - Consider timing of major policy announcements for optimal positioning
+            - Maintain a strategic view of government priorities and spending
             
-            Provide clear, objective analysis focused purely on how legislation, policy, and government contracts might affect stocks.
+            Your analysis should leverage deep understanding of policy processes and government operations for optimal investment outcomes. Focus on information advantage regarding policy directions and regulatory changes.
             """
         ),
         (
             "human",
-            """Based on the following congressional trading style analysis, create an investment signal.
+            """Based on the following congressional trading style analysis, create an investment signal:
 
             Analysis Data for {ticker}:
             {analysis_data}
