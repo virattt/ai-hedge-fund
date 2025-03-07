@@ -250,25 +250,31 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
         }
 
     # 1. R&D Investment Trends
-    rd_expenses = [item.research_and_development for item in financial_line_items if hasattr(item, 'research_and_development') and item.research_and_development is not None]
+    rd_expenses = [item.research_and_development for item in financial_line_items if
+                   hasattr(item, 'research_and_development') and item.research_and_development is not None]
     revenues = [item.revenue for item in financial_line_items if item.revenue is not None]
-    
+
     if rd_expenses and revenues and len(rd_expenses) >= 2:
         # Check R&D growth rate
-        rd_growth = (rd_expenses[-1] - rd_expenses[0]) / abs(rd_expenses[0])
+        if rd_expenses[0] == 0:
+            rd_growth = 0  # Avoid division by zero
+        else:
+            rd_growth = (rd_expenses[-1] - rd_expenses[0]) / abs(rd_expenses[0])
+
         if rd_growth > 0.5:  # 50% growth in R&D
             score += 3
-            details.append(f"Strong R&D investment growth: +{(rd_growth*100):.1f}%")
+            details.append(f"Strong R&D investment growth: +{(rd_growth * 100):.1f}%")
         elif rd_growth > 0.2:
             score += 2
-            details.append(f"Moderate R&D investment growth: +{(rd_growth*100):.1f}%")
-        
+            details.append(f"Moderate R&D investment growth: +{(rd_growth * 100):.1f}%")
+
         # Check R&D intensity trend
         rd_intensity_start = rd_expenses[0] / revenues[0]
         rd_intensity_end = rd_expenses[-1] / revenues[-1]
         if rd_intensity_end > rd_intensity_start:
             score += 2
-            details.append(f"Increasing R&D intensity: {(rd_intensity_end*100):.1f}% vs {(rd_intensity_start*100):.1f}%")
+            details.append(
+                f"Increasing R&D intensity: {(rd_intensity_end * 100):.1f}% vs {(rd_intensity_start * 100):.1f}%")
     else:
         details.append("Insufficient R&D data for trend analysis")
 
