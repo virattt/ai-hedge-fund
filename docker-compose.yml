@@ -6,6 +6,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    volumes:
+      - ./:/ai-hedge-fund
     env_file:
       - .env
     stdin_open: true
