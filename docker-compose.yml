@@ -1,0 +1,12 @@
+
+services:
+  ai-hedge-fund:
+    container_name: ai-hedge-fund
+    restart: always
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    stdin_open: true
+    tty: true

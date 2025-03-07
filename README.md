@@ -147,6 +147,16 @@ ai-hedge-fund/
 ├── ...
 ```
 
+## Docker & docker-compose
+
+If you have docker installed on your system, you can easily run the project by running docker-compose:
+
+`docker-compose up -d`
+
+Then:
+
+`docker exec -it ai-hedge-fund poetry run python src/main.py --ticker AAPL`
+
 ## Contributing
 
 1. Fork the repository
