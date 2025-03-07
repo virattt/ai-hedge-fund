@@ -4,6 +4,7 @@ import json
 from typing import TypeVar, Type, Optional, Any
 from pydantic import BaseModel
 from utils.progress import progress
+from langchain_core.output_parsers import PydanticOutputParser
 
 T = TypeVar('T', bound=BaseModel)
 
@@ -17,7 +18,7 @@ def call_llm(
     default_factory = None
 ) -> T:
     """
-    Makes an LLM call with retry logic, handling both Deepseek and non-Deepseek models.
+    Makes an LLM call with retry logic, handling different model types appropriately.
     
     Args:
         prompt: The prompt to send to the LLM
@@ -36,26 +37,45 @@ def call_llm(
     model_info = get_model_info(model_name)
     llm = get_model(model_name, model_provider)
     
-    # For non-Deepseek models, we can use structured output
-    if not (model_info and model_info.is_deepseek()):
-        llm = llm.with_structured_output(
-            pydantic_model,
-            method="json_mode",
-        )
+    # Create a parser for models that don't support structured output natively
+    parser = PydanticOutputParser(pydantic_object=pydantic_model)
     
     # Call the LLM with retries
     for attempt in range(max_retries):
         try:
-            # Call the LLM
-            result = llm.invoke(prompt)
+            # For models that support structured output directly
+            if hasattr(llm, "with_structured_output") and not (model_info and model_info.is_deepseek()):
+                try:
+                    structured_llm = llm.with_structured_output(
+                        pydantic_model,
+                        method="json_mode",
+                    )
+                    return structured_llm.invoke(prompt)
+                except (NotImplementedError, AttributeError):
+                    # Fall back to manual parsing if structured output fails
+                    pass
             
-            # For Deepseek, we need to extract and parse the JSON manually
+            # For Ollama (Mistral) and other models without native structured output support
+            formatted_prompt = f"{prompt}\n\nYou must respond with a valid JSON object that conforms to this Pydantic model:\n{parser.get_format_instructions()}"
+            result = llm.invoke(formatted_prompt)
+            content = result.content if hasattr(result, "content") else str(result)
+            
+            # For Deepseek, extract JSON from markdown
             if model_info and model_info.is_deepseek():
-                parsed_result = extract_json_from_deepseek_response(result.content)
+                parsed_result = extract_json_from_deepseek_response(content)
                 if parsed_result:
                     return pydantic_model(**parsed_result)
-            else:
-                return result
+            
+            # For Ollama and other models, try to parse the response
+            try:
+                # Try direct parsing first
+                return parser.parse(content)
+            except Exception:
+                # If that fails, try to extract JSON from the response
+                parsed_result = extract_json_from_response(content)
+                if parsed_result:
+                    return pydantic_model(**parsed_result)
+                raise
                 
         except Exception as e:
             if agent_name:
@@ -104,4 +124,36 @@ def extract_json_from_deepseek_response(content: str) -> Optional[dict]:
                 return json.loads(json_text)
     except Exception as e:
         print(f"Error extracting JSON from Deepseek response: {e}")
+    return None
+
+def extract_json_from_response(content: str) -> Optional[dict]:
+    """Extracts JSON from any text response by looking for JSON-like structures."""
+    try:
+        # Try to find JSON enclosed in code blocks
+        for marker in ["```json", "```"]:
+            json_start = content.find(marker)
+            if json_start != -1:
+                json_text = content[json_start + len(marker):]
+                json_end = json_text.find("```")
+                if json_end != -1:
+                    json_text = json_text[:json_end].strip()
+                    return json.loads(json_text)
+        
+        # Look for JSON objects starting with { and ending with }
+        brace_start = content.find("{")
+        if brace_start != -1:
+            # Find the matching closing brace
+            brace_count = 0
+            for i in range(brace_start, len(content)):
+                if content[i] == '{':
+                    brace_count += 1
+                elif content[i] == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        return json.loads(content[brace_start:i+1])
+        
+        # As a last resort, try to parse the entire response as JSON
+        return json.loads(content)
+    except Exception as e:
+        print(f"Error extracting JSON from response: {e}")
     return None

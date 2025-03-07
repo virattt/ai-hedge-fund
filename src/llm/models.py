@@ -1,6 +1,7 @@
 import os
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
+from langchain_ollama import OllamaLLM
 from enum import Enum
 from pydantic import BaseModel
 from typing import Tuple
@@ -10,6 +11,7 @@ class ModelProvider(str, Enum):
     """Enum for supported LLM providers"""
     OPENAI = "OpenAI"
     GROQ = "Groq"
+    OLLAMA = "Ollama"
 
 
 class LLMModel(BaseModel):
@@ -49,6 +51,17 @@ AVAILABLE_MODELS = [
         model_name="llama-3.3-70b-versatile",
         provider=ModelProvider.GROQ
     ),
+    LLMModel(
+        display_name="Deepseek-R1 [Ollama]",
+        model_name="deepseek-r1",
+        provider= ModelProvider.OLLAMA
+    ),
+    LLMModel(
+        display_name="mistral [Ollama]",
+        model_name="mistral",
+        provider= ModelProvider.OLLAMA
+    ),
+
 ]
 
 # Create LLM_ORDER in the format expected by the UI
@@ -74,5 +87,6 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
             print(f"API Key Error: Please make sure OPENAI_API_KEY is set in your .env file.")
             return None
         return ChatOpenAI(model=model_name, api_key=api_key)
-
+    elif model_provider == ModelProvider.OLLAMA:
+        return OllamaLLM(model=model_name,base_url="http://localhost:11434",temperature=0.1)
 
