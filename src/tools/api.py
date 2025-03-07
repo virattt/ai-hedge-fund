@@ -37,7 +37,7 @@ def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
     url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
     response = requests.get(url, headers=headers)
     if response.status_code != 200:
-        raise Exception(f"Error fetching data: {response.status_code} - {response.text}")
+        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
 
     # Parse response with Pydantic model
     price_response = PriceResponse(**response.json())
@@ -74,7 +74,7 @@ def get_financial_metrics(
     url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
     response = requests.get(url, headers=headers)
     if response.status_code != 200:
-        raise Exception(f"Error fetching data: {response.status_code} - {response.text}")
+        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
 
     # Parse response with Pydantic model
     metrics_response = FinancialMetricsResponse(**response.json())
@@ -113,7 +113,7 @@ def search_line_items(
     }
     response = requests.post(url, headers=headers, json=body)
     if response.status_code != 200:
-        raise Exception(f"Error fetching data: {response.status_code} - {response.text}")
+        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
     data = response.json()
     response_model = LineItemResponse(**data)
     search_results = response_model.search_results
@@ -157,7 +157,7 @@ def get_insider_trades(
         
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
-            raise Exception(f"Error fetching data: {response.status_code} - {response.text}")
+            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
         
         data = response.json()
         response_model = InsiderTradeResponse(**data)
@@ -220,7 +220,7 @@ def get_company_news(
         
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
-            raise Exception(f"Error fetching data: {response.status_code} - {response.text}")
+            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
         
         data = response.json()
         response_model = CompanyNewsResponse(**data)
