@@ -157,6 +157,14 @@ First:
 
 Then:
 
+`docker build -t ai-hedge-fund .`
+
+To run it directly with docker run:
+
+`docker run -it ai-hedge-fund`
+
+Or if you prefer docker-compose & docker exec:
+
 `docker-compose up -d`
 
 Finally:
