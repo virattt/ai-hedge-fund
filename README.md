@@ -79,12 +79,31 @@ OPENAI_API_KEY=your-openai-api-key
 # Get your Groq API key from https://groq.com/
 GROQ_API_KEY=your-groq-api-key
 
+# For running LLMs hosted by Google (gemini-pro)
+# Get your Google API key from https://makersuite.google.com/
+GOOGLE_API_KEY=your-google-api-key
+
 # For getting financial data to power the hedge fund
 # Get your Financial Datasets API key from https://financialdatasets.ai/
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
-**Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, or `ANTHROPIC_API_KEY` for the hedge fund to work.  If you want to use LLMs from all providers, you will need to set all API keys.
+**Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, `GOOGLE_API_KEY`, or `ANTHROPIC_API_KEY` for the hedge fund to work.  If you want to use LLMs from all providers, you will need to set all API keys.
+
+The following LLM models are supported:
+
+**Google Models**:
+- `gemini-2.0-pro` - Latest Gemini Pro model for complex analysis
+- `gemini-2.0-flash` - Optimized for fast responses
+- `gemini-2.0-flash-lite` - Lightweight version optimized for speed
+- `gemini-2.0-flash-thinking` - Enhanced reasoning capabilities
+- `gemini-pro` - Standard Gemini Pro model
+- `gemini-ultra` - Most powerful Gemini model
+
+**Anthropic Models**:
+- `claude-3-opus` - Most powerful model, best for complex analysis
+- `claude-3-sonnet` - Balanced performance and speed
+- `claude-3-haiku` - Fastest model, good for simple analysis
 
 Financial data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key.
 

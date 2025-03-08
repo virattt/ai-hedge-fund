@@ -2,6 +2,7 @@ import os
 from langchain_anthropic import ChatAnthropic
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from enum import Enum
 from pydantic import BaseModel
 from typing import Tuple
@@ -12,6 +13,7 @@ class ModelProvider(str, Enum):
     OPENAI = "OpenAI"
     GROQ = "Groq"
     ANTHROPIC = "Anthropic"
+    GOOGLE = "Google"
 
 
 class LLMModel(BaseModel):
@@ -45,6 +47,36 @@ AVAILABLE_MODELS = [
         display_name="[anthropic] claude-3.7-sonnet",
         model_name="claude-3-7-sonnet-latest",
         provider=ModelProvider.ANTHROPIC
+    ),
+    LLMModel(
+        display_name="[google] gemini-2.0-flash",
+        model_name="gemini-2.0-flash",
+        provider=ModelProvider.GOOGLE
+    ),
+    LLMModel(
+        display_name="[google] gemini-2.0-flash-lite",
+        model_name="gemini-2.0-flash-lite-preview-02-05",
+        provider=ModelProvider.GOOGLE
+    ),
+    LLMModel(
+        display_name="[google] gemini-2.0-pro",
+        model_name="gemini-2.0-pro-exp-02-05",
+        provider=ModelProvider.GOOGLE
+    ),
+    LLMModel(
+        display_name="[google] gemini-2.0-flash-thinking",
+        model_name="gemini-2.0-flash-thinking-exp-01-21",
+        provider=ModelProvider.GOOGLE
+    ),
+    LLMModel(
+        display_name="[google] gemini-pro",
+        model_name="gemini-pro",
+        provider=ModelProvider.GOOGLE
+    ),
+    LLMModel(
+        display_name="[google] gemini-ultra",
+        model_name="gemini-ultra",
+        provider=ModelProvider.GOOGLE
     ),
     LLMModel(
         display_name="[groq] deepseek-r1 70b",
@@ -85,7 +117,7 @@ def get_model_info(model_name: str) -> LLMModel | None:
     """Get model information by model_name"""
     return next((model for model in AVAILABLE_MODELS if model.model_name == model_name), None)
 
-def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | ChatGroq | None:
+def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | ChatGroq | ChatGoogleGenerativeAI | None:
     if model_provider == ModelProvider.GROQ:
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
@@ -107,3 +139,9 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
             print(f"API Key Error: Please make sure ANTHROPIC_API_KEY is set in your .env file.")
             raise ValueError("Anthropic API key not found.  Please make sure ANTHROPIC_API_KEY is set in your .env file.")
         return ChatAnthropic(model=model_name, api_key=api_key)
+    elif model_provider == ModelProvider.GOOGLE:
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure GOOGLE_API_KEY is set in your .env file.")
+            raise ValueError("Google API key not found. Please make sure GOOGLE_API_KEY is set in your .env file.")
+        return ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key)
