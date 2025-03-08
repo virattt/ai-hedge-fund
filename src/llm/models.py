@@ -88,22 +88,22 @@ def get_model_info(model_name: str) -> LLMModel | None:
 def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | ChatGroq | None:
     if model_provider == ModelProvider.GROQ:
         api_key = os.getenv("GROQ_API_KEY")
-        if not api_key:
+        if not api_key or api_key == "your-groq-api-key":
             # Print error to console
-            print(f"API Key Error: Please make sure GROQ_API_KEY is set in your .env file.")
+            print("API Key Error: Please make sure GROQ_API_KEY is set in your .env file.")
             raise ValueError("Groq API key not found.  Please make sure GROQ_API_KEY is set in your .env file.")
         return ChatGroq(model=model_name, api_key=api_key)
     elif model_provider == ModelProvider.OPENAI:
         # Get and validate API key
         api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
+        if not api_key or api_key == "your-openai-api-key":
             # Print error to console
-            print(f"API Key Error: Please make sure OPENAI_API_KEY is set in your .env file.")
+            print("API Key Error: Please make sure OPENAI_API_KEY is set in your .env file.")
             raise ValueError("OpenAI API key not found.  Please make sure OPENAI_API_KEY is set in your .env file.")
         return ChatOpenAI(model=model_name, api_key=api_key)
     elif model_provider == ModelProvider.ANTHROPIC:
         api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            print(f"API Key Error: Please make sure ANTHROPIC_API_KEY is set in your .env file.")
+        if not api_key or api_key == "your-anthropic-api-key":
+            print("API Key Error: Please make sure ANTHROPIC_API_KEY is set in your .env file.")
             raise ValueError("Anthropic API key not found.  Please make sure ANTHROPIC_API_KEY is set in your .env file.")
         return ChatAnthropic(model=model_name, api_key=api_key)
