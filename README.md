@@ -82,6 +82,9 @@ GROQ_API_KEY=your-groq-api-key
 # For getting financial data to power the hedge fund
 # Get your Financial Datasets API key from https://financialdatasets.ai/
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
+
+# For running LLMs hosted by ollama api
+OLLAMA_HOST='http://localhost:11434'
 ```
 
 **Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, or `ANTHROPIC_API_KEY` for the hedge fund to work.  If you want to use LLMs from all providers, you will need to set all API keys.
