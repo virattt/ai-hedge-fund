@@ -5,6 +5,7 @@ from agents.bill_ackman import bill_ackman_agent
 from agents.cathie_wood import cathie_wood_agent
 from agents.charlie_munger import charlie_munger_agent
 from agents.fundamentals import fundamentals_agent
+from agents.nancy_pelosi import nancy_pelosi_agent
 from agents.sentiment import sentiment_agent
 from agents.technicals import technical_analyst_agent
 from agents.valuation import valuation_agent
@@ -32,10 +33,15 @@ ANALYST_CONFIG = {
         "agent_func": charlie_munger_agent,
         "order": 3,
     },
+    "nancy_pelosi": {
+        "display_name": "Nancy Pelosi",
+        "agent_func": nancy_pelosi_agent,
+        "order": 4,
+    },
     "warren_buffett": {
         "display_name": "Warren Buffett",
         "agent_func": warren_buffett_agent,
-        "order": 4,
+        "order": 5,
     },
     "technical_analyst": {
         "display_name": "Technical Analyst",
