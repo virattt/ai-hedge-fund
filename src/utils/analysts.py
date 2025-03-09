@@ -6,6 +6,7 @@ from agents.cathie_wood import cathie_wood_agent
 from agents.charlie_munger import charlie_munger_agent
 from agents.fundamentals import fundamentals_agent
 from agents.sentiment import sentiment_agent
+from agents.stanley_druckenmiller import stanley_druckenmiller_agent
 from agents.technicals import technical_analyst_agent
 from agents.valuation import valuation_agent
 from agents.warren_buffett import warren_buffett_agent
@@ -32,30 +33,35 @@ ANALYST_CONFIG = {
         "agent_func": charlie_munger_agent,
         "order": 3,
     },
+    "stanley_druckenmiller": {
+        "display_name": "Stanley Druckenmiller",
+        "agent_func": stanley_druckenmiller_agent,
+        "order": 4,
+    },
     "warren_buffett": {
         "display_name": "Warren Buffett",
         "agent_func": warren_buffett_agent,
-        "order": 4,
+        "order": 5,
     },
     "technical_analyst": {
         "display_name": "Technical Analyst",
         "agent_func": technical_analyst_agent,
-        "order": 4,
+        "order": 6,
     },
     "fundamentals_analyst": {
         "display_name": "Fundamentals Analyst",
         "agent_func": fundamentals_agent,
-        "order": 5,
+        "order": 7,
     },
     "sentiment_analyst": {
         "display_name": "Sentiment Analyst",
         "agent_func": sentiment_agent,
-        "order": 6,
+        "order": 8,
     },
     "valuation_analyst": {
         "display_name": "Valuation Analyst",
         "agent_func": valuation_agent,
-        "order": 7,
+        "order": 9,
     },
 }
 
