@@ -126,6 +126,18 @@ You can optionally specify the start and end dates to backtest over a specific t
 poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
 ```
 
+## Using Docker
+
+To build the docker container:
+```bash
+docker build .
+```
+
+To run the docker container:
+```bash
+docker run -it <container_name> --ticker AAPL,MSFT,NVDA
+```
+
 ## Project Structure 
 ```
 ai-hedge-fund/
