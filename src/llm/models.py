@@ -1,7 +1,7 @@
 import os
 from langchain_anthropic import ChatAnthropic
 from langchain_groq import ChatGroq
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from enum import Enum
 from pydantic import BaseModel
 from typing import Tuple
@@ -12,6 +12,7 @@ class ModelProvider(str, Enum):
     OPENAI = "OpenAI"
     GROQ = "Groq"
     ANTHROPIC = "Anthropic"
+    AZURE_OPENAI = "AzureOpenAI"
 
 
 class LLMModel(BaseModel):
@@ -56,6 +57,12 @@ AVAILABLE_MODELS = [
         model_name="llama-3.3-70b-versatile",
         provider=ModelProvider.GROQ
     ),
+    # Add Azure OpenAI models
+    LLMModel(
+        display_name="[azure] gpt-4o",
+        model_name="gpt-4o",  # This should match your Azure deployment name
+        provider=ModelProvider.AZURE_OPENAI
+    ),
     LLMModel(
         display_name="[openai] gpt-4o",
         model_name="gpt-4o",
@@ -75,7 +82,7 @@ AVAILABLE_MODELS = [
         display_name="[openai] o3-mini",
         model_name="o3-mini",
         provider=ModelProvider.OPENAI
-    ),
+    )
 ]
 
 # Create LLM_ORDER in the format expected by the UI
@@ -107,3 +114,21 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
             print(f"API Key Error: Please make sure ANTHROPIC_API_KEY is set in your .env file.")
             raise ValueError("Anthropic API key not found.  Please make sure ANTHROPIC_API_KEY is set in your .env file.")
         return ChatAnthropic(model=model_name, api_key=api_key)
+    elif model_provider == ModelProvider.AZURE_OPENAI:
+        api_key = os.getenv("AZURE_OPENAI_API_KEY")
+        endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+        api_version = os.getenv("AZURE_OPENAI_API_VERSION")
+        if not api_key or not endpoint:
+            print(f"API Key Error: Please make sure AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT are set in your .env file.")
+            raise ValueError("Azure OpenAI settings not found. Please set AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT in your .env file.")
+    
+        # Default API version if not specified
+        if not api_version:
+            api_version = "2023-05-15"
+            
+        return AzureChatOpenAI(
+            azure_deployment=model_name,
+            openai_api_version=api_version,
+            azure_endpoint=endpoint,
+            api_key=api_key
+        )
