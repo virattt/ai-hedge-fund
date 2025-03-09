@@ -71,6 +71,10 @@ cp .env.example .env
 
 4. Set your API keys:
 ```bash
+# For running LLMs hosted by google (gemini, gemini-pro, etc.)
+# Get your Gemini API key from https://aistudio.google.com/app/apikey
+GEMINI_API_KEY=your-gemini-api-key
+
 # For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
 # Get your OpenAI API key from https://platform.openai.com/
 OPENAI_API_KEY=your-openai-api-key
@@ -108,7 +112,7 @@ poetry run python src/main.py --ticker AAPL,MSFT,NVDA --show-reasoning
 You can optionally specify the start and end dates to make decisions for a specific time period.
 
 ```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 
+poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
 ```
 
 ### Running the Backtester
@@ -126,7 +130,7 @@ You can optionally specify the start and end dates to backtest over a specific t
 poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
 ```
 
-## Project Structure 
+## Project Structure
 ```
 ai-hedge-fund/
 ├── src/
