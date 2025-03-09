@@ -20,12 +20,15 @@ from utils.analysts import ANALYST_ORDER, get_analyst_nodes
 from utils.progress import progress
 from llm.models import LLM_ORDER, get_model_info
 
-import argparse
-from datetime import datetime
-from dateutil.relativedelta import relativedelta
-from tabulate import tabulate
-from utils.visualize import save_graph_as_png
-import json
+if args.start_date:
+    try:
+        start_date = datetime.strptime(args.start_date, "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        raise ValueError("Start date must be in YYYY-MM-DD format")
+else:
+    end_date_obj = datetime.strptime(end_date, "%Y-%m-%d")
+    start_date = (end_date_obj - relativedelta(months=3)).strftime("%Y-%m-%d")
+
 
 # Load environment variables from .env file
 load_dotenv()
