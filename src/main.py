@@ -176,7 +176,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--show-reasoning", 
-        ction="store_true",
+        action="store_true",
         help="Show reasoning from each agent"
     )
     parser.add_argument(
