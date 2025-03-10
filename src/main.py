@@ -20,34 +20,37 @@ from utils.analysts import ANALYST_ORDER, get_analyst_nodes
 from utils.progress import progress
 from llm.models import LLM_ORDER, get_model_info
 
+
 import argparse
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from tabulate import tabulate
 from utils.visualize import save_graph_as_png
 import json
+import logging
 
 # Load environment variables from .env file
 load_dotenv()
 
 init(autoreset=True)
 
+# Configure logging for error handling
+logging.basicConfig(level=logging.ERROR)
+logger = logging.getLogger(__name__)
 
 def parse_hedge_fund_response(response):
-    """Parses a JSON string and returns a dictionary."""
+    """Parses a JSON string and returns a dictionary with better error handling."""
     try:
         return json.loads(response)
     except json.JSONDecodeError as e:
-        print(f"JSON decoding error: {e}\nResponse: {repr(response)}")
+        logger.error(f"JSON decoding error: {e}\nResponse: {repr(response)}")
         return None
     except TypeError as e:
-        print(f"Invalid response type (expected string, got {type(response).__name__}): {e}")
+        logger.error(f"Invalid response type (expected string, got {type(response).__name__}): {e}")
         return None
     except Exception as e:
-        print(f"Unexpected error while parsing response: {e}\nResponse: {repr(response)}")
+        logger.error(f"Unexpected error while parsing response: {e}\nResponse: {repr(response)}")
         return None
-
-
 
 ##### Run the Hedge Fund #####
 def run_hedge_fund(
