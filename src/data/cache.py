@@ -12,10 +12,10 @@ class Cache:
         """Merge existing and new data, avoiding duplicates based on a key field."""
         if not existing:
             return new_data
-        
+
         # Create a set of existing keys for O(1) lookup
         existing_keys = {item[key_field] for item in existing}
-        
+
         # Only add items that don't exist yet
         merged = existing.copy()
         merged.extend([item for item in new_data if item[key_field] not in existing_keys])
