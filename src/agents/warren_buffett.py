@@ -66,8 +66,8 @@ def warren_buffett_agent(state: AgentState):
 
         # Add margin of safety analysis if we have both intrinsic value and current price
         margin_of_safety = None
-        intrinsic_value = intrinsic_value_analysis["intrinsic_value"]
-        if intrinsic_value and market_cap:
+        intrinsic_value = intrinsic_value_analysis.get("intrinsic_value")
+        if intrinsic_value and market_cap and intrinsic_value > 0 and market_cap > 0:
             margin_of_safety = (intrinsic_value - market_cap) / market_cap
 
             # Add to score if there's a good margin of safety (>30%)
@@ -210,15 +210,15 @@ def analyze_consistency(financial_line_items: list) -> dict[str, any]:
 def calculate_owner_earnings(financial_line_items: list) -> dict[str, any]:
     """Calculate owner earnings (Buffett's preferred measure of true earnings power).
     Owner Earnings = Net Income + Depreciation - Maintenance CapEx"""
-    if not financial_line_items or len(financial_line_items) < 1:
+    if not financial_line_items:
         return {"owner_earnings": None, "details": ["Insufficient data for owner earnings calculation"]}
 
     latest = financial_line_items[0]
 
     # Get required components
-    net_income = latest.net_income
-    depreciation = latest.depreciation_and_amortization
-    capex = latest.capital_expenditure
+    net_income = latest.net_income if hasattr(latest, 'net_income') else None
+    depreciation = latest.depreciation_and_amortization if hasattr(latest, 'depreciation_and_amortization') else None
+    capex = latest.capital_expenditure if hasattr(latest, 'capital_expenditure') else None
 
     if not all([net_income, depreciation, capex]):
         return {"owner_earnings": None, "details": ["Missing components for owner earnings calculation"]}
@@ -238,22 +238,35 @@ def calculate_owner_earnings(financial_line_items: list) -> dict[str, any]:
 def calculate_intrinsic_value(financial_line_items: list) -> dict[str, any]:
     """Calculate intrinsic value using DCF with owner earnings."""
     if not financial_line_items:
-        return {"value": None, "details": ["Insufficient data for valuation"]}
-
+        return {
+            "intrinsic_value": None,
+            "owner_earnings": None,
+            "assumptions": None,
+            "details": ["Insufficient data for valuation"]
+        }
     # Calculate owner earnings
     earnings_data = calculate_owner_earnings(financial_line_items)
     if not earnings_data["owner_earnings"]:
-        return {"value": None, "details": earnings_data["details"]}
+        return {
+            "intrinsic_value": None,
+            "owner_earnings": None,
+            "assumptions": None,
+            "details": ["Unable to calculate owner earnings"]
+        }
 
     owner_earnings = earnings_data["owner_earnings"]
 
     # Get current market data
     latest_financial_line_items = financial_line_items[0]
-    shares_outstanding = latest_financial_line_items.outstanding_shares
+    shares_outstanding = latest_financial_line_items.outstanding_shares if hasattr(latest_financial_line_items, 'outstanding_shares') else None
 
     if not shares_outstanding:
-        return {"value": None, "details": ["Missing shares outstanding data"]}
-
+        return {
+            "intrinsic_value": None,
+            "owner_earnings": owner_earnings,
+            "assumptions": None,
+            "details": ["Missing shares outstanding data"]
+        }
     # Buffett's DCF assumptions
     growth_rate = 0.05  # Conservative 5% growth
     discount_rate = 0.09  # Typical 9% discount rate
