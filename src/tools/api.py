@@ -250,7 +250,6 @@ def get_company_news(
     return all_news
 
 
-
 def get_market_cap(
     ticker: str,
     end_date: str,
