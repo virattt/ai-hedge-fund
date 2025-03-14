@@ -60,13 +60,13 @@ AVAILABLE_MODELS = [
         provider=ModelProvider.ANTHROPIC
     ),
     LLMModel(
-        display_name="[deepseek] deepseek-r1",
-        model_name="deepseek-reasoner",
+        display_name="[deepseek] deepseek-v3",
+        model_name="deepseek-chat",
         provider=ModelProvider.DEEPSEEK
     ),
     LLMModel(
-        display_name="[deepseek] deepseek-v3",
-        model_name="deepseek-chat",
+        display_name="[deepseek] deepseek-r1",
+        model_name="deepseek-reasoner",
         provider=ModelProvider.DEEPSEEK
     ),
     LLMModel(

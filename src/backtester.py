@@ -62,6 +62,10 @@ class Backtester:
         # Store the margin ratio (e.g. 0.5 means 50% margin required).
         self.margin_ratio = initial_margin_requirement
 
+        # Store trading decisions and analyst signals for UI display
+        self.trading_decisions = {}
+        self.analyst_signals = {}
+
         # Initialize portfolio with support for long/short positions
         self.portfolio_values = []
         self.portfolio = {
@@ -362,6 +366,20 @@ class Backtester:
             )
             decisions = output["decisions"]
             analyst_signals = output["analyst_signals"]
+            
+            # Store decisions with reasoning for this date
+            self.trading_decisions[current_date_str] = {
+                ticker: {
+                    'action': decision.get('action', 'hold'),
+                    'quantity': decision.get('quantity', 0),
+                    'confidence': decision.get('confidence', 0),
+                    'reasoning': decision.get('reasoning', 'No reasoning provided')
+                }
+                for ticker, decision in decisions.items()
+            }
+            
+            # Store analyst signals for this date
+            self.analyst_signals[current_date_str] = analyst_signals
 
             # Execute trades for each ticker
             executed_trades = {}

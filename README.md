@@ -1,5 +1,12 @@
 # AI Hedge Fund Plus
 
+ <a href="https://buy.stripe.com/5kA3dy2xF5370YE145" target="_blank">
+            <svg width="150" height="40" viewBox="0 0 150 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="150" height="40" rx="8" fill="#635BFF"/>
+                <text x="75" y="24" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white" text-anchor="middle">Support This Project</text>
+            </svg>
+        </a>
+
 This is an enhanced version of the AI-powered hedge fund proof of concept. The goal of this project is to explore the use of AI to make trading decisions with an interactive web interface. This project is for **educational** purposes only and is not intended for real trading or investment.
 
 This system employs several agents working together:
@@ -20,8 +27,6 @@ This system employs several agents working together:
 <img width="1020" alt="Screenshot 2025-03-08 at 4 45 22 PM" src="https://github.com/user-attachments/assets/d8ab891e-a083-4fed-b514-ccc9322a3e57" />
 
 **Note**: the system simulates trading decisions, it does not actually trade.
-
-[![Twitter Follow](https://img.shields.io/twitter/follow/virattt?style=social)](https://twitter.com/virattt)
 
 ## Disclaimer
 
@@ -279,112 +284,6 @@ You can monetize the AI Hedge Fund Plus application by integrating a payment sys
    - Configure the webhook in your Stripe Dashboard
    - Handle events like `customer.subscription.created`, `customer.subscription.updated`, etc.
 
-### Paddle Setup
-
-1. **Create a Paddle Account**:
-   - Sign up at [paddle.com](https://paddle.com)
-   - Complete the verification process
-   - Set up your business details
-
-2. **Install Paddle Dependencies**:
-   ```bash
-   poetry add paddleapi
-   ```
-
-3. **Configure Paddle Keys**:
-   Add these to your `.env` file:
-   ```
-   PADDLE_VENDOR_ID=your_vendor_id
-   PADDLE_API_KEY=your_api_key
-   PADDLE_PUBLIC_KEY=your_public_key
-   ```
-
-4. **Create Products and Pricing**:
-   - Log into your Paddle Dashboard
-   - Go to Catalog > Products > Create Product
-   - Set up subscription plans
-   - Note the Product IDs for each plan
-
-5. **Implement Paddle in Your App**:
-   Create a new file `src/payment/paddle_integration.py`:
-   ```python
-   import os
-   import json
-   import streamlit as st
-   from dotenv import load_dotenv
-
-   load_dotenv()
-
-   PADDLE_VENDOR_ID = os.getenv("PADDLE_VENDOR_ID")
-
-   def display_payment_options():
-       st.header("Choose Your Subscription Plan")
-       
-       col1, col2, col3 = st.columns(3)
-       
-       with col1:
-           st.subheader("Basic")
-           st.write("$9.99/month")
-           st.write("- Access to basic features")
-           st.write("- Limited number of stocks")
-           if st.button("Subscribe to Basic"):
-               paddle_product_id = os.getenv("PADDLE_BASIC_PRODUCT_ID")
-               display_paddle_checkout(paddle_product_id)
-       
-       with col2:
-           st.subheader("Pro")
-           st.write("$19.99/month")
-           st.write("- All basic features")
-           st.write("- Unlimited stocks")
-           st.write("- Advanced analytics")
-           if st.button("Subscribe to Pro"):
-               paddle_product_id = os.getenv("PADDLE_PRO_PRODUCT_ID")
-               display_paddle_checkout(paddle_product_id)
-       
-       with col3:
-           st.subheader("Enterprise")
-           st.write("$49.99/month")
-           st.write("- All pro features")
-           st.write("- Priority support")
-           st.write("- Custom analytics")
-           if st.button("Subscribe to Enterprise"):
-               paddle_product_id = os.getenv("PADDLE_ENTERPRISE_PRODUCT_ID")
-               display_paddle_checkout(paddle_product_id)
-
-   def display_paddle_checkout(product_id):
-       # Inject Paddle checkout script
-       paddle_script = f"""
-       <script src="https://cdn.paddle.com/paddle/paddle.js"></script>
-       <script type="text/javascript">
-           Paddle.Setup({{ vendor: {PADDLE_VENDOR_ID} }});
-           Paddle.Checkout.open({{
-               product: {product_id},
-               email: '',
-               successCallback: function(data) {{
-                   window.location.href = 'http://localhost:8501/success';
-               }}
-           }});
-       </script>
-       """
-       st.components.v1.html(paddle_script, height=600)
-   ```
-
-6. **Integrate with Your Streamlit App**:
-   Update `app.py` to include the payment page:
-   ```python
-   # Add this import at the top
-   from src.payment.paddle_integration import display_payment_options
-   
-   # Add this to your sidebar or as a separate page
-   if st.sidebar.button("Subscription Plans"):
-       display_payment_options()
-   ```
-
-7. **Set Up Webhook for Subscription Management**:
-   - Create a webhook endpoint in your application
-   - Configure the webhook in your Paddle Dashboard
-   - Handle events like `subscription_created`, `subscription_updated`, etc.
-
 ## Project Structure 
 ```
 ai-hedge-fund-plus/
@@ -400,6 +299,23 @@ ai-hedge-fund-plus/
 │   │   ├── technicals.py       # Technical analysis agent
 │   │   ├── valuation.py        # Valuation analysis agent
 │   │   ├── warren_buffett.py   # Warren Buffett agent
+│   │   ├── ben_graham.py        # Ben Graham agent
+│   │   ├── cathie_wood.py       # Cathie Wood agent
+│   │   ├── charlie_munger.py    # Charlie Munger agent
+│   │   ├── stanley_druckenmiller.py # Stanley Druckenmiller agent
+│   │   ├── warren_buffett.py    # Warren Buffett agent
+│   │   ├── valuation.py         # Valuation analysis agent
+│   │   ├── sentiment.py         # Sentiment analysis agent
+│   │   ├── fundamentals.py      # Fundamental analysis agent
+│   │   ├── technicals.py        # Technical analysis agent
+│   │   ├── risk_manager.py      # Risk management agent
+│   │   ├── portfolio_manager.py  # Portfolio management agent
+│   │   ├── ben_graham.py         # Ben Graham agent
+│   │   ├── cathie_wood.py         # Cathie Wood agent
+│   │   ├── charlie_munger.py      # Charlie Munger agent
+│   │   ├── stanley_druckenmiller.py # Stanley Druckenmiller agent
+│   │   ├── warren_buffett.py      # Warren Buffett agent
+│   │   └── valuation.py           # Valuation analysis agent
 │   ├── data/                   # Data handling and processing
 │   ├── graph/                  # Visualization components
 │   ├── llm/                    # LLM integration and models
