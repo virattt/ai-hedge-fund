@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import requests
+import streamlit as st
 
 from data.cache import get_cache
 from data.models import (
@@ -20,6 +21,20 @@ from data.models import (
 _cache = get_cache()
 
 
+def get_financial_datasets_api_key():
+    """Get the Financial Datasets API key from Streamlit secrets or environment variables."""
+    # First try to get from Streamlit secrets
+    try:
+        if "FINANCIAL_DATASETS_API_KEY" in st.secrets:
+            return st.secrets["FINANCIAL_DATASETS_API_KEY"]
+    except:
+        # If we're not in a Streamlit context, this will raise an exception
+        pass
+    
+    # Fall back to environment variables
+    return os.environ.get("FINANCIAL_DATASETS_API_KEY")
+
+
 def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
     """Fetch price data from cache or API."""
     # Check cache first
@@ -31,7 +46,7 @@ def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
 
     # If not in cache or no data in range, fetch from API
     headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
+    if api_key := get_financial_datasets_api_key():
         headers["X-API-KEY"] = api_key
 
     url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
@@ -68,7 +83,7 @@ def get_financial_metrics(
 
     # If not in cache or insufficient data, fetch from API
     headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
+    if api_key := get_financial_datasets_api_key():
         headers["X-API-KEY"] = api_key
 
     url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
@@ -99,7 +114,7 @@ def search_line_items(
     """Fetch line items from API."""
     # If not in cache or insufficient data, fetch from API
     headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
+    if api_key := get_financial_datasets_api_key():
         headers["X-API-KEY"] = api_key
 
     url = "https://api.financialdatasets.ai/financials/search/line-items"
@@ -143,7 +158,7 @@ def get_insider_trades(
 
     # If not in cache or insufficient data, fetch from API
     headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
+    if api_key := get_financial_datasets_api_key():
         headers["X-API-KEY"] = api_key
 
     all_trades = []
@@ -206,7 +221,7 @@ def get_company_news(
 
     # If not in cache or insufficient data, fetch from API
     headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
+    if api_key := get_financial_datasets_api_key():
         headers["X-API-KEY"] = api_key
 
     all_news = []

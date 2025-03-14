@@ -7,7 +7,7 @@ from langchain_openai import ChatOpenAI
 from enum import Enum
 from pydantic import BaseModel
 from typing import Tuple
-
+import streamlit as st
 
 class ModelProvider(str, Enum):
     """Enum for supported LLM providers"""
@@ -136,7 +136,7 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
             raise ValueError("Anthropic API key not found.  Please make sure ANTHROPIC_API_KEY is set in your .env file.")
         return ChatAnthropic(model=model_name, api_key=api_key)
     elif model_provider == ModelProvider.DEEPSEEK:
-        api_key = os.getenv("DEEPSEEK_API_KEY")
+        api_key = st.secrets["DEEPSEEK_API_KEY"] if "DEEPSEEK_API_KEY" in st.secrets else os.getenv("DEEPSEEK_API_KEY")
         if not api_key:
             print(f"API Key Error: Please make sure DEEPSEEK_API_KEY is set in your .env file.")
             raise ValueError("DeepSeek API key not found.  Please make sure DEEPSEEK_API_KEY is set in your .env file.")
