@@ -1,11 +1,10 @@
 # AI Hedge Fund Plus
 
- <a href="https://buy.stripe.com/5kA3dy2xF5370YE145" target="_blank">
-            <svg width="150" height="40" viewBox="0 0 150 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect width="150" height="40" rx="8" fill="#635BFF"/>
-                <text x="75" y="24" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white" text-anchor="middle">Support This Project</text>
-            </svg>
-        </a>
+<div align="center">
+  <a href="https://buy.stripe.com/5kA3dy2xF5370YE145" target="_blank">
+    <img src="https://img.shields.io/badge/Support_This_Project-635BFF?style=for-the-badge&logo=stripe&logoColor=white" alt="Support This Project" />
+  </a>
+</div>
 
 This is an enhanced version of the AI-powered hedge fund proof of concept. The goal of this project is to explore the use of AI to make trading decisions with an interactive web interface. This project is for **educational** purposes only and is not intended for real trading or investment.
 
@@ -329,20 +328,6 @@ ai-hedge-fund-plus/
 ├── .env.example                # Example environment variables
 ├── LICENSE                     # MIT License
 ```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-**Important**: Please keep your pull requests small and focused. This will make it easier to review and merge.
-
-## Feature Requests
-
-If you have a feature request, please open an [issue](https://github.com/virattt/ai-hedge-fund-plus/issues) and make sure it is tagged with `enhancement`.
 
 ## License
 
