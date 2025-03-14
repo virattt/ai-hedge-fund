@@ -126,7 +126,7 @@ st.sidebar.markdown('<div class="sub-header">Configuration</div>', unsafe_allow_
 # Ticker input
 ticker_input = st.sidebar.text_input(
     "Stock Tickers (comma-separated)",
-    value="AAPL,MSFT,GOOGL",
+    value="AAPL,MSFT",
     help="Enter stock tickers separated by commas (e.g., AAPL,MSFT,GOOGL)"
 )
 tickers = [ticker.strip() for ticker in ticker_input.split(",") if ticker.strip()]
@@ -134,7 +134,7 @@ tickers = [ticker.strip() for ticker in ticker_input.split(",") if ticker.strip(
 # Date range selection
 today = datetime.now()
 default_end_date = today.strftime("%Y-%m-%d")
-default_start_date = (today - relativedelta(months=1)).strftime("%Y-%m-%d")
+default_start_date = (today - relativedelta(days=3)).strftime("%Y-%m-%d")
 
 col1, col2 = st.sidebar.columns(2)
 with col1:
