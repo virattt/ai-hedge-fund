@@ -7,6 +7,7 @@ import numpy as np
 import sys
 import os
 from dotenv import load_dotenv
+import matplotlib as mpl
 
 # Add src directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
@@ -16,6 +17,56 @@ from src.backtester import Backtester
 from src.main import run_hedge_fund
 from src.llm.models import LLM_ORDER, get_model_info, ModelProvider
 from src.utils.analysts import ANALYST_ORDER
+
+# Set up matplotlib to use colors that work in both light and dark mode
+plt.style.use('default')  # Reset to default style
+
+# Define a function to get theme-based colors
+def get_theme_colors(is_dark_theme=False):
+    if is_dark_theme:
+        return {
+            'primary': '#8ab4f8',       # Light blue for dark theme
+            'success': '#81c995',       # Light green for dark theme
+            'error': '#f28b82',         # Light red for dark theme
+            'warning': '#fdd663',       # Light yellow for dark theme
+            'neutral': '#9aa0a6',       # Light gray for dark theme
+            'background': '#202124',    # Dark background
+            'text': '#e8eaed',          # Light text for dark theme
+            'grid': '#5f6368',          # Grid lines for dark theme
+        }
+    else:
+        return {
+            'primary': '#1a73e8',       # Blue for light theme
+            'success': '#0f9d58',       # Green for light theme
+            'error': '#d93025',         # Red for light theme
+            'warning': '#f9ab00',       # Yellow/orange for light theme
+            'neutral': '#5f6368',       # Gray for light theme
+            'background': '#ffffff',    # Light background
+            'text': '#202124',          # Dark text for light theme
+            'grid': '#dadce0',          # Grid lines for light theme
+        }
+
+# Function to detect if Streamlit is in dark mode
+def is_dark_theme():
+    try:
+        # This is a hack to detect dark theme in Streamlit
+        # It may not always work, but it's a reasonable approximation
+        return st.get_option("theme.base") == "dark"
+    except:
+        return False
+
+# Get theme colors based on current theme
+theme_colors = get_theme_colors(is_dark_theme())
+
+# Set default matplotlib colors based on theme
+mpl.rcParams['axes.facecolor'] = 'none'  # Transparent background
+mpl.rcParams['figure.facecolor'] = 'none'  # Transparent figure
+mpl.rcParams['axes.edgecolor'] = theme_colors['grid']
+mpl.rcParams['axes.labelcolor'] = theme_colors['text']
+mpl.rcParams['xtick.color'] = theme_colors['text']
+mpl.rcParams['ytick.color'] = theme_colors['text']
+mpl.rcParams['grid.color'] = theme_colors['grid']
+mpl.rcParams['text.color'] = theme_colors['text']
 
 # Set page configuration
 st.set_page_config(
@@ -31,63 +82,64 @@ st.markdown("""
     .main-header {
         font-size: 2.5rem;
         font-weight: bold;
-        color: #4CAF50;
+        color: var(--primary-color, #4CAF50);
         margin-bottom: 1rem;
     }
     .sub-header {
         font-size: 1.5rem;
         font-weight: bold;
-        color: #2196F3;
+        color: var(--secondary-background-color, #2196F3);
         margin-bottom: 1rem;
     }
     .metric-card {
-        background-color: #f5f5f5;
+        background-color: rgba(128, 128, 128, 0.1);
         border-radius: 5px;
         padding: 1rem;
         margin-bottom: 1rem;
+        border: 1px solid rgba(128, 128, 128, 0.2);
     }
     .positive {
-        color: #4CAF50;
+        color: var(--success-color, #4CAF50);
         font-weight: bold;
     }
     .negative {
-        color: #F44336;
+        color: var(--error-color, #F44336);
         font-weight: bold;
     }
     .decision-card {
-        background-color: #f9f9f9;
-        border-left: 4px solid #2196F3;
+        background-color: rgba(128, 128, 128, 0.05);
+        border-left: 4px solid var(--primary-color, #2196F3);
         border-radius: 3px;
         padding: 1rem;
         margin-bottom: 0.5rem;
     }
     .decision-date {
         font-weight: bold;
-        color: #333;
+        color: var(--text-color, #333);
         margin-bottom: 0.5rem;
     }
     .decision-ticker {
         font-weight: bold;
-        color: #1976D2;
+        color: var(--primary-color, #1976D2);
     }
     .decision-action-buy {
-        color: #4CAF50;
+        color: var(--success-color, #4CAF50);
         font-weight: bold;
     }
     .decision-action-sell {
-        color: #F44336;
+        color: var(--error-color, #F44336);
         font-weight: bold;
     }
     .decision-action-short {
-        color: #9C27B0;
+        color: var(--warning-color, #9C27B0);
         font-weight: bold;
     }
     .decision-action-cover {
-        color: #FF9800;
+        color: var(--warning-color, #FF9800);
         font-weight: bold;
     }
     .decision-action-hold {
-        color: #607D8B;
+        color: var(--text-color, #607D8B);
         font-weight: bold;
     }
     .header-container {
@@ -98,6 +150,23 @@ st.markdown("""
     }
     .support-button {
         margin-top: 0.5rem;
+    }
+    /* Additional styles for better dark/light mode compatibility */
+    div[data-testid="stExpander"] {
+        border: 1px solid rgba(128, 128, 128, 0.2);
+        border-radius: 5px;
+    }
+    div.stDataFrame {
+        border: 1px solid rgba(128, 128, 128, 0.2);
+    }
+    /* Ensure background colors for analyst cards are adaptive */
+    div[style*="background-color: #f0f7ff"],
+    div[style*="background-color: #fff8f0"],
+    div[style*="background-color: #f0fff8"],
+    div[style*="background-color: #f5f5f5"],
+    div[style*="background-color: #f9f9f9"] {
+        background-color: rgba(128, 128, 128, 0.1) !important;
+        border: 1px solid rgba(128, 128, 128, 0.2) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -112,7 +181,7 @@ st.markdown("""
     <div class="support-button">
         <a href="https://buy.stripe.com/5kA3dy2xF5370YE145" target="_blank">
             <svg width="150" height="40" viewBox="0 0 150 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect width="150" height="40" rx="8" fill="#635BFF"/>
+                <rect width="150" height="40" rx="8" fill="var(--primary-color, #635BFF)"/>
                 <text x="75" y="24" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white" text-anchor="middle">Support This Project</text>
             </svg>
         </a>
@@ -134,7 +203,7 @@ tickers = [ticker.strip() for ticker in ticker_input.split(",") if ticker.strip(
 # Date range selection
 today = datetime.now()
 default_end_date = today.strftime("%Y-%m-%d")
-default_start_date = (today - relativedelta(days=3)).strftime("%Y-%m-%d")
+default_start_date = (today - relativedelta(days=2)).strftime("%Y-%m-%d")
 
 col1, col2 = st.sidebar.columns(2)
 with col1:
@@ -336,11 +405,11 @@ if 'backtest_run' in st.session_state and st.session_state.backtest_run:
         # Portfolio value chart
         st.markdown("### Portfolio Value Over Time")
         fig, ax = plt.subplots(figsize=(12, 6))
-        ax.plot(performance_df.index, performance_df["Portfolio Value"], color="blue")
+        ax.plot(performance_df.index, performance_df["Portfolio Value"], color=theme_colors['primary'])
         ax.set_title("Portfolio Value Over Time")
         ax.set_ylabel("Portfolio Value ($)")
         ax.set_xlabel("Date")
-        ax.grid(True)
+        ax.grid(True, alpha=0.3)
         st.pyplot(fig)
         
         # Daily returns chart
@@ -349,11 +418,11 @@ if 'backtest_run' in st.session_state and st.session_state.backtest_run:
         # Ensure we have valid data for the daily returns
         if "Daily Return" in performance_df.columns and not performance_df["Daily Return"].isnull().all():
             performance_df["Daily Return"].plot(kind="bar", ax=ax, color=performance_df["Daily Return"].apply(
-                lambda x: "green" if x >= 0 else "red"))
+                lambda x: theme_colors['success'] if x >= 0 else theme_colors['error']))
             ax.set_title("Daily Returns")
             ax.set_ylabel("Return (%)")
             ax.set_xlabel("Date")
-            ax.grid(True)
+            ax.grid(True, alpha=0.3)
             st.pyplot(fig)
         else:
             st.warning("No daily return data available.")
@@ -362,14 +431,14 @@ if 'backtest_run' in st.session_state and st.session_state.backtest_run:
         if "Long Exposure" in performance_df.columns and "Short Exposure" in performance_df.columns:
             st.markdown("### Long/Short Exposure")
             fig, ax = plt.subplots(figsize=(12, 6))
-            ax.plot(performance_df.index, performance_df["Long Exposure"], color="green", label="Long Exposure")
-            ax.plot(performance_df.index, performance_df["Short Exposure"], color="red", label="Short Exposure")
-            ax.plot(performance_df.index, performance_df["Net Exposure"], color="blue", label="Net Exposure")
+            ax.plot(performance_df.index, performance_df["Long Exposure"], color=theme_colors['success'], label="Long Exposure")
+            ax.plot(performance_df.index, performance_df["Short Exposure"], color=theme_colors['error'], label="Short Exposure")
+            ax.plot(performance_df.index, performance_df["Net Exposure"], color=theme_colors['primary'], label="Net Exposure")
             ax.set_title("Portfolio Exposure Over Time")
             ax.set_ylabel("Exposure ($)")
             ax.set_xlabel("Date")
             ax.legend()
-            ax.grid(True)
+            ax.grid(True, alpha=0.3)
             st.pyplot(fig)
         
         # Detailed performance table
@@ -499,34 +568,34 @@ if 'backtest_run' in st.session_state and st.session_state.backtest_run:
                 st.markdown("""
                 ### Value Investors
                 
-                <div style="background-color: #f0f7ff; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                <div style="background-color: rgba(128, 128, 128, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 10px; border: 1px solid rgba(128, 128, 128, 0.2);">
                     <strong>Warren Buffett</strong><br>
                     Focuses on companies with strong competitive advantages, good management, and reasonable valuations
                 </div>
                 
-                <div style="background-color: #f0f7ff; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                <div style="background-color: rgba(128, 128, 128, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 10px; border: 1px solid rgba(128, 128, 128, 0.2);">
                     <strong>Charlie Munger</strong><br>
                     Emphasizes mental models and avoiding psychological biases in investment decisions
                 </div>
                 
-                <div style="background-color: #f0f7ff; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                <div style="background-color: rgba(128, 128, 128, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 10px; border: 1px solid rgba(128, 128, 128, 0.2);">
                     <strong>Ben Graham</strong><br>
                     The father of value investing, focuses on margin of safety and quantitative analysis
                 </div>
                 
                 ### Active Investors
                 
-                <div style="background-color: #fff8f0; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                <div style="background-color: rgba(128, 128, 128, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 10px; border: 1px solid rgba(128, 128, 128, 0.2);">
                     <strong>Bill Ackman</strong><br>
                     Activist investor approach, looking for companies with potential for significant operational improvements
                 </div>
                 
-                <div style="background-color: #fff8f0; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                <div style="background-color: rgba(128, 128, 128, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 10px; border: 1px solid rgba(128, 128, 128, 0.2);">
                     <strong>Cathie Wood</strong><br>
                     Growth-focused, emphasizing disruptive innovation and technological trends
                 </div>
                 
-                <div style="background-color: #fff8f0; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                <div style="background-color: rgba(128, 128, 128, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 10px; border: 1px solid rgba(128, 128, 128, 0.2);">
                     <strong>Stanley Druckenmiller</strong><br>
                     Macro-focused approach with emphasis on capital preservation and concentrated positions
                 </div>
@@ -536,22 +605,22 @@ if 'backtest_run' in st.session_state and st.session_state.backtest_run:
                 st.markdown("""
                 ### Specialized Analysts
                 
-                <div style="background-color: #f0fff8; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                <div style="background-color: rgba(128, 128, 128, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 10px; border: 1px solid rgba(128, 128, 128, 0.2);">
                     <strong>Technical Analyst</strong><br>
                     Uses price patterns and technical indicators to generate trading signals
                 </div>
                 
-                <div style="background-color: #f0fff8; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                <div style="background-color: rgba(128, 128, 128, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 10px; border: 1px solid rgba(128, 128, 128, 0.2);">
                     <strong>Fundamentals Analyst</strong><br>
                     Analyzes financial statements and business fundamentals
                 </div>
                 
-                <div style="background-color: #f0fff8; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                <div style="background-color: rgba(128, 128, 128, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 10px; border: 1px solid rgba(128, 128, 128, 0.2);">
                     <strong>Sentiment Analyst</strong><br>
                     Evaluates market sentiment from news and insider trading activity
                 </div>
                 
-                <div style="background-color: #f0fff8; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                <div style="background-color: rgba(128, 128, 128, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 10px; border: 1px solid rgba(128, 128, 128, 0.2);">
                     <strong>Valuation Analyst</strong><br>
                     Focuses specifically on valuation metrics and fair value estimates
                 </div>
@@ -583,8 +652,9 @@ if 'backtest_run' in st.session_state and st.session_state.backtest_run:
             # Create a pie chart for the weights
             fig, ax = plt.subplots(figsize=(8, 8))
             ax.pie(tech_strategies["Weight"], labels=tech_strategies["Strategy"], autopct='%1.1f%%', 
-                   startangle=90, shadow=True, explode=[0.05, 0.05, 0, 0, 0],
-                   colors=['#ff9999','#66b3ff','#99ff99','#ffcc99','#c2c2f0'])
+                startangle=90, shadow=True, explode=[0.05, 0.05, 0, 0, 0],
+                colors=[theme_colors['error'], theme_colors['primary'], theme_colors['success'], 
+                        theme_colors['warning'], theme_colors['neutral']])
             ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
             ax.set_title("Technical Analysis Strategy Weights")
             st.pyplot(fig)
@@ -625,8 +695,8 @@ if 'backtest_run' in st.session_state and st.session_state.backtest_run:
             # Create a pie chart for the weights
             fig, ax = plt.subplots(figsize=(8, 8))
             ax.pie(sentiment_sources["Weight"], labels=sentiment_sources["Source"], autopct='%1.1f%%', 
-                   startangle=90, shadow=True, explode=[0.05, 0],
-                   colors=['#66b3ff','#ff9999'])
+                startangle=90, shadow=True, explode=[0.05, 0],
+                colors=[theme_colors['primary'], theme_colors['error']])
             ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
             ax.set_title("Sentiment Analysis Source Weights")
             st.pyplot(fig)
@@ -652,7 +722,7 @@ if 'backtest_run' in st.session_state and st.session_state.backtest_run:
             """)
             
             st.markdown("""
-            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+            <div style="background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid rgba(128, 128, 128, 0.2);">
                 <h3 style="margin-top: 0;">Inputs to the Decision Process</h3>
                 <ul>
                     <li><strong>Analyst Signals:</strong> All signals from the selected analysts with their confidence levels</li>
@@ -663,7 +733,7 @@ if 'backtest_run' in st.session_state and st.session_state.backtest_run:
                 </ul>
             </div>
             
-            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+            <div style="background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid rgba(128, 128, 128, 0.2);">
                 <h3 style="margin-top: 0;">Trading Rules</h3>
                 <ul>
                     <li><strong>For Long Positions:</strong>
@@ -685,18 +755,18 @@ if 'backtest_run' in st.session_state and st.session_state.backtest_run:
                 </ul>
             </div>
             
-            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+            <div style="background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid rgba(128, 128, 128, 0.2);">
                 <h3 style="margin-top: 0;">Available Actions</h3>
                 <ul>
-                    <li><strong style="color: #4CAF50;">Buy:</strong> Open or add to long position</li>
-                    <li><strong style="color: #F44336;">Sell:</strong> Close or reduce long position</li>
-                    <li><strong style="color: #9C27B0;">Short:</strong> Open or add to short position</li>
-                    <li><strong style="color: #FF9800;">Cover:</strong> Close or reduce short position</li>
-                    <li><strong style="color: #607D8B;">Hold:</strong> No action</li>
+                    <li><strong style="color: var(--success-color, #4CAF50);">Buy:</strong> Open or add to long position</li>
+                    <li><strong style="color: var(--error-color, #F44336);">Sell:</strong> Close or reduce long position</li>
+                    <li><strong style="color: var(--warning-color, #9C27B0);">Short:</strong> Open or add to short position</li>
+                    <li><strong style="color: var(--warning-color, #FF9800);">Cover:</strong> Close or reduce short position</li>
+                    <li><strong style="color: var(--text-color, #607D8B);">Hold:</strong> No action</li>
                 </ul>
             </div>
             
-            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px;">
+            <div style="background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 5px; border: 1px solid rgba(128, 128, 128, 0.2);">
                 <h3 style="margin-top: 0;">Output Decision</h3>
                 <p>For each ticker, the Portfolio Manager outputs:</p>
                 <ul>
@@ -786,7 +856,7 @@ if 'backtest_run' in st.session_state and st.session_state.backtest_run:
                                         "Analyst": analyst_name.replace("_agent", "").replace("_", " ").title(),
                                         "Signal": signal.title() if signal else "N/A",
                                         "Confidence": confidence if confidence else 0,
-                                        "Color": "green" if signal == "bullish" else ("red" if signal == "bearish" else "gray")
+                                        "Color": theme_colors['success'] if signal == "bullish" else (theme_colors['error'] if signal == "bearish" else theme_colors['neutral'])
                                     })
                         
                         if signal_data:
@@ -880,7 +950,7 @@ if 'backtest_run' in st.session_state and st.session_state.backtest_run:
                                                 "Analyst": analyst_name.replace("_agent", "").replace("_", " ").title(),
                                                 "Signal": signal.title() if signal else "N/A",
                                                 "Confidence": confidence if confidence else 0,
-                                                "Color": "green" if signal == "bullish" else ("red" if signal == "bearish" else "gray")
+                                                "Color": theme_colors['success'] if signal == "bullish" else (theme_colors['error'] if signal == "bearish" else theme_colors['neutral'])
                                             })
                                 
                                 if signal_data:
@@ -1093,7 +1163,7 @@ if 'backtest_run' in st.session_state and st.session_state.backtest_run:
                             trend_df["Signal Value"] = trend_df["Signal"].map(signal_values)
                             
                             # Plot signal trend
-                            ax1.plot(trend_df["Date"], trend_df["Signal Value"], marker='o', linestyle='-', color='blue')
+                            ax1.plot(trend_df["Date"], trend_df["Signal Value"], marker='o', linestyle='-', color=theme_colors['primary'])
                             ax1.set_ylabel("Signal")
                             ax1.set_title(f"Signal Trend for {selected_ticker}" + (f" - {selected_analyst}" if selected_analyst != "All Analysts" else " - Consensus"))
                             ax1.set_ylim([-1.5, 1.5])
@@ -1102,7 +1172,11 @@ if 'backtest_run' in st.session_state and st.session_state.backtest_run:
                             ax1.grid(True)
                             
                             # Plot confidence trend
-                            ax2.bar(trend_df["Date"], trend_df["Confidence"], color=trend_df["Signal"].map({"Bullish": "green", "Neutral": "gray", "Bearish": "red"}))
+                            ax2.bar(trend_df["Date"], trend_df["Confidence"], color=trend_df["Signal"].map({
+                                "Bullish": theme_colors['success'], 
+                                "Neutral": theme_colors['neutral'], 
+                                "Bearish": theme_colors['error']
+                            }))
                             ax2.set_ylabel("Confidence (%)")
                             ax2.set_xlabel("Date")
                             ax2.set_ylim([0, 100])
@@ -1117,9 +1191,9 @@ if 'backtest_run' in st.session_state and st.session_state.backtest_run:
                                 fig, ax = plt.subplots(figsize=(12, 6))
                                 
                                 # Create the stacked bars
-                                ax.bar(trend_df["Date"], trend_df["Bullish Count"], label="Bullish", color="green")
-                                ax.bar(trend_df["Date"], trend_df["Neutral Count"], bottom=trend_df["Bullish Count"], label="Neutral", color="gray")
-                                ax.bar(trend_df["Date"], trend_df["Bearish Count"], bottom=trend_df["Bullish Count"] + trend_df["Neutral Count"], label="Bearish", color="red")
+                                ax.bar(trend_df["Date"], trend_df["Bullish Count"], label="Bullish", color=theme_colors['success'])
+                                ax.bar(trend_df["Date"], trend_df["Neutral Count"], bottom=trend_df["Bullish Count"], label="Neutral", color=theme_colors['neutral'])
+                                ax.bar(trend_df["Date"], trend_df["Bearish Count"], bottom=trend_df["Bullish Count"] + trend_df["Neutral Count"], label="Bearish", color=theme_colors['error'])
                                 
                                 ax.set_ylabel("Analyst Count")
                                 ax.set_xlabel("Date")
@@ -1165,9 +1239,9 @@ else:
     
     # Plot sample data
     fig, ax = plt.subplots(figsize=(12, 6))
-    ax.plot(sample_data.index, sample_data["Portfolio Value"], color="blue", alpha=0.5)
+    ax.plot(sample_data.index, sample_data["Portfolio Value"], color=theme_colors['primary'], alpha=0.7)
     ax.set_title("Sample Portfolio Performance (Simulated Data)")
     ax.set_ylabel("Portfolio Value ($)")
     ax.set_xlabel("Date")
-    ax.grid(True)
+    ax.grid(True, alpha=0.3)
     st.pyplot(fig) 
