@@ -22,17 +22,37 @@ _cache = get_cache()
 
 
 def get_financial_datasets_api_key():
-    """Get the Financial Datasets API key from Streamlit secrets or environment variables."""
-    # First try to get from Streamlit secrets
+    """
+    Get the Financial Datasets API key from environment variables or Streamlit secrets.
+    First checks environment variables, then falls back to Streamlit secrets if available.
+    
+    Returns:
+        str: The API key
+        
+    Raises:
+        ValueError: If the API key is not found in either environment variables or Streamlit secrets
+    """
+    # First try to get from environment variables
+    api_key = os.environ.get("FINANCIAL_DATASETS_API_KEY")
+    if api_key:
+        return api_key
+    
+    # If not in environment variables, try Streamlit secrets
     try:
-        if "FINANCIAL_DATASETS_API_KEY" in st.secrets:
-            return st.secrets["FINANCIAL_DATASETS_API_KEY"]
-    except:
-        # If we're not in a Streamlit context, this will raise an exception
+        # This will raise an exception if we're not in a Streamlit context
+        # (e.g., when running from CLI or in tests)
+        api_key = st.secrets.get("FINANCIAL_DATASETS_API_KEY")
+        if api_key:
+            return api_key
+    except (RuntimeError, AttributeError):
+        # Not in a Streamlit context or key doesn't exist in secrets
         pass
     
-    # Fall back to environment variables
-    return os.environ.get("FINANCIAL_DATASETS_API_KEY")
+    # If we get here, the API key was not found in either place
+    raise ValueError(
+        "Financial Datasets API key not found. "
+        "Please set FINANCIAL_DATASETS_API_KEY in either environment variables or Streamlit secrets."
+    )
 
 
 def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
