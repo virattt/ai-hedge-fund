@@ -1,6 +1,7 @@
 import json
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai.chat_models import ChatOpenAI
 
 from graph.state import AgentState, show_agent_reasoning
 from pydantic import BaseModel, Field
@@ -10,7 +11,7 @@ from utils.llm import call_llm
 
 
 class PortfolioDecision(BaseModel):
-    action: Literal["buy", "sell", "short", "cover", "hold"]
+    action: Literal["buy", "sell", "hold"]
     quantity: int = Field(description="Number of shares to trade")
     confidence: float = Field(description="Confidence in the decision, between 0.0 and 100.0")
     reasoning: str = Field(description="Reasoning for the decision")
@@ -190,17 +191,11 @@ def portfolio_management_agent(state: AgentState):
         "data": state["data"],
     }
 
-
-def generate_trading_decision(
-    tickers: list[str],
-    signals_by_ticker: dict[str, dict],
-    current_prices: dict[str, float],
-    max_shares: dict[str, int],
-    portfolio: dict[str, float],
-    model_name: str,
-    model_provider: str,
-) -> PortfolioManagerOutput:
+def make_decision(prompt, tickers):
     """Attempts to get a decision from the LLM with retry logic"""
+    llm = ChatOpenAI(model="gpt-4o").with_structured_output(
+        PortfolioManagerOutput,
+        method="function_calling",
     # Create the prompt template
     template = ChatPromptTemplate.from_messages(
         [
