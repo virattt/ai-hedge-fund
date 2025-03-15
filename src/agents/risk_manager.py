@@ -38,10 +38,10 @@ def risk_management_agent(state: AgentState):
         current_prices[ticker] = current_price  # Store the current price
 
         # Calculate current position value for this ticker
-        current_position_value = portfolio.get("cost_basis", {}).get(ticker, 0)
+        current_position_value = float(portfolio.get("positions", {}).get(ticker, 0)) * float(current_price)
 
         # Calculate total portfolio value using stored prices
-        total_portfolio_value = portfolio.get("cash", 0) + sum(portfolio.get("cost_basis", {}).get(t, 0) for t in portfolio.get("cost_basis", {}))
+        total_portfolio_value = float(portfolio.get("cash", 0)) + sum((float(portfolio.get("cost_basis", {}).get(t, 0)) * float(portfolio.get("positions", {}).get(t, 0))) for t in portfolio.get("cost_basis", {}))
 
         # Base limit is 20% of portfolio for any single position
         position_limit = total_portfolio_value * 0.20

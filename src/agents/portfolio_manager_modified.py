@@ -57,6 +57,7 @@ def portfolio_management_agent(state: AgentState):
                 ticker_signals[agent] = {"signal": signals[ticker]["signal"], "confidence": signals[ticker]["confidence"]}
         signals_by_ticker[ticker] = ticker_signals
 
+<<<<<<< HEAD:src/agents/portfolio_manager.py
     progress.update_status("portfolio_management_agent", None, "Making trading decisions")
 
     # Generate the trading decision
@@ -69,6 +70,123 @@ def portfolio_management_agent(state: AgentState):
         model_name=state["metadata"]["model_name"],
         model_provider=state["metadata"]["model_provider"],
     )
+=======
+    progress.update_status("portfolio_management_agent", None, "Preparing trading strategy")
+    # Create the prompt template
+    previous_result = ""
+    template = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """You are a portfolio manager making final trading decisions.
+                Your job is to make trading decisions based on the team's analysis for multiple tickers.
+
+                Trading Rules:
+                - Only buy if you have available cash
+                - Only sell if you have shares to sell, otherwise hold
+                - For sells: quantity must be ≤ current position shares
+                - For buys: quantity must be ≤ max_shares provided for each ticker
+                - The max_shares values are pre-calculated to respect position limits
+                - When you adding all the buy descitions, they should not exceed the available cash plus the sum of all the sells, this is TOTALLY required. 
+                
+                Inputs:
+                - signals_by_ticker: dictionary of ticker to signals from analysts
+                - max_shares: maximum number of shares allowed for each ticker
+                - portfolio_cash: current cash in portfolio
+                - portfolio_positions: current positions in portfolio
+                - portfolio_cost_basis: cost basis for each position that is currently held
+                - current_prices: current price for each ticker
+                
+                Output:
+                - action: "buy", "sell", or "hold"
+                - quantity: number of shares to trade (integer)
+                - confidence: confidence level between 0-100
+                - reasoning: brief explanation of the decision""",
+            ),
+            (
+                "human",
+                """{previous_result}Based on the team's analysis below, make your trading decisions.
+
+                For each ticker, here are the signals:
+                {signals_by_ticker}
+
+                Current Prices:
+                {current_prices}
+
+                Maximum Shares Allowed For Any Purchase:
+                {max_shares}
+
+                Here is the current portfolio:
+                Cash: {portfolio_cash}
+                Current Positions: {portfolio_positions}
+                Current Cost Basis: {portfolio_cost_basis}
+
+                Return a decision for each ticker in the following format:
+                {{
+                    "decisions": {{
+                        "TICKER1": {{
+                            "action": "buy/sell/hold",
+                            "quantity": integer,
+                            "confidence": float,
+                            "reasoning": "string"
+                        }},
+                        "TICKER2": {{ ... }},
+                        ...
+                    }}
+                }}
+                """,
+            ),
+        ]
+    )
+
+    # Generate the prompt
+    prompt = template.invoke(
+        {
+            "previous_result": previous_result,
+            "signals_by_ticker": json.dumps(signals_by_ticker, indent=2),
+            "current_prices": json.dumps(current_prices, indent=2),
+            "max_shares": json.dumps(max_shares, indent=2),
+            "portfolio_cash": f"{portfolio['cash']:.2f}",
+            "portfolio_positions": json.dumps(portfolio["positions"], indent=2),
+            "portfolio_cost_basis": json.dumps(portfolio["cost_basis"], indent=2),
+        }
+    )
+
+    progress.update_status("portfolio_management_agent", None, "Making trading decisions")
+
+    # new logic for portfolio retrys
+    max_retries = 3
+    for attempt in range(max_retries):
+        result = make_decision(prompt, tickers)
+        # Add review from decision, that comply with the rules (mainly available cash) TODO MOVE TO FUNCION OR AGENT
+        new_total_value = portfolio["cash"]
+        for ticker, decision in result.decisions.items():
+            if decision.action == "buy":
+                new_total_value -= decision.quantity * current_prices[ticker]
+            elif decision.action == "sell":
+                new_total_value += decision.quantity * current_prices[ticker]
+        if new_total_value >= 0:
+            break
+        else:
+            progress.update_status("portfolio_management_agent", None, f"Error: The total value of the portfolio would be negative, retry {attempt + 1}/{max_retries}")
+            previous_result = f"The previous result needed more cash than it was available resulting in a negative cash need of {new_total_value}. Please adjunt your previous decision {result}\n"
+            prompt = template.invoke(
+                {
+                    "previous_result": previous_result,
+                    "signals_by_ticker": json.dumps(signals_by_ticker, indent=2),
+                    "current_prices": json.dumps(current_prices, indent=2),
+                    "max_shares": json.dumps(max_shares, indent=2),
+                    "portfolio_cash": f"{portfolio['cash']:.2f}",
+                    "portfolio_positions": json.dumps(portfolio["positions"], indent=2),
+                    "portfolio_cost_basis": json.dumps(portfolio["cost_basis"], indent=2),
+                }
+            )
+            if attempt == max_retries - 1:
+                # On final attempt, return a safe default
+                progress.update_status("portfolio_management_agent", None, "Error: The total value of the portfolio would be negative, This was the final try, did not find a solution")
+
+    # result = make_decision(prompt, tickers)
+>>>>>>> main:src/agents/portfolio_manager_modified.py
 
     # Create the portfolio management message
     message = HumanMessage(
@@ -174,6 +292,7 @@ def generate_trading_decision(
             ),
         ]
     )
+<<<<<<< HEAD:src/agents/portfolio_manager.py
 
     # Generate the prompt
     prompt = template.invoke(
@@ -192,3 +311,15 @@ def generate_trading_decision(
         return PortfolioManagerOutput(decisions={ticker: PortfolioDecision(action="hold", quantity=0, confidence=0.0, reasoning="Error in portfolio management, defaulting to hold") for ticker in tickers})
 
     return call_llm(prompt=prompt, model_name=model_name, model_provider=model_provider, pydantic_model=PortfolioManagerOutput, agent_name="portfolio_management_agent", default_factory=create_default_portfolio_output)
+=======
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            result = llm.invoke(prompt)
+            return result
+        except Exception as e:
+            progress.update_status("portfolio_management_agent", None, f"Error - retry {attempt + 1}/{max_retries}")
+            if attempt == max_retries - 1:
+                # On final attempt, return a safe default
+                return PortfolioManagerOutput(decisions={ticker: PortfolioDecision(action="hold", quantity=0, confidence=0.0, reasoning=f"Error in portfolio management, defaulting to hold - Error: {e}") for ticker in tickers})
+>>>>>>> main:src/agents/portfolio_manager_modified.py
