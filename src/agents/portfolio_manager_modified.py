@@ -7,6 +7,7 @@ from graph.state import AgentState, show_agent_reasoning
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
 from utils.progress import progress
+from utils.llm import call_llm
 
 
 class PortfolioDecision(BaseModel):

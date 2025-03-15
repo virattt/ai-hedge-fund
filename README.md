@@ -4,16 +4,22 @@ This is a proof of concept for an AI-powered hedge fund.  The goal of this proje
 
 This system employs several agents working together:
 
-1. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
-2. Sentiment Agent - Analyzes market sentiment and generates trading signals
-3. Fundamentals Agent - Analyzes fundamental data and generates trading signals
-4. Technical Analyst - Analyzes technical indicators and generates trading signals
-5. Risk Manager - Calculates risk metrics and sets position limits
-6. Portfolio Manager - Makes final trading decisions and generates orders
-   
-<img width="1060" alt="Screenshot 2025-01-03 at 5 39 25 PM" src="https://github.com/user-attachments/assets/4611aace-27d0-43b2-9a70-385b40336e3f" />
+1. Ben Graham Agent - The godfather of value investing, only buys hidden gems with a margin of safety
+2. Bill Ackman Agent - An activist investors, takes bold positions and pushes for change
+3. Cathie Wood Agent - The queen of growth investing, believes in the power of innovation and disruption
+4. Charlie Munger Agent - Warren Buffett's partner, only buys wonderful businesses at fair prices
+5. Stanley Druckenmiller Agent - Macro trading legend who hunts for asymmetric opportunities with explosive growth potential
+6. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
+7. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
+8. Sentiment Agent - Analyzes market sentiment and generates trading signals
+9. Fundamentals Agent - Analyzes fundamental data and generates trading signals
+10. Technicals Agent - Analyzes technical indicators and generates trading signals
+11. Risk Manager - Calculates risk metrics and sets position limits
+12. Portfolio Manager - Makes final trading decisions and generates orders
 
-Note: the system simulates trading decisions, it does not actually trade.
+<img width="1020" alt="Screenshot 2025-03-08 at 4 45 22 PM" src="https://github.com/user-attachments/assets/d8ab891e-a083-4fed-b514-ccc9322a3e57" />
+
+**Note**: the system simulates trading decisions, it does not actually trade.
 
 [![Twitter Follow](https://img.shields.io/twitter/follow/virattt?style=social)](https://twitter.com/virattt)
 
@@ -63,16 +69,22 @@ poetry install
 cp .env.example .env
 ```
 
-Set the API keys in the .env file:
-```
+4. Set your API keys:
+```bash
+# For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
 # Get your OpenAI API key from https://platform.openai.com/
 OPENAI_API_KEY=your-openai-api-key
 
+# For running LLMs hosted by groq (deepseek, llama3, etc.)
+# Get your Groq API key from https://groq.com/
+GROQ_API_KEY=your-groq-api-key
+
+# For getting financial data to power the hedge fund
 # Get your Financial Datasets API key from https://financialdatasets.ai/
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
-**Important**: You must to set the OpenAI API key for the hedge fund to work.
+**Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY` for the hedge fund to work.  If you want to use LLMs from all providers, you will need to set all API keys.
 
 Financial data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key.
 
@@ -119,12 +131,14 @@ poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --start-date 2024-01
 ai-hedge-fund/
 ├── src/
 │   ├── agents/                   # Agent definitions and workflow
+│   │   ├── bill_ackman.py        # Bill Ackman agent
 │   │   ├── fundamentals.py       # Fundamental analysis agent
 │   │   ├── portfolio_manager.py  # Portfolio management agent
 │   │   ├── risk_manager.py       # Risk management agent
 │   │   ├── sentiment.py          # Sentiment analysis agent
 │   │   ├── technicals.py         # Technical analysis agent
 │   │   ├── valuation.py          # Valuation analysis agent
+│   │   ├── warren_buffett.py     # Warren Buffett agent
 │   ├── tools/                    # Agent tools
 │   │   ├── api.py                # API tools
 │   ├── backtester.py             # Backtesting tools
@@ -145,7 +159,7 @@ ai-hedge-fund/
 
 ## Feature Requests
 
-If you have a feature request, please open an [issue](https://github.com/virattt/ai-hedge-fund/issues) and make it is tagged with `enhancement`.
+If you have a feature request, please open an [issue](https://github.com/virattt/ai-hedge-fund/issues) and make sure it is tagged with `enhancement`.
 
 ## License
 
