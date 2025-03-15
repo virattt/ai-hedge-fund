@@ -84,7 +84,7 @@ GROQ_API_KEY=your-groq-api-key
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
-**Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, or `ANTHROPIC_API_KEY` for the hedge fund to work.  If you want to use LLMs from all providers, you will need to set all API keys.
+**Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY` for the hedge fund to work.  If you want to use LLMs from all providers, you will need to set all API keys.
 
 Financial data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key.
 
