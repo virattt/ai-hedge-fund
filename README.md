@@ -7,17 +7,17 @@ This system employs several agents working together:
 1. Ben Graham Agent - The godfather of value investing, only buys hidden gems with a margin of safety
 2. Bill Ackman Agent - An activist investors, takes bold positions and pushes for change
 3. Cathie Wood Agent - The queen of growth investing, believes in the power of innovation and disruption
-4. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
-5. Charlie Munger Agent - Warren Buffett's partner, only buys wonderful businesses at fair prices
-6. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
-7. Sentiment Agent - Analyzes market sentiment and generates trading signals
-8. Fundamentals Agent - Analyzes fundamental data and generates trading signals
-9. Technicals Agent - Analyzes technical indicators and generates trading signals
-10. Risk Manager - Calculates risk metrics and sets position limits
-11. Portfolio Manager - Makes final trading decisions and generates orders
+4. Charlie Munger Agent - Warren Buffett's partner, only buys wonderful businesses at fair prices
+5. Stanley Druckenmiller Agent - Macro trading legend who hunts for asymmetric opportunities with explosive growth potential
+6. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
+7. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
+8. Sentiment Agent - Analyzes market sentiment and generates trading signals
+9. Fundamentals Agent - Analyzes fundamental data and generates trading signals
+10. Technicals Agent - Analyzes technical indicators and generates trading signals
+11. Risk Manager - Calculates risk metrics and sets position limits
+12. Portfolio Manager - Makes final trading decisions and generates orders
 
-<img width="1117" alt="Screenshot 2025-02-09 at 11 26 14 AM" src="https://github.com/user-attachments/assets/16509cc2-4b64-4c67-8de6-00d224893d58" />
-
+<img width="1020" alt="Screenshot 2025-03-08 at 4 45 22 PM" src="https://github.com/user-attachments/assets/d8ab891e-a083-4fed-b514-ccc9322a3e57" />
 
 **Note**: the system simulates trading decisions, it does not actually trade.
 
@@ -84,7 +84,7 @@ GROQ_API_KEY=your-groq-api-key
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
-**Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, or `ANTHROPIC_API_KEY` for the hedge fund to work.  If you want to use LLMs from all providers, you will need to set all API keys.
+**Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY` for the hedge fund to work.  If you want to use LLMs from all providers, you will need to set all API keys.
 
 Financial data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key.
 
