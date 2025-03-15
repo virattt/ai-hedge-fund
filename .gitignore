@@ -37,3 +37,6 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db 
+
+# graph
+*.png
