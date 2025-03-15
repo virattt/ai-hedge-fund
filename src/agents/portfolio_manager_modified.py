@@ -57,20 +57,6 @@ def portfolio_management_agent(state: AgentState):
                 ticker_signals[agent] = {"signal": signals[ticker]["signal"], "confidence": signals[ticker]["confidence"]}
         signals_by_ticker[ticker] = ticker_signals
 
-<<<<<<< HEAD:src/agents/portfolio_manager.py
-    progress.update_status("portfolio_management_agent", None, "Making trading decisions")
-
-    # Generate the trading decision
-    result = generate_trading_decision(
-        tickers=tickers,
-        signals_by_ticker=signals_by_ticker,
-        current_prices=current_prices,
-        max_shares=max_shares,
-        portfolio=portfolio,
-        model_name=state["metadata"]["model_name"],
-        model_provider=state["metadata"]["model_provider"],
-    )
-=======
     progress.update_status("portfolio_management_agent", None, "Preparing trading strategy")
     # Create the prompt template
     previous_result = ""
@@ -186,7 +172,6 @@ def portfolio_management_agent(state: AgentState):
                 progress.update_status("portfolio_management_agent", None, "Error: The total value of the portfolio would be negative, This was the final try, did not find a solution")
 
     # result = make_decision(prompt, tickers)
->>>>>>> main:src/agents/portfolio_manager_modified.py
 
     # Create the portfolio management message
     message = HumanMessage(
@@ -220,8 +205,8 @@ def generate_trading_decision(
     template = ChatPromptTemplate.from_messages(
         [
             (
-              "system",
-              """You are a portfolio manager making final trading decisions based on multiple tickers.
+                "system",
+                """You are a portfolio manager making final trading decisions based on multiple tickers.
 
               Trading Rules:
               - For long positions:
@@ -257,8 +242,8 @@ def generate_trading_decision(
               """,
             ),
             (
-              "human",
-              """Based on the team's analysis, make your trading decisions for each ticker.
+                "human",
+                """Based on the team's analysis, make your trading decisions for each ticker.
 
               Here are the signals by ticker:
               {signals_by_ticker}
@@ -292,26 +277,6 @@ def generate_trading_decision(
             ),
         ]
     )
-<<<<<<< HEAD:src/agents/portfolio_manager.py
-
-    # Generate the prompt
-    prompt = template.invoke(
-        {
-            "signals_by_ticker": json.dumps(signals_by_ticker, indent=2),
-            "current_prices": json.dumps(current_prices, indent=2),
-            "max_shares": json.dumps(max_shares, indent=2),
-            "portfolio_cash": f"{portfolio.get('cash', 0):.2f}",
-            "portfolio_positions": json.dumps(portfolio.get('positions', {}), indent=2),
-            "margin_requirement": f"{portfolio.get('margin_requirement', 0):.2f}",
-        }
-    )
-
-    # Create default factory for PortfolioManagerOutput
-    def create_default_portfolio_output():
-        return PortfolioManagerOutput(decisions={ticker: PortfolioDecision(action="hold", quantity=0, confidence=0.0, reasoning="Error in portfolio management, defaulting to hold") for ticker in tickers})
-
-    return call_llm(prompt=prompt, model_name=model_name, model_provider=model_provider, pydantic_model=PortfolioManagerOutput, agent_name="portfolio_management_agent", default_factory=create_default_portfolio_output)
-=======
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -322,4 +287,3 @@ def generate_trading_decision(
             if attempt == max_retries - 1:
                 # On final attempt, return a safe default
                 return PortfolioManagerOutput(decisions={ticker: PortfolioDecision(action="hold", quantity=0, confidence=0.0, reasoning=f"Error in portfolio management, defaulting to hold - Error: {e}") for ticker in tickers})
->>>>>>> main:src/agents/portfolio_manager_modified.py
