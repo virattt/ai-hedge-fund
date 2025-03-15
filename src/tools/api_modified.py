@@ -40,9 +40,20 @@ def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
         headers["X-API-KEY"] = api_key
 
     url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+    # Add initial random wait time between 0 and 2 seconds
+    time.sleep(random.uniform(0, 2))
+    for attempt in range(MAX_RETRIES):
+        response = requests.get(url, headers=headers)
+        if response.status_code == 429:
+            # Too Many Requests, backoff and retry
+            wait_time = BACKOFF_FACTOR * (2**attempt)
+            print(f"Rate limit exceeded. Retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+        elif response.status_code != 200:
+            raise Exception(f"Error fetching data: {response.status_code} - {response.text}")
+        else:
+            # break for loop if successful
+            break
 
     # Parse response with Pydantic model
     price_response = PriceResponse(**response.json())
@@ -77,9 +88,20 @@ def get_financial_metrics(
         headers["X-API-KEY"] = api_key
 
     url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+    # Add initial random wait time between 0 and 2 seconds
+    time.sleep(random.uniform(0, 2))
+    for attempt in range(MAX_RETRIES):
+        response = requests.get(url, headers=headers)
+        if response.status_code == 429:
+            # Too Many Requests, backoff and retry
+            wait_time = BACKOFF_FACTOR * (2**attempt)
+            print(f"Rate limit exceeded. Retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+        elif response.status_code != 200:
+            raise Exception(f"Error fetching data: {response.status_code} - {response.text}")
+        else:
+            # break for loop if successful
+            break
 
     # Parse response with Pydantic model
     metrics_response = FinancialMetricsResponse(**response.json())
@@ -101,7 +123,15 @@ def search_line_items(
     period: str = "ttm",
     limit: int = 10,
 ) -> list[LineItem]:
-    """Fetch line items from API."""
+    """Fetch line items from cache or API."""
+    # Check cache first
+    if cached_data := _cache.get_line_items(ticker):
+        # Filter cached data by date and limit
+        filtered_data = [LineItem(**item) for item in cached_data if item["report_period"] <= end_date]
+        filtered_data.sort(key=lambda x: x.report_period, reverse=True)
+        if filtered_data:
+            return filtered_data[:limit]
+
     # If not in cache or insufficient data, fetch from API
     headers = {}
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
@@ -116,9 +146,20 @@ def search_line_items(
         "period": period,
         "limit": limit,
     }
-    response = requests.post(url, headers=headers, json=body)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+    # Add initial random wait time between 0 and 2 seconds
+    time.sleep(random.uniform(0, 2))
+    for attempt in range(MAX_RETRIES):
+        response = requests.post(url, headers=headers, json=body)
+        if response.status_code == 429:
+            # Too Many Requests, backoff and retry
+            wait_time = BACKOFF_FACTOR * (2**attempt)
+            print(f"Rate limit exceeded. Retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+        elif response.status_code != 200:
+            raise Exception(f"Error fetching data: {response.status_code} - {response.text}")
+        else:
+            # break for loop if successful
+            break
     data = response.json()
     response_model = LineItemResponse(**data)
     search_results = response_model.search_results
@@ -126,6 +167,7 @@ def search_line_items(
         return []
 
     # Cache the results
+    _cache.set_line_items(ticker, [item.model_dump() for item in search_results])
     return search_results[:limit]
 
 
@@ -157,11 +199,20 @@ def get_insider_trades(
         if start_date:
             url += f"&filing_date_gte={start_date}"
         url += f"&limit={limit}"
-
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
-
+        # Add initial random wait time between 0 and 2 seconds
+        time.sleep(random.uniform(0, 2))
+        for attempt in range(MAX_RETRIES):
+            response = requests.get(url, headers=headers)
+            if response.status_code == 429:
+                # Too Many Requests, backoff and retry
+                wait_time = BACKOFF_FACTOR * (2**attempt)
+                print(f"Rate limit exceeded. Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            elif response.status_code != 200:
+                raise Exception(f"Error fetching data: {response.status_code} - {response.text}")
+            else:
+                # break for loop if successful
+                break
         data = response.json()
         response_model = InsiderTradeResponse(**data)
         insider_trades = response_model.insider_trades
@@ -218,10 +269,20 @@ def get_company_news(
         if start_date:
             url += f"&start_date={start_date}"
         url += f"&limit={limit}"
-
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+        # Add initial random wait time between 0 and 2 seconds
+        time.sleep(random.uniform(0, 2))
+        for attempt in range(MAX_RETRIES):
+            response = requests.get(url, headers=headers)
+            if response.status_code == 429:
+                # Too Many Requests, backoff and retry
+                wait_time = BACKOFF_FACTOR * (2**attempt)
+                print(f"Rate limit exceeded. Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            elif response.status_code != 200:
+                raise Exception(f"Error fetching data: {response.status_code} - {response.text}")
+            else:
+                # break for loop if successful
+                break
 
         data = response.json()
         response_model = CompanyNewsResponse(**data)
