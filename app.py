@@ -202,8 +202,9 @@ tickers = [ticker.strip() for ticker in ticker_input.split(",") if ticker.strip(
 
 # Date range selection
 today = datetime.now()
-default_end_date = today.strftime("%Y-%m-%d")
-default_start_date = (today - relativedelta(days=2)).strftime("%Y-%m-%d")
+day_before_yesterday = today - timedelta(days=2)
+default_end_date = day_before_yesterday.strftime("%Y-%m-%d")
+default_start_date = (today - relativedelta(days=3)).strftime("%Y-%m-%d")
 
 col1, col2 = st.sidebar.columns(2)
 with col1:
@@ -216,7 +217,7 @@ with col2:
     end_date = st.date_input(
         "End Date",
         value=datetime.strptime(default_end_date, "%Y-%m-%d"),
-        max_value=today,
+        max_value=day_before_yesterday,
     )
 
 # Convert date inputs to string format
@@ -294,6 +295,8 @@ elif start_date >= end_date:
     st.warning("Start date must be before end date.")
 elif not selected_analysts:
     st.warning("Please select at least one analyst.")
+elif end_date > day_before_yesterday.date():
+    st.warning("End date cannot be later than the day before yesterday. Please select a valid end date.")
 elif run_button:
     # Store the fact that we've run a backtest
     st.session_state.backtest_run = True
