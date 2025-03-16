@@ -92,7 +92,9 @@ def valuation_agent(state: AgentState):
         owner_earnings_gap = (owner_earnings_value - market_cap) / market_cap
         valuation_gap = (dcf_gap + owner_earnings_gap) / 2
 
-        if valuation_gap > 0.15:  # More than 15% undervalued
+        if valuation_gap = -1: #dcp value is 0, meaning the data is wrong or N/A
+            signal = "neutral"
+        elif valuation_gap > 0.15:  # More than 15% undervalued
             signal = "bullish"
         elif valuation_gap < -0.15:  # More than 15% overvalued
             signal = "bearish"
@@ -204,6 +206,10 @@ def calculate_intrinsic_value(
     terminal_growth_rate: float = 0.02,
     num_years: int = 5,
 ) -> float:
+    # if free_cash_flow = 0 or null, return 0
+    if not free_cash_flow:
+        return 0
+        
     """
     Computes the discounted cash flow (DCF) for a given company based on the current free cash flow.
     Use this function to calculate the intrinsic value of a stock.
