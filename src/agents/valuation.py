@@ -87,14 +87,16 @@ def valuation_agent(state: AgentState):
         # Get the market cap
         market_cap = get_market_cap(ticker=ticker, end_date=end_date)
 
+        # Reset dcf value to market value if dcf_value = 0
+        if dcf_value == 0:
+            dcf_value = market_cap
+
         # Calculate combined valuation gap (average of both methods)
         dcf_gap = (dcf_value - market_cap) / market_cap
         owner_earnings_gap = (owner_earnings_value - market_cap) / market_cap
         valuation_gap = (dcf_gap + owner_earnings_gap) / 2
 
-        if valuation_gap = -1: #dcp value is 0, meaning the data is wrong or N/A
-            signal = "neutral"
-        elif valuation_gap > 0.15:  # More than 15% undervalued
+        if valuation_gap > 0.15:  # More than 15% undervalued
             signal = "bullish"
         elif valuation_gap < -0.15:  # More than 15% overvalued
             signal = "bearish"
