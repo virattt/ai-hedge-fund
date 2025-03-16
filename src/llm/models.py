@@ -4,6 +4,7 @@ from langchain_deepseek import ChatDeepSeek
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from enum import Enum
 from pydantic import BaseModel
 from typing import Tuple
@@ -15,6 +16,7 @@ class ModelProvider(str, Enum):
     DEEPSEEK = "DeepSeek"
     GEMINI = "Gemini"
     GROQ = "Groq"
+    OLLAMA = "Ollama"
     OPENAI = "OpenAI"
 
 
@@ -104,6 +106,11 @@ AVAILABLE_MODELS = [
         model_name="o3-mini",
         provider=ModelProvider.OPENAI
     ),
+    LLMModel(
+        display_name="[ollama] qwen2.5-1m-abliterated:14b",
+        model_name="huihui_ai/qwen2.5-1m-abliterated:14b",
+        provider=ModelProvider.OLLAMA
+    ),
 ]
 
 # Create LLM_ORDER in the format expected by the UI
@@ -113,7 +120,7 @@ def get_model_info(model_name: str) -> LLMModel | None:
     """Get model information by model_name"""
     return next((model for model in AVAILABLE_MODELS if model.model_name == model_name), None)
 
-def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | ChatGroq | None:
+def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | ChatGroq | ChatOllama | None:
     if model_provider == ModelProvider.GROQ:
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
@@ -147,3 +154,9 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
             print(f"API Key Error: Please make sure GOOGLE_API_KEY is set in your .env file.")
             raise ValueError("Google API key not found.  Please make sure GOOGLE_API_KEY is set in your .env file.")
         return ChatGoogleGenerativeAI(model=model_name, api_key=api_key)
+    elif model_provider == ModelProvider.OLLAMA:
+        return ChatOllama(
+            model=model_name,
+            temperature=0.7,
+            base_url="http://localhost:11434",  # Default OLLAMA server URL
+        )
