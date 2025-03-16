@@ -211,33 +211,33 @@ def get_company_news(
 
     all_news = []
     current_end_date = end_date
-    
+
     while True:
         url = f"https://api.financialdatasets.ai/news/?ticker={ticker}&end_date={current_end_date}"
         if start_date:
             url += f"&start_date={start_date}"
         url += f"&limit={limit}"
-        
+
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
             raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
-        
+
         data = response.json()
         response_model = CompanyNewsResponse(**data)
         company_news = response_model.news
-        
+
         if not company_news:
             break
-            
+
         all_news.extend(company_news)
-        
+
         # Only continue pagination if we have a start_date and got a full page
         if not start_date or len(company_news) < limit:
             break
-            
+
         # Update end_date to the oldest date from current batch for next iteration
         current_end_date = min(news.date for news in company_news).split('T')[0]
-        
+
         # If we've reached or passed the start_date, we can stop
         if current_end_date <= start_date:
             break
@@ -248,7 +248,6 @@ def get_company_news(
     # Cache the results
     _cache.set_company_news(ticker, [news.model_dump() for news in all_news])
     return all_news
-
 
 
 def get_market_cap(
