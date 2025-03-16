@@ -36,6 +36,7 @@ This project is for **educational and research purposes only**.
 By using this software, you agree to use it solely for learning purposes.
 
 ## Table of Contents
+
 - [Setup](#setup)
 - [Usage](#usage)
   - [Running the Hedge Fund](#running-the-hedge-fund)
@@ -48,28 +49,33 @@ By using this software, you agree to use it solely for learning purposes.
 ## Setup
 
 Clone the repository:
+
 ```bash
 git clone https://github.com/virattt/ai-hedge-fund.git
 cd ai-hedge-fund
 ```
 
 1. Install Poetry (if not already installed):
+
 ```bash
 curl -sSL https://install.python-poetry.org | python3 -
 ```
 
 2. Install dependencies:
+
 ```bash
 poetry install
 ```
 
 3. Set up your environment variables:
+
 ```bash
 # Create .env file for your API keys
 cp .env.example .env
 ```
 
 4. Set your API keys:
+
 ```bash
 # For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
 # Get your OpenAI API key from https://platform.openai.com/
@@ -84,7 +90,19 @@ GROQ_API_KEY=your-groq-api-key
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
-**Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY` for the hedge fund to work.  If you want to use LLMs from all providers, you will need to set all API keys.
+5. (Optional) Set up OLLAMA for local LLM support:
+
+   - Install OLLAMA from https://ollama.ai/
+   - Pull the required model:
+
+   ```bash
+   ollama pull huihui_ai/qwen2.5-1m-abliterated:14b
+   ```
+
+   - No API key is required for OLLAMA as it runs locally
+   - To use different OLLAMA models, you can modify the available models in `src/llm/models.py`
+
+**Important**: You must set at least one of `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, or have OLLAMA installed with the appropriate model for the hedge fund to work. If you want to use LLMs from all providers, you will need to set all API keys.
 
 Financial data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key.
 
@@ -93,18 +111,33 @@ For any other ticker, you will need to set the `FINANCIAL_DATASETS_API_KEY` in t
 ## Usage
 
 ### Running the Hedge Fund
+
 ```bash
 poetry run python src/main.py --ticker AAPL,MSFT,NVDA
 ```
 
+When prompted, you can select your preferred LLM model, including the local OLLAMA model if installed:
+
+- `[ollama] qwen2.5-1m-abliterated` - Local Qwen 2.5 model (14B parameters)
+- Various cloud-based models from OpenAI, Anthropic, etc.
+
+**Note**: When using OLLAMA:
+
+- Ensure OLLAMA is running on your machine
+- The model must be pre-installed using `ollama pull huihui_ai/qwen2.5-1m-abliterated:14b`
+- Local models may be slower but don't incur API costs
+- Performance may vary compared to cloud-based models
+- You can add support for additional OLLAMA models by editing `src/llm/models.py`
+
 **Example Output:**
-<img width="992" alt="Screenshot 2025-01-06 at 5 50 17 PM" src="https://github.com/user-attachments/assets/e8ca04bf-9989-4a7d-a8b4-34e04666663b" />
+`<img width="992" alt="Screenshot 2025-01-06 at 5 50 17 PM" src="https://github.com/user-attachments/assets/e8ca04bf-9989-4a7d-a8b4-34e04666663b" />`
 
 You can also specify a `--show-reasoning` flag to print the reasoning of each agent to the console.
 
 ```bash
 poetry run python src/main.py --ticker AAPL,MSFT,NVDA --show-reasoning
 ```
+
 You can optionally specify the start and end dates to make decisions for a specific time period.
 
 ```bash
@@ -118,7 +151,7 @@ poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
 ```
 
 **Example Output:**
-<img width="941" alt="Screenshot 2025-01-06 at 5 47 52 PM" src="https://github.com/user-attachments/assets/00e794ea-8628-44e6-9a84-8f8a31ad3b47" />
+`<img width="941" alt="Screenshot 2025-01-06 at 5 47 52 PM" src="https://github.com/user-attachments/assets/00e794ea-8628-44e6-9a84-8f8a31ad3b47" />`
 
 You can optionally specify the start and end dates to backtest over a specific time period.
 
@@ -126,7 +159,8 @@ You can optionally specify the start and end dates to backtest over a specific t
 poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
 ```
 
-## Project Structure 
+## Project Structure
+
 ```
 ai-hedge-fund/
 ├── src/
@@ -139,6 +173,16 @@ ai-hedge-fund/
 │   │   ├── technicals.py         # Technical analysis agent
 │   │   ├── valuation.py          # Valuation analysis agent
 │   │   ├── warren_buffett.py     # Warren Buffett agent
+│   │   ├── ben_graham.py         # Ben Graham agent
+│   │   ├── cathie_wood.py        # Cathie Wood agent
+│   │   ├── charlie_munger.py     # Charlie Munger agent
+│   │   ├── stanley_druckenmiller.py # Stanley Druckenmiller agent
+│   │   ├── valuation_agent.py    # Valuation agent
+│   │   ├── sentiment_agent.py    # Sentiment agent
+│   │   ├── fundamentals_agent.py  # Fundamentals agent
+│   │   ├── technicals_agent.py   # Technicals agent
+│   │   ├── risk_manager.py        # Risk manager
+│   │   ├── portfolio_manager.py   # Portfolio manager
 │   ├── tools/                    # Agent tools
 │   │   ├── api.py                # API tools
 │   ├── backtester.py             # Backtesting tools
