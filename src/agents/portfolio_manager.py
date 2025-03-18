@@ -1,5 +1,5 @@
 import json
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 from graph.state import AgentState, show_agent_reasoning
@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field
 from typing_extensions import Literal
 from utils.progress import progress
 from utils.llm import call_llm
+from datetime import datetime
+from llm.models import get_model, ModelProvider
 
 
 class PortfolioDecision(BaseModel):
@@ -20,72 +22,179 @@ class PortfolioManagerOutput(BaseModel):
     decisions: dict[str, PortfolioDecision] = Field(description="Dictionary of ticker to trading decisions")
 
 
-##### Portfolio Management Agent #####
-def portfolio_management_agent(state: AgentState):
-    """Makes final trading decisions and generates orders for multiple tickers"""
-
-    # Get the portfolio and analyst signals
-    portfolio = state["data"]["portfolio"]
-    analyst_signals = state["data"]["analyst_signals"]
-    tickers = state["data"]["tickers"]
-
-    progress.update_status("portfolio_management_agent", None, "Analyzing signals")
-
-    # Get position limits, current prices, and signals for every ticker
-    position_limits = {}
-    current_prices = {}
-    max_shares = {}
-    signals_by_ticker = {}
-    for ticker in tickers:
-        progress.update_status("portfolio_management_agent", ticker, "Processing analyst signals")
-
-        # Get position limits and current prices for the ticker
-        risk_data = analyst_signals.get("risk_management_agent", {}).get(ticker, {})
-        position_limits[ticker] = risk_data.get("remaining_position_limit", 0)
-        current_prices[ticker] = risk_data.get("current_price", 0)
-
-        # Calculate maximum shares allowed based on position limit and price
-        if current_prices[ticker] > 0:
-            max_shares[ticker] = int(position_limits[ticker] / current_prices[ticker])
+def parse_llm_response(response_text):
+    """Parse JSON from LLM response"""
+    try:
+        # Try to extract JSON content if it's wrapped in markdown code blocks
+        if "```json" in response_text:
+            start_idx = response_text.find("```json") + 7
+            end_idx = response_text.find("```", start_idx)
+            json_str = response_text[start_idx:end_idx].strip()
+            return json.loads(json_str)
+        # Try to parse the entire response as JSON
         else:
-            max_shares[ticker] = 0
+            return json.loads(response_text)
+    except Exception as e:
+        print(f"Error parsing LLM response: {e}")
+        return {"error": "Could not parse response"}
 
-        # Get signals for the ticker
-        ticker_signals = {}
-        for agent, signals in analyst_signals.items():
-            if agent != "risk_management_agent" and ticker in signals:
-                ticker_signals[agent] = {"signal": signals[ticker]["signal"], "confidence": signals[ticker]["confidence"]}
-        signals_by_ticker[ticker] = ticker_signals
 
-    progress.update_status("portfolio_management_agent", None, "Making trading decisions")
+##### Portfolio Management Agent #####
+def portfolio_management_agent(state):
+    """Portfolio Management Agent"""
+    # In LangGraph 0.2.56, state might be a dict instead of AgentState object
+    # Handle both cases for compatibility
+    if isinstance(state, dict):
+        data = state["data"]
+        metadata = state["metadata"]
+        messages = state["messages"]
+    else:
+        data = state.data
+        metadata = state.metadata
+        messages = state.messages
+    
+    tickers = data["tickers"]
+    portfolio = data["portfolio"]
+    signals = data["analyst_signals"]
+    model_name = metadata.get("model_name", "gpt-4o")
+    model_provider = metadata.get("model_provider", "OpenAI")
+    
+    # Get trade history and frequency from state 
+    trade_history = data.get("trade_history", {})
+    trading_frequency = data.get("trading_frequency", {})
+    current_date = data.get("current_date", datetime.now().strftime("%Y-%m-%d"))
+    
+    # Generate prompt including trade history
+    prompt = f"""You are the Portfolio Management Agent of an AI-powered hedge fund.
 
-    # Generate the trading decision
-    result = generate_trading_decision(
-        tickers=tickers,
-        signals_by_ticker=signals_by_ticker,
-        current_prices=current_prices,
-        max_shares=max_shares,
-        portfolio=portfolio,
-        model_name=state["metadata"]["model_name"],
-        model_provider=state["metadata"]["model_provider"],
-    )
+Current Date: {current_date}
 
-    # Create the portfolio management message
-    message = HumanMessage(
-        content=json.dumps({ticker: decision.model_dump() for ticker, decision in result.decisions.items()}),
-        name="portfolio_management",
-    )
+Your role is to make the final trading decisions based on analyst recommendations and risk management guidelines.
 
-    # Print the decision if the flag is set
-    if state["metadata"]["show_reasoning"]:
-        show_agent_reasoning({ticker: decision.model_dump() for ticker, decision in result.decisions.items()}, "Portfolio Management Agent")
+Current Portfolio:
+{json.dumps(portfolio, indent=2)}
 
-    progress.update_status("portfolio_management_agent", None, "Done")
+Risk Analysis:
+{json.dumps(signals.get("risk_management_agent", {}), indent=2)}
 
-    return {
-        "messages": state["messages"] + [message],
-        "data": state["data"],
-    }
+Current Analyst Signals:
+{json.dumps({k: v for k, v in signals.items() if k != "risk_management_agent"}, indent=2)}
+
+Trading Frequency Metrics:
+{json.dumps(trading_frequency, indent=2)}
+
+## Overtrading Protection Rules
+1. Maximum 5 trades per day across all tickers
+2. Wait at least 2 days after a trade before trading same ticker again, unless:
+   - New significant information justifies immediate action
+   - A clear reversal signal is present with high conviction
+3. Maximum 3 trades per week per ticker
+4. Today's trade count so far: {trading_frequency.get('today_trade_count', 0)}
+5. Never make multiple trades in the same ticker on the same day
+
+For each ticker, evaluate all signals and determine the optimal action:
+1. "buy": Buy shares if bullish signals are strong, we have available cash, and haven't traded the ticker recently
+2. "sell": Sell shares if bearish signals are strong and we own shares
+3. "short": Short stock if very bearish signals exist AND we have margin capability
+4. "cover": Cover short position if signals turn neutral or bullish
+5. "hold": Take no action (default)
+
+For each action, provide a quantity that:
+- Respects the position limits from risk management
+- Accounts for available cash
+- Is proportional to the conviction level
+- Considers existing positions
+- Prevents overtrading/excessive turnover
+
+Respond with JSON format with decisions for each ticker:
+{{
+  "TICKER1": {{
+    "action": "buy"|"sell"|"short"|"cover"|"hold",
+    "quantity": 10
+  }},
+  "TICKER2": {{ ... }}
+}}
+"""
+
+    # Get reasoning and decisions from LLM
+    llm = get_model(model_name, ModelProvider(model_provider))
+    messages_for_llm = [
+        HumanMessage(content=prompt)
+    ]
+    try:
+        response = llm.invoke(messages_for_llm)
+        reasoning = response.content
+        
+        # Check if we're approaching trading limits
+        today_count = trading_frequency.get('today_trade_count', 0)
+        max_daily_trades = 5  # Maximum allowed trades per day
+        approaching_limit = today_count >= max_daily_trades - 2  # Warning if we have 3+ trades already
+        
+        # Parse the output as-is
+        parsed_response = parse_llm_response(reasoning)
+        
+        # Apply overtrading protection
+        if approaching_limit:
+            print(f"{Fore.YELLOW}WARNING: Approaching daily trade limit ({today_count}/{max_daily_trades}){Style.RESET_ALL}")
+            
+            # If we're at the limit, override decisions to "hold"
+            if today_count >= max_daily_trades:
+                print(f"{Fore.RED}ALERT: Daily trade limit reached. Forcing HOLD on all positions.{Style.RESET_ALL}")
+                for ticker in parsed_response:
+                    if parsed_response[ticker]["action"] != "hold":
+                        parsed_response[ticker]["action"] = "hold"
+                        parsed_response[ticker]["quantity"] = 0
+                        parsed_response[ticker]["override_reason"] = "Daily trade limit reached"
+        
+        # Check for recent trades on each ticker
+        for ticker in list(parsed_response.keys()):
+            ticker_history = trade_history.get(ticker, [])
+            if ticker_history and isinstance(ticker_history, list) and len(ticker_history) > 0:
+                first_trade = ticker_history[0]
+                days_ago = first_trade.get("days_ago")
+                
+                if days_ago is not None and days_ago < 2:
+                    # We traded this ticker in the last 2 days
+                    print(f"{Fore.YELLOW}Recent trade detected for {ticker} ({days_ago} days ago){Style.RESET_ALL}")
+                    
+                    # Check if there's a strong consensus from multiple analysts
+                    ticker_signals_count = sum(1 for k, v in signals.items() 
+                                              if k != "risk_management_agent" and ticker in v)
+                    strong_consensus = ticker_signals_count >= 3
+                    
+                    decision = parsed_response[ticker]
+                    if not strong_consensus and decision["action"] != "hold":
+                        decision["original_action"] = decision["action"]
+                        decision["action"] = "hold"
+                        decision["quantity"] = 0
+                        decision["override_reason"] = f"Recent trade ({days_ago} days ago) without strong new consensus"
+        
+        # Convert parsed_response to string for JSON response
+        final_decisions = {}
+        for ticker, decision in parsed_response.items():
+            final_decisions[ticker] = {
+                "action": decision.get("action", "hold"),
+                "quantity": decision.get("quantity", 0),
+                "confidence": decision.get("confidence", 50.0)
+            }
+            
+    except Exception as e:
+        print(f"Error in portfolio management agent: {e}")
+        final_decisions = {}
+        reasoning = f"Error: {str(e)}"
+
+    # If show_reasoning is enabled, print it
+    if metadata.get("show_reasoning", False):
+        print(f"\n{Fore.BLUE}Portfolio Management Agent Reasoning:{Style.RESET_ALL}")
+        print(reasoning)
+
+    # Return the response as a system message
+    if isinstance(state, dict):
+        state["messages"].append(SystemMessage(content=json.dumps(final_decisions)))
+    else:
+        state.messages.append(SystemMessage(content=json.dumps(final_decisions)))
+        
+    return state
 
 
 def generate_trading_decision(

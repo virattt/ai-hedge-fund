@@ -13,108 +13,70 @@ def sort_analyst_signals(signals):
     return sorted(signals, key=lambda x: analyst_order.get(x[0], 999))
 
 
-def print_trading_output(result: dict) -> None:
-    """
-    Print formatted trading results with colored tables for multiple tickers.
-
-    Args:
-        result (dict): Dictionary containing decisions and analyst signals for multiple tickers
-    """
-    decisions = result.get("decisions")
-    if not decisions:
-        print(f"{Fore.RED}No trading decisions available{Style.RESET_ALL}")
-        return
-
-    # Print decisions for each ticker
-    for ticker, decision in decisions.items():
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}Analysis for {Fore.CYAN}{ticker}{Style.RESET_ALL}")
-        print(f"{Fore.WHITE}{Style.BRIGHT}{'=' * 50}{Style.RESET_ALL}")
-
-        # Prepare analyst signals table for this ticker
-        table_data = []
-        for agent, signals in result.get("analyst_signals", {}).items():
-            if ticker not in signals:
-                continue
-
-            signal = signals[ticker]
-            agent_name = agent.replace("_agent", "").replace("_", " ").title()
-            signal_type = signal.get("signal", "").upper()
-
-            signal_color = {
-                "BULLISH": Fore.GREEN,
-                "BEARISH": Fore.RED,
-                "NEUTRAL": Fore.YELLOW,
-            }.get(signal_type, Fore.WHITE)
-
-            table_data.append(
-                [
-                    f"{Fore.CYAN}{agent_name}{Style.RESET_ALL}",
-                    f"{signal_color}{signal_type}{Style.RESET_ALL}",
-                    f"{Fore.YELLOW}{signal.get('confidence')}%{Style.RESET_ALL}",
-                ]
-            )
-
-        # Sort the signals according to the predefined order
-        table_data = sort_analyst_signals(table_data)
-
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}ANALYST SIGNALS:{Style.RESET_ALL} [{Fore.CYAN}{ticker}{Style.RESET_ALL}]")
-        print(
-            tabulate(
-                table_data,
-                headers=[f"{Fore.WHITE}Analyst", "Signal", "Confidence"],
-                tablefmt="grid",
-                colalign=("left", "center", "right"),
-            )
-        )
-
-        # Print Trading Decision Table
-        action = decision.get("action", "").upper()
-        action_color = {"BUY": Fore.GREEN, "SELL": Fore.RED, "HOLD": Fore.YELLOW}.get(action, Fore.WHITE)
-
-        decision_data = [
-            ["Action", f"{action_color}{action}{Style.RESET_ALL}"],
-            ["Quantity", f"{action_color}{decision.get('quantity')}{Style.RESET_ALL}"],
-            [
-                "Confidence",
-                f"{Fore.YELLOW}{decision.get('confidence'):.1f}%{Style.RESET_ALL}",
-            ],
-        ]
-
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}TRADING DECISION:{Style.RESET_ALL} [{Fore.CYAN}{ticker}{Style.RESET_ALL}]")
-        print(tabulate(decision_data, tablefmt="grid", colalign=("left", "right")))
-
-        # Print Reasoning
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}Reasoning:{Style.RESET_ALL} {Fore.CYAN}{decision.get('reasoning')}{Style.RESET_ALL}")
-
-    # Print Portfolio Summary
-    print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
-    portfolio_data = []
-    for ticker, decision in decisions.items():
-        action = decision.get("action", "").upper()
-        action_color = {
-            "BUY": Fore.GREEN,
-            "SELL": Fore.RED,
-            "HOLD": Fore.YELLOW,
-            "COVER": Fore.GREEN,
-            "SHORT": Fore.RED,
-        }.get(action, Fore.WHITE)
-        portfolio_data.append(
-            [
-                f"{Fore.CYAN}{ticker}{Style.RESET_ALL}",
-                f"{action_color}{action}{Style.RESET_ALL}",
-                f"{action_color}{decision.get('quantity')}{Style.RESET_ALL}",
-                f"{Fore.YELLOW}{decision.get('confidence'):.1f}%{Style.RESET_ALL}",
-            ]
-        )
-
-    print(
-        tabulate(
-            portfolio_data,
-            headers=[f"{Fore.WHITE}Ticker", "Action", "Quantity", "Confidence"],
-            tablefmt="grid",
-            colalign=("left", "center", "right", "right"),
-        )
-    )
+def print_trading_output(result):
+    """Print the trading decisions in a nicely formatted table."""
+    decisions = result["decisions"]
+    analyst_signals = result["analyst_signals"]
+    
+    # Print the analysis for each ticker
+    for ticker in decisions:
+        print(f"\nAnalysis for {Fore.GREEN}{ticker}{Style.RESET_ALL}")
+        print("=" * 50)
+        
+        # Get the decision for this ticker
+        decision = decisions[ticker]
+        action = decision.get("action", "hold")
+        quantity = decision.get("quantity", 0)
+        confidence = decision.get("confidence")  # This might be None
+        
+        # Print the analyst signals
+        ticker_signals = {}
+        for agent_name, signals in analyst_signals.items():
+            if ticker in signals:
+                ticker_signals[agent_name] = signals[ticker]
+        
+        if ticker_signals:
+            print(f"\n{Fore.CYAN}ANALYST SIGNALS: [{ticker}]{Style.RESET_ALL}")
+            headers = ["Analyst", "Signal", "Confidence"]
+            rows = []
+            
+            for agent_name, signal in ticker_signals.items():
+                if "signal" in signal:
+                    signal_color = Fore.GREEN if signal["signal"] == "bullish" else Fore.RED if signal["signal"] == "bearish" else Fore.YELLOW
+                    signal_str = f"{signal_color}{signal['signal'].upper()}{Style.RESET_ALL}"
+                    
+                    confidence_str = "N/A"
+                    if "confidence" in signal and signal["confidence"] is not None:
+                        confidence_str = f"{Fore.YELLOW}{signal['confidence']:.1f}%{Style.RESET_ALL}"
+                    
+                    rows.append([agent_name, signal_str, confidence_str])
+            
+            print(tabulate(rows, headers=headers, tablefmt="grid"))
+        
+        # Print the final trading decision
+        print(f"\n{Fore.CYAN}TRADING DECISION: [{ticker}]{Style.RESET_ALL}")
+        
+        # Format the action with color
+        action_str = "HOLD"
+        if action == "buy":
+            action_str = f"{Fore.GREEN}BUY{Style.RESET_ALL}"
+        elif action == "sell":
+            action_str = f"{Fore.RED}SELL{Style.RESET_ALL}"
+        elif action == "short":
+            action_str = f"{Fore.MAGENTA}SHORT{Style.RESET_ALL}"
+        elif action == "cover":
+            action_str = f"{Fore.BLUE}COVER{Style.RESET_ALL}"
+        elif action == "hold":
+            action_str = f"{Fore.YELLOW}HOLD{Style.RESET_ALL}"
+        
+        # Format confidence with color if available
+        confidence_str = "N/A"
+        if confidence is not None:
+            confidence_str = f"{Fore.YELLOW}{confidence:.1f}%{Style.RESET_ALL}"
+        
+        headers = ["Action", "Quantity", "Confidence"]
+        rows = [[action_str, quantity, confidence_str]]
+        print(tabulate(rows, headers=headers, tablefmt="grid"))
 
 
 def print_backtest_results(table_rows: list) -> None:

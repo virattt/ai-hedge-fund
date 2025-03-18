@@ -4,6 +4,7 @@ import json
 from typing import TypeVar, Type, Optional, Any
 from pydantic import BaseModel
 from utils.progress import progress
+from llm.models import ModelProvider
 
 T = TypeVar('T', bound=BaseModel)
 
@@ -17,7 +18,7 @@ def call_llm(
     default_factory = None
 ) -> T:
     """
-    Makes an LLM call with retry logic, handling both Deepseek and non-Deepseek models.
+    Makes an LLM call with retry logic, handling different model types.
     
     Args:
         prompt: The prompt to send to the LLM
@@ -51,7 +52,11 @@ def call_llm(
             
             # For non-JSON support models, we need to extract and parse the JSON manually
             if model_info and not model_info.has_json_mode():
-                parsed_result = extract_json_from_deepseek_response(result.content)
+                if model_provider == ModelProvider.OLLAMA:
+                    parsed_result = extract_json_from_ollama_response(result.content)
+                else:
+                    parsed_result = extract_json_from_deepseek_response(result.content)
+                
                 if parsed_result:
                     return pydantic_model(**parsed_result)
             else:
@@ -104,4 +109,39 @@ def extract_json_from_deepseek_response(content: str) -> Optional[dict]:
                 return json.loads(json_text)
     except Exception as e:
         print(f"Error extracting JSON from Deepseek response: {e}")
+    return None
+
+def extract_json_from_ollama_response(content: str) -> Optional[dict]:
+    """Extracts JSON from Ollama's response."""
+    try:
+        # First try to parse the entire response as JSON
+        return json.loads(content)
+    except json.JSONDecodeError:
+        try:
+            # Look for JSON-like structure within markdown code blocks
+            json_start = content.find("```json")
+            if json_start != -1:
+                json_text = content[json_start + 7:]
+                json_end = json_text.find("```")
+                if json_end != -1:
+                    json_text = json_text[:json_end].strip()
+                    return json.loads(json_text)
+            
+            # Look for JSON-like structure within regular code blocks
+            json_start = content.find("```")
+            if json_start != -1:
+                json_text = content[json_start + 3:]
+                json_end = json_text.find("```")
+                if json_end != -1:
+                    json_text = json_text[:json_end].strip()
+                    return json.loads(json_text)
+                    
+            # Try to find JSON within curly braces
+            start_idx = content.find("{")
+            end_idx = content.rfind("}")
+            if start_idx != -1 and end_idx != -1:
+                json_text = content[start_idx:end_idx + 1]
+                return json.loads(json_text)
+        except Exception:
+            pass
     return None

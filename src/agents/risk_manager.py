@@ -2,82 +2,155 @@ from langchain_core.messages import HumanMessage
 from graph.state import AgentState, show_agent_reasoning
 from utils.progress import progress
 from tools.api import get_prices, prices_to_df
+from tools.alpaca_client import AlpacaClient
+from datetime import datetime, timedelta
 import json
+from colorama import Fore, Style
+from llm.models import get_model, ModelProvider
 
 
 ##### Risk Management Agent #####
-def risk_management_agent(state: AgentState):
-    """Controls position sizing based on real-world risk factors for multiple tickers."""
-    portfolio = state["data"]["portfolio"]
-    data = state["data"]
+def risk_management_agent(state):
+    """Risk Management Agent"""
+    # In LangGraph 0.2.56, state might be a dict instead of AgentState object
+    # Handle both cases for compatibility
+    if isinstance(state, dict):
+        data = state["data"]
+        metadata = state["metadata"]
+    else:
+        data = state.data
+        metadata = state.metadata
+    
     tickers = data["tickers"]
-
-    # Initialize risk analysis for each ticker
-    risk_analysis = {}
-    current_prices = {}  # Store prices here to avoid redundant API calls
-
-    for ticker in tickers:
-        progress.update_status("risk_management_agent", ticker, "Analyzing price data")
-
-        prices = get_prices(
-            ticker=ticker,
-            start_date=data["start_date"],
-            end_date=data["end_date"],
-        )
-
-        if not prices:
-            progress.update_status("risk_management_agent", ticker, "Failed: No price data found")
-            continue
-
-        prices_df = prices_to_df(prices)
-
-        progress.update_status("risk_management_agent", ticker, "Calculating position limits")
-
-        # Calculate portfolio value
-        current_price = prices_df["close"].iloc[-1]
-        current_prices[ticker] = current_price  # Store the current price
-
-        # Calculate current position value for this ticker
-        current_position_value = portfolio.get("cost_basis", {}).get(ticker, 0)
-
-        # Calculate total portfolio value using stored prices
-        total_portfolio_value = portfolio.get("cash", 0) + sum(portfolio.get("cost_basis", {}).get(t, 0) for t in portfolio.get("cost_basis", {}))
-
-        # Base limit is 20% of portfolio for any single position
-        position_limit = total_portfolio_value * 0.20
-
-        # For existing positions, subtract current position value from limit
-        remaining_position_limit = position_limit - current_position_value
-
-        # Ensure we don't exceed available cash
-        max_position_size = min(remaining_position_limit, portfolio.get("cash", 0))
-
-        risk_analysis[ticker] = {
-            "remaining_position_limit": float(max_position_size),
-            "current_price": float(current_price),
-            "reasoning": {
-                "portfolio_value": float(total_portfolio_value),
-                "current_position": float(current_position_value),
-                "position_limit": float(position_limit),
-                "remaining_limit": float(remaining_position_limit),
-                "available_cash": float(portfolio.get("cash", 0)),
-            },
+    portfolio = data["portfolio"]
+    signals = data["analyst_signals"]
+    model_name = metadata.get("model_name", "gpt-4o")
+    model_provider = metadata.get("model_provider", "OpenAI")
+    
+    # Get current date
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Initialize Alpaca client to get trade history
+    try:
+        alpaca_client = AlpacaClient()
+        # Get trade history for all tickers in our portfolio
+        trade_history = alpaca_client.get_trade_history(days_back=30, symbols=tickers)
+        # Get trading frequency analysis
+        trading_frequency = alpaca_client.get_trading_frequency_analysis(days_back=30)
+        
+        # Add this data to the state for agents to use
+        data["trade_history"] = trade_history
+        data["trading_frequency"] = trading_frequency
+        data["current_date"] = current_date
+        
+        # Log that we're including trade history in our analysis
+        print(f"Including trade history for risk analysis: {len(trade_history)} tickers with trading history")
+        
+    except Exception as e:
+        print(f"Warning: Could not retrieve Alpaca trade history: {e}")
+        # Continue without trade history if there's an error
+        data["trade_history"] = {}
+        data["trading_frequency"] = {
+            "total_trades": 0,
+            "avg_trades_per_day": 0,
+            "today_trade_count": 0
         }
+        data["current_date"] = current_date
+    
+    # Construct the prompt, including trade history information
+    prompt = f"""You are the Risk Management Agent of an AI-powered hedge fund.
 
-        progress.update_status("risk_management_agent", ticker, "Done")
+Current Date: {current_date}
 
-    message = HumanMessage(
-        content=json.dumps(risk_analysis),
-        name="risk_management_agent",
-    )
+Portfolio:
+{json.dumps(portfolio, indent=2)}
 
-    if state["metadata"]["show_reasoning"]:
-        show_agent_reasoning(risk_analysis, "Risk Management Agent")
+Existing Analyst Signals:
+{json.dumps(signals, indent=2)}
 
-    # Add the signal to the analyst_signals list
-    state["data"]["analyst_signals"]["risk_management_agent"] = risk_analysis
+## Trade History Analysis
+{json.dumps(data['trading_frequency'], indent=2)}
 
-    return {
-        "messages": state["messages"] + [message],
-        "data": data,
-    }
+Your goal is to analyze the risk of each position and determine position sizing.
+For each stock in the portfolio, assess:
+
+1. Market risk - volatility, correlation to broader market
+2. Liquidity risk - how easily the position can be exited
+3. Concentration risk - avoid overexposure to any single stock
+4. Trading frequency risk - avoid overtrading or excessive turnover
+5. Recent trade history - consider recent trades before recommending more action on the same ticker
+
+Rules:
+1. Maximum allocation to any single position: 25% of portfolio
+2. Minimum cash reserve: 10% of portfolio
+3. Maximum daily trades: 5 trades per day 
+4. No immediate reversal: Don't buy a stock that was sold in the last 3 days (and vice versa)
+5. Consistency check: If we recently bought a stock, don't sell it without significant new information
+
+Decision Parameters:
+- Limit new trades on any ticker where we've traded in the last 2 days
+- Require stronger signals to trade a ticker that's been recently traded
+- Maximum of 3 trades per ticker per week
+- Today's trade count: {data['trading_frequency'].get('today_trade_count', 0)}
+
+For each ticker in the portfolio, provide: 
+1. An adjusted position size (% of portfolio)
+2. A risk score (1-10, where 10 is highest risk)
+3. Whether any trading frequency limits have been hit
+4. Whether the stock has been recently traded (in last 48 hours)
+
+Respond in JSON format:
+{{
+  "risk_analysis": {{
+    "TICKER1": {{
+      "risk_score": 5,
+      "max_position_size": 10,
+      "trading_frequency_limit_hit": false,
+      "recently_traded": false,
+      "days_since_last_trade": 5,
+      "trade_allowed_today": true,
+      "reasoning": "Explanation..."
+    }},
+    "TICKER2": {{ ... }}
+  }}
+}}
+"""
+
+    # Get reasoning and analysis from LLM
+    llm = get_model(model_name, ModelProvider(model_provider))
+    messages = [
+        HumanMessage(content=prompt)
+    ]
+    try:
+        response = llm.invoke(messages)
+        reasoning = response.content
+        risk_analysis = parse_llm_response(reasoning)
+        signals["risk_management_agent"] = risk_analysis
+    except Exception as e:
+        print(f"Error in risk management agent: {e}")
+        risk_analysis = {"error": str(e)}
+        signals["risk_management_agent"] = risk_analysis
+
+    # If show_reasoning is enabled, print it
+    if isinstance(state, dict) and metadata.get("show_reasoning", False):
+        print(f"\n{Fore.YELLOW}Risk Management Agent Reasoning:{Style.RESET_ALL}")
+        print(reasoning)
+
+    # Continue to the next agent
+    return state
+
+def parse_llm_response(response_text):
+    """Parse JSON from LLM response"""
+    try:
+        # Try to extract JSON content if it's wrapped in markdown code blocks
+        if "```json" in response_text:
+            start_idx = response_text.find("```json") + 7
+            end_idx = response_text.find("```", start_idx)
+            json_str = response_text[start_idx:end_idx].strip()
+            return json.loads(json_str)
+        # Try to parse the entire response as JSON
+        else:
+            return json.loads(response_text)
+    except Exception as e:
+        print(f"Error parsing LLM response: {e}")
+        return {"error": "Could not parse response"}
