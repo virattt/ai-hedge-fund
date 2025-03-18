@@ -4,6 +4,7 @@ from utils.progress import progress
 import json
 from enum import Enum
 from typing import List, Optional
+import base64
 
 from tools.chart_api import get_trading_chart
 from data.models import EntrySignal, EntrySignalResponse
@@ -122,6 +123,21 @@ def analyze_chart_with_strategy(
 def analyze_smi_crossover(trading_chart, ticker: str, model_name: str, model_provider: str) -> EntrySignal:
     """Analyze SMI crossover signals for entry opportunities."""
     
+    # Read and encode the image
+    try:
+        with open(trading_chart.image_path, "rb") as image_file:
+            image_data = base64.b64encode(image_file.read()).decode('utf-8')
+    except Exception as e:
+        print(f"Debug: Error reading image file: {str(e)}")
+        return EntrySignal(
+            ticker=ticker,
+            signal="neutral",
+            confidence=0,
+            pattern="No valid SMI signal",
+            reasoning=f"Error reading chart image: {str(e)}",
+            image_path=trading_chart.image_path
+        )
+    
     system_message = {
         "role": "system",
         "content": """You are a technical analysis expert specializing in SMI (Stochastic Momentum Index) analysis.
@@ -153,13 +169,13 @@ Return JSON in this exact format:
     "confidence": <number between 0-100>,
     "pattern": "SMI bullish crossover" or "No valid SMI signal",
     "reasoning": "<detailed explanation of SMI analysis>",
-    "chart_url": "{trading_chart.chart_url}"
+    "image_path": "{trading_chart.image_path}"
 }}"""
             },
             {
                 "type": "image_url",
                 "image_url": {
-                    "url": f"data:image/png;base64,{trading_chart.image_data}"
+                    "url": f"data:image/png;base64,{image_data}"
                 }
             }
         ]
@@ -182,5 +198,5 @@ Return JSON in this exact format:
             confidence=0,
             pattern="No valid SMI signal",
             reasoning=f"Error analyzing SMI signals: {str(e)}",
-            chart_url=trading_chart.chart_url
+            image_path=trading_chart.image_path
         )
