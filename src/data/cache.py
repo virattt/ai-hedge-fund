@@ -7,6 +7,7 @@ class Cache:
         self._line_items_cache: dict[str, list[dict[str, any]]] = {}
         self._insider_trades_cache: dict[str, list[dict[str, any]]] = {}
         self._company_news_cache: dict[str, list[dict[str, any]]] = {}
+        self._trading_charts_cache: dict[str, dict[str, any]] = {}
 
     def _merge_data(self, existing: list[dict] | None, new_data: list[dict], key_field: str) -> list[dict]:
         """Merge existing and new data, avoiding duplicates based on a key field."""
@@ -80,6 +81,16 @@ class Cache:
             data,
             key_field="date"
         )
+        
+    def get_trading_chart(self, ticker: str, timeframe: str = "1D") -> dict[str, any] | None:
+        """Get cached trading chart if available."""
+        chart_key = f"{ticker}_{timeframe}"
+        return self._trading_charts_cache.get(chart_key)
+    
+    def set_trading_chart(self, ticker: str, timeframe: str, data: dict[str, any]):
+        """Store trading chart in cache."""
+        chart_key = f"{ticker}_{timeframe}"
+        self._trading_charts_cache[chart_key] = data
 
 
 # Global cache instance

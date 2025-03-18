@@ -147,3 +147,30 @@ class AgentStateData(BaseModel):
 class AgentStateMetadata(BaseModel):
     show_reasoning: bool = False
     model_config = {"extra": "allow"}
+
+
+# New models for trading chart analysis
+class TradingChart(BaseModel):
+    ticker: str
+    chart_url: str
+    image_data: str  # Base64 encoded image data
+    timestamp: str
+    timeframe: str
+    indicators: list[str] = []  # List of indicators shown on the chart
+
+
+class TradingChartResponse(BaseModel):
+    chart: TradingChart
+
+
+class EntrySignal(BaseModel):
+    ticker: str
+    signal: str  # bullish, bearish, neutral
+    confidence: float
+    pattern: str | None = None  # Identified chart pattern
+    reasoning: str
+    chart_url: str | None = None  # URL to the analyzed chart
+
+
+class EntrySignalResponse(BaseModel):
+    entry_signals: list[EntrySignal]

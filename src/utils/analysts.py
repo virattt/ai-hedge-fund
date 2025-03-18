@@ -8,6 +8,7 @@ from agents.fundamentals import fundamentals_agent
 from agents.sentiment import sentiment_agent
 from agents.stanley_druckenmiller import stanley_druckenmiller_agent
 from agents.technicals import technical_analyst_agent
+from agents.chart_analysis import chart_analysis_agent  # Updated import
 from agents.valuation import valuation_agent
 from agents.warren_buffett import warren_buffett_agent
 
@@ -63,10 +64,24 @@ ANALYST_CONFIG = {
         "agent_func": valuation_agent,
         "order": 9,
     },
+    "chart_analysis": {  # Updated key
+        "display_name": "Chart Analysis",  # Updated display name
+        "agent_func": chart_analysis_agent,  # Updated function reference
+        "order": 10,
+    },
 }
 
 # Derive ANALYST_ORDER from ANALYST_CONFIG for backwards compatibility
 ANALYST_ORDER = [(config["display_name"], key) for key, config in sorted(ANALYST_CONFIG.items(), key=lambda x: x[1]["order"])]
+
+# Ensure all analysts are included in the order
+all_analysts = set(ANALYST_CONFIG.keys())
+analysts_in_order = set(key for _, key in ANALYST_ORDER)
+
+# Add any missing analysts to the order
+if all_analysts != analysts_in_order:
+    for key in all_analysts - analysts_in_order:
+        ANALYST_ORDER.append((ANALYST_CONFIG[key]["display_name"], key))
 
 
 def get_analyst_nodes():
