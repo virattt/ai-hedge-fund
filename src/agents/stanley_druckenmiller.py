@@ -228,7 +228,7 @@ def analyze_growth_and_momentum(financial_line_items: list, prices: list) -> dic
     #
     # We'll give up to 3 points for strong momentum
     if prices and len(prices) > 30:
-        sorted_prices = sorted(prices, key=lambda p: p.time)
+        sorted_prices = sorted(prices, key=lambda p: p.date)
         close_prices = [p.close for p in sorted_prices if p.close is not None]
         if len(close_prices) >= 2:
             start_price = close_prices[0]

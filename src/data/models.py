@@ -7,12 +7,12 @@ class Price(BaseModel):
     high: float
     low: float
     volume: int
-    time: str
+    date: str
+    model_config = {"extra": "allow"}
 
 
 class PriceResponse(BaseModel):
-    ticker: str
-    prices: list[Price]
+    data: list[Price]
 
 
 class FinancialMetrics(BaseModel):
@@ -59,10 +59,11 @@ class FinancialMetrics(BaseModel):
     earnings_per_share: float | None
     book_value_per_share: float | None
     free_cash_flow_per_share: float | None
+    model_config = {"extra": "allow"}
 
 
 class FinancialMetricsResponse(BaseModel):
-    financial_metrics: list[FinancialMetrics]
+    data: list[FinancialMetrics]
 
 
 class LineItem(BaseModel):
@@ -76,7 +77,7 @@ class LineItem(BaseModel):
 
 
 class LineItemResponse(BaseModel):
-    search_results: list[LineItem]
+    data: list[LineItem]
 
 
 class InsiderTrade(BaseModel):
@@ -93,10 +94,13 @@ class InsiderTrade(BaseModel):
     shares_owned_after_transaction: float | None
     security_title: str | None
     filing_date: str
+    model_config = {"extra": "allow"}
+
 
 
 class InsiderTradeResponse(BaseModel):
-    insider_trades: list[InsiderTrade]
+    status: str
+    data: list[InsiderTrade]
 
 
 class CompanyNews(BaseModel):
@@ -107,10 +111,11 @@ class CompanyNews(BaseModel):
     date: str
     url: str
     sentiment: str | None = None
+    model_config = {"extra": "allow"}
 
 
 class CompanyNewsResponse(BaseModel):
-    news: list[CompanyNews]
+    data: list[CompanyNews]
 
 
 class Position(BaseModel):

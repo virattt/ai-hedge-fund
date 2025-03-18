@@ -31,17 +31,13 @@ def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
 
     # If not in cache or no data in range, fetch from API
     headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
-
-    url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
+    url = f"http://api.marketstack.com/v2/eod?access_key={os.environ.get("MARKET_STACK_DATASETS_API_KEY")}&symbols={ticker}.XNSE&date_from={start_date}&date_to={end_date}&exchange=XNSE"
     response = requests.get(url, headers=headers)
     if response.status_code != 200:
         raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
-
     # Parse response with Pydantic model
     price_response = PriceResponse(**response.json())
-    prices = price_response.prices
+    prices = price_response.data
 
     if not prices:
         return []
@@ -52,10 +48,10 @@ def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
 
 
 def get_financial_metrics(
-    ticker: str,
-    end_date: str,
-    period: str = "ttm",
-    limit: int = 10,
+        ticker: str,
+        end_date: str,
+        period: str = "ttm",
+        limit: int = 10,
 ) -> list[FinancialMetrics]:
     """Fetch financial metrics from cache or API."""
     # Check cache first
@@ -68,19 +64,16 @@ def get_financial_metrics(
 
     # If not in cache or insufficient data, fetch from API
     headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
-
-    url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
+    url = f"http://localhost:8080/v1/financials/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
     response = requests.get(url, headers=headers)
     if response.status_code != 200:
         raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
 
     # Parse response with Pydantic model
-    metrics_response = FinancialMetricsResponse(**response.json())
+    data = response.json()
+    metrics_response = FinancialMetricsResponse(**data)
     # Return the FinancialMetrics objects directly instead of converting to dict
-    financial_metrics = metrics_response.financial_metrics
-
+    financial_metrics = metrics_response.data
     if not financial_metrics:
         return []
 
@@ -90,19 +83,16 @@ def get_financial_metrics(
 
 
 def search_line_items(
-    ticker: str,
-    line_items: list[str],
-    end_date: str,
-    period: str = "ttm",
-    limit: int = 10,
+        ticker: str,
+        line_items: list[str],
+        end_date: str,
+        period: str = "ttm",
+        limit: int = 10,
 ) -> list[LineItem]:
     """Fetch line items from API."""
     # If not in cache or insufficient data, fetch from API
     headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
-
-    url = "https://api.financialdatasets.ai/financials/search/line-items"
+    url = f"http://localhost:8080/v1/financials/search/line_items?ticker={ticker}&period={period}&limit={limit}"
 
     body = {
         "tickers": [ticker],
@@ -111,12 +101,12 @@ def search_line_items(
         "period": period,
         "limit": limit,
     }
-    response = requests.post(url, headers=headers, json=body)
+    response = requests.get(url, headers=headers, json=body)
     if response.status_code != 200:
         raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
     data = response.json()
     response_model = LineItemResponse(**data)
-    search_results = response_model.search_results
+    search_results = response_model.data
     if not search_results:
         return []
 
@@ -125,59 +115,52 @@ def search_line_items(
 
 
 def get_insider_trades(
-    ticker: str,
-    end_date: str,
-    start_date: str | None = None,
-    limit: int = 1000,
+        ticker: str,
+        end_date: str,
+        start_date: str | None = None,
+        limit: int = 1000,
 ) -> list[InsiderTrade]:
     """Fetch insider trades from cache or API."""
     # Check cache first
     if cached_data := _cache.get_insider_trades(ticker):
         # Filter cached data by date range
-        filtered_data = [InsiderTrade(**trade) for trade in cached_data 
-                        if (start_date is None or (trade.get("transaction_date") or trade["filing_date"]) >= start_date)
-                        and (trade.get("transaction_date") or trade["filing_date"]) <= end_date]
+        filtered_data = [InsiderTrade(**trade) for trade in cached_data
+                         if
+                         (start_date is None or (trade.get("transaction_date") or trade["filing_date"]) >= start_date)
+                         and (trade.get("transaction_date") or trade["filing_date"]) <= end_date]
         filtered_data.sort(key=lambda x: x.transaction_date or x.filing_date, reverse=True)
         if filtered_data:
             return filtered_data
 
     # If not in cache or insufficient data, fetch from API
     headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
-
     all_trades = []
     current_end_date = end_date
-    
-    while True:
-        url = f"https://api.financialdatasets.ai/insider-trades/?ticker={ticker}&filing_date_lte={current_end_date}"
-        if start_date:
-            url += f"&filing_date_gte={start_date}"
-        url += f"&limit={limit}"
-        
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
-        
-        data = response.json()
-        response_model = InsiderTradeResponse(**data)
-        insider_trades = response_model.insider_trades
-        
-        if not insider_trades:
-            break
-            
-        all_trades.extend(insider_trades)
-        
-        # Only continue pagination if we have a start_date and got a full page
-        if not start_date or len(insider_trades) < limit:
-            break
-            
+
+    url = f"http://localhost:8080/v1/financials"
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        print(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+
+    data = response.json()
+    response_model = InsiderTradeResponse(**data)
+    insider_trades = response_model.data
+
+    if not insider_trades:
+        return []
+
+    all_trades.extend(insider_trades)
+
+    # Only continue pagination if we have a start_date and got a full page
+    if not start_date or len(insider_trades) < limit:
+        return []
+
         # Update end_date to the oldest filing date from current batch for next iteration
-        current_end_date = min(trade.filing_date for trade in insider_trades).split('T')[0]
-        
-        # If we've reached or passed the start_date, we can stop
-        if current_end_date <= start_date:
-            break
+    current_end_date = min(trade.filing_date for trade in insider_trades).split('T')[0]
+
+    if current_end_date <= start_date:
+        return []
 
     if not all_trades:
         return []
@@ -188,59 +171,51 @@ def get_insider_trades(
 
 
 def get_company_news(
-    ticker: str,
-    end_date: str,
-    start_date: str | None = None,
-    limit: int = 1000,
+        ticker: str,
+        end_date: str,
+        start_date: str | None = None,
+        limit: int = 1000,
 ) -> list[CompanyNews]:
     """Fetch company news from cache or API."""
     # Check cache first
     if cached_data := _cache.get_company_news(ticker):
         # Filter cached data by date range
-        filtered_data = [CompanyNews(**news) for news in cached_data 
-                        if (start_date is None or news["date"] >= start_date)
-                        and news["date"] <= end_date]
+        filtered_data = [CompanyNews(**news) for news in cached_data
+                         if (start_date is None or news["date"] >= start_date)
+                         and news["date"] <= end_date]
         filtered_data.sort(key=lambda x: x.date, reverse=True)
         if filtered_data:
             return filtered_data
 
     # If not in cache or insufficient data, fetch from API
     headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
-
+    api_key = os.environ.get("POLYGON_DATASETS_API_KEY")
     all_news = []
     current_end_date = end_date
-    
-    while True:
-        url = f"https://api.financialdatasets.ai/news/?ticker={ticker}&end_date={current_end_date}"
-        if start_date:
-            url += f"&start_date={start_date}"
-        url += f"&limit={limit}"
-        
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
-        
-        data = response.json()
-        response_model = CompanyNewsResponse(**data)
-        company_news = response_model.news
-        
-        if not company_news:
-            break
-            
-        all_news.extend(company_news)
-        
-        # Only continue pagination if we have a start_date and got a full page
-        if not start_date or len(company_news) < limit:
-            break
-            
-        # Update end_date to the oldest date from current batch for next iteration
-        current_end_date = min(news.date for news in company_news).split('T')[0]
-        
-        # If we've reached or passed the start_date, we can stop
-        if current_end_date <= start_date:
-            break
+
+    url = f"http://localhost:8080/v1/financials"
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+
+    data = response.json()
+    response_model = CompanyNewsResponse(**data)
+    company_news = response_model.data
+
+    if not company_news:
+        return []
+
+    all_news.extend(company_news)
+
+    # Only continue pagination if we have a start_date and got a full page
+    if not start_date or len(company_news) < limit:
+        return []
+    # Update end_date to the oldest date from current batch for next iteration
+    current_end_date = min(news.date for news in company_news).split('T')[0]
+
+    # If we've reached or passed the start_date, we can stop
+    if current_end_date <= start_date:
+        return []
 
     if not all_news:
         return []
@@ -250,10 +225,9 @@ def get_company_news(
     return all_news
 
 
-
 def get_market_cap(
-    ticker: str,
-    end_date: str,
+        ticker: str,
+        end_date: str,
 ) -> float | None:
     """Fetch market cap from the API."""
     financial_metrics = get_financial_metrics(ticker, end_date)
@@ -267,7 +241,7 @@ def get_market_cap(
 def prices_to_df(prices: list[Price]) -> pd.DataFrame:
     """Convert prices to a DataFrame."""
     df = pd.DataFrame([p.model_dump() for p in prices])
-    df["Date"] = pd.to_datetime(df["time"])
+    df["Date"] = pd.to_datetime(df["date"])
     df.set_index("Date", inplace=True)
     numeric_cols = ["open", "close", "high", "low", "volume"]
     for col in numeric_cols:
