@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Literal
-from typing import Literal, Dict, List, Optional
+from typing import Dict, List, Optional
+from typing_extensions import Literal
+from pydantic import BaseModel
 
 
 class Price(BaseModel):
