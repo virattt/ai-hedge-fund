@@ -4,6 +4,7 @@ from tools.api import get_financial_metrics, get_market_cap, search_line_items
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
+from typing import Literal
 import json
 from typing_extensions import Literal
 from utils.progress import progress

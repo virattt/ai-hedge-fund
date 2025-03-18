@@ -2,6 +2,7 @@ import os
 import requests
 import base64
 from datetime import datetime
+from pathlib import Path
 
 from data.cache import get_cache
 from data.models import TradingChart, TradingChartResponse
@@ -9,6 +10,8 @@ from data.models import TradingChart, TradingChartResponse
 # Global cache instance
 _cache = get_cache()
 
+# Define charts directory
+CHARTS_DIR = Path("output/charts")
 
 def get_trading_chart(
     ticker: str,
@@ -16,17 +19,7 @@ def get_trading_chart(
     timeframe: str = "1D",
     indicators: list[str] = None,
 ) -> TradingChart:
-    """Fetch trading chart from chart-img.com API or cache.
-    
-    Args:
-        ticker: The stock ticker symbol
-        end_date: The end date for the chart (defaults to current date)
-        timeframe: Chart timeframe (e.g., "1D", "4H", "1W")
-        indicators: List of technical indicators to include
-        
-    Returns:
-        TradingChart object with chart data and image
-    """
+    """Fetch trading chart from chart-img.com API or cache."""
     # Check cache first
     if cached_data := _cache.get_trading_chart(ticker, timeframe):
         return TradingChart(**cached_data)
@@ -44,40 +37,50 @@ def get_trading_chart(
     if end_date is None:
         end_date = datetime.now().strftime("%Y-%m-%d")
     
-    # Prepare request to chart-img.com API
-    url = "https://api.chart-img.com/v1/tradingview/advanced-chart"
+    # Ensure charts directory exists and is empty
+    CHARTS_DIR.mkdir(parents=True, exist_ok=True)
+    for file in CHARTS_DIR.glob("*"):
+        file.unlink()
     
-    # Configure chart parameters
-    params = {
+    # Prepare request to chart-img.com API
+    url = "https://api.chart-img.com/v2/tradingview/layout-chart/TT6qAg8k"
+    
+    # Configure headers and payload
+    headers = {
+        "x-api-key": api_key,
+        "content-type": "application/json"
+    }
+    
+    payload = {
         "symbol": f"NASDAQ:{ticker}",
         "interval": timeframe,
         "studies": indicators,
-        "key": api_key,
         "height": 600,
         "width": 800,
-        "theme": "light",
+        "theme": "light"
     }
     
     # Make the API request
-    response = requests.get(url, params=params)
+    response = requests.post(url, headers=headers, json=payload)
     
     if response.status_code != 200:
         raise Exception(f"Error fetching chart: {response.status_code} - {response.text}")
     
-    # Get the image data and encode as base64
-    image_data = base64.b64encode(response.content).decode('utf-8')
+    # Save the image file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    image_path = CHARTS_DIR / f"{ticker}_{timeframe}_{timestamp}.png"
+    image_path.write_bytes(response.content)
     
-    # Create chart URL (for reference)
-    chart_url = response.url
+    # Get the image data and encode as base64
+    # image_data = base64.b64encode(response.content).decode('utf-8')
     
     # Create the trading chart object
     trading_chart = TradingChart(
         ticker=ticker,
-        chart_url=chart_url,
-        image_data=image_data,
         timestamp=datetime.now().isoformat(),
         timeframe=timeframe,
-        indicators=indicators
+        indicators=indicators,
+        image_path=str(image_path)
     )
     
     # Cache the results

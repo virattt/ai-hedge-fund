@@ -5,7 +5,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 import json
-from typing_extensions import Literal
+from typing import Literal
 from utils.progress import progress
 from utils.llm import call_llm
 

@@ -43,3 +43,6 @@ Thumbs.db
 
 # Txt files
 *.txt
+
+# Chart images
+output/charts/

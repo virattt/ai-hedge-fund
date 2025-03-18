@@ -2,24 +2,30 @@ from langchain_core.messages import HumanMessage
 from graph.state import AgentState, show_agent_reasoning
 from utils.progress import progress
 import json
-import base64
-from typing import List
+from enum import Enum
+from typing import List, Optional
 
 from tools.chart_api import get_trading_chart
 from data.models import EntrySignal, EntrySignalResponse
 from utils.llm import call_llm
 
 
-##### Chart Analysis Agent #####
+class ChartStrategy(str, Enum):
+    SMI_CROSSOVER = "smi_crossover"
+    # Add more strategies here as needed
+
+
 def chart_analysis_agent(state: AgentState):
     """Analyzes trading charts using vision models to identify entry signals based on technical patterns."""
     data = state.get("data", {})
     end_date = data.get("end_date")
     tickers = data.get("tickers")
+    strategy = state.get("metadata", {}).get("chart_strategy", ChartStrategy.SMI_CROSSOVER)
     
     # Add debug logging
     print(f"Debug: Analyzing charts for tickers: {tickers}")
     print(f"Debug: Using end date: {end_date}")
+    print(f"Debug: Using strategy: {strategy}")
     
     model_name = state.get("metadata", {}).get("model_name", "gpt-4o")
     model_provider = state.get("metadata", {}).get("model_provider", "OpenAI")
@@ -31,22 +37,23 @@ def chart_analysis_agent(state: AgentState):
         print(f"Debug: Processing ticker {ticker}")
         progress.update_status("chart_analysis_agent", ticker, "Fetching trading chart")
 
-        # Get the trading chart
         try:
+            # Get the trading chart with SMI indicator
             trading_chart = get_trading_chart(
                 ticker=ticker,
                 end_date=end_date,
                 timeframe="1D",  # Daily timeframe
-                indicators=["ema(20)", "ema(50)", "rsi", "macd", "volume"],
+                indicators=["smi", "smi_signal"],  # SMI and its signal line
             )
             print(f"Debug: Successfully fetched chart for {ticker}")
             
             progress.update_status("chart_analysis_agent", ticker, "Analyzing chart patterns")
             
-            # Analyze the chart using vision model
-            entry_signal = analyze_chart_with_vision(
+            # Analyze the chart using the selected strategy
+            entry_signal = analyze_chart_with_strategy(
                 trading_chart=trading_chart,
                 ticker=ticker,
+                strategy=strategy,
                 model_name=model_name,
                 model_provider=model_provider,
             )
@@ -57,7 +64,7 @@ def chart_analysis_agent(state: AgentState):
                 "confidence": entry_signal.confidence,
                 "reasoning": entry_signal.reasoning,
                 "pattern": entry_signal.pattern,
-                "chart_url": entry_signal.chart_url,
+                "image_path": entry_signal.image_path,  # Changed from chart_url to image_path
             }
             print(f"Debug: Analysis completed for {ticker}: {entry_signals_analysis[ticker]}")
             
@@ -69,22 +76,19 @@ def chart_analysis_agent(state: AgentState):
                 "confidence": 0,
                 "reasoning": f"Error analyzing chart: {str(e)}",
                 "pattern": None,
-                "chart_url": None,
+                "image_path": None,  # Changed from chart_url to image_path
             }
 
         progress.update_status("chart_analysis_agent", ticker, "Done")
 
-    # Create the entry signals message
     message = HumanMessage(
         content=json.dumps(entry_signals_analysis),
         name="chart_analysis_agent",
     )
 
-    # Print the reasoning if the flag is set
     if state["metadata"]["show_reasoning"]:
         show_agent_reasoning(entry_signals_analysis, "Chart Analysis Agent")
 
-    # Add the signal to the analyst_signals list
     state["data"]["analyst_signals"]["chart_analysis_agent"] = entry_signals_analysis
 
     return {
@@ -93,13 +97,40 @@ def chart_analysis_agent(state: AgentState):
     }
 
 
-def analyze_chart_with_vision(trading_chart, ticker, model_name, model_provider) -> EntrySignal:
-    """Analyze a trading chart using a vision model to identify entry signals."""
+def analyze_chart_with_strategy(
+    trading_chart, 
+    ticker: str, 
+    strategy: ChartStrategy,
+    model_name: str,
+    model_provider: str
+) -> EntrySignal:
+    """Analyze a trading chart using the specified strategy."""
+    
+    if strategy == ChartStrategy.SMI_CROSSOVER:
+        return analyze_smi_crossover(
+            trading_chart=trading_chart,
+            ticker=ticker,
+            model_name=model_name,
+            model_provider=model_provider,
+        )
+    
+    # Add more strategy handlers here
+    
+    raise ValueError(f"Unknown strategy: {strategy}")
+
+
+def analyze_smi_crossover(trading_chart, ticker: str, model_name: str, model_provider: str) -> EntrySignal:
+    """Analyze SMI crossover signals for entry opportunities."""
     
     system_message = {
         "role": "system",
-        "content": """You are a technical analysis expert. Analyze the chart and return your analysis in JSON format.
-Your response must include all required fields: ticker, signal, confidence, pattern, reasoning, and chart_url."""
+        "content": """You are a technical analysis expert specializing in SMI (Stochastic Momentum Index) analysis.
+Focus specifically on identifying bullish entry signals where:
+1. The SMI line is below the oversold level (-40)
+2. The SMI line is showing upward momentum
+3. The SMI line is about to cross or has recently crossed above its signal line
+
+Return your analysis in JSON format with all required fields."""
     }
     
     user_message = {
@@ -107,22 +138,21 @@ Your response must include all required fields: ticker, signal, confidence, patt
         "content": [
             {
                 "type": "text",
-                "text": f"""Please analyze this trading chart for {ticker} and provide your analysis in JSON format.
+                "text": f"""Analyze this chart for {ticker} focusing on SMI crossover signals.
 
-Focus on:
-- Trend direction
-- Support/resistance levels
-- Chart patterns
-- Technical indicators (MACD, RSI, EMAs)
-- Volume patterns
+Key criteria:
+- SMI position relative to -40 oversold level
+- SMI line slope and momentum
+- SMI crossover with signal line
+- Confirmation from price action
 
 Return JSON in this exact format:
 {{
     "ticker": "{ticker}",
-    "signal": "bullish" | "bearish" | "neutral",
+    "signal": "bullish" if entry criteria met, else "neutral",
     "confidence": <number between 0-100>,
-    "pattern": "<main technical pattern identified>",
-    "reasoning": "<detailed explanation>",
+    "pattern": "SMI bullish crossover" or "No valid SMI signal",
+    "reasoning": "<detailed explanation of SMI analysis>",
     "chart_url": "{trading_chart.chart_url}"
 }}"""
             },
@@ -146,12 +176,11 @@ Return JSON in this exact format:
         return result
     except Exception as e:
         print(f"Debug: LLM analysis error: {str(e)}")
-        # Return a default signal if analysis fails
         return EntrySignal(
             ticker=ticker,
             signal="neutral",
             confidence=0,
-            pattern="No pattern identified",
-            reasoning=f"Error analyzing chart: {str(e)}",
+            pattern="No valid SMI signal",
+            reasoning=f"Error analyzing SMI signals: {str(e)}",
             chart_url=trading_chart.chart_url
         )

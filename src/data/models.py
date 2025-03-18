@@ -1,4 +1,5 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Literal
+from typing import Literal, Dict, List, Optional
 
 
 class Price(BaseModel):
@@ -120,8 +121,9 @@ class Position(BaseModel):
 
 
 class Portfolio(BaseModel):
-    positions: dict[str, Position]  # ticker -> Position mapping
-    total_cash: float = 0.0
+    cash: float = 100000.0
+    positions: Dict[str, float] = {}  # ticker -> quantity mapping
+    history: List[Dict] = []
 
 
 class AnalystSignal(BaseModel):
@@ -132,16 +134,17 @@ class AnalystSignal(BaseModel):
 
 
 class TickerAnalysis(BaseModel):
-    ticker: str
-    analyst_signals: dict[str, AnalystSignal]  # agent_name -> signal mapping
+    signals: Dict[str, Dict] = {}  # analyst -> signal mapping
+    decision: Dict = {}
+    reasoning: str = ""
 
 
 class AgentStateData(BaseModel):
-    tickers: list[str]
+    tickers: List[str]
     portfolio: Portfolio
     start_date: str
     end_date: str
-    ticker_analyses: dict[str, TickerAnalysis]  # ticker -> analysis mapping
+    ticker_analyses: Dict[str, TickerAnalysis]  # ticker -> analysis mapping
 
 
 class AgentStateMetadata(BaseModel):
@@ -152,11 +155,10 @@ class AgentStateMetadata(BaseModel):
 # New models for trading chart analysis
 class TradingChart(BaseModel):
     ticker: str
-    chart_url: str
-    image_data: str  # Base64 encoded image data
     timestamp: str
     timeframe: str
-    indicators: list[str] = []  # List of indicators shown on the chart
+    indicators: List[str] = []
+    image_path: str  # Path to saved chart image
 
 
 class TradingChartResponse(BaseModel):
@@ -165,11 +167,11 @@ class TradingChartResponse(BaseModel):
 
 class EntrySignal(BaseModel):
     ticker: str
-    signal: str  # bullish, bearish, neutral
+    signal: Literal["bullish", "bearish", "neutral"]
     confidence: float
-    pattern: str | None = None  # Identified chart pattern
     reasoning: str
-    chart_url: str | None = None  # URL to the analyzed chart
+    pattern: Optional[str] = None
+    image_path: Optional[str] = None  # Changed from chart_url to image_path
 
 
 class EntrySignalResponse(BaseModel):
