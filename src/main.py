@@ -1,4 +1,5 @@
 import sys
+import os
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
@@ -19,6 +20,7 @@ from utils.display import print_trading_output
 from utils.analysts import ANALYST_ORDER, get_analyst_nodes
 from utils.progress import progress
 from llm.models import LLM_ORDER, get_model_info
+from tools.alpaca_client import AlpacaClient  # Import the new AlpacaClient
 
 import argparse
 from datetime import datetime
@@ -140,21 +142,35 @@ def create_workflow(selected_analysts=None):
     return workflow
 
 
+def execute_alpaca_trades(decisions, alpaca_client):
+    """Execute the hedge fund decisions through Alpaca Markets"""
+    print(f"\n{Fore.CYAN}Executing trades through Alpaca Markets:{Style.RESET_ALL}")
+    
+    orders = {}
+    for ticker, decision in decisions.items():
+        action = decision.get("action", "hold")
+        quantity = decision.get("quantity", 0)
+        
+        if action != "hold" and quantity > 0:
+            try:
+                order_result = alpaca_client.place_order(ticker, action, quantity)
+                orders[ticker] = order_result
+                
+                # Format the status message
+                status_color = Fore.GREEN if "error" not in order_result else Fore.RED
+                status_msg = f"SUCCESS: Order placed" if "error" not in order_result else f"ERROR: {order_result['error']}"
+                
+                print(f"{status_color}{action.upper()} {quantity} shares of {ticker} - {status_msg}{Style.RESET_ALL}")
+            except Exception as e:
+                print(f"{Fore.RED}Failed to place order for {ticker}: {str(e)}{Style.RESET_ALL}")
+                orders[ticker] = {"error": str(e)}
+    
+    return orders
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the hedge fund trading system")
-    parser.add_argument(
-        "--initial-cash",
-        type=float,
-        default=100000.0,
-        help="Initial cash position. Defaults to 100000.0)"
-    )
-    parser.add_argument(
-        "--margin-requirement",
-        type=float,
-        default=0.0,
-        help="Initial margin requirement. Defaults to 0.0"
-    )
-    parser.add_argument("--tickers", type=str, required=True, help="Comma-separated list of stock ticker symbols")
+    parser.add_argument("--tickers", type=str, help="Comma-separated list of stock ticker symbols (optional, will use current portfolio if not provided)")
     parser.add_argument(
         "--start-date",
         type=str,
@@ -165,11 +181,39 @@ if __name__ == "__main__":
     parser.add_argument(
         "--show-agent-graph", action="store_true", help="Show the agent graph"
     )
+    parser.add_argument(
+        "--paper-trading", action="store_true", help="Use paper trading account (default is determined by .env)"
+    )
+    parser.add_argument(
+        "--execute-trades", action="store_true", help="Execute trades through Alpaca Markets (default is dry-run only)"
+    )
 
     args = parser.parse_args()
 
-    # Parse tickers from comma-separated string
-    tickers = [ticker.strip() for ticker in args.tickers.split(",")]
+    # Initialize Alpaca client
+    try:
+        # Set environment variable for paper trading if specified via command line
+        if args.paper_trading:
+            os.environ["ALPACA_PAPER_TRADING"] = "true"
+            
+        alpaca_client = AlpacaClient()
+        
+        # Get portfolio data and tickers from Alpaca
+        portfolio, alpaca_tickers = alpaca_client.get_portfolio()
+        
+        # Use tickers from command line if provided, otherwise use portfolio tickers
+        tickers = [ticker.strip() for ticker in args.tickers.split(",")] if args.tickers else alpaca_tickers
+        
+        if not tickers:
+            print(f"{Fore.YELLOW}No tickers found in portfolio and none provided. Please specify tickers with --tickers.{Style.RESET_ALL}")
+            sys.exit(1)
+            
+        print(f"\nAnalyzing tickers: {', '.join(Fore.GREEN + ticker + Style.RESET_ALL for ticker in tickers)}\n")
+        
+    except Exception as e:
+        print(f"{Fore.RED}Error connecting to Alpaca Markets: {str(e)}{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}Please check your Alpaca API credentials in .env file.{Style.RESET_ALL}")
+        sys.exit(1)
 
     # Select analysts
     selected_analysts = None
@@ -254,26 +298,6 @@ if __name__ == "__main__":
     else:
         start_date = args.start_date
 
-    # Initialize portfolio with cash amount and stock positions
-    portfolio = {
-        "cash": args.initial_cash,  # Initial cash amount
-        "margin_requirement": args.margin_requirement,  # Initial margin requirement
-        "positions": {
-            ticker: {
-                "long": 0,  # Number of shares held long
-                "short": 0,  # Number of shares held short
-                "long_cost_basis": 0.0,  # Average cost basis for long positions
-                "short_cost_basis": 0.0,  # Average price at which shares were sold short
-            } for ticker in tickers
-        },
-        "realized_gains": {
-            ticker: {
-                "long": 0.0,  # Realized gains from long positions
-                "short": 0.0,  # Realized gains from short positions
-            } for ticker in tickers
-        }
-    }
-
     # Run the hedge fund
     result = run_hedge_fund(
         tickers=tickers,
@@ -286,3 +310,9 @@ if __name__ == "__main__":
         model_provider=model_provider,
     )
     print_trading_output(result)
+    
+    # Execute trades if requested
+    if args.execute_trades:
+        execute_alpaca_trades(result["decisions"], alpaca_client)
+    else:
+        print(f"\n{Fore.YELLOW}Dry run completed. Use --execute-trades to place real orders.{Style.RESET_ALL}")

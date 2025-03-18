@@ -22,6 +22,7 @@ from tools.api import (
 )
 from utils.display import print_backtest_results, format_backtest_row
 from typing_extensions import Callable
+from tools.alpaca_client import AlpacaClient  # Import the new AlpacaClient
 
 init(autoreset=True)
 
@@ -38,6 +39,7 @@ class Backtester:
         model_provider: str = "OpenAI",
         selected_analysts: list[str] = [],
         initial_margin_requirement: float = 0.0,
+        use_alpaca: bool = False,  # New parameter to toggle Alpaca usage
     ):
         """
         :param agent: The trading agent (Callable).
@@ -49,6 +51,7 @@ class Backtester:
         :param model_provider: Which LLM provider (OpenAI, etc).
         :param selected_analysts: List of analyst names or IDs to incorporate.
         :param initial_margin_requirement: The margin ratio (e.g. 0.5 = 50%).
+        :param use_alpaca: Toggle for using Alpaca data (default: False).
         """
         self.agent = agent
         self.tickers = tickers
@@ -58,6 +61,7 @@ class Backtester:
         self.model_name = model_name
         self.model_provider = model_provider
         self.selected_analysts = selected_analysts
+        self.use_alpaca = use_alpaca
 
         # Store the margin ratio (e.g. 0.5 means 50% margin required).
         self.margin_ratio = initial_margin_requirement
@@ -717,6 +721,7 @@ if __name__ == "__main__":
         model_provider=model_provider,
         selected_analysts=selected_analysts,
         initial_margin_requirement=args.margin_requirement,
+        use_alpaca=True,
     )
 
     performance_metrics = backtester.run_backtest()
