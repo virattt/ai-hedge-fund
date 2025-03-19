@@ -120,7 +120,7 @@ def charlie_munger_agent(state: AgentState):
             "news_sentiment": analyze_news_sentiment(company_news) if company_news else "No news data available"
         }
         
-        progress.update_status("charlie_munger_agent", ticker, "Generating Munger analysis")
+        progress.update_status("charlie_munger_agent", ticker, "Generating Charlie Munger analysis")
         munger_output = generate_munger_output(
             ticker=ticker, 
             analysis_data=analysis_data,

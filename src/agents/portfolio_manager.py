@@ -161,7 +161,7 @@ def generate_trading_decision(
                   "TICKER1": {{
                     "action": "buy/sell/short/cover/hold",
                     "quantity": integer,
-                    "confidence": float,
+                    "confidence": float between 0 and 100,
                     "reasoning": "string"
                   }},
                   "TICKER2": {{

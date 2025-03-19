@@ -66,7 +66,7 @@ def ben_graham_agent(state: AgentState):
 
         analysis_data[ticker] = {"signal": signal, "score": total_score, "max_score": max_possible_score, "earnings_analysis": earnings_analysis, "strength_analysis": strength_analysis, "valuation_analysis": valuation_analysis}
 
-        progress.update_status("ben_graham_agent", ticker, "Generating Graham-style analysis")
+        progress.update_status("ben_graham_agent", ticker, "Generating Ben Graham analysis")
         graham_output = generate_graham_output(
             ticker=ticker,
             analysis_data=analysis_data,

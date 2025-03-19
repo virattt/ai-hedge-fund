@@ -133,7 +133,7 @@ def stanley_druckenmiller_agent(state: AgentState):
             "valuation_analysis": valuation_analysis,
         }
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Generating Druckenmiller analysis")
+        progress.update_status("stanley_druckenmiller_agent", ticker, "Generating Stanley Druckenmiller analysis")
         druck_output = generate_druckenmiller_output(
             ticker=ticker,
             analysis_data=analysis_data,
