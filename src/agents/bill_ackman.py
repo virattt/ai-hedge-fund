@@ -84,7 +84,7 @@ def bill_ackman_agent(state: AgentState):
             "valuation_analysis": valuation_analysis
         }
         
-        progress.update_status("bill_ackman_agent", ticker, "Generating Ackman analysis")
+        progress.update_status("bill_ackman_agent", ticker, "Generating Bill Ackman analysis")
         ackman_output = generate_ackman_output(
             ticker=ticker, 
             analysis_data=analysis_data,

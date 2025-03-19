@@ -91,7 +91,7 @@ def cathie_wood_agent(state: AgentState):
             "valuation_analysis": valuation_analysis
         }
 
-        progress.update_status("cathie_wood_agent", ticker, "Generating Cathie Wood style analysis")
+        progress.update_status("cathie_wood_agent", ticker, "Generating Cathie Wood analysis")
         cw_output = generate_cathie_wood_output(
             ticker=ticker,
             analysis_data=analysis_data,

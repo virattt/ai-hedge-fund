@@ -104,7 +104,7 @@ def warren_buffett_agent(state: AgentState):
             "margin_of_safety": margin_of_safety,
         }
 
-        progress.update_status("warren_buffett_agent", ticker, "Generating Buffett analysis")
+        progress.update_status("warren_buffett_agent", ticker, "Generating Warren Buffett analysis")
         buffett_output = generate_buffett_output(
             ticker=ticker,
             analysis_data=analysis_data,

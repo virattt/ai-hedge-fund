@@ -8,7 +8,7 @@ This system employs several agents working together:
 2. Bill Ackman Agent - An activist investors, takes bold positions and pushes for change
 3. Cathie Wood Agent - The queen of growth investing, believes in the power of innovation and disruption
 4. Charlie Munger Agent - Warren Buffett's partner, only buys wonderful businesses at fair prices
-5. Stanley Druckenmiller Agent - Macro trading legend who hunts for asymmetric opportunities with explosive growth potential
+5. Stanley Druckenmiller Agent - Macro legend who hunts for asymmetric opportunities with growth potential
 6. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
 7. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
 8. Sentiment Agent - Analyzes market sentiment and generates trading signals
