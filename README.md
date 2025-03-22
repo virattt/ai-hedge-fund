@@ -1,6 +1,6 @@
-# AI Hedge Fund
+# SmartHedge
 
-This is a proof of concept for an AI-powered hedge fund.  The goal of this project is to explore the use of AI to make trading decisions.  This project is for **educational** purposes only and is not intended for real trading or investment.
+This is an enhanced version of the AI-powered hedge fund proof of concept. The goal of this project is to explore the use of AI to make trading decisions with an interactive web interface. This project is for **educational** purposes only and is not intended for real trading or investment.
 
 This system employs several agents working together:
 
@@ -22,8 +22,6 @@ This system employs several agents working together:
 
 **Note**: the system simulates trading decisions, it does not actually trade.
 
-[![Twitter Follow](https://img.shields.io/twitter/follow/virattt?style=social)](https://twitter.com/virattt)
-
 ## Disclaimer
 
 This project is for **educational and research purposes only**.
@@ -39,8 +37,9 @@ By using this software, you agree to use it solely for learning purposes.
 ## Table of Contents
 - [Setup](#setup)
 - [Usage](#usage)
-  - [Running the Hedge Fund](#running-the-hedge-fund)
-  - [Running the Backtester](#running-the-backtester)
+  - [Running the Web App](#running-the-web-app)
+  - [Running the Hedge Fund CLI](#running-the-hedge-fund-cli)
+  - [Running the Backtester CLI](#running-the-backtester-cli)
 - [Project Structure](#project-structure)
 - [Contributing](#contributing)
 - [Feature Requests](#feature-requests)
@@ -50,8 +49,8 @@ By using this software, you agree to use it solely for learning purposes.
 
 Clone the repository:
 ```bash
-git clone https://github.com/virattt/ai-hedge-fund.git
-cd ai-hedge-fund
+git clone https://github.com/mr-jestin-roy/SmartHedge.git
+cd SmartHedge
 ```
 
 1. Install Poetry (if not already installed):
@@ -80,12 +79,20 @@ OPENAI_API_KEY=your-openai-api-key
 # Get your Groq API key from https://groq.com/
 GROQ_API_KEY=your-groq-api-key
 
+# For running LLMs hosted by Anthropic (claude-3-opus, etc.)
+# Get your Anthropic API key from https://anthropic.com/
+ANTHROPIC_API_KEY=your-anthropic-api-key
+
+# For running LLMs hosted by DeepSeek
+# Get your DeepSeek API key from https://deepseek.com/
+DEEPSEEK_API_KEY=your-deepseek-api-key
+
 # For getting financial data to power the hedge fund
 # Get your Financial Datasets API key from https://financialdatasets.ai/
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
-**Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY` for the hedge fund to work.  If you want to use LLMs from all providers, you will need to set all API keys.
+**Important**: You must set at least one of `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY` for the hedge fund to work. If you want to use LLMs from all providers, you will need to set all API keys.
 
 Financial data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key.
 
@@ -93,13 +100,36 @@ For any other ticker, you will need to set the `FINANCIAL_DATASETS_API_KEY` in t
 
 ## Usage
 
-### Running the Hedge Fund
+### Running the Web App
+
+The SmartHedge comes with an interactive Streamlit web interface that allows you to:
+- Configure and run backtests with different parameters
+- Visualize portfolio performance
+- Analyze trading decisions and signals
+- Compare different analysts' perspectives
+
+To run the web app:
+
+```bash
+# Using the provided script
+./run_app.sh
+
+# Or directly with Poetry
+poetry run streamlit run app.py
+```
+
+The web app will be available at http://localhost:8501 in your browser.
+
+### Running the Hedge Fund CLI
+
+For command-line usage:
+
 ```bash
 poetry run python src/main.py --ticker AAPL,MSFT,NVDA
 ```
 
 **Example Output:**
-<img width="992" alt="Screenshot 2025-01-06 at 5 50 17 PM" src="https://github.com/user-attachments/assets/e8ca04bf-9989-4a7d-a8b4-34e04666663b" />
+<img width="992" alt="Screenshot 2025-01-06 at 5 50 17 PM" src="https://github.com/user-attachments/assets/e8ca04bf-9989-4a7d-a8b4-34e04666663b" />
 
 You can also specify a `--show-reasoning` flag to print the reasoning of each agent to the console.
 
@@ -109,17 +139,17 @@ poetry run python src/main.py --ticker AAPL,MSFT,NVDA --show-reasoning
 You can optionally specify the start and end dates to make decisions for a specific time period.
 
 ```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 
+poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
 ```
 
-### Running the Backtester
+### Running the Backtester CLI
 
 ```bash
 poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
 ```
 
 **Example Output:**
-<img width="941" alt="Screenshot 2025-01-06 at 5 47 52 PM" src="https://github.com/user-attachments/assets/00e794ea-8628-44e6-9a84-8f8a31ad3b47" />
+<img width="941" alt="Screenshot 2025-01-06 at 5 47 52 PM" src="https://github.com/user-attachments/assets/00e794ea-8628-44e6-9a84-8f8a31ad3b47" />
 
 You can optionally specify the start and end dates to backtest over a specific time period.
 
@@ -127,40 +157,51 @@ You can optionally specify the start and end dates to backtest over a specific t
 poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
 ```
 
-## Project Structure 
+## Project Structure
 ```
-ai-hedge-fund/
+SmartHedge/
+├── app.py                      # Streamlit web application
+├── run_app.sh                  # Script to run the web app
 ├── src/
-│   ├── agents/                   # Agent definitions and workflow
-│   │   ├── bill_ackman.py        # Bill Ackman agent
-│   │   ├── fundamentals.py       # Fundamental analysis agent
+│   ├── agents/                 # Agent definitions and workflow
+│   │   ├── bill_ackman.py      # Bill Ackman agent
+│   │   ├── fundamentals.py     # Fundamental analysis agent
+│   │   ├── portfolio_manager.py # Portfolio management agent
+│   │   ├── risk_manager.py     # Risk management agent
+│   │   ├── sentiment.py        # Sentiment analysis agent
+│   │   ├── technicals.py       # Technical analysis agent
+│   │   ├── valuation.py        # Valuation analysis agent
+│   │   ├── warren_buffett.py   # Warren Buffett agent
+│   │   ├── ben_graham.py        # Ben Graham agent
+│   │   ├── cathie_wood.py       # Cathie Wood agent
+│   │   ├── charlie_munger.py    # Charlie Munger agent
+│   │   ├── stanley_druckenmiller.py # Stanley Druckenmiller agent
+│   │   ├── warren_buffett.py    # Warren Buffett agent
+│   │   ├── valuation.py         # Valuation analysis agent
+│   │   ├── sentiment.py         # Sentiment analysis agent
+│   │   ├── fundamentals.py      # Fundamental analysis agent
+│   │   ├── technicals.py        # Technical analysis agent
+│   │   ├── risk_manager.py      # Risk management agent
 │   │   ├── portfolio_manager.py  # Portfolio management agent
-│   │   ├── risk_manager.py       # Risk management agent
-│   │   ├── sentiment.py          # Sentiment analysis agent
-│   │   ├── technicals.py         # Technical analysis agent
-│   │   ├── valuation.py          # Valuation analysis agent
-│   │   ├── warren_buffett.py     # Warren Buffett agent
-│   ├── tools/                    # Agent tools
-│   │   ├── api.py                # API tools
-│   ├── backtester.py             # Backtesting tools
-│   ├── main.py # Main entry point
-├── pyproject.toml
-├── ...
+│   │   ├── ben_graham.py         # Ben Graham agent
+│   │   ├── cathie_wood.py         # Cathie Wood agent
+│   │   ├── charlie_munger.py      # Charlie Munger agent
+│   │   ├── stanley_druckenmiller.py # Stanley Druckenmiller agent
+│   │   ├── warren_buffett.py      # Warren Buffett agent
+│   │   └── valuation.py           # Valuation analysis agent
+│   ├── data/                   # Data handling and processing
+│   ├── graph/                  # Visualization components
+│   ├── llm/                    # LLM integration and models
+│   ├── tools/                  # Agent tools
+│   │   ├── api.py              # API tools
+│   ├── utils/                  # Utility functions
+│   ├── backtester.py           # Backtesting engine
+│   ├── main.py                 # Main CLI entry point
+├── backtester.py               # CLI backtester entry point
+├── pyproject.toml              # Poetry configuration
+├── .env.example                # Example environment variables
+├── LICENSE                     # MIT License
 ```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-**Important**: Please keep your pull requests small and focused.  This will make it easier to review and merge.
-
-## Feature Requests
-
-If you have a feature request, please open an [issue](https://github.com/virattt/ai-hedge-fund/issues) and make sure it is tagged with `enhancement`.
 
 ## License
 

@@ -64,34 +64,43 @@ def run_hedge_fund(
     progress.start()
 
     try:
-        # Create a new workflow if analysts are customized
-        if selected_analysts:
-            workflow = create_workflow(selected_analysts)
+        # Get all available analyst nodes
+        analyst_nodes = get_analyst_nodes()
+
+        # Filter out any invalid analyst keys
+        valid_selected_analysts = [analyst for analyst in selected_analysts if analyst in analyst_nodes]
+
+        # Create a new workflow with valid analysts
+        if valid_selected_analysts:
+            workflow = create_workflow(valid_selected_analysts)
             agent = workflow.compile()
         else:
-            agent = app
+            # If no valid analysts, use default workflow
+            workflow = create_workflow()
+            agent = workflow.compile()
 
-        final_state = agent.invoke(
-            {
-                "messages": [
-                    HumanMessage(
-                        content="Make trading decisions based on the provided data.",
-                    )
-                ],
-                "data": {
-                    "tickers": tickers,
-                    "portfolio": portfolio,
-                    "start_date": start_date,
-                    "end_date": end_date,
-                    "analyst_signals": {},
-                },
-                "metadata": {
-                    "show_reasoning": show_reasoning,
-                    "model_name": model_name,
-                    "model_provider": model_provider,
-                },
+        # Initialize the agent state with proper structure
+        initial_state = {
+            "messages": [
+                HumanMessage(
+                    content="Make trading decisions based on the provided data.",
+                )
+            ],
+            "data": {
+                "tickers": tickers,
+                "portfolio": portfolio,
+                "start_date": start_date,
+                "end_date": end_date,
+                "analyst_signals": {},
             },
-        )
+            "metadata": {
+                "show_reasoning": show_reasoning,
+                "model_name": model_name,
+                "model_provider": model_provider,
+            },
+        }
+
+        final_state = agent.invoke(initial_state)
 
         return {
             "decisions": parse_hedge_fund_response(final_state["messages"][-1].content),
@@ -104,6 +113,9 @@ def run_hedge_fund(
 
 def start(state: AgentState):
     """Initialize the workflow with the input message."""
+    # Ensure the data structure is properly initialized
+    if "analyst_signals" not in state["data"]:
+        state["data"]["analyst_signals"] = {}
     return state
 
 
@@ -118,8 +130,12 @@ def create_workflow(selected_analysts=None):
     # Default to all analysts if none selected
     if selected_analysts is None:
         selected_analysts = list(analyst_nodes.keys())
+
+    # Filter out any invalid analyst keys
+    valid_selected_analysts = [analyst for analyst in selected_analysts if analyst in analyst_nodes]
+
     # Add selected analyst nodes
-    for analyst_key in selected_analysts:
+    for analyst_key in valid_selected_analysts:
         node_name, node_func = analyst_nodes[analyst_key]
         workflow.add_node(node_name, node_func)
         workflow.add_edge("start_node", node_name)
@@ -129,7 +145,7 @@ def create_workflow(selected_analysts=None):
     workflow.add_node("portfolio_management_agent", portfolio_management_agent)
 
     # Connect selected analysts to risk management
-    for analyst_key in selected_analysts:
+    for analyst_key in valid_selected_analysts:
         node_name = analyst_nodes[analyst_key][0]
         workflow.add_edge(node_name, "risk_management_agent")
 

@@ -62,15 +62,12 @@ class Backtester:
         # Store the margin ratio (e.g. 0.5 means 50% margin required).
         self.margin_ratio = initial_margin_requirement
 
-        # Store trading decisions and analyst signals for UI display
-        self.trading_decisions = {}
-        self.analyst_signals = {}
-
         # Initialize portfolio with support for long/short positions
         self.portfolio_values = []
         self.portfolio = {
             "cash": initial_capital,
             "margin_used": 0.0,  # total margin usage across all short positions
+            "margin_requirement": initial_margin_requirement,  # Store margin requirement in portfolio
             "positions": {
                 ticker: {
                     "long": 0,               # Number of shares held long
@@ -82,11 +79,17 @@ class Backtester:
             },
             "realized_gains": {
                 ticker: {
-                    "long": 0.0,   # Realized gains from long positions
+                    "long": 0.0,  # Realized gains from long positions
                     "short": 0.0,  # Realized gains from short positions
                 } for ticker in tickers
             }
         }
+
+        # Dictionary to store trading decisions with reasoning
+        self.trading_decisions = {}
+
+        # Dictionary to store analyst signals for each date
+        self.analyst_signals = {}
 
     def execute_trade(self, ticker: str, action: str, quantity: float, current_price: float):
         """
@@ -368,18 +371,20 @@ class Backtester:
             analyst_signals = output["analyst_signals"]
 
             # Store decisions with reasoning for this date
-            self.trading_decisions[current_date_str] = {
-                ticker: {
-                    'action': decision.get('action', 'hold'),
-                    'quantity': decision.get('quantity', 0),
-                    'confidence': decision.get('confidence', 0),
-                    'reasoning': decision.get('reasoning', 'No reasoning provided')
+            if decisions:  # Check if decisions is not None
+                self.trading_decisions[current_date_str] = {
+                    ticker: {
+                        'action': decision.get('action', 'hold'),
+                        'quantity': decision.get('quantity', 0),
+                        'confidence': decision.get('confidence', 0),
+                        'reasoning': decision.get('reasoning', 'No reasoning provided')
+                    }
+                    for ticker, decision in decisions.items() if decision  # Skip None values
                 }
-                for ticker, decision in decisions.items()
-            }
 
             # Store analyst signals for this date
-            self.analyst_signals[current_date_str] = analyst_signals
+            if analyst_signals:  # Check if analyst_signals is not None
+                self.analyst_signals[current_date_str] = analyst_signals
 
             # Execute trades for each ticker
             executed_trades = {}
@@ -576,8 +581,6 @@ class Backtester:
         plt.xlabel("Date")
         plt.grid(True)
         plt.show()
-        plt.pause(10)
-
 
         # Compute daily returns
         performance_df["Daily Return"] = performance_df["Portfolio Value"].pct_change().fillna(0)
@@ -729,7 +732,7 @@ if __name__ == "__main__":
     # Create and run the backtester
     backtester = Backtester(
         agent=run_hedge_fund,
-        tickers=tickers,
+      tickers=tickers,
         start_date=args.start_date,
         end_date=args.end_date,
         initial_capital=args.initial_capital,
