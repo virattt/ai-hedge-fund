@@ -29,7 +29,6 @@ def bill_ackman_agent(state: AgentState):
     
     for ticker in tickers:
         progress.update_status("bill_ackman_agent", ticker, "Fetching financial metrics")
-        # You can adjust these parameters (period="annual"/"ttm", limit=5/10, etc.)
         metrics = get_financial_metrics(ticker, end_date, period="annual", limit=5)
         
         progress.update_status("bill_ackman_agent", ticker, "Gathering financial line items")
