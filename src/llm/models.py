@@ -1,9 +1,11 @@
 import os
+import requests
 from langchain_anthropic import ChatAnthropic
 from langchain_deepseek import ChatDeepSeek
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from enum import Enum
 from pydantic import BaseModel
 from typing import Tuple
@@ -16,7 +18,7 @@ class ModelProvider(str, Enum):
     GEMINI = "Gemini"
     GROQ = "Groq"
     OPENAI = "OpenAI"
-
+    OLLAMA = "Ollama"
 
 
 class LLMModel(BaseModel):
@@ -106,14 +108,38 @@ AVAILABLE_MODELS = [
     ),
 ]
 
-# Create LLM_ORDER in the format expected by the UI
-LLM_ORDER = [model.to_choice_tuple() for model in AVAILABLE_MODELS]
+def get_available_ollama_models():
+    """Fetch available models from an Ollama server"""
+    try:
+        base_url = os.environ.get("OLLAMA_BASE_URL")
+        response = requests.get(f"{base_url}/api/tags")
+        if response.status_code == 200:
+            models = response.json().get("models", [])
+            models.sort(key=lambda x: x['name'].lower())
+            return [
+                LLMModel(
+                    display_name=f"[ollama] {model['name']}",
+                    model_name=model['name'],
+                    provider=ModelProvider.OLLAMA
+                )
+                for model in models
+            ]
+        else:
+            print(f"Failed to fetch Ollama models: {response.status_code} - {response.text}")
+            return []
+    except Exception as e:
+        # If no Ollama server is running, return an empty list
+        return []
+
+def get_llm_order():
+    """Get the available LLM models including Ollama models"""
+    return [model.to_choice_tuple() for model in AVAILABLE_MODELS + get_available_ollama_models()]
 
 def get_model_info(model_name: str) -> LLMModel | None:
     """Get model information by model_name"""
-    return next((model for model in AVAILABLE_MODELS if model.model_name == model_name), None)
+    return next((model for model in AVAILABLE_MODELS + get_available_ollama_models() if model.model_name == model_name), None)
 
-def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | ChatGroq | None:
+def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | ChatGroq | ChatAnthropic | ChatDeepSeek | ChatGoogleGenerativeAI | ChatOllama | None:
     if model_provider == ModelProvider.GROQ:
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
@@ -147,3 +173,5 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
             print(f"API Key Error: Please make sure GOOGLE_API_KEY is set in your .env file.")
             raise ValueError("Google API key not found.  Please make sure GOOGLE_API_KEY is set in your .env file.")
         return ChatGoogleGenerativeAI(model=model_name, api_key=api_key)
+    elif model_provider == ModelProvider.OLLAMA:
+        return ChatOllama(model=model_name)
