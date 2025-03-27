@@ -110,7 +110,7 @@ def fundamentals_agent(state: AgentState):
         ]
         price_ratio_score = sum(metric is not None and metric > threshold for metric, threshold in thresholds)
 
-        signals.append("bullish" if price_ratio_score >= 2 else "bearish" if price_ratio_score == 0 else "neutral")
+        signals.append("bearish" if price_ratio_score >= 2 else "bullish" if price_ratio_score == 0 else "neutral")
         reasoning["price_ratios_signal"] = {
             "signal": signals[3],
             "details": (f"P/E: {pe_ratio:.2f}" if pe_ratio else "P/E: N/A") + ", " + (f"P/B: {pb_ratio:.2f}" if pb_ratio else "P/B: N/A") + ", " + (f"P/S: {ps_ratio:.2f}" if ps_ratio else "P/S: N/A"),
