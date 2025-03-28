@@ -11,13 +11,14 @@ def risk_management_agent(state: AgentState):
     portfolio = state["data"]["portfolio"]
     data = state["data"]
     tickers = data["tickers"]
+    progress_tickers = ",".join(tickers)
 
     # Initialize risk analysis for each ticker
     risk_analysis = {}
     current_prices = {}  # Store prices here to avoid redundant API calls
 
     for ticker in tickers:
-        progress.update_status("risk_management_agent", ticker, "Analyzing price data")
+        progress.update_status("risk_management_agent", progress_tickers, "Analyzing price data")
 
         prices = get_prices(
             ticker=ticker,
@@ -26,12 +27,12 @@ def risk_management_agent(state: AgentState):
         )
 
         if not prices:
-            progress.update_status("risk_management_agent", ticker, "Failed: No price data found")
+            progress.update_status("risk_management_agent", progress_tickers, "Failed: No price data found")
             continue
 
         prices_df = prices_to_df(prices)
 
-        progress.update_status("risk_management_agent", ticker, "Calculating position limits")
+        progress.update_status("risk_management_agent", progress_tickers, "Calculating position limits")
 
         # Calculate portfolio value
         current_price = prices_df["close"].iloc[-1]
@@ -64,7 +65,7 @@ def risk_management_agent(state: AgentState):
             },
         }
 
-        progress.update_status("risk_management_agent", ticker, "Done")
+        progress.update_status("risk_management_agent", progress_tickers, "Done")
 
     message = HumanMessage(
         content=json.dumps(risk_analysis),

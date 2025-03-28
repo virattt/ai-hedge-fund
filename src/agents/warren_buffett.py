@@ -20,17 +20,18 @@ def warren_buffett_agent(state: AgentState):
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
+    progress_tickers = ",".join(tickers)
 
     # Collect all analysis for LLM reasoning
     analysis_data = {}
     buffett_analysis = {}
 
     for ticker in tickers:
-        progress.update_status("warren_buffett_agent", ticker, "Fetching financial metrics")
+        progress.update_status("warren_buffett_agent", progress_tickers, "Fetching financial metrics")
         # Fetch required data
         metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=5)
 
-        progress.update_status("warren_buffett_agent", ticker, "Gathering financial line items")
+        progress.update_status("warren_buffett_agent", progress_tickers, "Gathering financial line items")
         financial_line_items = search_line_items(
             ticker,
             [
@@ -46,24 +47,24 @@ def warren_buffett_agent(state: AgentState):
             end_date,
         )
 
-        progress.update_status("warren_buffett_agent", ticker, "Getting market cap")
+        progress.update_status("warren_buffett_agent", progress_tickers, "Getting market cap")
         # Get current market cap
         market_cap = get_market_cap(ticker, end_date)
 
-        progress.update_status("warren_buffett_agent", ticker, "Analyzing fundamentals")
+        progress.update_status("warren_buffett_agent", progress_tickers, "Analyzing fundamentals")
         # Analyze fundamentals
         fundamental_analysis = analyze_fundamentals(metrics)
 
-        progress.update_status("warren_buffett_agent", ticker, "Analyzing consistency")
+        progress.update_status("warren_buffett_agent", progress_tickers, "Analyzing consistency")
         consistency_analysis = analyze_consistency(financial_line_items)
 
-        progress.update_status("warren_buffett_agent", ticker, "Analyzing moat")
+        progress.update_status("warren_buffett_agent", progress_tickers, "Analyzing moat")
         moat_analysis = analyze_moat(metrics)
 
-        progress.update_status("warren_buffett_agent", ticker, "Analyzing management quality")
+        progress.update_status("warren_buffett_agent", progress_tickers, "Analyzing management quality")
         mgmt_analysis = analyze_management_quality(financial_line_items)
 
-        progress.update_status("warren_buffett_agent", ticker, "Calculating intrinsic value")
+        progress.update_status("warren_buffett_agent", progress_tickers, "Calculating intrinsic value")
         intrinsic_value_analysis = calculate_intrinsic_value(financial_line_items)
 
         # Calculate total score
@@ -104,7 +105,7 @@ def warren_buffett_agent(state: AgentState):
             "margin_of_safety": margin_of_safety,
         }
 
-        progress.update_status("warren_buffett_agent", ticker, "Generating Warren Buffett analysis")
+        progress.update_status("warren_buffett_agent", progress_tickers, "Generating Warren Buffett analysis")
         buffett_output = generate_buffett_output(
             ticker=ticker,
             analysis_data=analysis_data,
@@ -119,7 +120,7 @@ def warren_buffett_agent(state: AgentState):
             "reasoning": buffett_output.reasoning,
         }
 
-        progress.update_status("warren_buffett_agent", ticker, "Done")
+        progress.update_status("warren_buffett_agent", progress_tickers, "Done")
 
     # Create the message
     message = HumanMessage(content=json.dumps(buffett_analysis), name="warren_buffett_agent")

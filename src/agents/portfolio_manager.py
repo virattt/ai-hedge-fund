@@ -28,6 +28,7 @@ def portfolio_management_agent(state: AgentState):
     portfolio = state["data"]["portfolio"]
     analyst_signals = state["data"]["analyst_signals"]
     tickers = state["data"]["tickers"]
+    progress_tickers = ",".join(tickers)
 
     progress.update_status("portfolio_management_agent", None, "Analyzing signals")
 
@@ -37,7 +38,7 @@ def portfolio_management_agent(state: AgentState):
     max_shares = {}
     signals_by_ticker = {}
     for ticker in tickers:
-        progress.update_status("portfolio_management_agent", ticker, "Processing analyst signals")
+        progress.update_status("portfolio_management_agent", progress_tickers, "Processing analyst signals")
 
         # Get position limits and current prices for the ticker
         risk_data = analyst_signals.get("risk_management_agent", {}).get(ticker, {})
