@@ -18,7 +18,7 @@ from agents.valuation import valuation_agent
 from utils.display import print_trading_output
 from utils.analysts import ANALYST_ORDER, get_analyst_nodes
 from utils.progress import progress
-from llm.models import LLM_ORDER, get_model_info
+from llm.models import get_llm_order, get_model_info
 
 import argparse
 from datetime import datetime
@@ -198,7 +198,7 @@ if __name__ == "__main__":
     # Select LLM model
     model_choice = questionary.select(
         "Select your LLM model:",
-        choices=[questionary.Choice(display, value=value) for display, value, _ in LLM_ORDER],
+        choices=[questionary.Choice(display, value=value) for display, value, _ in get_llm_order()],
         style=questionary.Style([
             ("selected", "fg:green bold"),
             ("pointer", "fg:green bold"),
