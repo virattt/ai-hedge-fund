@@ -1,5 +1,5 @@
 import sys
-
+from typing import Optional, List
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
@@ -56,7 +56,7 @@ def run_hedge_fund(
     end_date: str,
     portfolio: dict,
     show_reasoning: bool = False,
-    selected_analysts: list[str] = [],
+    selected_analysts: Optional[List[str]] = None,
     model_name: str = "gpt-4o",
     model_provider: str = "OpenAI",
 ):
@@ -281,7 +281,6 @@ if __name__ == "__main__":
         end_date=end_date,
         portfolio=portfolio,
         show_reasoning=args.show_reasoning,
-        selected_analysts=selected_analysts,
         model_name=model_choice,
         model_provider=model_provider,
     )
