@@ -4,6 +4,7 @@ from langchain_deepseek import ChatDeepSeek
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from enum import Enum
 from pydantic import BaseModel
 from typing import Tuple
@@ -16,8 +17,9 @@ class ModelProvider(str, Enum):
     GEMINI = "Gemini"
     GROQ = "Groq"
     OPENAI = "OpenAI"
+    OLLAMA = "Ollama"
 
-
+ollama_model = os.getenv("OLLAMA_MODEL")
 
 class LLMModel(BaseModel):
     """Represents an LLM model configuration"""
@@ -31,7 +33,7 @@ class LLMModel(BaseModel):
     
     def has_json_mode(self) -> bool:
         """Check if the model supports JSON mode"""
-        return not self.is_deepseek() and not self.is_gemini()
+        return not self.is_deepseek() and not self.is_gemini() and not self.is_ollama()
     
     def is_deepseek(self) -> bool:
         """Check if the model is a DeepSeek model"""
@@ -40,7 +42,10 @@ class LLMModel(BaseModel):
     def is_gemini(self) -> bool:
         """Check if the model is a Gemini model"""
         return self.model_name.startswith("gemini")
-
+    
+    def is_ollama(self) -> bool:
+        """Check if the model is an Ollama model"""
+        return self.provider == ModelProvider.OLLAMA
 
 # Define available models
 AVAILABLE_MODELS = [
@@ -104,6 +109,11 @@ AVAILABLE_MODELS = [
         model_name="o3-mini",
         provider=ModelProvider.OPENAI
     ),
+    LLMModel(
+        display_name=f"[ollama] ",
+        model_name="ollama",
+        provider=ModelProvider.OLLAMA
+    ),
 ]
 
 # Create LLM_ORDER in the format expected by the UI
@@ -147,3 +157,20 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
             print(f"API Key Error: Please make sure GOOGLE_API_KEY is set in your .env file.")
             raise ValueError("Google API key not found.  Please make sure GOOGLE_API_KEY is set in your .env file.")
         return ChatGoogleGenerativeAI(model=model_name, api_key=api_key)
+    elif model_provider == ModelProvider.OLLAMA:
+        # Get configuration
+        ollam_base_url = os.getenv("OLLAMA_BASE_URL")
+        ollama_model = os.getenv("OLLAMA_MODEL")
+        if not ollam_base_url:
+            print(f"Error: OLLAMA_BASE_URL is not set in your .env file")
+            raise ValueError("Ollama base URL not found. Please make sure OLLAMA_BASE_URL is set in your .env file.")
+        if not ollama_model:
+            print(f"Error: OLLAMA_MODEL is not set in your .env file")
+            raise ValueError("Ollama model not specified. Please make sure OLLAMA_MODEL is set in your .env file.")
+        try:
+            print(f"Using Ollama model: {ollama_model} from {ollam_base_url}")
+            return ChatOllama(model=ollama_model, base_url=ollam_base_url)
+        except Exception as e:
+            print(f"Error connecting to Ollama: {e}")
+            raise ValueError(f"Could not connect to Ollama at {ollam_base_url}. Please check that Ollama is running and the URL is correct.")
+        #return ChatOllama(model="llama3.3:70b-instruct-q2_K")
