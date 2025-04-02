@@ -211,7 +211,7 @@ def analyze_financial_discipline(metrics: list, financial_line_items: list) -> d
         }
     
     # 1. Multi-period debt ratio or debt_to_equity
-    # Check if the company’s leverage is stable or improving
+    # Check if the company's leverage is stable or improving
     debt_to_equity_vals = [item.debt_to_equity for item in financial_line_items if item.debt_to_equity is not None]
     
     # If we have multi-year data, see if D/E ratio has gone down or stayed <1 across most periods
@@ -356,13 +356,26 @@ def generate_ackman_output(
             5. Invest with high conviction in a concentrated portfolio for the long term.
             6. Potential activist approach if management or operational improvements can unlock value.
             
+
             Rules:
             - Evaluate brand strength, market position, or other moats.
             - Check free cash flow generation, stable or growing earnings.
             - Analyze balance sheet health (reasonable debt, good ROE).
             - Buy at a discount to intrinsic value; higher discount => stronger conviction.
             - Engage if management is suboptimal or if there's a path for strategic improvements.
-            - Provide a rational, data-driven recommendation (bullish, bearish, or neutral)."""
+            - Provide a rational, data-driven recommendation (bullish, bearish, or neutral).
+            
+            When providing your reasoning, be thorough and specific by:
+            1. Explaining the quality of the business and its competitive advantages in detail
+            2. Highlighting the specific financial metrics that most influenced your decision (FCF, margins, leverage)
+            3. Discussing any potential for operational improvements or management changes
+            4. Providing a clear valuation assessment with numerical evidence
+            5. Identifying specific catalysts that could unlock value
+            6. Using Bill Ackman's confident, analytical, and sometimes confrontational style
+            
+            For example, if bullish: "This business generates exceptional free cash flow with a 15% margin and has a dominant market position that competitors can't easily replicate. Trading at only 12x FCF, there's a 40% discount to intrinsic value, and management's recent capital allocation decisions suggest..."
+            For example, if bearish: "Despite decent market position, FCF margins have deteriorated from 12% to 8% over three years. Management continues to make poor capital allocation decisions by pursuing low-ROIC acquisitions. Current valuation at 18x FCF provides no margin of safety given the operational challenges..."
+            """
         ),
         (
             "human",
