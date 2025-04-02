@@ -5,7 +5,7 @@ description = "An AI-powered hedge fund that uses multiple agents to make tradin
 authors = ["Your Name <your.email@example.com>"]
 readme = "README.md"
 packages = [
-    { include = "ai_hedge_fund", from = "src" }
+    { include = "src", from = ".", package = "ai_hedge_fund" }
 ]
 [tool.poetry.dependencies]
 python = "^3.9"
