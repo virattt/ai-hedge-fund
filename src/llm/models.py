@@ -75,8 +75,8 @@ AVAILABLE_MODELS = [
         provider=ModelProvider.GEMINI
     ),
     LLMModel(
-        display_name="[gemini] gemini-2.0-pro",
-        model_name="gemini-2.0-pro-exp-02-05",
+        display_name="[gemini] gemini-2.5-pro",
+        model_name="gemini-2.5-pro-exp-03-25",
         provider=ModelProvider.GEMINI
     ),
     LLMModel(
