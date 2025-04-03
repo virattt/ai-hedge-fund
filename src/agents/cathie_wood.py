@@ -1,5 +1,5 @@
 from langchain_openai import ChatOpenAI
-from graph.state import AgentState, show_agent_reasoning
+from ..graph.state import AgentState, show_agent_reasoning
 from ..tools.api import get_financial_metrics, get_market_cap, search_line_items
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
