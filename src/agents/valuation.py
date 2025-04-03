@@ -1,9 +1,9 @@
 from langchain_core.messages import HumanMessage
 from graph.state import AgentState, show_agent_reasoning
-from utils.progress import progress
+from ..utils.progress import progress
 import json
 
-from tools.api import get_financial_metrics, get_market_cap, search_line_items
+from ..tools.api import get_financial_metrics, get_market_cap, search_line_items
 
 
 ##### Valuation Agent #####
@@ -30,7 +30,7 @@ def valuation_agent(state: AgentState):
         if not financial_metrics:
             progress.update_status("valuation_agent", ticker, "Failed: No financial metrics found")
             continue
-        
+
         metrics = financial_metrics[0]
 
         progress.update_status("valuation_agent", ticker, "Gathering line items")

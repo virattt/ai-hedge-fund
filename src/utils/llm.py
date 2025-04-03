@@ -3,7 +3,7 @@
 import json
 from typing import TypeVar, Type, Optional, Any
 from pydantic import BaseModel
-from utils.progress import progress
+from ..utils.progress import progress
 
 T = TypeVar('T', bound=BaseModel)
 
@@ -18,7 +18,7 @@ def call_llm(
 ) -> T:
     """
     Makes an LLM call with retry logic, handling both Deepseek and non-Deepseek models.
-    
+
     Args:
         prompt: The prompt to send to the LLM
         model_name: Name of the model to use
@@ -27,28 +27,28 @@ def call_llm(
         agent_name: Optional name of the agent for progress updates
         max_retries: Maximum number of retries (default: 3)
         default_factory: Optional factory function to create default response on failure
-        
+
     Returns:
         An instance of the specified Pydantic model
     """
-    from llm.models import get_model, get_model_info
-    
+    from ..llm.models import get_model, get_model_info
+
     model_info = get_model_info(model_name)
     llm = get_model(model_name, model_provider)
-    
+
     # For non-JSON support models, we can use structured output
     if not (model_info and not model_info.has_json_mode()):
         llm = llm.with_structured_output(
             pydantic_model,
             method="json_mode",
         )
-    
+
     # Call the LLM with retries
     for attempt in range(max_retries):
         try:
             # Call the LLM
             result = llm.invoke(prompt)
-            
+
             # For non-JSON support models, we need to extract and parse the JSON manually
             if model_info and not model_info.has_json_mode():
                 parsed_result = extract_json_from_deepseek_response(result.content)
@@ -56,11 +56,11 @@ def call_llm(
                     return pydantic_model(**parsed_result)
             else:
                 return result
-                
+
         except Exception as e:
             if agent_name:
                 progress.update_status(agent_name, None, f"Error - retry {attempt + 1}/{max_retries}")
-            
+
             if attempt == max_retries - 1:
                 print(f"Error in LLM call after {max_retries} attempts: {e}")
                 # Use default_factory if provided, otherwise create a basic default
@@ -89,7 +89,7 @@ def create_default_response(model_class: Type[T]) -> T:
                 default_values[field_name] = field.annotation.__args__[0]
             else:
                 default_values[field_name] = None
-    
+
     return model_class(**default_values)
 
 def extract_json_from_deepseek_response(content: str) -> Optional[dict]:

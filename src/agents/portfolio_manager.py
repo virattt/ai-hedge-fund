@@ -5,8 +5,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from graph.state import AgentState, show_agent_reasoning
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
-from utils.progress import progress
-from utils.llm import call_llm
+from ..utils.progress import progress
+from ..utils.llm import call_llm
 
 
 class PortfolioDecision(BaseModel):
@@ -111,13 +111,13 @@ def generate_trading_decision(
                 * Only sell if you currently hold long shares of that ticker
                 * Sell quantity must be ≤ current long position shares
                 * Buy quantity must be ≤ max_shares for that ticker
-              
+
               - For short positions:
                 * Only short if you have available margin (position value × margin requirement)
                 * Only cover if you currently have short shares of that ticker
                 * Cover quantity must be ≤ current short position shares
                 * Short quantity must respect margin requirements
-              
+
               - The max_shares values are pre-calculated to respect position limits
               - Consider both long and short opportunities based on signals
               - Maintain appropriate risk management with both long and short exposure
