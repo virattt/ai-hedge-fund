@@ -1,9 +1,9 @@
 from langchain_core.messages import HumanMessage
-from graph.state import AgentState, show_agent_reasoning
-from utils.progress import progress
+from ..graph.state import AgentState, show_agent_reasoning
+from ..utils.progress import progress
 import json
 
-from tools.api import get_financial_metrics
+from ..tools.api import get_financial_metrics
 
 
 ##### Fundamental Agent #####

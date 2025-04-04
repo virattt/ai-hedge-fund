@@ -5,7 +5,7 @@ description = "An AI-powered hedge fund that uses multiple agents to make tradin
 authors = ["Your Name <your.email@example.com>"]
 readme = "README.md"
 packages = [
-    { include = "src", from = "." }
+    { include = "src", from = ".", to = "ai_hedge_fund" }
 ]
 [tool.poetry.dependencies]
 python = "^3.9"
@@ -32,7 +32,7 @@ isort = "^5.12.0"
 flake8 = "^6.1.0"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=1.2.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.black]

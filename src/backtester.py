@@ -340,7 +340,7 @@ class Backtester:
             try:
                 current_prices = {}
                 missing_data = False
-                
+
                 for ticker in self.tickers:
                     try:
                         price_data = get_price_data(ticker, previous_date_str, current_date_str)
@@ -353,11 +353,11 @@ class Backtester:
                         print(f"Error fetching price for {ticker} between {previous_date_str} and {current_date_str}: {e}")
                         missing_data = True
                         break
-                
+
                 if missing_data:
                     print(f"Skipping trading day {current_date_str} due to missing price data")
                     continue
-                
+
             except Exception as e:
                 # If there's a general API error, log it and skip this day
                 print(f"Error fetching prices for {current_date_str}: {e}")
@@ -446,7 +446,7 @@ class Backtester:
                 # Get the action and quantity from the decisions
                 action = decisions.get(ticker, {}).get("action", "hold")
                 quantity = executed_trades.get(ticker, 0)
-                
+
                 # Append the agent action to the table rows
                 date_rows.append(
                     format_backtest_row(
@@ -539,12 +539,12 @@ class Backtester:
         # Maximum drawdown (ensure it's stored as a negative percentage)
         rolling_max = values_df["Portfolio Value"].cummax()
         drawdown = (values_df["Portfolio Value"] - rolling_max) / rolling_max
-        
+
         if len(drawdown) > 0:
             min_drawdown = drawdown.min()
             # Store as a negative percentage
             performance_metrics["max_drawdown"] = min_drawdown * 100
-            
+
             # Store the date of max drawdown for reference
             if min_drawdown < 0:
                 performance_metrics["max_drawdown_date"] = drawdown.idxmin().strftime('%Y-%m-%d')
@@ -570,11 +570,11 @@ class Backtester:
 
         print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO PERFORMANCE SUMMARY:{Style.RESET_ALL}")
         print(f"Total Return: {Fore.GREEN if total_return >= 0 else Fore.RED}{total_return:.2f}%{Style.RESET_ALL}")
-        
+
         # Print realized P&L for informational purposes only
         total_realized_gains = sum(
-            self.portfolio["realized_gains"][ticker]["long"] + 
-            self.portfolio["realized_gains"][ticker]["short"] 
+            self.portfolio["realized_gains"][ticker]["long"] +
+            self.portfolio["realized_gains"][ticker]["short"]
             for ticker in self.tickers
         )
         print(f"Total Realized Gains/Losses: {Fore.GREEN if total_realized_gains >= 0 else Fore.RED}${total_realized_gains:,.2f}{Style.RESET_ALL}")
@@ -604,7 +604,7 @@ class Backtester:
         # Use the max drawdown value calculated during the backtest if available
         max_drawdown = getattr(self, 'performance_metrics', {}).get('max_drawdown')
         max_drawdown_date = getattr(self, 'performance_metrics', {}).get('max_drawdown_date')
-        
+
         # If no value exists yet, calculate it
         if max_drawdown is None:
             rolling_max = performance_df["Portfolio Value"].cummax()
