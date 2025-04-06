@@ -4,13 +4,19 @@ from utils.progress import progress
 import json
 
 from tools.api import get_financial_metrics
+from src.utils.logger_config import get_logger
 
+# 设置日志记录
+logger = get_logger()
 
 ##### Fundamental Agent #####
 def fundamentals_agent(state: AgentState):
     """Analyzes fundamental data and generates trading signals for multiple tickers."""
+    logger.info("[FUNDAMENTALS_AGENT] 开始执行基本面分析Agent ...")
+    # logger.info("当前市场为: " + state["metadata"]["market"])
     data = state["data"]
     end_date = data["end_date"]
+    market = state["metadata"]["market"]
     tickers = data["tickers"]
 
     # Initialize fundamental analysis for each ticker
@@ -21,6 +27,7 @@ def fundamentals_agent(state: AgentState):
 
         # Get the financial metrics
         financial_metrics = get_financial_metrics(
+            market=market,
             ticker=ticker,
             end_date=end_date,
             period="ttm",
@@ -39,6 +46,7 @@ def fundamentals_agent(state: AgentState):
         reasoning = {}
 
         progress.update_status("fundamentals_agent", ticker, "Analyzing profitability")
+        
         # 1. Profitability Analysis
         return_on_equity = metrics.return_on_equity
         net_margin = metrics.net_margin
@@ -58,6 +66,7 @@ def fundamentals_agent(state: AgentState):
         }
 
         progress.update_status("fundamentals_agent", ticker, "Analyzing growth")
+        
         # 2. Growth Analysis
         revenue_growth = metrics.revenue_growth
         earnings_growth = metrics.earnings_growth
@@ -77,6 +86,7 @@ def fundamentals_agent(state: AgentState):
         }
 
         progress.update_status("fundamentals_agent", ticker, "Analyzing financial health")
+        
         # 3. Financial Health
         current_ratio = metrics.current_ratio
         debt_to_equity = metrics.debt_to_equity
@@ -98,6 +108,7 @@ def fundamentals_agent(state: AgentState):
         }
 
         progress.update_status("fundamentals_agent", ticker, "Analyzing valuation ratios")
+        
         # 4. Price to X ratios
         pe_ratio = metrics.price_to_earnings_ratio
         pb_ratio = metrics.price_to_book_ratio
@@ -117,6 +128,7 @@ def fundamentals_agent(state: AgentState):
         }
 
         progress.update_status("fundamentals_agent", ticker, "Calculating final signal")
+        
         # Determine overall signal
         bullish_signals = signals.count("bullish")
         bearish_signals = signals.count("bearish")

@@ -2,10 +2,12 @@ from typing_extensions import Annotated, Sequence, TypedDict
 
 import operator
 from langchain_core.messages import BaseMessage
-
+from src.utils.logger_config import get_logger
 
 import json
 
+# 设置日志记录
+logger = get_logger()
 
 def merge_dicts(a: dict[str, any], b: dict[str, any]) -> dict[str, any]:
     return {**a, **b}
@@ -19,7 +21,7 @@ class AgentState(TypedDict):
 
 
 def show_agent_reasoning(output, agent_name):
-    print(f"\n{'=' * 10} {agent_name.center(28)} {'=' * 10}")
+    # logger.info(f"\n{'=' * 10} {agent_name.center(28)} {'=' * 10}")
 
     def convert_to_serializable(obj):
         if hasattr(obj, "to_dict"):  # Handle Pandas Series/DataFrame
@@ -38,14 +40,14 @@ def show_agent_reasoning(output, agent_name):
     if isinstance(output, (dict, list)):
         # Convert the output to JSON-serializable format
         serializable_output = convert_to_serializable(output)
-        print(json.dumps(serializable_output, indent=2))
+        logger.info(json.dumps(serializable_output, indent=2))
     else:
         try:
             # Parse the string as JSON and pretty print it
             parsed_output = json.loads(output)
-            print(json.dumps(parsed_output, indent=2))
+            logger.info(json.dumps(parsed_output, indent=2))
         except json.JSONDecodeError:
             # Fallback to original string if not valid JSON
-            print(output)
+            logger.info(output)
 
-    print("=" * 48)
+    # logger.info("=" * 48)

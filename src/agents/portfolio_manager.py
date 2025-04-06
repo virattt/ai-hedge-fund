@@ -7,7 +7,10 @@ from pydantic import BaseModel, Field
 from typing_extensions import Literal
 from utils.progress import progress
 from utils.llm import call_llm
+from src.utils.logger_config import get_logger
 
+# 设置日志记录
+logger = get_logger()
 
 class PortfolioDecision(BaseModel):
     action: Literal["buy", "sell", "short", "cover", "hold"]
@@ -23,10 +26,12 @@ class PortfolioManagerOutput(BaseModel):
 ##### Portfolio Management Agent #####
 def portfolio_management_agent(state: AgentState):
     """Makes final trading decisions and generates orders for multiple tickers"""
-
+    logger.info("[PORTFOLIO_MANAGEMENT_AGENT] 开始执行投资组合管理Agent ...")
+    
     # Get the portfolio and analyst signals
     portfolio = state["data"]["portfolio"]
     analyst_signals = state["data"]["analyst_signals"]
+    market = state["metadata"]["market"]
     tickers = state["data"]["tickers"]
 
     progress.update_status("portfolio_management_agent", None, "Analyzing signals")
@@ -189,6 +194,8 @@ def generate_trading_decision(
             "total_margin_used": f"{portfolio.get('margin_used', 0):.2f}",
         }
     )
+    
+    print(prompt)
 
     # Create default factory for PortfolioManagerOutput
     def create_default_portfolio_output():

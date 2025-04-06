@@ -19,39 +19,9 @@ from data.models import (
 # Global cache instance
 _cache = get_cache()
 
-
-def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
-    """Fetch price data from cache or API."""
-    # Check cache first
-    if cached_data := _cache.get_prices(ticker):
-        # Filter cached data by date range and convert to Price objects
-        filtered_data = [Price(**price) for price in cached_data if start_date <= price["time"] <= end_date]
-        if filtered_data:
-            return filtered_data
-
-    # If not in cache or no data in range, fetch from API
-    headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
-
-    url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
-
-    # Parse response with Pydantic model
-    price_response = PriceResponse(**response.json())
-    prices = price_response.prices
-
-    if not prices:
-        return []
-
-    # Cache the results as dicts
-    _cache.set_prices(ticker, [p.model_dump() for p in prices])
-    return prices
-
-
+# called by fundamentals_agent
 def get_financial_metrics(
+    market:str,
     ticker: str,
     end_date: str,
     period: str = "ttm",
@@ -87,6 +57,37 @@ def get_financial_metrics(
     # Cache the results as dicts
     _cache.set_financial_metrics(ticker, [m.model_dump() for m in financial_metrics])
     return financial_metrics
+
+
+def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
+    """Fetch price data from cache or API."""
+    # Check cache first
+    if cached_data := _cache.get_prices(ticker):
+        # Filter cached data by date range and convert to Price objects
+        filtered_data = [Price(**price) for price in cached_data if start_date <= price["time"] <= end_date]
+        if filtered_data:
+            return filtered_data
+
+    # If not in cache or no data in range, fetch from API
+    headers = {}
+    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
+        headers["X-API-KEY"] = api_key
+
+    url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+
+    # Parse response with Pydantic model
+    price_response = PriceResponse(**response.json())
+    prices = price_response.prices
+
+    if not prices:
+        return []
+
+    # Cache the results as dicts
+    _cache.set_prices(ticker, [p.model_dump() for p in prices])
+    return prices
 
 
 def search_line_items(

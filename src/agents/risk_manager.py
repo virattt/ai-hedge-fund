@@ -4,12 +4,19 @@ from utils.progress import progress
 from tools.api import get_prices, prices_to_df
 import json
 
+from src.utils.logger_config import get_logger
+
+# 设置日志记录
+logger = get_logger()
+
 
 ##### Risk Management Agent #####
 def risk_management_agent(state: AgentState):
     """Controls position sizing based on real-world risk factors for multiple tickers."""
+    logger.info("[RISK_MANAGEMENT_AGENT] 开始执行风险控制Agent ...")
     portfolio = state["data"]["portfolio"]
     data = state["data"]
+    market = state["metadata"]["market"]
     tickers = data["tickers"]
 
     # Initialize risk analysis for each ticker
@@ -19,6 +26,7 @@ def risk_management_agent(state: AgentState):
     for ticker in tickers:
         progress.update_status("risk_management_agent", ticker, "Analyzing price data")
 
+        print(data["start_date"], data["end_date"])
         prices = get_prices(
             ticker=ticker,
             start_date=data["start_date"],
