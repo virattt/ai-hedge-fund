@@ -111,7 +111,11 @@ def valuation_agent(state: AgentState):
             "details": f"Owner Earnings Value: ${owner_earnings_value:,.2f}, Market Cap: ${market_cap:,.2f}, Gap: {owner_earnings_gap:.1%}",
         }
 
-        confidence = round(abs(valuation_gap), 2) * 100
+        # Calculate confidence as a percentage between 0 and 100
+        # The higher the absolute valuation gap, the higher the confidence, but capped at 100%
+        # Use 0.30 (30%) as the maximum gap that corresponds to 100% confidence
+        confidence = min(abs(valuation_gap) / 0.30 * 100, 100)
+        confidence = round(confidence)
         valuation_analysis[ticker] = {
             "signal": signal,
             "confidence": confidence,
