@@ -355,6 +355,7 @@ def calculate_intrinsic_value(financial_line_items: list) -> dict[str, any]:
     growth_rate = 0.05  # Conservative 5% growth
     discount_rate = 0.09  # Typical ~9% discount rate
     terminal_multiple = 12
+    terminal_growth_rate = 0.02  # Terminal growth rate (typically close to the long-term GDP growth rate)
     projection_years = 10
 
     # Sum of discounted future owner earnings
@@ -365,8 +366,9 @@ def calculate_intrinsic_value(financial_line_items: list) -> dict[str, any]:
         future_value += present_value
 
     # Terminal value
-    terminal_value = (owner_earnings * (1 + growth_rate) ** projection_years * terminal_multiple) / ((1 + discount_rate) ** projection_years)
+    terminal_value = (owner_earnings * (1 + growth_rate) ** projection_years * (1 + terminal_growth_rate) / (discount_rate - terminal_growth_rate)) / ((1 + discount_rate) ** projection_years)
 
+    # Calculate intrinsic value
     intrinsic_value = future_value + terminal_value
 
     return {
@@ -376,6 +378,7 @@ def calculate_intrinsic_value(financial_line_items: list) -> dict[str, any]:
             "growth_rate": growth_rate,
             "discount_rate": discount_rate,
             "terminal_multiple": terminal_multiple,
+            "terminal_growth_rate": terminal_growth_rate,
             "projection_years": projection_years,
         },
         "details": ["Intrinsic value calculated using DCF model with owner earnings"],
