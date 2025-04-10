@@ -9,6 +9,7 @@ from typing_extensions import Literal
 from utils.progress import progress
 from utils.llm import call_llm
 
+
 class BillAckmanSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
     confidence: float
@@ -18,7 +19,8 @@ class BillAckmanSignal(BaseModel):
 def bill_ackman_agent(state: AgentState):
     """
     Analyzes stocks using Bill Ackman's investing principles and LLM reasoning.
-    Fetches multiple periods of data so we can analyze long-term trends.
+    Fetches multiple periods of data for a more robust long-term view.
+    Incorporates brand/competitive advantage, activism potential, and other key factors.
     """
     data = state["data"]
     end_date = data["end_date"]
@@ -43,11 +45,13 @@ def bill_ackman_agent(state: AgentState):
                 "total_assets",
                 "total_liabilities",
                 "dividends_and_other_cash_distributions",
-                "outstanding_shares"
+                "outstanding_shares",
+                # Optional: intangible_assets if available
+                # "intangible_assets"
             ],
             end_date,
-            period="annual",  # or "ttm" if you prefer trailing 12 months
-            limit=5           # fetch up to 5 annual periods (or more if needed)
+            period="annual",
+            limit=5
         )
         
         progress.update_status("bill_ackman_agent", ticker, "Getting market cap")
@@ -59,12 +63,20 @@ def bill_ackman_agent(state: AgentState):
         progress.update_status("bill_ackman_agent", ticker, "Analyzing balance sheet and capital structure")
         balance_sheet_analysis = analyze_financial_discipline(metrics, financial_line_items)
         
+        progress.update_status("bill_ackman_agent", ticker, "Analyzing activism potential")
+        activism_analysis = analyze_activism_potential(financial_line_items)
+        
         progress.update_status("bill_ackman_agent", ticker, "Calculating intrinsic value & margin of safety")
         valuation_analysis = analyze_valuation(financial_line_items, market_cap)
         
         # Combine partial scores or signals
-        total_score = quality_analysis["score"] + balance_sheet_analysis["score"] + valuation_analysis["score"]
-        max_possible_score = 15  # Adjust weighting as desired
+        total_score = (
+            quality_analysis["score"]
+            + balance_sheet_analysis["score"]
+            + activism_analysis["score"]
+            + valuation_analysis["score"]
+        )
+        max_possible_score = 20  # Adjust weighting as desired (5 from each sub-analysis, for instance)
         
         # Generate a simple buy/hold/sell (bullish/neutral/bearish) signal
         if total_score >= 0.7 * max_possible_score:
@@ -80,6 +92,7 @@ def bill_ackman_agent(state: AgentState):
             "max_score": max_possible_score,
             "quality_analysis": quality_analysis,
             "balance_sheet_analysis": balance_sheet_analysis,
+            "activism_analysis": activism_analysis,
             "valuation_analysis": valuation_analysis
         }
         
@@ -121,7 +134,8 @@ def bill_ackman_agent(state: AgentState):
 def analyze_business_quality(metrics: list, financial_line_items: list) -> dict:
     """
     Analyze whether the company has a high-quality business with stable or growing cash flows,
-    durable competitive advantages, and potential for long-term growth.
+    durable competitive advantages (moats), and potential for long-term growth.
+    Also tries to infer brand strength if intangible_assets data is present (optional).
     """
     score = 0
     details = []
@@ -135,14 +149,12 @@ def analyze_business_quality(metrics: list, financial_line_items: list) -> dict:
     # 1. Multi-period revenue growth analysis
     revenues = [item.revenue for item in financial_line_items if item.revenue is not None]
     if len(revenues) >= 2:
-        # Check if overall revenue grew from first to last
         initial, final = revenues[0], revenues[-1]
         if initial and final and final > initial:
-            # Simple growth rate
             growth_rate = (final - initial) / abs(initial)
-            if growth_rate > 0.5:  # e.g., 50% growth over the available time
+            if growth_rate > 0.5:  # e.g., 50% cumulative growth
                 score += 2
-                details.append(f"Revenue grew by {(growth_rate*100):.1f}% over the full period.")
+                details.append(f"Revenue grew by {(growth_rate*100):.1f}% over the full period (strong growth).")
             else:
                 score += 1
                 details.append(f"Revenue growth is positive but under 50% cumulatively ({(growth_rate*100):.1f}%).")
@@ -152,23 +164,20 @@ def analyze_business_quality(metrics: list, financial_line_items: list) -> dict:
         details.append("Not enough revenue data for multi-period trend.")
     
     # 2. Operating margin and free cash flow consistency
-    # We'll check if operating_margin or free_cash_flow are consistently positive/improving
     fcf_vals = [item.free_cash_flow for item in financial_line_items if item.free_cash_flow is not None]
     op_margin_vals = [item.operating_margin for item in financial_line_items if item.operating_margin is not None]
     
     if op_margin_vals:
-        # Check if the majority of operating margins are > 15%
         above_15 = sum(1 for m in op_margin_vals if m > 0.15)
         if above_15 >= (len(op_margin_vals) // 2 + 1):
             score += 2
-            details.append("Operating margins have often exceeded 15%.")
+            details.append("Operating margins have often exceeded 15% (indicates good profitability).")
         else:
             details.append("Operating margin not consistently above 15%.")
     else:
         details.append("No operating margin data across periods.")
     
     if fcf_vals:
-        # Check if free cash flow is positive in most periods
         positive_fcf_count = sum(1 for f in fcf_vals if f > 0)
         if positive_fcf_count >= (len(fcf_vals) // 2 + 1):
             score += 1
@@ -179,15 +188,20 @@ def analyze_business_quality(metrics: list, financial_line_items: list) -> dict:
         details.append("No free cash flow data across periods.")
     
     # 3. Return on Equity (ROE) check from the latest metrics
-    # (If you want multi-period ROE, you'd need that in financial_line_items as well.)
     latest_metrics = metrics[0]
     if latest_metrics.return_on_equity and latest_metrics.return_on_equity > 0.15:
         score += 2
-        details.append(f"High ROE of {latest_metrics.return_on_equity:.1%}, indicating potential moat.")
+        details.append(f"High ROE of {latest_metrics.return_on_equity:.1%}, indicating a competitive advantage.")
     elif latest_metrics.return_on_equity:
-        details.append(f"ROE of {latest_metrics.return_on_equity:.1%} is not indicative of a strong moat.")
+        details.append(f"ROE of {latest_metrics.return_on_equity:.1%} is moderate.")
     else:
-        details.append("ROE data not available in metrics.")
+        details.append("ROE data not available.")
+    
+    # 4. (Optional) Brand Intangible (if intangible_assets are fetched)
+    # intangible_vals = [item.intangible_assets for item in financial_line_items if item.intangible_assets]
+    # if intangible_vals and sum(intangible_vals) > 0:
+    #     details.append("Significant intangible assets may indicate brand value or proprietary tech.")
+    #     score += 1
     
     return {
         "score": score,
@@ -211,19 +225,16 @@ def analyze_financial_discipline(metrics: list, financial_line_items: list) -> d
         }
     
     # 1. Multi-period debt ratio or debt_to_equity
-    # Check if the company's leverage is stable or improving
     debt_to_equity_vals = [item.debt_to_equity for item in financial_line_items if item.debt_to_equity is not None]
-    
-    # If we have multi-year data, see if D/E ratio has gone down or stayed <1 across most periods
     if debt_to_equity_vals:
         below_one_count = sum(1 for d in debt_to_equity_vals if d < 1.0)
         if below_one_count >= (len(debt_to_equity_vals) // 2 + 1):
             score += 2
-            details.append("Debt-to-equity < 1.0 for the majority of periods.")
+            details.append("Debt-to-equity < 1.0 for the majority of periods (reasonable leverage).")
         else:
-            details.append("Debt-to-equity >= 1.0 in many periods.")
+            details.append("Debt-to-equity >= 1.0 in many periods (could be high leverage).")
     else:
-        # Fallback to total_liabilities/total_assets if D/E not available
+        # Fallback to total_liabilities / total_assets
         liab_to_assets = []
         for item in financial_line_items:
             if item.total_liabilities and item.total_assets and item.total_assets > 0:
@@ -240,21 +251,22 @@ def analyze_financial_discipline(metrics: list, financial_line_items: list) -> d
             details.append("No consistent leverage ratio data available.")
     
     # 2. Capital allocation approach (dividends + share counts)
-    # If the company paid dividends or reduced share count over time, it may reflect discipline
-    dividends_list = [item.dividends_and_other_cash_distributions for item in financial_line_items if item.dividends_and_other_cash_distributions is not None]
+    dividends_list = [
+        item.dividends_and_other_cash_distributions
+        for item in financial_line_items
+        if item.dividends_and_other_cash_distributions is not None
+    ]
     if dividends_list:
-        # Check if dividends were paid (i.e., negative outflows to shareholders) in most periods
         paying_dividends_count = sum(1 for d in dividends_list if d < 0)
         if paying_dividends_count >= (len(dividends_list) // 2 + 1):
             score += 1
             details.append("Company has a history of returning capital to shareholders (dividends).")
         else:
-            details.append("Dividends not consistently paid or no data.")
+            details.append("Dividends not consistently paid or no data on distributions.")
     else:
         details.append("No dividend data found across periods.")
     
-    # Check for decreasing share count (simple approach):
-    # We can compare first vs last if we have at least two data points
+    # Check for decreasing share count (simple approach)
     shares = [item.outstanding_shares for item in financial_line_items if item.outstanding_shares is not None]
     if len(shares) >= 2:
         if shares[-1] < shares[0]:
@@ -271,12 +283,55 @@ def analyze_financial_discipline(metrics: list, financial_line_items: list) -> d
     }
 
 
+def analyze_activism_potential(financial_line_items: list) -> dict:
+    """
+    Bill Ackman often engages in activism if a company has a decent brand or moat
+    but is underperforming operationally.
+    
+    We'll do a simplified approach:
+    - Look for positive revenue trends but subpar margins
+    - That may indicate 'activism upside' if operational improvements could unlock value.
+    """
+    if not financial_line_items:
+        return {
+            "score": 0,
+            "details": "Insufficient data for activism potential"
+        }
+    
+    # Check revenue growth vs. operating margin
+    revenues = [item.revenue for item in financial_line_items if item.revenue is not None]
+    op_margins = [item.operating_margin for item in financial_line_items if item.operating_margin is not None]
+    
+    if len(revenues) < 2 or not op_margins:
+        return {
+            "score": 0,
+            "details": "Not enough data to assess activism potential (need multi-year revenue + margins)."
+        }
+    
+    initial, final = revenues[0], revenues[-1]
+    revenue_growth = (final - initial) / abs(initial) if initial else 0
+    avg_margin = sum(op_margins) / len(op_margins)
+    
+    score = 0
+    details = []
+    
+    # Suppose if there's decent revenue growth but margins are below 10%, Ackman might see activism potential.
+    if revenue_growth > 0.15 and avg_margin < 0.10:
+        score += 2
+        details.append(
+            f"Revenue growth is healthy (~{revenue_growth*100:.1f}%), but margins are low (avg {avg_margin*100:.1f}%). "
+            "Activism could unlock margin improvements."
+        )
+    else:
+        details.append("No clear sign of activism opportunity (either margins are already decent or growth is weak).")
+    
+    return {"score": score, "details": "; ".join(details)}
+
+
 def analyze_valuation(financial_line_items: list, market_cap: float) -> dict:
     """
     Ackman invests in companies trading at a discount to intrinsic value.
-    We can do a simplified DCF or an FCF-based approach.
-    This function currently uses the latest free cash flow only, 
-    but you could expand it to use an average or multi-year FCF approach.
+    Uses a simplified DCF with FCF as a proxy, plus margin of safety analysis.
     """
     if not financial_line_items or market_cap is None:
         return {
@@ -284,15 +339,8 @@ def analyze_valuation(financial_line_items: list, market_cap: float) -> dict:
             "details": "Insufficient data to perform valuation"
         }
     
-    # Example: use the most recent item for FCF
-    latest = financial_line_items[-1]  # the last one is presumably the most recent
+    latest = financial_line_items[-1]
     fcf = latest.free_cash_flow if latest.free_cash_flow else 0
-    
-    # For demonstration, let's do a naive approach:
-    growth_rate = 0.06
-    discount_rate = 0.10
-    terminal_multiple = 15
-    projection_years = 5
     
     if fcf <= 0:
         return {
@@ -301,6 +349,12 @@ def analyze_valuation(financial_line_items: list, market_cap: float) -> dict:
             "intrinsic_value": None
         }
     
+    # Basic DCF assumptions
+    growth_rate = 0.06
+    discount_rate = 0.10
+    terminal_multiple = 15
+    projection_years = 5
+    
     present_value = 0
     for year in range(1, projection_years + 1):
         future_fcf = fcf * (1 + growth_rate) ** year
@@ -308,14 +362,15 @@ def analyze_valuation(financial_line_items: list, market_cap: float) -> dict:
         present_value += pv
     
     # Terminal Value
-    terminal_value = (fcf * (1 + growth_rate) ** projection_years * terminal_multiple) \
-                     / ((1 + discount_rate) ** projection_years)
-    intrinsic_value = present_value + terminal_value
+    terminal_value = (
+        fcf * (1 + growth_rate) ** projection_years * terminal_multiple
+    ) / ((1 + discount_rate) ** projection_years)
     
-    # Compare with market cap => margin of safety
+    intrinsic_value = present_value + terminal_value
     margin_of_safety = (intrinsic_value - market_cap) / market_cap
     
     score = 0
+    # Simple scoring
     if margin_of_safety > 0.3:
         score += 3
     elif margin_of_safety > 0.1:
@@ -343,38 +398,30 @@ def generate_ackman_output(
 ) -> BillAckmanSignal:
     """
     Generates investment decisions in the style of Bill Ackman.
+    Includes more explicit references to brand strength, activism potential, 
+    catalysts, and management changes in the system prompt.
     """
     template = ChatPromptTemplate.from_messages([
         (
             "system",
             """You are a Bill Ackman AI agent, making investment decisions using his principles:
 
-            1. Seek high-quality businesses with durable competitive advantages (moats).
-            2. Prioritize consistent free cash flow and growth potential.
+            1. Seek high-quality businesses with durable competitive advantages (moats), often in well-known consumer or service brands.
+            2. Prioritize consistent free cash flow and growth potential over the long term.
             3. Advocate for strong financial discipline (reasonable leverage, efficient capital allocation).
-            4. Valuation matters: target intrinsic value and margin of safety.
-            5. Invest with high conviction in a concentrated portfolio for the long term.
-            6. Potential activist approach if management or operational improvements can unlock value.
-            
+            4. Valuation matters: target intrinsic value with a margin of safety.
+            5. Consider activism where management or operational improvements can unlock substantial upside.
+            6. Concentrate on a few high-conviction investments.
 
-            Rules:
-            - Evaluate brand strength, market position, or other moats.
-            - Check free cash flow generation, stable or growing earnings.
-            - Analyze balance sheet health (reasonable debt, good ROE).
-            - Buy at a discount to intrinsic value; higher discount => stronger conviction.
-            - Engage if management is suboptimal or if there's a path for strategic improvements.
-            - Provide a rational, data-driven recommendation (bullish, bearish, or neutral).
-            
-            When providing your reasoning, be thorough and specific by:
-            1. Explaining the quality of the business and its competitive advantages in detail
-            2. Highlighting the specific financial metrics that most influenced your decision (FCF, margins, leverage)
-            3. Discussing any potential for operational improvements or management changes
-            4. Providing a clear valuation assessment with numerical evidence
-            5. Identifying specific catalysts that could unlock value
-            6. Using Bill Ackman's confident, analytical, and sometimes confrontational style
-            
-            For example, if bullish: "This business generates exceptional free cash flow with a 15% margin and has a dominant market position that competitors can't easily replicate. Trading at only 12x FCF, there's a 40% discount to intrinsic value, and management's recent capital allocation decisions suggest..."
-            For example, if bearish: "Despite decent market position, FCF margins have deteriorated from 12% to 8% over three years. Management continues to make poor capital allocation decisions by pursuing low-ROIC acquisitions. Current valuation at 18x FCF provides no margin of safety given the operational challenges..."
+            In your reasoning:
+            - Emphasize brand strength, moat, or unique market positioning.
+            - Review free cash flow generation and margin trends as key signals.
+            - Analyze leverage, share buybacks, and dividends as capital discipline metrics.
+            - Provide a valuation assessment with numerical backup (DCF, multiples, etc.).
+            - Identify any catalysts for activism or value creation (e.g., cost cuts, better capital allocation).
+            - Use a confident, analytic, and sometimes confrontational tone when discussing weaknesses or opportunities.
+
+            Return your final recommendation (signal: bullish, neutral, or bearish) with a 0-100 confidence and a thorough reasoning section.
             """
         ),
         (
@@ -384,9 +431,9 @@ def generate_ackman_output(
             Analysis Data for {ticker}:
             {analysis_data}
 
-            Return the trading signal in this JSON format:
+            Return your output in strictly valid JSON:
             {{
-              "signal": "bullish/bearish/neutral",
+              "signal": "bullish" | "bearish" | "neutral",
               "confidence": float (0-100),
               "reasoning": "string"
             }}

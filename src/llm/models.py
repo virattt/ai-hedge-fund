@@ -85,6 +85,11 @@ AVAILABLE_MODELS = [
         provider=ModelProvider.GROQ
     ),
     LLMModel(
+        display_name="[groq] llama-4-scout",
+        model_name="meta-llama/llama-4-scout-17b-16e-instruct",
+        provider=ModelProvider.GROQ
+    ),
+    LLMModel(
         display_name="[openai] gpt-4.5",
         model_name="gpt-4.5-preview",
         provider=ModelProvider.OPENAI
