@@ -1,6 +1,4 @@
-from typing_extensions import Annotated, Sequence, TypedDict
-from typing import Dict, Any, Optional, Union, cast
-
+from typing import Annotated, Sequence, TypedDict, Dict, Any, Optional
 import operator
 from langchain_core.messages import BaseMessage
 
@@ -13,7 +11,7 @@ def merge_dicts(a: dict[str, any], b: dict[str, any]) -> dict[str, any]:
     return {**a, **b}
 
 
-# Define agent state
+# Define agent state - keep this compatible with original AgentState
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], operator.add]
     data: Annotated[dict[str, any], merge_dicts]
@@ -22,45 +20,52 @@ class AgentState(TypedDict):
 
 class EnhancedAgentState:
     """
-    Enhanced version of AgentState that provides structured access to hedge fund data
+    Enhanced version of AgentState that provides structured access to OptionPal data
     while maintaining compatibility with LangChain's AgentState.
+    
+    This wrapper allows you to access data with dot notation like:
+    state.data.portfolio.strategy(0).risk_profile
+    
+    While still being compatible with the original AgentState dictionary format.
     """
     def __init__(self, state: AgentState):
         self._state = state
-        self._hedge_fund_data: Optional[OptionPal] = None
+        self._option_pal_data: Optional[OptionPal] = None
         
     @property
     def messages(self) -> Sequence[BaseMessage]:
+        """Access the messages from the state"""
         return self._state["messages"]
     
     @property
     def metadata(self) -> Dict[str, Any]:
+        """Access the metadata from the state"""
         return self._state["metadata"]
     
     @property
     def data(self) -> OptionPal:
         """
-        Access the hedge fund data as a structured Pydantic model.
+        Access the OptionPal data as a structured Pydantic model.
         If the data hasn't been converted to a Pydantic model yet, it will be converted.
         """
-        if self._hedge_fund_data is None:
+        if self._option_pal_data is None:
             # Initialize with empty model if no data exists yet
             if "data" not in self._state or not self._state["data"]:
                 self._state["data"] = {}
                 
             # Convert dict to Pydantic model
-            self._hedge_fund_data = OptionPal.parse_obj(self._state["data"])
+            self._option_pal_data = OptionPal.parse_obj(self._state["data"])
             
-        return self._hedge_fund_data
+        return self._option_pal_data
     
     def to_dict(self) -> AgentState:
         """
         Convert back to a dictionary compatible with LangChain's AgentState.
         This ensures any changes made to the Pydantic models are reflected in the state.
         """
-        if self._hedge_fund_data is not None:
+        if self._option_pal_data is not None:
             # Update the state with the latest data from the Pydantic model
-            self._state["data"] = json.loads(self._hedge_fund_data.json(by_alias=True))
+            self._state["data"] = json.loads(self._option_pal_data.json(by_alias=True))
             
         return self._state
     
@@ -70,6 +75,7 @@ class EnhancedAgentState:
         return cls(state_dict)
 
 
+# Keep the original show_agent_reasoning function for compatibility
 def show_agent_reasoning(output, agent_name):
     print(f"\n{'=' * 10} {agent_name.center(28)} {'=' * 10}")
 

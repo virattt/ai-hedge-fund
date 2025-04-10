@@ -7,15 +7,17 @@ import json
 
 ##### Risk Management Agent #####
 def risk_management_agent(state: AgentState):
-    """Controls position sizing based on real-world risk factors for multiple tickers."""
+
+    """controls the size of each position, each ticker """
     portfolio = state["data"]["portfolio"]
     data = state["data"]
     tickers = data["tickers"]
-
+    positions=tickers["positions"]
+    
     # Initialize risk analysis for each ticker
     risk_analysis = {}
     current_prices = {}  # Store prices here to avoid redundant API calls
-
+    
     for ticker in tickers:
         progress.update_status("risk_management_agent", ticker, "Analyzing price data")
 
@@ -24,15 +26,15 @@ def risk_management_agent(state: AgentState):
             start_date=data["start_date"],
             end_date=data["end_date"],
         )
-
+        
         if not prices:
             progress.update_status("risk_management_agent", ticker, "Failed: No price data found")
             continue
-
+            
         prices_df = prices_to_df(prices)
-
+        
         progress.update_status("risk_management_agent", ticker, "Calculating position limits")
-
+        
         # Calculate portfolio value
         current_price = prices_df["close"].iloc[-1]
         current_prices[ticker] = current_price  # Store the current price
@@ -48,7 +50,7 @@ def risk_management_agent(state: AgentState):
 
         # For existing positions, subtract current position value from limit
         remaining_position_limit = position_limit - current_position_value
-
+        
         # Ensure we don't exceed available cash
         max_position_size = min(remaining_position_limit, portfolio.get("cash", 0))
 
@@ -63,20 +65,20 @@ def risk_management_agent(state: AgentState):
                 "available_cash": float(portfolio.get("cash", 0)),
             },
         }
-
+        
         progress.update_status("risk_management_agent", ticker, "Done")
-
+    
     message = HumanMessage(
         content=json.dumps(risk_analysis),
         name="risk_management_agent",
     )
-
+    
     if state["metadata"]["show_reasoning"]:
         show_agent_reasoning(risk_analysis, "Risk Management Agent")
-
+    
     # Add the signal to the analyst_signals list
     state["data"]["analyst_signals"]["risk_management_agent"] = risk_analysis
-
+    
     return {
         "messages": state["messages"] + [message],
         "data": data,
