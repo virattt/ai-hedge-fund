@@ -87,6 +87,10 @@ def valuation_agent(state: AgentState):
         # Get the market cap
         market_cap = get_market_cap(ticker=ticker, end_date=end_date)
 
+        # Reset dcf value to market value if dcf_value = 0
+        if dcf_value == 0:
+            dcf_value = market_cap
+
         # Calculate combined valuation gap (average of both methods)
         dcf_gap = (dcf_value - market_cap) / market_cap
         owner_earnings_gap = (owner_earnings_value - market_cap) / market_cap
@@ -208,6 +212,10 @@ def calculate_intrinsic_value(
     terminal_growth_rate: float = 0.02,
     num_years: int = 5,
 ) -> float:
+    # if free_cash_flow = 0 or null, return 0
+    if not free_cash_flow:
+        return 0
+        
     """
     Computes the discounted cash flow (DCF) for a given company based on the current free cash flow.
     Use this function to calculate the intrinsic value of a stock.

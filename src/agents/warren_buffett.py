@@ -74,7 +74,12 @@ def warren_buffett_agent(state: AgentState):
 
         # Add margin of safety analysis if we have both intrinsic value and current price
         margin_of_safety = None
-        intrinsic_value = intrinsic_value_analysis["intrinsic_value"]
+        intrinsic_value = None
+
+        # Check intrinsic_value key exists first
+        if "intrinsic_value" in intrinsic_value_analysis:
+            intrinsic_value = intrinsic_value_analysis["intrinsic_value"]
+
         if intrinsic_value and market_cap:
             margin_of_safety = (intrinsic_value - market_cap) / market_cap
 
