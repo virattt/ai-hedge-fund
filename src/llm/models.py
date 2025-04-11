@@ -16,6 +16,7 @@ class ModelProvider(str, Enum):
     GEMINI = "Gemini"
     GROQ = "Groq"
     OPENAI = "OpenAI"
+    SILICONFLOW = "SiliconFlow"
 
 
 
@@ -109,6 +110,11 @@ AVAILABLE_MODELS = [
         model_name="o3-mini",
         provider=ModelProvider.OPENAI
     ),
+    LLMModel(
+        display_name="[siliconflow] deepseek-r1",
+        model_name="deepseek-ai/DeepSeek-R1",
+        provider=ModelProvider.SILICONFLOW
+    ),
 ]
 
 # Create LLM_ORDER in the format expected by the UI
@@ -152,3 +158,9 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
             print(f"API Key Error: Please make sure GOOGLE_API_KEY is set in your .env file.")
             raise ValueError("Google API key not found.  Please make sure GOOGLE_API_KEY is set in your .env file.")
         return ChatGoogleGenerativeAI(model=model_name, api_key=api_key)
+    elif model_provider == ModelProvider.SILICONFLOW:
+        api_key = os.getenv("SILICONFLOW_API_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure SILICONFLOW_API_KEY is set in your .env file.")
+            raise ValueError("SiliconFlow API key not found.  Please make sure SILICONFLOW_API_KEY is set in your .env file.")
+        return ChatOpenAI(model=model_name, api_key=api_key, base_url="https://api.siliconflow.cn/v1")
