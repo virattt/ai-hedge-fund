@@ -26,7 +26,7 @@ def risk_management_agent(state: AgentState):
     for ticker in tickers:
         progress.update_status("risk_management_agent", ticker, "Analyzing price data")
 
-        print(data["start_date"], data["end_date"])
+        # print(data["start_date"], data["end_date"])
         prices = get_prices(
             ticker=ticker,
             start_date=data["start_date"],

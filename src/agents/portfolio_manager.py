@@ -195,7 +195,7 @@ def generate_trading_decision(
         }
     )
     
-    print(prompt)
+    # print(prompt)
 
     # Create default factory for PortfolioManagerOutput
     def create_default_portfolio_output():
