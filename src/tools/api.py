@@ -21,11 +21,11 @@ _cache = get_cache()
 
 # called by fundamentals_agent
 def get_financial_metrics(
-    market:str,
     ticker: str,
     end_date: str,
     period: str = "ttm",
     limit: int = 10,
+    market: str = "US"
 ) -> list[FinancialMetrics]:
     """Fetch financial metrics from cache or API."""
     # Check cache first

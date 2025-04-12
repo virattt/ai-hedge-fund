@@ -7,10 +7,15 @@ import json
 
 from tools.api import get_insider_trades, get_company_news
 
+from src.utils.logger_config import get_logger
+
+# 设置日志记录
+logger = get_logger()
 
 ##### Sentiment Agent #####
 def sentiment_agent(state: AgentState):
     """Analyzes market sentiment and generates trading signals for multiple tickers."""
+    # logger.info("[SENTIMENT_ANALYST_AGENT] 开始执行情绪面分析Agent ...")
     data = state.get("data", {})
     end_date = data.get("end_date")
     tickers = data.get("tickers")

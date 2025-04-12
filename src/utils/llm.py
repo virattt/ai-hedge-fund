@@ -1,6 +1,8 @@
 """Helper functions for LLM"""
 
 import json
+import numpy as np
+from time import sleep
 from typing import TypeVar, Type, Optional, Any
 from pydantic import BaseModel
 from utils.progress import progress
@@ -13,7 +15,7 @@ def call_llm(
     model_provider: str,
     pydantic_model: Type[T],
     agent_name: Optional[str] = None,
-    max_retries: int = 3,
+    max_retries: int = 5,
     default_factory = None
 ) -> T:
     """
@@ -58,8 +60,11 @@ def call_llm(
                 return result
                 
         except Exception as e:
+            MAX_SLEEP_TIME = 10
+            rand_sleep = np.random.uniform(0, MAX_SLEEP_TIME)
             if agent_name:
-                progress.update_status(agent_name, None, f"Error - retry {attempt + 1}/{max_retries}")
+                progress.update_status(agent_name, None, f"Error - retry {attempt + 1}/{max_retries} with {rand_sleep}s sleep")
+            sleep(rand_sleep)
             
             if attempt == max_retries - 1:
                 print(f"Error in LLM call after {max_retries} attempts: {e}")

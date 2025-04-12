@@ -4,6 +4,11 @@ from .analysts import ANALYST_ORDER
 import os
 import json
 
+from src.utils.logger_config import get_logger
+
+# 设置日志记录
+logger = get_logger()
+
 
 def sort_agent_signals(signals):
     """Sort agent signals in a consistent order."""
@@ -23,13 +28,12 @@ def print_trading_output(result: dict) -> None:
     """
     decisions = result.get("decisions")
     if not decisions:
-        print(f"{Fore.RED}No trading decisions available{Style.RESET_ALL}")
+        logger.info(f"{Fore.RED}No trading decisions available{Style.RESET_ALL}")
         return
 
     # Print decisions for each ticker
     for ticker, decision in decisions.items():
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}Analysis for {Fore.CYAN}{ticker}{Style.RESET_ALL}")
-        print(f"{Fore.WHITE}{Style.BRIGHT}{'=' * 50}{Style.RESET_ALL}")
+        logger.info(f"{Fore.WHITE}{Style.BRIGHT}Analysis for {Fore.CYAN}{ticker}{Style.RESET_ALL}")
 
         # Prepare analyst signals table for this ticker
         table_data = []
@@ -98,8 +102,9 @@ def print_trading_output(result: dict) -> None:
         # Sort the signals according to the predefined order
         table_data = sort_agent_signals(table_data)
 
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}AGENT ANALYSIS:{Style.RESET_ALL} [{Fore.CYAN}{ticker}{Style.RESET_ALL}]")
-        print(
+        logger.info(f"{Fore.WHITE}{Style.BRIGHT}AGENT ANALYSIS:{Style.RESET_ALL} [{Fore.CYAN}{ticker}{Style.RESET_ALL}]")
+        logger.info(
+            "\n" + 
             tabulate(
                 table_data,
                 headers=[f"{Fore.WHITE}Agent", "Signal", "Confidence", "Reasoning"],
@@ -148,11 +153,11 @@ def print_trading_output(result: dict) -> None:
             ["Reasoning", f"{Fore.WHITE}{wrapped_reasoning}{Style.RESET_ALL}"],
         ]
         
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}TRADING DECISION:{Style.RESET_ALL} [{Fore.CYAN}{ticker}{Style.RESET_ALL}]")
-        print(tabulate(decision_data, tablefmt="grid", colalign=("left", "left")))
+        logger.info(f"{Fore.WHITE}{Style.BRIGHT}TRADING DECISION:{Style.RESET_ALL} [{Fore.CYAN}{ticker}{Style.RESET_ALL}]")
+        logger.info("\n" +  tabulate(decision_data, tablefmt="grid", colalign=("left", "left")))
 
     # Print Portfolio Summary
-    print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
+    logger.info(f"{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
     portfolio_data = []
     
     # Extract portfolio manager reasoning (common for all tickers)
@@ -183,7 +188,8 @@ def print_trading_output(result: dict) -> None:
     headers = [f"{Fore.WHITE}Ticker", "Action", "Quantity", "Confidence"]
     
     # Print the portfolio summary table
-    print(
+    logger.info(
+        "\n" + 
         tabulate(
             portfolio_data,
             headers=headers,
@@ -208,8 +214,8 @@ def print_trading_output(result: dict) -> None:
         # Wrap long reasoning text to make it more readable
         wrapped_reasoning = ""
         current_line = ""
-        # Use a fixed width of 60 characters to match the table column width
-        max_line_length = 60
+        # Use a fixed width of 600 characters to match the table column width
+        max_line_length = 600
         for word in reasoning_str.split():
             if len(current_line) + len(word) + 1 > max_line_length:
                 wrapped_reasoning += current_line + "\n"
@@ -222,8 +228,8 @@ def print_trading_output(result: dict) -> None:
         if current_line:
             wrapped_reasoning += current_line
             
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}Portfolio Strategy:{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}{wrapped_reasoning}{Style.RESET_ALL}")
+        logger.info(f"{Fore.WHITE}{Style.BRIGHT}Portfolio Strategy:{Style.RESET_ALL}")
+        logger.info(f"{Fore.CYAN}{wrapped_reasoning}{Style.RESET_ALL}")
 
 
 def print_backtest_results(table_rows: list) -> None:
@@ -245,31 +251,31 @@ def print_backtest_results(table_rows: list) -> None:
     # Display latest portfolio summary
     if summary_rows:
         latest_summary = summary_rows[-1]
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
+        logger.info(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
 
         # Extract values and remove commas before converting to float
         cash_str = latest_summary[7].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
         position_str = latest_summary[6].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
         total_str = latest_summary[8].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
 
-        print(f"Cash Balance: {Fore.CYAN}${float(cash_str):,.2f}{Style.RESET_ALL}")
-        print(f"Total Position Value: {Fore.YELLOW}${float(position_str):,.2f}{Style.RESET_ALL}")
-        print(f"Total Value: {Fore.WHITE}${float(total_str):,.2f}{Style.RESET_ALL}")
-        print(f"Return: {latest_summary[9]}")
+        logger.info(f"Cash Balance: {Fore.CYAN}${float(cash_str):,.2f}{Style.RESET_ALL}")
+        logger.info(f"Total Position Value: {Fore.YELLOW}${float(position_str):,.2f}{Style.RESET_ALL}")
+        logger.info(f"Total Value: {Fore.WHITE}${float(total_str):,.2f}{Style.RESET_ALL}")
+        logger.info(f"Return: {latest_summary[9]}")
         
         # Display performance metrics if available
         if latest_summary[10]:  # Sharpe ratio
-            print(f"Sharpe Ratio: {latest_summary[10]}")
+            logger.info(f"Sharpe Ratio: {latest_summary[10]}")
         if latest_summary[11]:  # Sortino ratio
-            print(f"Sortino Ratio: {latest_summary[11]}")
+            logger.info(f"Sortino Ratio: {latest_summary[11]}")
         if latest_summary[12]:  # Max drawdown
-            print(f"Max Drawdown: {latest_summary[12]}")
+            logger.info(f"Max Drawdown: {latest_summary[12]}")
 
     # Add vertical spacing
-    print("\n" * 2)
+    logger.info("\n" * 2)
 
     # Print the table with just ticker rows
-    print(
+    logger.info(
         tabulate(
             ticker_rows,
             headers=[
@@ -301,7 +307,7 @@ def print_backtest_results(table_rows: list) -> None:
     )
 
     # Add vertical spacing
-    print("\n" * 4)
+    logger.info("\n" * 4)
 
 
 def format_backtest_row(

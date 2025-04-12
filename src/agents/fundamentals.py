@@ -12,7 +12,7 @@ logger = get_logger()
 ##### Fundamental Agent #####
 def fundamentals_agent(state: AgentState):
     """Analyzes fundamental data and generates trading signals for multiple tickers."""
-    logger.info("[FUNDAMENTALS_AGENT] 开始执行基本面分析Agent ...")
+    # logger.info("[FUNDAMENTALS_ANALYST_AGENT] 开始执行基本面分析Agent ...")
     # logger.info("当前市场为: " + state["metadata"]["market"])
     data = state["data"]
     end_date = data["end_date"]

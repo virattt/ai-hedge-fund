@@ -5,10 +5,15 @@ import json
 
 from tools.api import get_financial_metrics, get_market_cap, search_line_items
 
+from src.utils.logger_config import get_logger
+
+# 设置日志记录
+logger = get_logger()
 
 ##### Valuation Agent #####
 def valuation_agent(state: AgentState):
     """Performs detailed valuation analysis using multiple methodologies for multiple tickers."""
+    # logger.info("[VALUATION_ANALYST_AGENT] 开始执行价值面分析Agent ...")
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]

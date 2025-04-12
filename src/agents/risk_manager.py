@@ -13,7 +13,7 @@ logger = get_logger()
 ##### Risk Management Agent #####
 def risk_management_agent(state: AgentState):
     """Controls position sizing based on real-world risk factors for multiple tickers."""
-    logger.info("[RISK_MANAGEMENT_AGENT] 开始执行风险控制Agent ...")
+    # logger.info("[RISK_MANAGEMENT_AGENT] 开始执行风险控制Agent ...")
     portfolio = state["data"]["portfolio"]
     data = state["data"]
     market = state["metadata"]["market"]

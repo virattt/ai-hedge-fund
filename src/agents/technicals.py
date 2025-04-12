@@ -10,7 +10,10 @@ import numpy as np
 
 from tools.api import get_prices, prices_to_df
 from utils.progress import progress
+from src.utils.logger_config import get_logger
 
+# 设置日志记录
+logger = get_logger()
 
 ##### Technical Analyst #####
 def technical_analyst_agent(state: AgentState):
@@ -22,6 +25,7 @@ def technical_analyst_agent(state: AgentState):
     4. Volatility Analysis
     5. Statistical Arbitrage Signals
     """
+    # logger.info("[TECHNICAL_ANALYST_AGENT] 开始执行技术面分析Agent ...")
     data = state["data"]
     start_date = data["start_date"]
     end_date = data["end_date"]
@@ -87,28 +91,28 @@ def technical_analyst_agent(state: AgentState):
         technical_analysis[ticker] = {
             "signal": combined_signal["signal"],
             "confidence": round(combined_signal["confidence"] * 100),
-            "strategy_signals": {
-                "trend_following": {
+            "reasoning": {
+                "trend_following_signals": {
                     "signal": trend_signals["signal"],
                     "confidence": round(trend_signals["confidence"] * 100),
                     "metrics": normalize_pandas(trend_signals["metrics"]),
                 },
-                "mean_reversion": {
+                "mean_reversion_signals": {
                     "signal": mean_reversion_signals["signal"],
                     "confidence": round(mean_reversion_signals["confidence"] * 100),
                     "metrics": normalize_pandas(mean_reversion_signals["metrics"]),
                 },
-                "momentum": {
+                "momentum_signals": {
                     "signal": momentum_signals["signal"],
                     "confidence": round(momentum_signals["confidence"] * 100),
                     "metrics": normalize_pandas(momentum_signals["metrics"]),
                 },
-                "volatility": {
+                "volatility_signals": {
                     "signal": volatility_signals["signal"],
                     "confidence": round(volatility_signals["confidence"] * 100),
                     "metrics": normalize_pandas(volatility_signals["metrics"]),
                 },
-                "statistical_arbitrage": {
+                "statistical_arbitrage_signals": {
                     "signal": stat_arb_signals["signal"],
                     "confidence": round(stat_arb_signals["confidence"] * 100),
                     "metrics": normalize_pandas(stat_arb_signals["metrics"]),
@@ -406,11 +410,11 @@ def calculate_rsi(prices_df: pd.DataFrame, period: int = 14) -> pd.Series:
     return rsi
 
 
-def calculate_bollinger_bands(prices_df: pd.DataFrame, window: int = 20) -> tuple[pd.Series, pd.Series]:
+def calculate_bollinger_bands(prices_df: pd.DataFrame, window: int = 20, std_range: int = 2) -> tuple[pd.Series, pd.Series]:
     sma = prices_df["close"].rolling(window).mean()
     std_dev = prices_df["close"].rolling(window).std()
-    upper_band = sma + (std_dev * 2)
-    lower_band = sma - (std_dev * 2)
+    upper_band = sma + (std_dev * std_range)
+    lower_band = sma - (std_dev * std_range)
     return upper_band, lower_band
 
 

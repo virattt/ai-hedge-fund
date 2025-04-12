@@ -26,7 +26,7 @@ class PortfolioManagerOutput(BaseModel):
 ##### Portfolio Management Agent #####
 def portfolio_management_agent(state: AgentState):
     """Makes final trading decisions and generates orders for multiple tickers"""
-    logger.info("[PORTFOLIO_MANAGEMENT_AGENT] 开始执行投资组合管理Agent ...")
+    # logger.info("[PORTFOLIO_MANAGEMENT_AGENT] 开始执行投资组合管理Agent ...")
     
     # Get the portfolio and analyst signals
     portfolio = state["data"]["portfolio"]

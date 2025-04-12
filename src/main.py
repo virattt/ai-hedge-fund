@@ -234,7 +234,7 @@ if __name__ == "__main__":
         sys.exit(0)
     else:
         selected_analysts = choices
-        logger.info(f"Selected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n")
+        logger.info(f"Selected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}.")
 
     # Select LLM model
     model_choice = questionary.select(
@@ -256,17 +256,17 @@ if __name__ == "__main__":
         model_info = get_model_info(model_choice)
         if model_info:
             model_provider = model_info.provider.value
-            logger.info(f"Selected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+            logger.info(f"Selected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}.")
         else:
             model_provider = "Unknown"
-            logger.info(f"Selected model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+            logger.info(f"Selected model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}.")
 
     # Create the workflow with selected analysts
     workflow = create_workflow(selected_analysts)
     app = workflow.compile()
 
     if args.show_agent_graph:
-        file_path = ""
+        file_path = "logs/"
         if selected_analysts is not None:
             for selected_analyst in selected_analysts:
                 file_path += selected_analyst + "_"
@@ -311,7 +311,7 @@ if __name__ == "__main__":
 
     for cur_market, cur_tickers in market_classification.items():
         # Run the hedge fund for different markets
-        logger.info(f"{Fore.CYAN}Running hedge fund for {cur_market} market...{Style.RESET_ALL}\n")
+        logger.info(f"{Fore.CYAN}Running hedge fund for {cur_market} market...{Style.RESET_ALL}")
         # Initialize portfolio with cash amount and stock positions
         portfolio = {
             "cash": args.initial_cash,  # Initial cash amount
