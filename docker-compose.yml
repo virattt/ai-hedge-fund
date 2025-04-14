@@ -1,0 +1,10 @@
+version: "3.9"
+services:
+  ai-hedge-fund:
+    build: .
+    container_name: ai-hedge-fund
+    env_file: .env
+    stdin_open: true
+    tty: true
+    volumes:
+      - .:/app
