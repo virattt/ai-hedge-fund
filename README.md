@@ -137,6 +137,9 @@ docker-compose build --no-cache
 docker-compose run --rm ai-hedge-fund
 ```
 
+**Important**: Adjust the parameters in the Dockerfile as needed, particularly the final section that defines the entry point.
+
+
 ## Project Structure 
 ```
 ai-hedge-fund/
