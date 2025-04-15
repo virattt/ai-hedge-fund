@@ -101,6 +101,16 @@ AVAILABLE_MODELS = [
         provider=ModelProvider.GROQ
     ),
     LLMModel(
+        display_name="[groq] deepseek-r1-distill-llama-70b",
+        model_name="deepseek-r1-distill-llama-70b",
+        provider=ModelProvider.GROQ
+    ),
+    LLMModel(
+        display_name="[groq] deepseek-r1-distill-qwen-32b",
+        model_name="deepseek-r1-distill-qwen-32b",
+        provider=ModelProvider.GROQ
+    ),
+    LLMModel(
         display_name="[openai] gpt-4.5",
         model_name="gpt-4.5-preview",
         provider=ModelProvider.OPENAI
