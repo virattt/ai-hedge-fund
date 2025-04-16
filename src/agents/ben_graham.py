@@ -1,14 +1,16 @@
-from langchain_openai import ChatOpenAI
+import json
+import math
+from typing import Any
+
+from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel
+from typing_extensions import Literal
+
 from graph.state import AgentState, show_agent_reasoning
 from tools.api import get_financial_metrics, get_market_cap, search_line_items
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage
-from pydantic import BaseModel
-import json
-from typing_extensions import Literal
-from utils.progress import progress
 from utils.llm import call_llm
-import math
+from utils.progress import progress
 
 
 class BenGrahamSignal(BaseModel):
@@ -36,24 +38,53 @@ def ben_graham_agent(state: AgentState):
         progress.update_status("ben_graham_agent", ticker, "Fetching financial metrics")
         metrics = get_financial_metrics(ticker, end_date, period="annual", limit=10)
 
-        progress.update_status("ben_graham_agent", ticker, "Gathering financial line items")
-        financial_line_items = search_line_items(ticker, ["earnings_per_share", "revenue", "net_income", "book_value_per_share", "total_assets", "total_liabilities", "current_assets", "current_liabilities", "dividends_and_other_cash_distributions", "outstanding_shares"], end_date, period="annual", limit=10)
+        progress.update_status(
+            "ben_graham_agent", ticker, "Gathering financial line items"
+        )
+        financial_line_items = search_line_items(
+            ticker,
+            [
+                "earnings_per_share",
+                "revenue",
+                "net_income",
+                "book_value_per_share",
+                "total_assets",
+                "total_liabilities",
+                "current_assets",
+                "current_liabilities",
+                "dividends_and_other_cash_distributions",
+                "outstanding_shares",
+            ],
+            end_date,
+            period="annual",
+            limit=10,
+        )
 
         progress.update_status("ben_graham_agent", ticker, "Getting market cap")
         market_cap = get_market_cap(ticker, end_date)
 
         # Perform sub-analyses
-        progress.update_status("ben_graham_agent", ticker, "Analyzing earnings stability")
+        progress.update_status(
+            "ben_graham_agent", ticker, "Analyzing earnings stability"
+        )
         earnings_analysis = analyze_earnings_stability(metrics, financial_line_items)
 
-        progress.update_status("ben_graham_agent", ticker, "Analyzing financial strength")
+        progress.update_status(
+            "ben_graham_agent", ticker, "Analyzing financial strength"
+        )
         strength_analysis = analyze_financial_strength(metrics, financial_line_items)
 
         progress.update_status("ben_graham_agent", ticker, "Analyzing Graham valuation")
-        valuation_analysis = analyze_valuation_graham(metrics, financial_line_items, market_cap)
+        valuation_analysis = analyze_valuation_graham(
+            metrics, financial_line_items, market_cap
+        )
 
         # Aggregate scoring
-        total_score = earnings_analysis["score"] + strength_analysis["score"] + valuation_analysis["score"]
+        total_score = (
+            earnings_analysis["score"]
+            + strength_analysis["score"]
+            + valuation_analysis["score"]
+        )
         max_possible_score = 15  # total possible from the three analysis functions
 
         # Map total_score to signal
@@ -64,9 +95,18 @@ def ben_graham_agent(state: AgentState):
         else:
             signal = "neutral"
 
-        analysis_data[ticker] = {"signal": signal, "score": total_score, "max_score": max_possible_score, "earnings_analysis": earnings_analysis, "strength_analysis": strength_analysis, "valuation_analysis": valuation_analysis}
+        analysis_data[ticker] = {
+            "signal": signal,
+            "score": total_score,
+            "max_score": max_possible_score,
+            "earnings_analysis": earnings_analysis,
+            "strength_analysis": strength_analysis,
+            "valuation_analysis": valuation_analysis,
+        }
 
-        progress.update_status("ben_graham_agent", ticker, "Generating Ben Graham analysis")
+        progress.update_status(
+            "ben_graham_agent", ticker, "Generating Ben Graham analysis"
+        )
         graham_output = generate_graham_output(
             ticker=ticker,
             analysis_data=analysis_data,
@@ -74,7 +114,11 @@ def ben_graham_agent(state: AgentState):
             model_provider=state["metadata"]["model_provider"],
         )
 
-        graham_analysis[ticker] = {"signal": graham_output.signal, "confidence": graham_output.confidence, "reasoning": graham_output.reasoning}
+        graham_analysis[ticker] = {
+            "signal": graham_output.signal,
+            "confidence": graham_output.confidence,
+            "reasoning": graham_output.reasoning,
+        }
 
         progress.update_status("ben_graham_agent", ticker, "Done")
 
@@ -102,7 +146,10 @@ def analyze_earnings_stability(metrics: list, financial_line_items: list) -> dic
     details = []
 
     if not metrics or not financial_line_items:
-        return {"score": score, "details": "Insufficient data for earnings stability analysis"}
+        return {
+            "score": score,
+            "details": "Insufficient data for earnings stability analysis",
+        }
 
     eps_vals = []
     for item in financial_line_items:
@@ -162,9 +209,13 @@ def analyze_financial_strength(metrics: list, financial_line_items: list) -> dic
             score += 1
             details.append(f"Current ratio = {current_ratio:.2f} (moderately strong).")
         else:
-            details.append(f"Current ratio = {current_ratio:.2f} (<1.5: weaker liquidity).")
+            details.append(
+                f"Current ratio = {current_ratio:.2f} (<1.5: weaker liquidity)."
+            )
     else:
-        details.append("Cannot compute current ratio (missing or zero current_liabilities).")
+        details.append(
+            "Cannot compute current ratio (missing or zero current_liabilities)."
+        )
 
     # 2. Debt vs. Assets
     if total_assets > 0:
@@ -174,14 +225,22 @@ def analyze_financial_strength(metrics: list, financial_line_items: list) -> dic
             details.append(f"Debt ratio = {debt_ratio:.2f}, under 0.50 (conservative).")
         elif debt_ratio < 0.8:
             score += 1
-            details.append(f"Debt ratio = {debt_ratio:.2f}, somewhat high but could be acceptable.")
+            details.append(
+                f"Debt ratio = {debt_ratio:.2f}, somewhat high but could be acceptable."
+            )
         else:
-            details.append(f"Debt ratio = {debt_ratio:.2f}, quite high by Graham standards.")
+            details.append(
+                f"Debt ratio = {debt_ratio:.2f}, quite high by Graham standards."
+            )
     else:
         details.append("Cannot compute debt ratio (missing total_assets).")
 
     # 3. Dividend track record
-    div_periods = [item.dividends_and_other_cash_distributions for item in financial_line_items if item.dividends_and_other_cash_distributions is not None]
+    div_periods = [
+        item.dividends_and_other_cash_distributions
+        for item in financial_line_items
+        if item.dividends_and_other_cash_distributions is not None
+    ]
     if div_periods:
         # In many data feeds, dividend outflow is shown as a negative number
         # (money going out to shareholders). We'll consider any negative as 'paid a dividend'.
@@ -190,9 +249,13 @@ def analyze_financial_strength(metrics: list, financial_line_items: list) -> dic
             # e.g. if at least half the periods had dividends
             if div_paid_years >= (len(div_periods) // 2 + 1):
                 score += 1
-                details.append("Company paid dividends in the majority of the reported years.")
+                details.append(
+                    "Company paid dividends in the majority of the reported years."
+                )
             else:
-                details.append("Company has some dividend payments, but not most years.")
+                details.append(
+                    "Company has some dividend payments, but not most years."
+                )
         else:
             details.append("Company did not pay dividends in these periods.")
     else:
@@ -201,7 +264,9 @@ def analyze_financial_strength(metrics: list, financial_line_items: list) -> dic
     return {"score": score, "details": "; ".join(details)}
 
 
-def analyze_valuation_graham(metrics: list, financial_line_items: list, market_cap: float) -> dict:
+def analyze_valuation_graham(
+    metrics: list, financial_line_items: list, market_cap: float
+) -> dict:
     """
     Core Graham approach to valuation:
     1. Net-Net Check: (Current Assets - Total Liabilities) vs. Market Cap
@@ -240,9 +305,13 @@ def analyze_valuation_graham(metrics: list, financial_line_items: list, market_c
             # For partial net-net discount
             if net_current_asset_value_per_share >= (price_per_share * 0.67):
                 score += 2
-                details.append("NCAV Per Share >= 2/3 of Price Per Share (moderate net-net discount).")
+                details.append(
+                    "NCAV Per Share >= 2/3 of Price Per Share (moderate net-net discount)."
+                )
     else:
-        details.append("NCAV not exceeding market cap or insufficient data for net-net approach.")
+        details.append(
+            "NCAV not exceeding market cap or insufficient data for net-net approach."
+        )
 
     # 2. Graham Number
     #   GrahamNumber = sqrt(22.5 * EPS * BVPS).
@@ -253,7 +322,9 @@ def analyze_valuation_graham(metrics: list, financial_line_items: list, market_c
         graham_number = math.sqrt(22.5 * eps * book_value_ps)
         details.append(f"Graham Number = {graham_number:.2f}")
     else:
-        details.append("Unable to compute Graham Number (EPS or Book Value missing/<=0).")
+        details.append(
+            "Unable to compute Graham Number (EPS or Book Value missing/<=0)."
+        )
 
     # 3. Margin of Safety relative to Graham Number
     if graham_number and shares_outstanding > 0:
@@ -268,9 +339,13 @@ def analyze_valuation_graham(metrics: list, financial_line_items: list, market_c
                 score += 1
                 details.append("Some margin of safety relative to Graham Number.")
             else:
-                details.append("Price close to or above Graham Number, low margin of safety.")
+                details.append(
+                    "Price close to or above Graham Number, low margin of safety."
+                )
         else:
-            details.append("Current price is zero or invalid; can't compute margin of safety.")
+            details.append(
+                "Current price is zero or invalid; can't compute margin of safety."
+            )
     # else: already appended details for missing graham_number
 
     return {"score": score, "details": "; ".join(details)}
@@ -278,7 +353,7 @@ def analyze_valuation_graham(metrics: list, financial_line_items: list, market_c
 
 def generate_graham_output(
     ticker: str,
-    analysis_data: dict[str, any],
+    analysis_data: dict[str, Any],
     model_name: str,
     model_provider: str,
 ) -> BenGrahamSignal:
@@ -310,7 +385,7 @@ def generate_graham_output(
             For example, if bearish: "Despite consistent earnings, the current price of $50 exceeds our calculated Graham Number of $35, offering no margin of safety. Additionally, the current ratio of only 1.2 falls below Graham's preferred 2.0 threshold..."
                         
             Return a rational recommendation: bullish, bearish, or neutral, with a confidence level (0-100) and thorough reasoning.
-            """
+            """,
         ),
         (
             "human",
@@ -325,17 +400,21 @@ def generate_graham_output(
               "confidence": float (0-100),
               "reasoning": "string"
             }}
-            """
-        )
+            """,
+        ),
     ])
 
     prompt = template.invoke({
         "analysis_data": json.dumps(analysis_data, indent=2),
-        "ticker": ticker
+        "ticker": ticker,
     })
 
     def create_default_ben_graham_signal():
-        return BenGrahamSignal(signal="neutral", confidence=0.0, reasoning="Error in generating analysis; defaulting to neutral.")
+        return BenGrahamSignal(
+            signal="neutral",
+            confidence=0.0,
+            reasoning="Error in generating analysis; defaulting to neutral.",
+        )
 
     return call_llm(
         prompt=prompt,

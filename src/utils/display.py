@@ -1,15 +1,20 @@
+import json
+import os
+from typing import Any
+
 from colorama import Fore, Style
 from tabulate import tabulate
+
 from .analysts import ANALYST_ORDER
-import os
-import json
 
 
 def sort_agent_signals(signals):
     """Sort agent signals in a consistent order."""
     # Create order mapping from ANALYST_ORDER
     analyst_order = {display: idx for idx, (display, _) in enumerate(ANALYST_ORDER)}
-    analyst_order["Risk Management"] = len(ANALYST_ORDER)  # Add Risk Management at the end
+    analyst_order["Risk Management"] = len(
+        ANALYST_ORDER
+    )  # Add Risk Management at the end
 
     return sorted(signals, key=lambda x: analyst_order.get(x[0], 999))
 
@@ -28,7 +33,9 @@ def print_trading_output(result: dict) -> None:
 
     # Print decisions for each ticker
     for ticker, decision in decisions.items():
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}Analysis for {Fore.CYAN}{ticker}{Style.RESET_ALL}")
+        print(
+            f"\n{Fore.WHITE}{Style.BRIGHT}Analysis for {Fore.CYAN}{ticker}{Style.RESET_ALL}"
+        )
         print(f"{Fore.WHITE}{Style.BRIGHT}{'=' * 50}{Style.RESET_ALL}")
 
         # Prepare analyst signals table for this ticker
@@ -36,7 +43,7 @@ def print_trading_output(result: dict) -> None:
         for agent, signals in result.get("analyst_signals", {}).items():
             if ticker not in signals:
                 continue
-                
+
             # Skip Risk Management agent in the signals section
             if agent == "risk_management_agent":
                 continue
@@ -51,12 +58,12 @@ def print_trading_output(result: dict) -> None:
                 "BEARISH": Fore.RED,
                 "NEUTRAL": Fore.YELLOW,
             }.get(signal_type, Fore.WHITE)
-            
+
             # Get reasoning if available
             reasoning_str = ""
             if "reasoning" in signal and signal["reasoning"]:
                 reasoning = signal["reasoning"]
-                
+
                 # Handle different types of reasoning (string, dict, etc.)
                 if isinstance(reasoning, str):
                     reasoning_str = reasoning
@@ -66,7 +73,7 @@ def print_trading_output(result: dict) -> None:
                 else:
                     # Convert any other type to string
                     reasoning_str = str(reasoning)
-                
+
                 # Wrap long reasoning text to make it more readable
                 wrapped_reasoning = ""
                 current_line = ""
@@ -83,22 +90,22 @@ def print_trading_output(result: dict) -> None:
                             current_line = word
                 if current_line:
                     wrapped_reasoning += current_line
-                
+
                 reasoning_str = wrapped_reasoning
 
-            table_data.append(
-                [
-                    f"{Fore.CYAN}{agent_name}{Style.RESET_ALL}",
-                    f"{signal_color}{signal_type}{Style.RESET_ALL}",
-                    f"{Fore.WHITE}{confidence}%{Style.RESET_ALL}",
-                    f"{Fore.WHITE}{reasoning_str}{Style.RESET_ALL}",
-                ]
-            )
+            table_data.append([
+                f"{Fore.CYAN}{agent_name}{Style.RESET_ALL}",
+                f"{signal_color}{signal_type}{Style.RESET_ALL}",
+                f"{Fore.WHITE}{confidence}%{Style.RESET_ALL}",
+                f"{Fore.WHITE}{reasoning_str}{Style.RESET_ALL}",
+            ])
 
         # Sort the signals according to the predefined order
         table_data = sort_agent_signals(table_data)
 
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}AGENT ANALYSIS:{Style.RESET_ALL} [{Fore.CYAN}{ticker}{Style.RESET_ALL}]")
+        print(
+            f"\n{Fore.WHITE}{Style.BRIGHT}AGENT ANALYSIS:{Style.RESET_ALL} [{Fore.CYAN}{ticker}{Style.RESET_ALL}]"
+        )
         print(
             tabulate(
                 table_data,
@@ -147,21 +154,23 @@ def print_trading_output(result: dict) -> None:
             ],
             ["Reasoning", f"{Fore.WHITE}{wrapped_reasoning}{Style.RESET_ALL}"],
         ]
-        
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}TRADING DECISION:{Style.RESET_ALL} [{Fore.CYAN}{ticker}{Style.RESET_ALL}]")
+
+        print(
+            f"\n{Fore.WHITE}{Style.BRIGHT}TRADING DECISION:{Style.RESET_ALL} [{Fore.CYAN}{ticker}{Style.RESET_ALL}]"
+        )
         print(tabulate(decision_data, tablefmt="grid", colalign=("left", "left")))
 
     # Print Portfolio Summary
     print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
     portfolio_data = []
-    
+
     # Extract portfolio manager reasoning (common for all tickers)
     portfolio_manager_reasoning = None
-    for ticker, decision in decisions.items():
+    for _, decision in decisions.items():
         if decision.get("reasoning"):
             portfolio_manager_reasoning = decision.get("reasoning")
             break
-            
+
     for ticker, decision in decisions.items():
         action = decision.get("action", "").upper()
         action_color = {
@@ -171,17 +180,15 @@ def print_trading_output(result: dict) -> None:
             "COVER": Fore.GREEN,
             "SHORT": Fore.RED,
         }.get(action, Fore.WHITE)
-        portfolio_data.append(
-            [
-                f"{Fore.CYAN}{ticker}{Style.RESET_ALL}",
-                f"{action_color}{action}{Style.RESET_ALL}",
-                f"{action_color}{decision.get('quantity')}{Style.RESET_ALL}",
-                f"{Fore.WHITE}{decision.get('confidence'):.1f}%{Style.RESET_ALL}",
-            ]
-        )
+        portfolio_data.append([
+            f"{Fore.CYAN}{ticker}{Style.RESET_ALL}",
+            f"{action_color}{action}{Style.RESET_ALL}",
+            f"{action_color}{decision.get('quantity')}{Style.RESET_ALL}",
+            f"{Fore.WHITE}{decision.get('confidence'):.1f}%{Style.RESET_ALL}",
+        ])
 
     headers = [f"{Fore.WHITE}Ticker", "Action", "Quantity", "Confidence"]
-    
+
     # Print the portfolio summary table
     print(
         tabulate(
@@ -191,7 +198,7 @@ def print_trading_output(result: dict) -> None:
             colalign=("left", "center", "right", "right"),
         )
     )
-    
+
     # Print Portfolio Manager's reasoning if available
     if portfolio_manager_reasoning:
         # Handle different types of reasoning (string, dict, etc.)
@@ -204,7 +211,7 @@ def print_trading_output(result: dict) -> None:
         else:
             # Convert any other type to string
             reasoning_str = str(portfolio_manager_reasoning)
-            
+
         # Wrap long reasoning text to make it more readable
         wrapped_reasoning = ""
         current_line = ""
@@ -221,7 +228,7 @@ def print_trading_output(result: dict) -> None:
                     current_line = word
         if current_line:
             wrapped_reasoning += current_line
-            
+
         print(f"\n{Fore.WHITE}{Style.BRIGHT}Portfolio Strategy:{Style.RESET_ALL}")
         print(f"{Fore.CYAN}{wrapped_reasoning}{Style.RESET_ALL}")
 
@@ -241,22 +248,29 @@ def print_backtest_results(table_rows: list) -> None:
         else:
             ticker_rows.append(row)
 
-    
     # Display latest portfolio summary
     if summary_rows:
         latest_summary = summary_rows[-1]
         print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
 
         # Extract values and remove commas before converting to float
-        cash_str = latest_summary[7].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
-        position_str = latest_summary[6].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
-        total_str = latest_summary[8].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
+        cash_str = (
+            latest_summary[7].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
+        )
+        position_str = (
+            latest_summary[6].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
+        )
+        total_str = (
+            latest_summary[8].split("$")[1].split(Style.RESET_ALL)[0].replace(",", "")
+        )
 
         print(f"Cash Balance: {Fore.CYAN}${float(cash_str):,.2f}{Style.RESET_ALL}")
-        print(f"Total Position Value: {Fore.YELLOW}${float(position_str):,.2f}{Style.RESET_ALL}")
+        print(
+            f"Total Position Value: {Fore.YELLOW}${float(position_str):,.2f}{Style.RESET_ALL}"
+        )
         print(f"Total Value: {Fore.WHITE}${float(total_str):,.2f}{Style.RESET_ALL}")
         print(f"Return: {latest_summary[9]}")
-        
+
         # Display performance metrics if available
         if latest_summary[10]:  # Sharpe ratio
             print(f"Sharpe Ratio: {latest_summary[10]}")
@@ -323,7 +337,7 @@ def format_backtest_row(
     sharpe_ratio: float = None,
     sortino_ratio: float = None,
     max_drawdown: float = None,
-) -> list[any]:
+) -> list[Any]:
     """Format a row for the backtest results table"""
     # Color the action
     action_color = {
@@ -347,9 +361,15 @@ def format_backtest_row(
             f"{Fore.CYAN}${cash_balance:,.2f}{Style.RESET_ALL}",  # Cash Balance
             f"{Fore.WHITE}${total_value:,.2f}{Style.RESET_ALL}",  # Total Value
             f"{return_color}{return_pct:+.2f}%{Style.RESET_ALL}",  # Return
-            f"{Fore.YELLOW}{sharpe_ratio:.2f}{Style.RESET_ALL}" if sharpe_ratio is not None else "",  # Sharpe Ratio
-            f"{Fore.YELLOW}{sortino_ratio:.2f}{Style.RESET_ALL}" if sortino_ratio is not None else "",  # Sortino Ratio
-            f"{Fore.RED}{abs(max_drawdown):.2f}%{Style.RESET_ALL}" if max_drawdown is not None else "",  # Max Drawdown
+            f"{Fore.YELLOW}{sharpe_ratio:.2f}{Style.RESET_ALL}"
+            if sharpe_ratio is not None
+            else "",  # Sharpe Ratio
+            f"{Fore.YELLOW}{sortino_ratio:.2f}{Style.RESET_ALL}"
+            if sortino_ratio is not None
+            else "",  # Sortino Ratio
+            f"{Fore.RED}{abs(max_drawdown):.2f}%{Style.RESET_ALL}"
+            if max_drawdown is not None
+            else "",  # Max Drawdown
         ]
     else:
         return [

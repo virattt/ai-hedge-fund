@@ -6,8 +6,8 @@ from agents.cathie_wood import cathie_wood_agent
 from agents.charlie_munger import charlie_munger_agent
 from agents.fundamentals import fundamentals_agent
 from agents.michael_burry import michael_burry_agent
-from agents.phil_fisher import phil_fisher_agent
 from agents.peter_lynch import peter_lynch_agent
+from agents.phil_fisher import phil_fisher_agent
 from agents.sentiment import sentiment_agent
 from agents.stanley_druckenmiller import stanley_druckenmiller_agent
 from agents.technicals import technical_analyst_agent
