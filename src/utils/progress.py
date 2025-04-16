@@ -1,10 +1,10 @@
+from typing import Dict, Optional
+
 from rich.console import Console
 from rich.live import Live
-from rich.table import Table
 from rich.style import Style
+from rich.table import Table
 from rich.text import Text
-from typing import Dict, Optional
-from datetime import datetime
 
 console = Console()
 

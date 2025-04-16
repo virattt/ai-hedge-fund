@@ -1,27 +1,26 @@
+import itertools
 import sys
-
 from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
-import questionary
 
 import matplotlib.pyplot as plt
-import pandas as pd
-from colorama import Fore, Style, init
 import numpy as np
-import itertools
+import pandas as pd
+import questionary
+from colorama import Fore, Style, init
+from dateutil.relativedelta import relativedelta
+from typing_extensions import Callable
 
-from llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider
-from utils.analysts import ANALYST_ORDER
+from llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, ModelProvider, get_model_info
 from main import run_hedge_fund
 from tools.api import (
     get_company_news,
-    get_price_data,
-    get_prices,
     get_financial_metrics,
     get_insider_trades,
+    get_price_data,
+    get_prices,
 )
-from utils.display import print_backtest_results, format_backtest_row
-from typing_extensions import Callable
+from utils.analysts import ANALYST_ORDER
+from utils.display import format_backtest_row, print_backtest_results
 from utils.ollama import ensure_ollama_and_model
 
 init(autoreset=True)
@@ -222,10 +221,7 @@ class Backtester:
                 avg_short_price = position["short_cost_basis"] if position["short"] > 0 else 0
                 realized_gain = (avg_short_price - current_price) * quantity
 
-                if position["short"] > 0:
-                    portion = quantity / position["short"]
-                else:
-                    portion = 1.0
+                portion = quantity / position["short"] if position["short"] > 0 else 1.0
 
                 margin_to_release = portion * position["short_margin_used"]
 

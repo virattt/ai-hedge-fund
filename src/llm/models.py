@@ -1,13 +1,14 @@
 import os
+from enum import Enum
+from typing import Tuple
+
 from langchain_anthropic import ChatAnthropic
 from langchain_deepseek import ChatDeepSeek
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
-from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
-from enum import Enum
+from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
-from typing import Tuple, List, Dict, Any, Optional
 
 
 class ModelProvider(str, Enum):
@@ -33,7 +34,7 @@ class LLMModel(BaseModel):
     
     def has_json_mode(self) -> bool:
         """Check if the model supports JSON mode"""
-        if self.is_deepseek() or self.is_gemini():
+        if self.is_deepseek():
             return False
         # Only certain Ollama models support JSON mode
         if self.is_ollama():

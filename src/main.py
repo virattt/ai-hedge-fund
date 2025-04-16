@@ -1,32 +1,24 @@
+import argparse
+import json
 import sys
+from datetime import datetime
 
+import questionary
+from colorama import Fore, Style, init
+from dateutil.relativedelta import relativedelta
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
-from colorama import Fore, Back, Style, init
-import questionary
-from agents.ben_graham import ben_graham_agent
-from agents.bill_ackman import bill_ackman_agent
-from agents.fundamentals import fundamentals_agent
-from agents.portfolio_manager import portfolio_management_agent
-from agents.technicals import technical_analyst_agent
-from agents.risk_manager import risk_management_agent
-from agents.sentiment import sentiment_agent
-from agents.warren_buffett import warren_buffett_agent
-from graph.state import AgentState
-from agents.valuation import valuation_agent
-from utils.display import print_trading_output
-from utils.analysts import ANALYST_ORDER, get_analyst_nodes
-from utils.progress import progress
-from llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider
-from utils.ollama import ensure_ollama_and_model
 
-import argparse
-from datetime import datetime
-from dateutil.relativedelta import relativedelta
-from tabulate import tabulate
+from agents.portfolio_manager import portfolio_management_agent
+from agents.risk_manager import risk_management_agent
+from graph.state import AgentState
+from llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, ModelProvider, get_model_info
+from utils.analysts import ANALYST_ORDER, get_analyst_nodes
+from utils.display import print_trading_output
+from utils.ollama import ensure_ollama_and_model
+from utils.progress import progress
 from utils.visualize import save_graph_as_png
-import json
 
 # Load environment variables from .env file
 load_dotenv()
@@ -42,12 +34,15 @@ def parse_hedge_fund_response(response):
         print(f"JSON decoding error: {e}\nResponse: {repr(response)}")
         return None
     except TypeError as e:
-        print(f"Invalid response type (expected string, got {type(response).__name__}): {e}")
+        print(
+            f"Invalid response type (expected string, got {type(response).__name__}): {e}"
+        )
         return None
     except Exception as e:
-        print(f"Unexpected error while parsing response: {e}\nResponse: {repr(response)}")
+        print(
+            f"Unexpected error while parsing response: {e}\nResponse: {repr(response)}"
+        )
         return None
-
 
 
 ##### Run the Hedge Fund #####
@@ -147,22 +142,31 @@ if __name__ == "__main__":
         "--initial-cash",
         type=float,
         default=100000.0,
-        help="Initial cash position. Defaults to 100000.0)"
+        help="Initial cash position. Defaults to 100000.0)",
     )
     parser.add_argument(
         "--margin-requirement",
         type=float,
         default=0.0,
-        help="Initial margin requirement. Defaults to 0.0"
+        help="Initial margin requirement. Defaults to 0.0",
     )
-    parser.add_argument("--tickers", type=str, required=True, help="Comma-separated list of stock ticker symbols")
+    parser.add_argument(
+        "--tickers",
+        type=str,
+        required=True,
+        help="Comma-separated list of stock ticker symbols",
+    )
     parser.add_argument(
         "--start-date",
         type=str,
         help="Start date (YYYY-MM-DD). Defaults to 3 months before end date",
     )
-    parser.add_argument("--end-date", type=str, help="End date (YYYY-MM-DD). Defaults to today")
-    parser.add_argument("--show-reasoning", action="store_true", help="Show reasoning from each agent")
+    parser.add_argument(
+        "--end-date", type=str, help="End date (YYYY-MM-DD). Defaults to today"
+    )
+    parser.add_argument(
+        "--show-reasoning", action="store_true", help="Show reasoning from each agent"
+    )
     parser.add_argument(
         "--show-agent-graph", action="store_true", help="Show the agent graph"
     )
@@ -179,17 +183,17 @@ if __name__ == "__main__":
     selected_analysts = None
     choices = questionary.checkbox(
         "Select your AI analysts.",
-        choices=[questionary.Choice(display, value=value) for display, value in ANALYST_ORDER],
+        choices=[
+            questionary.Choice(display, value=value) for display, value in ANALYST_ORDER
+        ],
         instruction="\n\nInstructions: \n1. Press Space to select/unselect analysts.\n2. Press 'a' to select/unselect all.\n3. Press Enter when done to run the hedge fund.\n",
         validate=lambda x: len(x) > 0 or "You must select at least one analyst.",
-        style=questionary.Style(
-            [
-                ("checkbox-selected", "fg:green"),
-                ("selected", "fg:green noinherit"),
-                ("highlighted", "noinherit"),
-                ("pointer", "noinherit"),
-            ]
-        ),
+        style=questionary.Style([
+            ("checkbox-selected", "fg:green"),
+            ("selected", "fg:green noinherit"),
+            ("highlighted", "noinherit"),
+            ("pointer", "noinherit"),
+        ]),
     ).ask()
 
     if not choices:
@@ -197,49 +201,61 @@ if __name__ == "__main__":
         sys.exit(0)
     else:
         selected_analysts = choices
-        print(f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n")
+        print(
+            f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n"
+        )
 
     # Select LLM model based on whether Ollama is being used
     model_choice = None
     model_provider = None
-    
+
     if args.ollama:
         print(f"{Fore.CYAN}Using Ollama for local LLM inference.{Style.RESET_ALL}")
-        
+
         # Select from Ollama-specific models
         model_choice = questionary.select(
             "Select your Ollama model:",
-            choices=[questionary.Choice(display, value=value) for display, value, _ in OLLAMA_LLM_ORDER],
+            choices=[
+                questionary.Choice(display, value=value)
+                for display, value, _ in OLLAMA_LLM_ORDER
+            ],
             style=questionary.Style([
                 ("selected", "fg:green bold"),
                 ("pointer", "fg:green bold"),
                 ("highlighted", "fg:green"),
                 ("answer", "fg:green bold"),
-            ])
+            ]),
         ).ask()
-        
+
         if not model_choice:
             print("\n\nInterrupt received. Exiting...")
             sys.exit(0)
-        
+
         # Ensure Ollama is installed, running, and the model is available
         if not ensure_ollama_and_model(model_choice):
-            print(f"{Fore.RED}Cannot proceed without Ollama and the selected model.{Style.RESET_ALL}")
+            print(
+                f"{Fore.RED}Cannot proceed without Ollama and the selected model.{Style.RESET_ALL}"
+            )
             sys.exit(1)
-        
+
         model_provider = ModelProvider.OLLAMA.value
-        print(f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+        print(
+            f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n"
+        )
     else:
         # Use the standard cloud-based LLM selection
         model_choice = questionary.select(
             "Select your LLM model:",
-            choices=[questionary.Choice(display, value=value) for display, value, _ in LLM_ORDER],
+            choices=[
+                questionary.Choice(display, value=value)
+                for display, value, _ in LLM_ORDER
+            ],
             style=questionary.Style([
                 ("selected", "fg:green bold"),
                 ("pointer", "fg:green bold"),
                 ("highlighted", "fg:green"),
                 ("answer", "fg:green bold"),
-            ])
+            ]),
         ).ask()
 
         if not model_choice:
@@ -250,10 +266,14 @@ if __name__ == "__main__":
             model_info = get_model_info(model_choice)
             if model_info:
                 model_provider = model_info.provider.value
-                print(f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+                print(
+                    f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n"
+                )
             else:
                 model_provider = "Unknown"
-                print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+                print(
+                    f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n"
+                )
 
     # Create the workflow with selected analysts
     workflow = create_workflow(selected_analysts)
@@ -271,14 +291,14 @@ if __name__ == "__main__":
     if args.start_date:
         try:
             datetime.strptime(args.start_date, "%Y-%m-%d")
-        except ValueError:
-            raise ValueError("Start date must be in YYYY-MM-DD format")
+        except ValueError as exc:
+            raise ValueError("Start date must be in YYYY-MM-DD format") from exc
 
     if args.end_date:
         try:
             datetime.strptime(args.end_date, "%Y-%m-%d")
-        except ValueError:
-            raise ValueError("End date must be in YYYY-MM-DD format")
+        except ValueError as exc:
+            raise ValueError("End date must be in YYYY-MM-DD format") from exc
 
     # Set the start and end dates
     end_date = args.end_date or datetime.now().strftime("%Y-%m-%d")
@@ -301,14 +321,16 @@ if __name__ == "__main__":
                 "long_cost_basis": 0.0,  # Average cost basis for long positions
                 "short_cost_basis": 0.0,  # Average price at which shares were sold short
                 "short_margin_used": 0.0,  # Dollars of margin used for this ticker's short
-            } for ticker in tickers
+            }
+            for ticker in tickers
         },
         "realized_gains": {
             ticker: {
                 "long": 0.0,  # Realized gains from long positions
                 "short": 0.0,  # Realized gains from short positions
-            } for ticker in tickers
-        }
+            }
+            for ticker in tickers
+        },
     }
 
     # Run the hedge fund

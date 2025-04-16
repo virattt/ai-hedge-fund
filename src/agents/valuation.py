@@ -1,9 +1,10 @@
-from langchain_core.messages import HumanMessage
-from graph.state import AgentState, show_agent_reasoning
-from utils.progress import progress
 import json
 
+from langchain_core.messages import HumanMessage
+
+from graph.state import AgentState, show_agent_reasoning
 from tools.api import get_financial_metrics, get_market_cap, search_line_items
+from utils.progress import progress
 
 
 ##### Valuation Agent #####
@@ -28,9 +29,11 @@ def valuation_agent(state: AgentState):
 
         # Add safety check for financial metrics
         if not financial_metrics:
-            progress.update_status("valuation_agent", ticker, "Failed: No financial metrics found")
+            progress.update_status(
+                "valuation_agent", ticker, "Failed: No financial metrics found"
+            )
             continue
-        
+
         metrics = financial_metrics[0]
 
         progress.update_status("valuation_agent", ticker, "Gathering line items")
@@ -51,7 +54,9 @@ def valuation_agent(state: AgentState):
 
         # Add safety check for financial line items
         if len(financial_line_items) < 2:
-            progress.update_status("valuation_agent", ticker, "Failed: Insufficient financial line items")
+            progress.update_status(
+                "valuation_agent", ticker, "Failed: Insufficient financial line items"
+            )
             continue
 
         # Pull the current and previous financial line items
@@ -60,7 +65,10 @@ def valuation_agent(state: AgentState):
 
         progress.update_status("valuation_agent", ticker, "Calculating owner earnings")
         # Calculate working capital change
-        working_capital_change = current_financial_line_item.working_capital - previous_financial_line_item.working_capital
+        working_capital_change = (
+            current_financial_line_item.working_capital
+            - previous_financial_line_item.working_capital
+        )
 
         # Owner Earnings Valuation (Buffett Method)
         owner_earnings_value = calculate_owner_earnings_value(
@@ -102,12 +110,24 @@ def valuation_agent(state: AgentState):
         # Create the reasoning
         reasoning = {}
         reasoning["dcf_analysis"] = {
-            "signal": ("bullish" if dcf_gap > 0.15 else "bearish" if dcf_gap < -0.15 else "neutral"),
+            "signal": (
+                "bullish"
+                if dcf_gap > 0.15
+                else "bearish"
+                if dcf_gap < -0.15
+                else "neutral"
+            ),
             "details": f"Intrinsic Value: ${dcf_value:,.2f}, Market Cap: ${market_cap:,.2f}, Gap: {dcf_gap:.1%}",
         }
 
         reasoning["owner_earnings_analysis"] = {
-            "signal": ("bullish" if owner_earnings_gap > 0.15 else "bearish" if owner_earnings_gap < -0.15 else "neutral"),
+            "signal": (
+                "bullish"
+                if owner_earnings_gap > 0.15
+                else "bearish"
+                if owner_earnings_gap < -0.15
+                else "neutral"
+            ),
             "details": f"Owner Earnings Value: ${owner_earnings_value:,.2f}, Market Cap: ${market_cap:,.2f}, Gap: {owner_earnings_gap:.1%}",
         }
 
@@ -173,7 +193,10 @@ def calculate_owner_earnings_value(
     Returns:
         float: Intrinsic value with margin of safety
     """
-    if not all([isinstance(x, (int, float)) for x in [net_income, depreciation, capex, working_capital_change]]):
+    if not all([
+        isinstance(x, (int, float))
+        for x in [net_income, depreciation, capex, working_capital_change]
+    ]):
         return 0
 
     # Calculate initial owner earnings
@@ -191,7 +214,9 @@ def calculate_owner_earnings_value(
 
     # Calculate terminal value (using perpetuity growth formula)
     terminal_growth = min(growth_rate, 0.03)  # Cap terminal growth at 3%
-    terminal_value = (future_values[-1] * (1 + terminal_growth)) / (required_return - terminal_growth)
+    terminal_value = (future_values[-1] * (1 + terminal_growth)) / (
+        required_return - terminal_growth
+    )
     terminal_value_discounted = terminal_value / (1 + required_return) ** num_years
 
     # Sum all values and apply margin of safety
@@ -222,7 +247,11 @@ def calculate_intrinsic_value(
         present_values.append(present_value)
 
     # Calculate the terminal value
-    terminal_value = cash_flows[-1] * (1 + terminal_growth_rate) / (discount_rate - terminal_growth_rate)
+    terminal_value = (
+        cash_flows[-1]
+        * (1 + terminal_growth_rate)
+        / (discount_rate - terminal_growth_rate)
+    )
     terminal_present_value = terminal_value / (1 + discount_rate) ** num_years
 
     # Sum up the present values and terminal value
