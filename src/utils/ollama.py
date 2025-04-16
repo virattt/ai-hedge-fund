@@ -8,6 +8,10 @@ from typing import List
 import questionary
 from colorama import Fore, Style
 
+system = platform.system().lower()
+if system == "windows":
+    system = "win32"
+    
 # Constants
 OLLAMA_SERVER_URL = "http://localhost:11434"
 OLLAMA_API_MODELS_ENDPOINT = f"{OLLAMA_SERVER_URL}/api/tags"
@@ -24,8 +28,7 @@ INSTALLATION_INSTRUCTIONS = {
 
 
 def is_ollama_installed() -> bool:
-    """Check if Ollama is installed on the system."""
-    system = platform.system().lower()
+    """Check if Ollama is installed on the system."""    
     
     if system == "darwin" or system == "linux":  # macOS or Linux
         try:
@@ -79,9 +82,7 @@ def start_ollama_server() -> bool:
     if is_ollama_server_running():
         print(f"{Fore.GREEN}Ollama server is already running.{Style.RESET_ALL}")
         return True
-    
-    system = platform.system().lower()
-    
+        
     try:
         if system == "darwin" or system == "linux":  # macOS or Linux
             subprocess.Popen(["ollama", "serve"], 
@@ -112,7 +113,6 @@ def start_ollama_server() -> bool:
 
 def install_ollama() -> bool:
     """Install Ollama on the system."""
-    system = platform.system().lower()
     if system not in OLLAMA_DOWNLOAD_URL:
         print(f"{Fore.RED}Unsupported operating system for automatic installation: {system}{Style.RESET_ALL}")
         print(f"Please visit https://ollama.com/download to install Ollama manually.")
