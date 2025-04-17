@@ -13,12 +13,12 @@ OLLAMA_SERVER_URL = "http://localhost:11434"
 OLLAMA_API_MODELS_ENDPOINT = f"{OLLAMA_SERVER_URL}/api/tags"
 OLLAMA_DOWNLOAD_URL = {
     "darwin": "https://ollama.com/download/darwin",     # macOS
-    "windows": "https://ollama.com/download/windows",     # Windows
+    "win32": "https://ollama.com/download/windows",     # Windows
     "linux": "https://ollama.com/download/linux"        # Linux
 }
 INSTALLATION_INSTRUCTIONS = {
     "darwin": "curl -fsSL https://ollama.com/install.sh | sh",
-    "windows": "# Download from https://ollama.com/download/windows and run the installer",
+    "win32": "# Download from https://ollama.com/download/windows and run the installer",
     "linux": "curl -fsSL https://ollama.com/install.sh | sh"
 }
 
@@ -36,13 +36,13 @@ def is_ollama_installed() -> bool:
             return result.returncode == 0
         except Exception:
             return False
-    elif system == "windows":  # Windows
+    elif system == "win32":  # Windows
         try:
             result = subprocess.run(["where", "ollama"], 
                                    stdout=subprocess.PIPE, 
                                    stderr=subprocess.PIPE, 
                                    text=True,
-                                   shell=False)
+                                   shell=True)
             return result.returncode == 0
         except Exception:
             return False
@@ -91,7 +91,7 @@ def start_ollama_server() -> bool:
             subprocess.Popen(["ollama", "serve"], 
                            stdout=subprocess.PIPE, 
                            stderr=subprocess.PIPE,
-                           shell=False)
+                           shell=True)
         else:
             print(f"{Fore.RED}Unsupported operating system: {system}{Style.RESET_ALL}")
             return False
@@ -184,15 +184,15 @@ def install_ollama() -> bool:
         except Exception as e:
             print(f"{Fore.RED}Error during Ollama installation: {e}{Style.RESET_ALL}")
             return False
-    elif system == "windows":  # Windows
+    elif system == "win32":  # Windows
         print(f"{Fore.YELLOW}Automatic installation on Windows is not supported.{Style.RESET_ALL}")
-        print(f"Please download and install Ollama from: {OLLAMA_DOWNLOAD_URL['windows']}")
+        print(f"Please download and install Ollama from: {OLLAMA_DOWNLOAD_URL['win32']}")
         
         # Ask if they want to open the download page
         if questionary.confirm("Do you want to open the Ollama download page in your browser?").ask():
             try:
                 import webbrowser
-                webbrowser.open(OLLAMA_DOWNLOAD_URL['windows'])
+                webbrowser.open(OLLAMA_DOWNLOAD_URL['win32'])
                 print(f"{Fore.YELLOW}After installation, please restart this application.{Style.RESET_ALL}")
                 
                 # Ask if they want to try continuing after installation
