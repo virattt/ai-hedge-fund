@@ -1,0 +1,88 @@
+name: Django CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        django-version: ["4.2", "5.0"]
+        postgres-version: [14, 15]
+        
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres-version }}
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://testuser:testpass@localhost:5432/testdb
+      DJANGO_SETTINGS_MODULE: your_project.settings.test
+      PYTHONUNBUFFERED: 1
+      DEBUG: "False"
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip install -r requirements.txt
+        pip install django==${{ matrix.django-version }}
+        pip install pytest pytest-django pytest-cov
+
+    - name: Run migrations
+      run: python manage.py migrate --noinput
+
+    - name: Run security checks
+      run: |
+        pip install bandit safety
+        bandit -r .
+        safety check -r requirements.txt
+
+    - name: Run tests
+      run: |
+        pytest --cov=./ --cov-report=xml --ds=$DJANGO_SETTINGS_MODULE --disable-warnings -v
+      env:
+        DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      if: always()
+
+    - name: Lint code
+      run: |
+        pip install flake8 black
+        flake8 .
+        black --check --diff .
