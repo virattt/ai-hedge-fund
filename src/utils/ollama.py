@@ -13,12 +13,12 @@ OLLAMA_SERVER_URL = "http://localhost:11434"
 OLLAMA_API_MODELS_ENDPOINT = f"{OLLAMA_SERVER_URL}/api/tags"
 OLLAMA_DOWNLOAD_URL = {
     "darwin": "https://ollama.com/download/darwin",     # macOS
-    "win32": "https://ollama.com/download/windows",     # Windows
+    "windows": "https://ollama.com/download/windows",     # Windows
     "linux": "https://ollama.com/download/linux"        # Linux
 }
 INSTALLATION_INSTRUCTIONS = {
     "darwin": "curl -fsSL https://ollama.com/install.sh | sh",
-    "win32": "# Download from https://ollama.com/download/windows and run the installer",
+    "windows": "# Download from https://ollama.com/download/windows and run the installer",
     "linux": "curl -fsSL https://ollama.com/install.sh | sh"
 }
 
@@ -36,7 +36,7 @@ def is_ollama_installed() -> bool:
             return result.returncode == 0
         except Exception:
             return False
-    elif system == "win32":  # Windows
+    elif system == "windows":  # Windows
         try:
             result = subprocess.run(["where", "ollama"], 
                                    stdout=subprocess.PIPE, 
@@ -184,15 +184,15 @@ def install_ollama() -> bool:
         except Exception as e:
             print(f"{Fore.RED}Error during Ollama installation: {e}{Style.RESET_ALL}")
             return False
-    elif system == "win32":  # Windows
+    elif system == "windows":  # Windows
         print(f"{Fore.YELLOW}Automatic installation on Windows is not supported.{Style.RESET_ALL}")
-        print(f"Please download and install Ollama from: {OLLAMA_DOWNLOAD_URL['win32']}")
+        print(f"Please download and install Ollama from: {OLLAMA_DOWNLOAD_URL['windows']}")
         
         # Ask if they want to open the download page
         if questionary.confirm("Do you want to open the Ollama download page in your browser?").ask():
             try:
                 import webbrowser
-                webbrowser.open(OLLAMA_DOWNLOAD_URL['win32'])
+                webbrowser.open(OLLAMA_DOWNLOAD_URL['windows'])
                 print(f"{Fore.YELLOW}After installation, please restart this application.{Style.RESET_ALL}")
                 
                 # Ask if they want to try continuing after installation
