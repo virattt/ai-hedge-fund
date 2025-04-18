@@ -7,9 +7,13 @@ import time
 from typing import List
 import questionary
 from colorama import Fore, Style
+import os
+import dotenv
+
+dotenv.load_dotenv()
 
 # Constants
-OLLAMA_SERVER_URL = "http://localhost:11434"
+OLLAMA_SERVER_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_API_MODELS_ENDPOINT = f"{OLLAMA_SERVER_URL}/api/tags"
 OLLAMA_DOWNLOAD_URL = {
     "darwin": "https://ollama.com/download/darwin",     # macOS
@@ -29,7 +33,7 @@ def is_ollama_installed() -> bool:
     
     if system == "darwin" or system == "linux":  # macOS or Linux
         try:
-            result = subprocess.run(["which", "ollama"], 
+            result = subprocess.run(["curl", OLLAMA_API_MODELS_ENDPOINT], 
                                    stdout=subprocess.PIPE, 
                                    stderr=subprocess.PIPE, 
                                    text=True)
@@ -38,7 +42,7 @@ def is_ollama_installed() -> bool:
             return False
     elif system == "windows":  # Windows
         try:
-            result = subprocess.run(["where", "ollama"], 
+            result = subprocess.run(["curl", OLLAMA_API_MODELS_ENDPOINT], 
                                    stdout=subprocess.PIPE, 
                                    stderr=subprocess.PIPE, 
                                    text=True,
