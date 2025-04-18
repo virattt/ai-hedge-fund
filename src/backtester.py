@@ -654,27 +654,52 @@ class Backtester:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run the hedge fund backtester")
-    parser.add_argument("--tickers", type=str, required=True, help="Comma-separated list of stock ticker symbols")
-    parser.add_argument("--start-date", type=str, help="Start date (YYYY-MM-DD). Defaults to 3 months before end date")
-    parser.add_argument("--end-date", type=str, help="End date (YYYY-MM-DD). Defaults to today")
-    parser.add_argument("--initial-cash", type=float, default=100000.0, help="Initial cash position. Defaults to 100000.0")
-    parser.add_argument("--margin-requirement", type=float, default=0.0, help="Initial margin requirement. Defaults to 0.0")
-    parser.add_argument("--show-reasoning", action="store_true", help="Show reasoning from each agent")
-    parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
-    parser.add_argument("--akashchat", action="store_true", help="Use Akash Chat for LLM inference")
+    parser = argparse.ArgumentParser(description="Run backtesting simulation")
+    parser.add_argument(
+        "--tickers",
+        type=str,
+        required=False,
+        help="Comma-separated list of stock ticker symbols (e.g., AAPL,MSFT,GOOGL)",
+    )
+    parser.add_argument(
+        "--end-date",
+        type=str,
+        default=datetime.now().strftime("%Y-%m-%d"),
+        help="End date in YYYY-MM-DD format",
+    )
+    parser.add_argument(
+        "--start-date",
+        type=str,
+        default=(datetime.now() - relativedelta(months=1)).strftime("%Y-%m-%d"),
+        help="Start date in YYYY-MM-DD format",
+    )
+    parser.add_argument(
+        "--initial-capital",
+        type=float,
+        default=100000,
+        help="Initial capital amount (default: 100000)",
+    )
+    parser.add_argument(
+        "--margin-requirement",
+        type=float,
+        default=0.0,
+        help="Margin ratio for short positions, e.g. 0.5 for 50% (default: 0.0)",
+    )
+    parser.add_argument(
+        "--ollama", action="store_true", help="Use Ollama for local LLM inference"
+    )
 
     args = parser.parse_args()
 
     # Parse tickers from comma-separated string
-    tickers = [ticker.strip() for ticker in args.tickers.split(",")]
+    tickers = [ticker.strip() for ticker in args.tickers.split(",")] if args.tickers else []
 
-    # Select analysts
+    # Choose analysts
     selected_analysts = None
     choices = questionary.checkbox(
-        "Select your AI analysts.",
+        "Use the Space bar to select/unselect analysts.",
         choices=[questionary.Choice(display, value=value) for display, value in ANALYST_ORDER],
-        instruction="\n\nInstructions: \n1. Press Space to select/unselect analysts.\n2. Press 'a' to select/unselect all.\n3. Press Enter when done to run the hedge fund.\n",
+        instruction="\n\nPress 'a' to toggle all.\n\nPress Enter when done to run the hedge fund.",
         validate=lambda x: len(x) > 0 or "You must select at least one analyst.",
         style=questionary.Style(
             [
@@ -691,9 +716,12 @@ if __name__ == "__main__":
         sys.exit(0)
     else:
         selected_analysts = choices
-        print(f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n")
+        print(
+            f"\nSelected analysts: "
+            f"{', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}"
+        )
 
-    # Select LLM model based on whether Ollama or Akash Chat is being used
+    # Select LLM model based on whether Ollama is being used
     model_choice = None
     model_provider = None
     
@@ -723,28 +751,6 @@ if __name__ == "__main__":
         
         model_provider = ModelProvider.OLLAMA.value
         print(f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
-    elif args.akashchat:
-        print(f"{Fore.CYAN}Using Akash Chat for LLM inference.{Style.RESET_ALL}")
-        
-        # Filter for Akash Chat models
-        akash_models = [m for m in LLM_ORDER if m[2] == ModelProvider.AKASH_CHAT.value]
-        model_choice = questionary.select(
-            "Select your Akash Chat model:",
-            choices=[questionary.Choice(display, value=value) for display, value, _ in akash_models],
-            style=questionary.Style([
-                ("selected", "fg:green bold"),
-                ("pointer", "fg:green bold"),
-                ("highlighted", "fg:green"),
-                ("answer", "fg:green bold"),
-            ])
-        ).ask()
-        
-        if not model_choice:
-            print("\n\nInterrupt received. Exiting...")
-            sys.exit(0)
-        
-        model_provider = ModelProvider.AKASH_CHAT.value
-        print(f"\nSelected {Fore.CYAN}Akash Chat{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
     else:
         # Use the standard cloud-based LLM selection
         model_choice = questionary.select(
@@ -762,7 +768,6 @@ if __name__ == "__main__":
             print("\n\nInterrupt received. Exiting...")
             sys.exit(0)
         else:
-            # Get model info using the helper function
             model_info = get_model_info(model_choice)
             if model_info:
                 model_provider = model_info.provider.value
@@ -777,7 +782,7 @@ if __name__ == "__main__":
         tickers=tickers,
         start_date=args.start_date,
         end_date=args.end_date,
-        initial_capital=args.initial_cash,
+        initial_capital=args.initial_capital,
         model_name=model_choice,
         model_provider=model_provider,
         selected_analysts=selected_analysts,
