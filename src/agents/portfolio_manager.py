@@ -113,7 +113,7 @@ def generate_trading_decision(
                 * Buy quantity must be ≤ max_shares for that ticker
               
               - For short positions:
-                * Only short if you have available margin (50% of position value required)
+                * Only short if you have available margin (position value × margin requirement)
                 * Only cover if you currently have short shares of that ticker
                 * Cover quantity must be ≤ current short position shares
                 * Short quantity must respect margin requirements
@@ -135,7 +135,8 @@ def generate_trading_decision(
               - portfolio_cash: current cash in portfolio
               - portfolio_positions: current positions (both long and short)
               - current_prices: current prices for each ticker
-              - margin_requirement: current margin requirement for short positions
+              - margin_requirement: current margin requirement for short positions (e.g., 0.5 means 50%)
+              - total_margin_used: total margin currently in use
               """,
             ),
             (
@@ -154,6 +155,7 @@ def generate_trading_decision(
               Portfolio Cash: {portfolio_cash}
               Current Positions: {portfolio_positions}
               Current Margin Requirement: {margin_requirement}
+              Total Margin Used: {total_margin_used}
 
               Output strictly in JSON with the following structure:
               {{
@@ -161,7 +163,7 @@ def generate_trading_decision(
                   "TICKER1": {{
                     "action": "buy/sell/short/cover/hold",
                     "quantity": integer,
-                    "confidence": float,
+                    "confidence": float between 0 and 100,
                     "reasoning": "string"
                   }},
                   "TICKER2": {{
@@ -184,6 +186,7 @@ def generate_trading_decision(
             "portfolio_cash": f"{portfolio.get('cash', 0):.2f}",
             "portfolio_positions": json.dumps(portfolio.get('positions', {}), indent=2),
             "margin_requirement": f"{portfolio.get('margin_requirement', 0):.2f}",
+            "total_margin_used": f"{portfolio.get('margin_used', 0):.2f}",
         }
     )
 

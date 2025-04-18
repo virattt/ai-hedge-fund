@@ -10,14 +10,19 @@ This system employs several agents working together:
 2. Bill Ackman Agent - An activist investor, takes bold positions and pushes for change
 3. Cathie Wood Agent - The queen of growth investing, believes in the power of innovation and disruption
 4. Charlie Munger Agent - Warren Buffett's partner, only buys wonderful businesses at fair prices
-5. Stanley Druckenmiller Agent - Macro trading legend who hunts for asymmetric opportunities with explosive growth potential
-6. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
-7. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
-8. Sentiment Agent - Analyzes market sentiment and generates trading signals
-9. Fundamentals Agent - Analyzes fundamental data and generates trading signals
-10. Technicals Agent - Analyzes technical indicators and generates trading signals
-11. Risk Manager - Calculates risk metrics and sets position limits
-12. Portfolio Manager - Makes final trading decisions and generates orders
+5. Michael Burry Agent - The Big Short contrarian who hunts for deep value
+6. Peter Lynch Agent - Practical investor who seeks "ten-baggers" in everyday businesses
+7. Phil Fisher Agent - Meticulous growth investor who uses deep "scuttlebutt" research 
+8. Stanley Druckenmiller Agent - Macro legend who hunts for asymmetric opportunities with growth potential
+9. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
+10. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
+11. Sentiment Agent - Analyzes market sentiment and generates trading signals
+12. Fundamentals Agent - Analyzes fundamental data and generates trading signals
+13. Technicals Agent - Analyzes technical indicators and generates trading signals
+14. Risk Manager - Calculates risk metrics and sets position limits
+15. Portfolio Manager - Makes final trading decisions and generates orders
+    
+<img width="1042" alt="Screenshot 2025-03-22 at 6 19 07 PM" src="https://github.com/user-attachments/assets/cbae3dcf-b571-490d-b0ad-3f0f035ac0d4" />
 
 <img width="1020" alt="Screenshot 2025-03-08 at 4 45 22 PM" src="https://github.com/user-attachments/assets/d8ab891e-a083-4fed-b514-ccc9322a3e57" />
 
@@ -135,6 +140,12 @@ poetry run python src/main.py --ticker AAPL,MSFT,NVDA
 **Example Output:**
 <img width="992" alt="Screenshot 2025-01-06 at 5 50 17 PM" src="https://github.com/user-attachments/assets/e8ca04bf-9989-4a7d-a8b4-34e04666663b" />
 
+You can also specify a `--ollama` flag to run the AI hedge fund using local LLMs.
+
+```bash
+poetry run python src/main.py --ticker AAPL,MSFT,NVDA --ollama
+```
+
 You can also specify a `--show-reasoning` flag to print the reasoning of each agent to the console.
 
 ```bash
@@ -155,11 +166,18 @@ poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
 **Example Output:**
 <img width="941" alt="Screenshot 2025-01-06 at 5 47 52 PM" src="https://github.com/user-attachments/assets/00e794ea-8628-44e6-9a84-8f8a31ad3b47" />
 
+
 You can optionally specify the start and end dates to backtest over a specific time period.
 
 ```bash
 poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
 ```
+
+You can also specify a `--ollama` flag to run the backtester using local LLMs.
+```bash
+poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --ollama
+```
+
 
 ## Project Structure 
 ```
@@ -193,18 +211,12 @@ ai-hedge-fund-plus/
 │   │   ├── stanley_druckenmiller.py # Stanley Druckenmiller agent
 │   │   ├── warren_buffett.py      # Warren Buffett agent
 │   │   └── valuation.py           # Valuation analysis agent
-│   ├── data/                   # Data handling and processing
-│   ├── graph/                  # Visualization components
-│   ├── llm/                    # LLM integration and models
-│   ├── tools/                  # Agent tools
-│   │   ├── api.py              # API tools
-│   ├── utils/                  # Utility functions
-│   ├── backtester.py           # Backtesting engine
-│   ├── main.py                 # Main CLI entry point
-├── backtester.py               # CLI backtester entry point
-├── pyproject.toml              # Poetry configuration
-├── .env.example                # Example environment variables
-├── LICENSE                     # MIT License
+│   ├── tools/                    # Agent tools
+│   │   ├── api.py                # API tools
+│   ├── backtester.py             # Backtesting tools
+│   ├── main.py # Main entry point
+├── pyproject.toml
+├── ...
 ```
 
 ## License

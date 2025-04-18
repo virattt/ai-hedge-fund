@@ -120,7 +120,7 @@ def charlie_munger_agent(state: AgentState):
             "news_sentiment": analyze_news_sentiment(company_news) if company_news else "No news data available"
         }
         
-        progress.update_status("charlie_munger_agent", ticker, "Generating Munger analysis")
+        progress.update_status("charlie_munger_agent", ticker, "Generating Charlie Munger analysis")
         munger_output = generate_munger_output(
             ticker=ticker, 
             analysis_data=analysis_data,
@@ -692,7 +692,18 @@ def generate_munger_output(
             - Focus on long-term economics rather than short-term metrics.
             - Be skeptical of businesses with rapidly changing dynamics or excessive share dilution.
             - Avoid excessive leverage or financial engineering.
-            - Provide a rational, data-driven recommendation (bullish, bearish, or neutral)."""
+            - Provide a rational, data-driven recommendation (bullish, bearish, or neutral).
+            
+            When providing your reasoning, be thorough and specific by:
+            1. Explaining the key factors that influenced your decision the most (both positive and negative)
+            2. Applying at least 2-3 specific mental models or disciplines to explain your thinking
+            3. Providing quantitative evidence where relevant (e.g., specific ROIC values, margin trends)
+            4. Citing what you would "avoid" in your analysis (invert the problem)
+            5. Using Charlie Munger's direct, pithy conversational style in your explanation
+            
+            For example, if bullish: "The high ROIC of 22% demonstrates the company's moat. When applying basic microeconomics, we can see that competitors would struggle to..."
+            For example, if bearish: "I see this business making a classic mistake in capital allocation. As I've often said about [relevant Mungerism], this company appears to be..."
+            """
         ),
         (
             "human",
