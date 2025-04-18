@@ -155,6 +155,7 @@ ai-hedge-fund/
 │   │   ├── sentiment.py          # Sentiment analysis agent
 │   │   ├── technicals.py         # Technical analysis agent
 │   │   ├── valuation.py          # Valuation analysis agent
+│   │   ├── ...                   # Other agents
 │   │   ├── warren_buffett.py     # Warren Buffett agent
 │   ├── tools/                    # Agent tools
 │   │   ├── api.py                # API tools

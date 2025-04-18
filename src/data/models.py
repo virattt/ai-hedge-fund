@@ -113,6 +113,31 @@ class CompanyNewsResponse(BaseModel):
     news: list[CompanyNews]
 
 
+class CompanyFacts(BaseModel):
+    ticker: str
+    name: str
+    cik: str | None = None
+    industry: str | None = None
+    sector: str | None = None
+    category: str | None = None
+    exchange: str | None = None
+    is_active: bool | None = None
+    listing_date: str | None = None
+    location: str | None = None
+    market_cap: float | None = None
+    number_of_employees: int | None = None
+    sec_filings_url: str | None = None
+    sic_code: str | None = None
+    sic_industry: str | None = None
+    sic_sector: str | None = None
+    website_url: str | None = None
+    weighted_average_shares: int | None = None
+
+
+class CompanyFactsResponse(BaseModel):
+    company_facts: CompanyFacts
+
+
 class Position(BaseModel):
     cash: float = 0.0
     shares: int = 0
