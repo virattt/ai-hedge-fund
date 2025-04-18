@@ -171,24 +171,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Header with support button in the right corner
-st.markdown("""
-<div class="header-container">
-    <div>
-        <div class="main-header">AI Hedge Fund Backtester</div>
-        <p>Backtest your AI-powered hedge fund strategy with historical data.</p>
-    </div>
-    <div class="support-button">
-        <a href="https://buy.stripe.com/5kA3dy2xF5370YE145" target="_blank">
-            <svg width="150" height="40" viewBox="0 0 150 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect width="150" height="40" rx="8" fill="var(--primary-color, #635BFF)"/>
-                <text x="75" y="24" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white" text-anchor="middle">Support This Project</text>
-            </svg>
-        </a>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
 # Sidebar for inputs
 st.sidebar.markdown('<div class="sub-header">Configuration</div>', unsafe_allow_html=True)
 

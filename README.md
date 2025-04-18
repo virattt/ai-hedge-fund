@@ -1,10 +1,6 @@
 # AI Hedge Fund Plus
 
-<div align="center">
-  <a href="https://buy.stripe.com/5kA3dy2xF5370YE145" target="_blank">
-    <img src="https://img.shields.io/badge/Support_This_Project-635BFF?style=for-the-badge&logo=stripe&logoColor=white" alt="Support This Project" />
-  </a>
-</div>
+![Demo](demo.gif)
 
 This is an enhanced version of the AI-powered hedge fund proof of concept. The goal of this project is to explore the use of AI to make trading decisions with an interactive web interface. This project is for **educational** purposes only and is not intended for real trading or investment.
 
@@ -164,124 +160,6 @@ You can optionally specify the start and end dates to backtest over a specific t
 ```bash
 poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
 ```
-
-## Payment Integration
-
-You can monetize the AI Hedge Fund Plus application by integrating a payment system. This section provides instructions for setting up either Stripe or Paddle as your payment processor.
-
-### Stripe Setup
-
-1. **Create a Stripe Account**:
-   - Sign up at [stripe.com](https://stripe.com)
-   - Complete the verification process
-   - Set up your business details
-
-2. **Install Stripe Dependencies**:
-   ```bash
-   poetry add stripe streamlit-stripe
-   ```
-
-3. **Configure Stripe Keys**:
-   Add these to your `.env` file:
-   ```
-   STRIPE_PUBLISHABLE_KEY=your_publishable_key
-   STRIPE_SECRET_KEY=your_secret_key
-   STRIPE_PRICE_ID=your_price_id
-   ```
-
-4. **Create Products and Pricing**:
-   - Log into your Stripe Dashboard
-   - Go to Products > Create Product
-   - Set up subscription tiers (e.g., Basic, Pro, Enterprise)
-   - Note the Price IDs for each tier
-
-5. **Implement Stripe in Your App**:
-   Create a new file `src/payment/stripe_integration.py`:
-   ```python
-   import os
-   import stripe
-   import streamlit as st
-   from dotenv import load_dotenv
-
-   load_dotenv()
-
-   stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
-
-   def create_checkout_session(price_id, success_url, cancel_url):
-       try:
-           checkout_session = stripe.checkout.Session.create(
-               payment_method_types=["card"],
-               line_items=[{"price": price_id, "quantity": 1}],
-               mode="subscription",
-               success_url=success_url,
-               cancel_url=cancel_url,
-           )
-           return checkout_session
-       except Exception as e:
-           return str(e)
-
-   def display_payment_options():
-       st.header("Choose Your Subscription Plan")
-       
-       col1, col2, col3 = st.columns(3)
-       
-       with col1:
-           st.subheader("Basic")
-           st.write("$9.99/month")
-           st.write("- Access to basic features")
-           st.write("- Limited number of stocks")
-           if st.button("Subscribe to Basic"):
-               session = create_checkout_session(
-                   os.getenv("STRIPE_BASIC_PRICE_ID"),
-                   "http://localhost:8501/success",
-                   "http://localhost:8501/cancel"
-               )
-               st.markdown(f"[Proceed to Payment]({{session.url}})")
-       
-       with col2:
-           st.subheader("Pro")
-           st.write("$19.99/month")
-           st.write("- All basic features")
-           st.write("- Unlimited stocks")
-           st.write("- Advanced analytics")
-           if st.button("Subscribe to Pro"):
-               session = create_checkout_session(
-                   os.getenv("STRIPE_PRO_PRICE_ID"),
-                   "http://localhost:8501/success",
-                   "http://localhost:8501/cancel"
-               )
-               st.markdown(f"[Proceed to Payment]({{session.url}})")
-       
-       with col3:
-           st.subheader("Enterprise")
-           st.write("$49.99/month")
-           st.write("- All pro features")
-           st.write("- Priority support")
-           st.write("- Custom analytics")
-           if st.button("Subscribe to Enterprise"):
-               session = create_checkout_session(
-                   os.getenv("STRIPE_ENTERPRISE_PRICE_ID"),
-                   "http://localhost:8501/success",
-                   "http://localhost:8501/cancel"
-               )
-               st.markdown(f"[Proceed to Payment]({{session.url}})")
-   ```
-
-6. **Integrate with Your Streamlit App**:
-   Update `app.py` to include the payment page:
-   ```python
-   # Add this import at the top
-   from src.payment.stripe_integration import display_payment_options
-   
-   # Add this to your sidebar or as a separate page
-   if st.sidebar.button("Subscription Plans"):
-       display_payment_options()
-   ```
-
-7. **Set Up Webhook for Subscription Management**:
-   - Create a webhook endpoint in your application
-   - Configure the webhook in your Stripe Dashboard
-   - Handle events like `customer.subscription.created`, `customer.subscription.updated`, etc.
 
 ## Project Structure 
 ```
