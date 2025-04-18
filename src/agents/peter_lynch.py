@@ -14,7 +14,6 @@ import json
 from typing_extensions import Literal
 from utils.progress import progress
 from utils.llm import call_llm
-import statistics
 
 
 class PeterLynchSignal(BaseModel):

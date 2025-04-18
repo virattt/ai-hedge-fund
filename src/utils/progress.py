@@ -4,7 +4,6 @@ from rich.table import Table
 from rich.style import Style
 from rich.text import Text
 from typing import Dict, Optional
-from datetime import datetime
 
 console = Console()
 
