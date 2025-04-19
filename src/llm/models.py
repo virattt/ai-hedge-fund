@@ -9,6 +9,9 @@ from enum import Enum
 from pydantic import BaseModel
 from typing import Tuple, List, Dict, Any, Optional
 
+import dotenv
+
+dotenv.load_dotenv()
 
 class ModelProvider(str, Enum):
     """Enum for supported LLM providers"""
