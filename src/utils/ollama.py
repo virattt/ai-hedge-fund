@@ -229,7 +229,8 @@ def download_model(model_name: str) -> bool:
             stderr=subprocess.STDOUT,  # Redirect stderr to stdout to capture all output
             text=True,
             bufsize=1,  # Line buffered
-            universal_newlines=True
+            encoding='utf-8',  # Explicitly use UTF-8 encoding
+            errors='replace'   # Replace any characters that cannot be decoded
         )
         
         # Show some progress to the user
