@@ -1,13 +1,13 @@
 import os
-from langchain_anthropic import ChatAnthropic
 from langchain_deepseek import ChatDeepSeek
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
-from langchain_openai import ChatOpenAI
-from langchain_ollama import ChatOllama
+from langchain_community.chat_models.anthropic import ChatAnthropic
+from langchain_community.chat_models.ollama import ChatOllama
+from langchain_community.chat_models.openai import ChatOpenAI
 from enum import Enum
 from pydantic import BaseModel
-from typing import Tuple, List, Dict, Any, Optional
+from typing import Tuple
 
 
 class ModelProvider(str, Enum):
