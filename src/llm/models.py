@@ -5,9 +5,13 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
+from openai import OpenAI
 from enum import Enum
 from pydantic import BaseModel
 from typing import Tuple, List, Dict, Any, Optional
+
+# Add AkashChat import
+from openai import OpenAI as AkashChat
 
 
 class ModelProvider(str, Enum):
@@ -18,6 +22,7 @@ class ModelProvider(str, Enum):
     GROQ = "Groq"
     OPENAI = "OpenAI"
     OLLAMA = "Ollama"
+    AKASH_CHAT = "AkashChat"
 
 
 
@@ -120,6 +125,46 @@ AVAILABLE_MODELS = [
         model_name="o4-mini",
         provider=ModelProvider.OPENAI
     ),
+    LLMModel(
+        display_name="[akash_chat] deepseek-r1",
+        model_name="DeepSeek-R1",
+        provider=ModelProvider.AKASH_CHAT
+    ),
+    LLMModel(
+        display_name="[akash_chat] deepseek-r1-distill-llama-70b",
+        model_name="DeepSeek-R1-Distill-Llama-70B",
+        provider=ModelProvider.AKASH_CHAT
+    ),
+    LLMModel(
+        display_name="[akash_chat] deepseek-r1-distill-qwen-14b",
+        model_name="DeepSeek-R1-Distill-Qwen-14B",
+        provider=ModelProvider.AKASH_CHAT
+    ),
+    LLMModel(
+        display_name="[akash_chat] deepseek-r1-distill-qwen-32b",
+        model_name="DeepSeek-R1-Distill-Qwen-32B",
+        provider=ModelProvider.AKASH_CHAT
+    ),
+    LLMModel(
+        display_name="[akash_chat] llama-3-1-8b",
+        model_name="Meta-Llama-3-1-8B-Instruct-FP8",
+        provider=ModelProvider.AKASH_CHAT
+    ),
+    LLMModel(
+        display_name="[akash_chat] llama-3-2-3b",
+        model_name="Meta-Llama-3-2-3B-Instruct",
+        provider=ModelProvider.AKASH_CHAT
+    ),
+    LLMModel(
+        display_name="[akash_chat] llama-3-3-70b",
+        model_name="Meta-Llama-3-3-70B-Instruct",
+        provider=ModelProvider.AKASH_CHAT
+    ),
+    LLMModel(
+        display_name="[akash_chat] llama-4-maverick-17b",
+        model_name="Meta-Llama-4-Maverick-17B-128E-Instruct-FP8",
+        provider=ModelProvider.AKASH_CHAT
+    ),
 ]
 
 # Define Ollama models separately
@@ -178,7 +223,17 @@ def get_model_info(model_name: str) -> LLMModel | None:
     return next((model for model in all_models if model.model_name == model_name), None)
 
 def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | ChatGroq | ChatOllama | None:
-    if model_provider == ModelProvider.GROQ:
+    if model_provider == ModelProvider.AKASH_CHAT:
+        api_key = os.getenv("AKASH_CHAT_API_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure AKASH_CHAT_API_KEY is set in your .env file.")
+            raise ValueError("Akash Chat API key not found. Please make sure AKASH_CHAT_API_KEY is set in your .env file.")
+        return ChatOpenAI(
+            model=model_name,
+            api_key=api_key,
+            base_url="https://chatapi.akash.network/api/v1"
+        )
+    elif model_provider == ModelProvider.GROQ:
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
             # Print error to console

@@ -161,6 +161,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--ollama", action="store_true", help="Use Ollama for local LLM inference"
     )
+    parser.add_argument(
+        "--akashchat", action="store_true", help="Use Akash Chat for LLM inference"
+    )
 
     args = parser.parse_args()
 
@@ -191,7 +194,7 @@ if __name__ == "__main__":
         selected_analysts = choices
         print(f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n")
 
-    # Select LLM model based on whether Ollama is being used
+    # Select LLM model based on whether Ollama or Akash Chat is being used
     model_choice = None
     model_provider = None
     
@@ -221,6 +224,28 @@ if __name__ == "__main__":
         
         model_provider = ModelProvider.OLLAMA.value
         print(f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+    elif args.akashchat:
+        print(f"{Fore.CYAN}Using Akash Chat for LLM inference.{Style.RESET_ALL}")
+        
+        # Filter for Akash Chat models
+        akash_models = [m for m in LLM_ORDER if m[2] == ModelProvider.AKASH_CHAT.value]
+        model_choice = questionary.select(
+            "Select your Akash Chat model:",
+            choices=[questionary.Choice(display, value=value) for display, value, _ in akash_models],
+            style=questionary.Style([
+                ("selected", "fg:green bold"),
+                ("pointer", "fg:green bold"),
+                ("highlighted", "fg:green"),
+                ("answer", "fg:green bold"),
+            ])
+        ).ask()
+        
+        if not model_choice:
+            print("\n\nInterrupt received. Exiting...")
+            sys.exit(0)
+        
+        model_provider = ModelProvider.AKASH_CHAT.value
+        print(f"\nSelected {Fore.CYAN}Akash Chat{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
     else:
         # Use the standard cloud-based LLM selection
         model_choice = questionary.select(
