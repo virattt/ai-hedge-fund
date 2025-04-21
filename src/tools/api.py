@@ -1,3 +1,4 @@
+import datetime
 import os
 import pandas as pd
 import requests
@@ -14,6 +15,7 @@ from data.models import (
     LineItemResponse,
     InsiderTrade,
     InsiderTradeResponse,
+    CompanyFactsResponse,
 )
 
 # Global cache instance
@@ -250,14 +252,34 @@ def get_company_news(
     return all_news
 
 
-
 def get_market_cap(
     ticker: str,
     end_date: str,
 ) -> float | None:
     """Fetch market cap from the API."""
+    # Check if end_date is today
+    if end_date == datetime.datetime.now().strftime("%Y-%m-%d"):
+        # Get the market cap from company facts API
+        headers = {}
+        if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
+            headers["X-API-KEY"] = api_key
+            
+        url = f"https://api.financialdatasets.ai/company/facts/?ticker={ticker}"
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            print(f"Error fetching company facts: {ticker} - {response.status_code}")
+            return None
+            
+        data = response.json()
+        response_model = CompanyFactsResponse(**data)
+        return response_model.company_facts.market_cap
+
     financial_metrics = get_financial_metrics(ticker, end_date)
+    if not financial_metrics:
+        return None
+    
     market_cap = financial_metrics[0].market_cap
+
     if not market_cap:
         return None
 

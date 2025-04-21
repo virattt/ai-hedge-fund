@@ -111,13 +111,13 @@ AVAILABLE_MODELS = [
         provider=ModelProvider.OPENAI
     ),
     LLMModel(
-        display_name="[openai] o1",
-        model_name="o1",
+        display_name="[openai] o3",
+        model_name="o3",
         provider=ModelProvider.OPENAI
     ),
     LLMModel(
-        display_name="[openai] o3-mini",
-        model_name="o3-mini",
+        display_name="[openai] o4-mini",
+        model_name="o4-mini",
         provider=ModelProvider.OPENAI
     ),
 ]
