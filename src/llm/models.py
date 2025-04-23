@@ -5,6 +5,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
+from langchain_community.chat_models import ChatLlamaCpp
 from enum import Enum
 from pydantic import BaseModel
 from typing import Tuple, List, Dict, Any, Optional
@@ -18,6 +19,7 @@ class ModelProvider(str, Enum):
     GROQ = "Groq"
     OPENAI = "OpenAI"
     OLLAMA = "Ollama"
+    LMSTUDIO = "LM Studio"
 
 
 
@@ -51,6 +53,10 @@ class LLMModel(BaseModel):
     def is_ollama(self) -> bool:
         """Check if the model is an Ollama model"""
         return self.provider == ModelProvider.OLLAMA
+
+    def is_lmstudio(self) -> bool:
+        """Check if the model is a LM Studio model"""
+        return self.provider == ModelProvider.LMSTUDIO
 
 
 # Define available models
@@ -166,6 +172,30 @@ OLLAMA_MODELS = [
     ),
 ]
 
+# Define default LM Studio models
+LMSTUDIO_MODELS = []
+
+def get_lmstudio_models() -> List[LLMModel]:
+    """Get models available from LM Studio server."""
+    from utils.lmstudio import get_available_lmstudio_models, format_model_names
+    
+    # Get models from LM Studio API
+    try:
+        available_models = get_available_lmstudio_models()
+        formatted_models = format_model_names(available_models)
+        
+        models = []
+        for model_info in formatted_models:
+            models.append(LLMModel(
+                display_name=model_info['display_name'],
+                model_name=model_info['model_name'],
+                provider=ModelProvider.LMSTUDIO
+            ))
+                
+        return models
+    except:
+        return []  # If LM Studio server is not running or any other error
+
 # Create LLM_ORDER in the format expected by the UI
 LLM_ORDER = [model.to_choice_tuple() for model in AVAILABLE_MODELS]
 
@@ -174,10 +204,10 @@ OLLAMA_LLM_ORDER = [model.to_choice_tuple() for model in OLLAMA_MODELS]
 
 def get_model_info(model_name: str) -> LLMModel | None:
     """Get model information by model_name"""
-    all_models = AVAILABLE_MODELS + OLLAMA_MODELS
+    all_models = AVAILABLE_MODELS + OLLAMA_MODELS + get_lmstudio_models()
     return next((model for model in all_models if model.model_name == model_name), None)
 
-def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | ChatGroq | ChatOllama | None:
+def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | ChatGroq | ChatOllama | ChatLlamaCpp | None:
     if model_provider == ModelProvider.GROQ:
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
@@ -217,4 +247,12 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
         return ChatOllama(
             model=model_name, 
             base_url=base_url,
+        )
+    elif model_provider == ModelProvider.LMSTUDIO:
+        # For LM Studio, we use a base URL for the OpenAI compatible API
+        base_url = os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")
+        return ChatOpenAI(
+            model=model_name,
+            base_url=base_url,
+            api_key="lm-studio", # LM Studio doesn't need a real API key, but the field is required
         )

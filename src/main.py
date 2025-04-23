@@ -1,4 +1,5 @@
 import sys
+import os
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
@@ -11,8 +12,9 @@ from graph.state import AgentState
 from utils.display import print_trading_output
 from utils.analysts import ANALYST_ORDER, get_analyst_nodes
 from utils.progress import progress
-from llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider
+from llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider, get_lmstudio_models
 from utils.ollama import ensure_ollama_and_model
+from utils.lmstudio import ensure_lmstudio_server
 
 import argparse
 from datetime import datetime
@@ -161,6 +163,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--ollama", action="store_true", help="Use Ollama for local LLM inference"
     )
+    parser.add_argument(
+        "--lmstudio", action="store_true", help="Use LM Studio for local LLM inference"
+    )
 
     args = parser.parse_args()
 
@@ -191,9 +196,13 @@ if __name__ == "__main__":
         selected_analysts = choices
         print(f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n")
 
-    # Select LLM model based on whether Ollama is being used
+    # Select LLM model based on whether Ollama or LM Studio is being used
     model_choice = None
     model_provider = None
+    
+    if args.ollama and args.lmstudio:
+        print(f"{Fore.RED}Error: You cannot use both --ollama and --lmstudio at the same time.{Style.RESET_ALL}")
+        sys.exit(1)
     
     if args.ollama:
         print(f"{Fore.CYAN}Using Ollama for local LLM inference.{Style.RESET_ALL}")
@@ -221,6 +230,43 @@ if __name__ == "__main__":
         
         model_provider = ModelProvider.OLLAMA.value
         print(f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+    elif args.lmstudio:
+        print(f"{Fore.CYAN}Using LM Studio for local LLM inference.{Style.RESET_ALL}")
+        
+        # Ensure LM Studio server is running
+        if not ensure_lmstudio_server():
+            print(f"{Fore.RED}Cannot proceed without LM Studio server running.{Style.RESET_ALL}")
+            sys.exit(1)
+        
+        # Get LM Studio models and create choices
+        lmstudio_models = get_lmstudio_models()
+        if not lmstudio_models:
+            print(f"{Fore.RED}No models available in LM Studio. Please add models in LM Studio first.{Style.RESET_ALL}")
+            sys.exit(1)
+            
+        lmstudio_choices = [
+            questionary.Choice(model.display_name, value=model.model_name) 
+            for model in lmstudio_models
+        ]
+        
+        # Select from LM Studio models
+        model_choice = questionary.select(
+            "Select your LM Studio model:",
+            choices=lmstudio_choices,
+            style=questionary.Style([
+                ("selected", "fg:green bold"),
+                ("pointer", "fg:green bold"),
+                ("highlighted", "fg:green"),
+                ("answer", "fg:green bold"),
+            ])
+        ).ask()
+        
+        if not model_choice:
+            print("\n\nInterrupt received. Exiting...")
+            sys.exit(0)
+        
+        model_provider = ModelProvider.LMSTUDIO.value
+        print(f"\nSelected {Fore.CYAN}LM Studio{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{os.path.basename(model_choice)}{Style.RESET_ALL}\n")
     else:
         # Use the standard cloud-based LLM selection
         model_choice = questionary.select(
