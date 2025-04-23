@@ -94,6 +94,21 @@ Financial data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not requir
 
 For any other ticker, you will need to set the `FINANCIAL_DATASETS_API_KEY` in the .env file.
 
+### Local LLM Setup (Optional)
+
+To use local LLMs, you can set up either Ollama or LM Studio:
+
+#### Ollama
+1. Download and install [Ollama](https://ollama.com/) for your platform
+2. Start the Ollama server
+3. Use the `--ollama` flag when running the hedge fund
+
+#### LM Studio
+1. Download and install [LM Studio](https://lmstudio.ai/) for your platform
+2. Launch LM Studio and load your desired model
+3. Enable the "OpenAI Compatible Server" in Settings > Local Inference Server
+4. Use the `--lmstudio` flag when running the hedge fund
+
 ## Usage
 
 ### Running the Hedge Fund
@@ -108,6 +123,12 @@ You can also specify a `--ollama` flag to run the AI hedge fund using local LLMs
 
 ```bash
 poetry run python src/main.py --ticker AAPL,MSFT,NVDA --ollama
+```
+
+You can also specify a `--lmstudio` flag to run the AI hedge fund using LM Studio for local LLM inference.
+
+```bash
+poetry run python src/main.py --ticker AAPL,MSFT,NVDA --lmstudio
 ```
 
 You can also specify a `--show-reasoning` flag to print the reasoning of each agent to the console.
@@ -142,6 +163,11 @@ You can also specify a `--ollama` flag to run the backtester using local LLMs.
 poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --ollama
 ```
 
+You can also specify a `--lmstudio` flag to run the backtester using LM Studio for local LLM inference.
+```bash
+poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --lmstudio
+```
+
 
 ## Project Structure 
 ```
@@ -157,10 +183,13 @@ ai-hedge-fund/
 │   │   ├── valuation.py          # Valuation analysis agent
 │   │   ├── ...                   # Other agents
 │   │   ├── warren_buffett.py     # Warren Buffett agent
+│   │   ├── ...                   # Other agents
 │   ├── tools/                    # Agent tools
 │   │   ├── api.py                # API tools
 │   ├── backtester.py             # Backtesting tools
-│   ├── main.py # Main entry point
+│   ├── main.py                   # Main entry point
+│   ├── ollama_utils.py           # Utilities for using Ollama
+│   ├── lmstudio_utils.py         # Utilities for using LM Studio
 ├── pyproject.toml
 ├── ...
 ```
