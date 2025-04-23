@@ -94,6 +94,37 @@ Financial data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not requir
 
 For any other ticker, you will need to set the `FINANCIAL_DATASETS_API_KEY` in the .env file.
 
+5. Issues with Poetry Installation due to different Python version
+```bash
+### Commands for Windows
+# 1) Create virtual environment with Python version (in this case 3.11)
+py -3.11 -m venv .venv
+
+# 2) Tell poetry to use Python version interpreter from inside venv
+poetry env use .venv\\Scripts\\python.exe
+
+# 3) (Optional) Regenerate the lock‑file to match the new interpreter
+poetry lock
+
+# 4) Install dependencies 
+poetry install
+```
+
+```bash
+### Commands for Mac/Linux
+# 1) Create a virtual environment with Python version (in this case 3.11)
+python3.11 -m venv .venv
+
+# 2) Tell poetry to use Python version interpreter from inside venv
+poetry env use .venv/bin/python
+
+# 3) (Optional) Regenerate the lock‑file to match the new interpreter
+poetry lock
+
+# 4) Install dependencies
+poetry install
+```
+
 ## Usage
 
 ### Running the Hedge Fund
