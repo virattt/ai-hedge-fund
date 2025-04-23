@@ -24,6 +24,8 @@ wheels/
 # Virtual Environment
 venv/
 ENV/
+.ipynb_checkpoints/
+.ipynb_checkpoints
 
 # Environment Variables
 .env
