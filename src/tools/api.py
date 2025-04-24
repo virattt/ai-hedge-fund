@@ -3,9 +3,9 @@ from datetime import timedelta
 import os
 import pandas as pd
 import requests
-from typing import Optional, List, TypeVar, Generic, Callable, Dict, Any
+from typing import Optional, List, TypeVar, Callable, Dict, Any
 
-from data.cache import get_cache
+from data.cache import get_cache, ttl_seconds
 from data.models import (
     CompanyNews,
     CompanyNewsResponse,
@@ -123,8 +123,8 @@ def get_prices(ticker: str, start_date: str, end_date: str) -> List[Price]:
     if not prices:
         return []
 
-    # Cache the results as dicts with a shorter TTL for price data (e.g., 1 hour)
-    _cache.set_prices(ticker, [p.model_dump() for p in prices], ttl=timedelta(hours=1))
+    # Cache the results as dicts with a shorter TTL for price data (1 hour)
+    _cache.set_prices(ticker, [p.model_dump() for p in prices], ttl=ttl_seconds(timedelta(hours=1)))
     return prices
 
 
@@ -165,8 +165,9 @@ def get_financial_metrics(
     if not financial_metrics:
         return []
 
-    # Cache the results as dicts with a longer TTL for financial data (e.g., 1 week)
-    _cache.set_financial_metrics(ticker, [m.model_dump() for m in financial_metrics], ttl=timedelta(days=7))
+    # Cache the results as dicts with a longer TTL for financial data (1 week)
+    _cache.set_financial_metrics(ticker, [m.model_dump() for m in financial_metrics], 
+                                ttl=ttl_seconds(timedelta(days=7)))
     return financial_metrics
 
 
@@ -252,8 +253,9 @@ def get_insider_trades(
     if not all_trades:
         return []
 
-    # Cache the results with a medium TTL (e.g., 2 days)
-    _cache.set_insider_trades(ticker, [trade.model_dump() for trade in all_trades], ttl=timedelta(days=2))
+    # Cache the results with a medium TTL (2 days)
+    _cache.set_insider_trades(ticker, [trade.model_dump() for trade in all_trades], 
+                             ttl=ttl_seconds(timedelta(days=2)))
     return all_trades
 
 
@@ -303,8 +305,9 @@ def get_company_news(
     if not all_news:
         return []
 
-    # Cache the results with a shorter TTL for news (e.g., 4 hours)
-    _cache.set_company_news(ticker, [news.model_dump() for news in all_news], ttl=timedelta(hours=4))
+    # Cache the results with a shorter TTL for news (4 hours)
+    _cache.set_company_news(ticker, [news.model_dump() for news in all_news], 
+                           ttl=ttl_seconds(timedelta(hours=4)))
     return all_news
 
 
@@ -368,3 +371,13 @@ def get_price_data(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
     except Exception as e:
         print(f"Error getting price data: {ticker} - {str(e)}")
         return pd.DataFrame()
+
+
+def clear_cache(ticker: Optional[str] = None):
+    """Clear cache entries for a ticker or all tickers."""
+    _cache.clear(ticker=ticker)
+
+
+def optimize_database():
+    """Run database optimization."""
+    _cache.vacuum()
