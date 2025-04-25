@@ -7,7 +7,7 @@ from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
 from enum import Enum
 from pydantic import BaseModel
-from typing import Tuple, List, Dict, Any, Optional
+from typing import Tuple
 
 
 class ModelProvider(str, Enum):
@@ -213,7 +213,9 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
         return ChatGoogleGenerativeAI(model=model_name, api_key=api_key)
     elif model_provider == ModelProvider.OLLAMA:
         # For Ollama, we use a base URL instead of an API key
-        base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        # Check if OLLAMA_HOST is set (for Docker on macOS)
+        ollama_host = os.getenv("OLLAMA_HOST", "localhost")
+        base_url = os.getenv("OLLAMA_BASE_URL", f"http://{ollama_host}:11434")
         return ChatOllama(
             model=model_name, 
             base_url=base_url,

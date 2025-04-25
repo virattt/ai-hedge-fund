@@ -146,16 +146,16 @@ def analyze_disruptive_potential(metrics: list, financial_line_items: list) -> d
         growth_rates = []
         for i in range(len(revenues)-1):
             if revenues[i] and revenues[i+1]:
-                growth_rate = (revenues[i+1] - revenues[i]) / abs(revenues[i]) if revenues[i] != 0 else 0
+                growth_rate = (revenues[i] - revenues[i+1]) / abs(revenues[i+1]) if revenues[i+1] != 0 else 0
                 growth_rates.append(growth_rate)
 
-        # Check if growth is accelerating
-        if len(growth_rates) >= 2 and growth_rates[-1] > growth_rates[0]:
+        # Check if growth is accelerating (first growth rate higher than last, since they're in reverse order)
+        if len(growth_rates) >= 2 and growth_rates[0] > growth_rates[-1]:
             score += 2
-            details.append(f"Revenue growth is accelerating: {(growth_rates[-1]*100):.1f}% vs {(growth_rates[0]*100):.1f}%")
+            details.append(f"Revenue growth is accelerating: {(growth_rates[0]*100):.1f}% vs {(growth_rates[-1]*100):.1f}%")
 
-        # Check absolute growth rate
-        latest_growth = growth_rates[-1] if growth_rates else 0
+        # Check absolute growth rate (most recent growth rate is at index 0)
+        latest_growth = growth_rates[0] if growth_rates else 0
         if latest_growth > 1.0:
             score += 3
             details.append(f"Exceptional revenue growth: {(latest_growth*100):.1f}%")
@@ -171,7 +171,7 @@ def analyze_disruptive_potential(metrics: list, financial_line_items: list) -> d
     # 2. Gross Margin Analysis - Check for expanding margins
     gross_margins = [item.gross_margin for item in financial_line_items if hasattr(item, 'gross_margin') and item.gross_margin is not None]
     if len(gross_margins) >= 2:
-        margin_trend = gross_margins[-1] - gross_margins[0]
+        margin_trend = gross_margins[0] - gross_margins[-1]
         if margin_trend > 0.05:  # 5% improvement
             score += 2
             details.append(f"Expanding gross margins: +{(margin_trend*100):.1f}%")
@@ -179,10 +179,10 @@ def analyze_disruptive_potential(metrics: list, financial_line_items: list) -> d
             score += 1
             details.append(f"Slightly improving gross margins: +{(margin_trend*100):.1f}%")
 
-        # Check absolute margin level
-        if gross_margins[-1] > 0.50:  # High margin business
+        # Check absolute margin level (most recent margin is at index 0)
+        if gross_margins[0] > 0.50:  # High margin business
             score += 2
-            details.append(f"High gross margin: {(gross_margins[-1]*100):.1f}%")
+            details.append(f"High gross margin: {(gross_margins[0]*100):.1f}%")
     else:
         details.append("Insufficient gross margin data")
 
@@ -195,8 +195,8 @@ def analyze_disruptive_potential(metrics: list, financial_line_items: list) -> d
     ]
 
     if len(revenues) >= 2 and len(operating_expenses) >= 2:
-        rev_growth = (revenues[-1] - revenues[0]) / abs(revenues[0])
-        opex_growth = (operating_expenses[-1] - operating_expenses[0]) / abs(operating_expenses[0])
+        rev_growth = (revenues[0] - revenues[-1]) / abs(revenues[-1])
+        opex_growth = (operating_expenses[0] - operating_expenses[-1]) / abs(operating_expenses[-1])
 
         if rev_growth > opex_growth:
             score += 2
@@ -207,7 +207,7 @@ def analyze_disruptive_potential(metrics: list, financial_line_items: list) -> d
     # 4. R&D Investment Analysis
     rd_expenses = [item.research_and_development for item in financial_line_items if hasattr(item, 'research_and_development') and item.research_and_development is not None]
     if rd_expenses and revenues:
-        rd_intensity = rd_expenses[-1] / revenues[-1]
+        rd_intensity = rd_expenses[0] / revenues[0]
         if rd_intensity > 0.15:  # High R&D intensity
             score += 3
             details.append(f"High R&D investment: {(rd_intensity*100):.1f}% of revenue")
@@ -260,8 +260,7 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
     revenues = [item.revenue for item in financial_line_items if item.revenue]
 
     if rd_expenses and revenues and len(rd_expenses) >= 2:
-        # Check R&D growth rate
-        rd_growth = (rd_expenses[-1] - rd_expenses[0]) / abs(rd_expenses[0]) if rd_expenses[0] != 0 else 0
+        rd_growth = (rd_expenses[0] - rd_expenses[-1]) / abs(rd_expenses[-1]) if rd_expenses[-1] != 0 else 0
         if rd_growth > 0.5:  # 50% growth in R&D
             score += 3
             details.append(f"Strong R&D investment growth: +{(rd_growth*100):.1f}%")
@@ -269,9 +268,9 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
             score += 2
             details.append(f"Moderate R&D investment growth: +{(rd_growth*100):.1f}%")
 
-        # Check R&D intensity trend
-        rd_intensity_start = rd_expenses[0] / revenues[0]
-        rd_intensity_end = rd_expenses[-1] / revenues[-1]
+        # Check R&D intensity trend (corrected for reverse chronological order)
+        rd_intensity_start = rd_expenses[-1] / revenues[-1]
+        rd_intensity_end = rd_expenses[0] / revenues[0]
         if rd_intensity_end > rd_intensity_start:
             score += 2
             details.append(f"Increasing R&D intensity: {(rd_intensity_end*100):.1f}% vs {(rd_intensity_start*100):.1f}%")
@@ -281,8 +280,7 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
     # 2. Free Cash Flow Analysis
     fcf_vals = [item.free_cash_flow for item in financial_line_items if item.free_cash_flow]
     if fcf_vals and len(fcf_vals) >= 2:
-        # Check FCF growth and consistency
-        fcf_growth = (fcf_vals[-1] - fcf_vals[0]) / abs(fcf_vals[0])
+        fcf_growth = (fcf_vals[0] - fcf_vals[-1]) / abs(fcf_vals[-1])
         positive_fcf_count = sum(1 for f in fcf_vals if f > 0)
 
         if fcf_growth > 0.3 and positive_fcf_count == len(fcf_vals):
@@ -300,15 +298,14 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
     # 3. Operating Efficiency Analysis
     op_margin_vals = [item.operating_margin for item in financial_line_items if item.operating_margin]
     if op_margin_vals and len(op_margin_vals) >= 2:
-        # Check margin improvement
-        margin_trend = op_margin_vals[-1] - op_margin_vals[0]
+        margin_trend = op_margin_vals[0] - op_margin_vals[-1]
 
-        if op_margin_vals[-1] > 0.15 and margin_trend > 0:
+        if op_margin_vals[0] > 0.15 and margin_trend > 0:
             score += 3
-            details.append(f"Strong and improving operating margin: {(op_margin_vals[-1]*100):.1f}%")
-        elif op_margin_vals[-1] > 0.10:
+            details.append(f"Strong and improving operating margin: {(op_margin_vals[0]*100):.1f}%")
+        elif op_margin_vals[0] > 0.10:
             score += 2
-            details.append(f"Healthy operating margin: {(op_margin_vals[-1]*100):.1f}%")
+            details.append(f"Healthy operating margin: {(op_margin_vals[0]*100):.1f}%")
         elif margin_trend > 0:
             score += 1
             details.append("Improving operating efficiency")
@@ -318,8 +315,8 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
     # 4. Capital Allocation Analysis
     capex = [item.capital_expenditure for item in financial_line_items if hasattr(item, 'capital_expenditure') and item.capital_expenditure]
     if capex and revenues and len(capex) >= 2:
-        capex_intensity = abs(capex[-1]) / revenues[-1]
-        capex_growth = (abs(capex[-1]) - abs(capex[0])) / abs(capex[0]) if capex[0] != 0 else 0
+        capex_intensity = abs(capex[0]) / revenues[0]
+        capex_growth = (abs(capex[0]) - abs(capex[-1])) / abs(capex[-1]) if capex[-1] != 0 else 0
 
         if capex_intensity > 0.10 and capex_growth > 0.2:
             score += 2
@@ -333,8 +330,7 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
     # 5. Growth Reinvestment Analysis
     dividends = [item.dividends_and_other_cash_distributions for item in financial_line_items if hasattr(item, 'dividends_and_other_cash_distributions') and item.dividends_and_other_cash_distributions]
     if dividends and fcf_vals:
-        # Check if company prioritizes reinvestment over dividends
-        latest_payout_ratio = dividends[-1] / fcf_vals[-1] if fcf_vals[-1] != 0 else 1
+        latest_payout_ratio = dividends[0] / fcf_vals[0] if fcf_vals[0] != 0 else 1
         if latest_payout_ratio < 0.2:  # Low dividend payout ratio suggests reinvestment focus
             score += 2
             details.append("Strong focus on reinvestment over dividends")
@@ -368,7 +364,7 @@ def analyze_cathie_wood_valuation(financial_line_items: list, market_cap: float)
             "details": "Insufficient data for valuation"
         }
 
-    latest = financial_line_items[-1]
+    latest = financial_line_items[0]
     fcf = latest.free_cash_flow if latest.free_cash_flow else 0
 
     if fcf <= 0:
