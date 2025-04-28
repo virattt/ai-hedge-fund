@@ -2,8 +2,20 @@ from colorama import Fore, Style
 from tabulate import tabulate
 from .analysts import ANALYST_ORDER
 import os
+import re
 import json
 
+def split_chinese_chars(text):
+    """按字拆分中文，但保留英文单词"""
+    pattern = re.compile(
+    r'('
+    r'[\u4e00-\u9fff]|'  # 单个中文字符
+    r'\d+\.?\d*|'         # 数字（含小数点）
+    r'\w+|'               # 英文单词
+    r'[^\w\s\u4e00-\u9fff]'  # 标点符号（非中文、非字母数字、非空格）
+    r')'
+    )
+    return [char for char in pattern.findall(text) if char.strip()]
 
 def sort_agent_signals(signals):
     """Sort agent signals in a consistent order."""
@@ -62,7 +74,7 @@ def print_trading_output(result: dict) -> None:
                     reasoning_str = reasoning
                 elif isinstance(reasoning, dict):
                     # Convert dict to string representation
-                    reasoning_str = json.dumps(reasoning, indent=2)
+                    reasoning_str = json.dumps(reasoning, indent=2, ensure_ascii=False)  # Ensure proper encoding for Chinese
                 else:
                     # Convert any other type to string
                     reasoning_str = str(reasoning)
@@ -72,15 +84,23 @@ def print_trading_output(result: dict) -> None:
                 current_line = ""
                 # Use a fixed width of 60 characters to match the table column width
                 max_line_length = 60
-                for word in reasoning_str.split():
-                    if len(current_line) + len(word) + 1 > max_line_length:
+                for word in split_chinese_chars(reasoning_str):
+                    word_byte_len = len(word.encode('utf-8'))
+                    
+                    # 如果当前行非空，加空格（英文单词间需要空格）
+                    if current_line and re.match(r'[A-Za-z]$', word):
+                        separator = " "
+                        separator_len = 1
+                    else:
+                        separator = ""
+                        separator_len = 0
+                    
+                    # 检查是否超出行宽
+                    if len(current_line.encode('utf-8')) + word_byte_len + separator_len > max_line_length:
                         wrapped_reasoning += current_line + "\n"
                         current_line = word
                     else:
-                        if current_line:
-                            current_line += " " + word
-                        else:
-                            current_line = word
+                        current_line += separator + word
                 if current_line:
                     wrapped_reasoning += current_line
                 
@@ -127,7 +147,7 @@ def print_trading_output(result: dict) -> None:
             # Use a fixed width of 60 characters to match the table column width
             max_line_length = 60
             for word in reasoning.split():
-                if len(current_line) + len(word) + 1 > max_line_length:
+                if len(current_line.encode('utf-8')) + len(word.encode('utf-8')) + 1 > max_line_length:
                     wrapped_reasoning += current_line + "\n"
                     current_line = word
                 else:
@@ -200,10 +220,10 @@ def print_trading_output(result: dict) -> None:
             reasoning_str = portfolio_manager_reasoning
         elif isinstance(portfolio_manager_reasoning, dict):
             # Convert dict to string representation
-            reasoning_str = json.dumps(portfolio_manager_reasoning, indent=2)
+            reasoning_str = json.dumps(portfolio_manager_reasoning, indent=2, ensure_ascii=False)  # Ensure proper encoding for Chinese
         else:
             # Convert any other type to string
-            reasoning_str = str(portfolio_manager_reasoning)
+            reasoning_str = str(reasoning_str)
             
         # Wrap long reasoning text to make it more readable
         wrapped_reasoning = ""
@@ -211,7 +231,7 @@ def print_trading_output(result: dict) -> None:
         # Use a fixed width of 60 characters to match the table column width
         max_line_length = 60
         for word in reasoning_str.split():
-            if len(current_line) + len(word) + 1 > max_line_length:
+            if len(current_line.encode('utf-8')) + len(word.encode('utf-8')) + 1 > max_line_length:
                 wrapped_reasoning += current_line + "\n"
                 current_line = word
             else:

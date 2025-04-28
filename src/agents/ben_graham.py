@@ -325,6 +325,7 @@ def generate_graham_output(
               "confidence": float (0-100),
               "reasoning": "string"
             }}
+            reasoning部分请使用中文。
             """
         )
     ])
