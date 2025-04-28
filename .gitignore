@@ -46,3 +46,6 @@ Thumbs.db
 
 # Txt files
 *.txt
+
+# PDF files
+*.pdf

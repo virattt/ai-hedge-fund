@@ -96,7 +96,7 @@ def stanley_druckenmiller_agent(state: AgentState):
         insider_activity = analyze_insider_activity(insider_trades)
 
         progress.update_status("stanley_druckenmiller_agent", ticker, "Analyzing risk-reward")
-        risk_reward_analysis = analyze_risk_reward(financial_line_items, market_cap, prices)
+        risk_reward_analysis = analyze_risk_reward(financial_line_items, prices)
 
         progress.update_status("stanley_druckenmiller_agent", ticker, "Performing Druckenmiller-style valuation")
         valuation_analysis = analyze_druckenmiller_valuation(financial_line_items, market_cap)
@@ -340,7 +340,7 @@ def analyze_sentiment(news_items: list) -> dict:
     return {"score": score, "details": "; ".join(details)}
 
 
-def analyze_risk_reward(financial_line_items: list, market_cap: float | None, prices: list) -> dict:
+def analyze_risk_reward(financial_line_items: list, prices: list) -> dict:
     """
     Assesses risk via:
       - Debt-to-Equity
