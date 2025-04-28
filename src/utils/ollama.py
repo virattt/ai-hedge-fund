@@ -197,8 +197,16 @@ def download_model(model_name: str) -> bool:
 
     try:
         # Use the Ollama CLI to download the model
-        process = subprocess.Popen(["ollama", "pull", model_name], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, universal_newlines=True)  # Redirect stderr to stdout to capture all output  # Line buffered
-
+        process = subprocess.Popen(
+            ["ollama", "pull", model_name],
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.STDOUT,  # Redirect stderr to stdout to capture all output
+            text=True,
+            bufsize=1,  # Line buffered
+            encoding='utf-8',  # Explicitly use UTF-8 encoding
+            errors='replace'   # Replace any characters that cannot be decoded
+        )
+        
         # Show some progress to the user
         print(f"{Fore.CYAN}Download progress:{Style.RESET_ALL}")
 
