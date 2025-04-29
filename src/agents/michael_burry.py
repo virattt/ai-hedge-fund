@@ -367,6 +367,7 @@ def _generate_burry_output(
                   "confidence": float between 0 and 100,
                   "reasoning": "string"
                 }}
+                reasoning部分请使用中文。
                 """,
             ),
         ]
