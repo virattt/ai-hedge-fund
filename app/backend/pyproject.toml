@@ -1,0 +1,33 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "ai-hedge-fund-backend"
+version = "0.1.0"
+description = "FastAPI backend for AI Hedge Fund"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+packages = [{include = "app"}]
+
+[tool.poetry.dependencies]
+python = ">=3.11"
+fastapi = {extras = ["standard"], version = ">=0.104.0"}
+pydantic = ">=2.4.2"
+python-dotenv = ">=1.0.0"
+httpx = ">=0.25.0"
+sqlalchemy = ">=2.0.22"
+alembic = ">=1.12.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=7.4.3"
+black = ">=23.7.0"
+isort = ">=5.12.0"
+flake8 = ">=6.1.0"
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.isort]
+profile = "black" 

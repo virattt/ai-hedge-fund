@@ -125,42 +125,42 @@ AVAILABLE_MODELS = [
 # Define Ollama models separately
 OLLAMA_MODELS = [
     LLMModel(
-        display_name="[ollama] gemma3 (4B)",
+        display_name="[google] gemma3 (4B)",
         model_name="gemma3:4b",
         provider=ModelProvider.OLLAMA
     ),
     LLMModel(
-        display_name="[ollama] qwen2.5 (7B)",
-        model_name="qwen2.5",
+        display_name="[alibaba] qwen3 (4B)",
+        model_name="qwen3:4b",
         provider=ModelProvider.OLLAMA
     ),
     LLMModel(
-        display_name="[ollama] llama3.1 (8B)",
+        display_name="[meta] llama3.1 (8B)",
         model_name="llama3.1:latest",
         provider=ModelProvider.OLLAMA
     ),
     LLMModel(
-        display_name="[ollama] gemma3 (12B)",
+        display_name="[google] gemma3 (12B)",
         model_name="gemma3:12b",
         provider=ModelProvider.OLLAMA
     ),
     LLMModel(
-        display_name="[ollama] mistral-small3.1 (24B)",
+        display_name="[mistral] mistral-small3.1 (24B)",
         model_name="mistral-small3.1",
         provider=ModelProvider.OLLAMA
     ),
     LLMModel(
-        display_name="[ollama] gemma3 (27B)",
+        display_name="[google] gemma3 (27B)",
         model_name="gemma3:27b",
         provider=ModelProvider.OLLAMA
     ),
     LLMModel(
-        display_name="[ollama] qwen2.5 (32B)",
-        model_name="qwen2.5:32b",
+        display_name="[alibaba] qwen3 (30B-a3B)",
+        model_name="qwen3:30b-a3b",
         provider=ModelProvider.OLLAMA
     ),
     LLMModel(
-        display_name="[ollama] llama-3.3 (70B)",
+        display_name="[meta] llama-3.3 (70B)",
         model_name="llama3.3:70b-instruct-q4_0",
         provider=ModelProvider.OLLAMA
     ),
