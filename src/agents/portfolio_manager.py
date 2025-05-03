@@ -136,7 +136,7 @@ def generate_trading_decision(
               - portfolio_positions: current positions (both long and short)
               - current_prices: current prices for each ticker
               - margin_requirement: current margin requirement for short positions (e.g., 0.5 means 50%)
-              - total_margin_used: total margin currently in use
+              - NetLiquidation: total total value of the portfolio (cash + positions)
               """,
             ),
             (
@@ -155,7 +155,7 @@ def generate_trading_decision(
               Portfolio Cash: {portfolio_cash}
               Current Positions: {portfolio_positions}
               Current Margin Requirement: {margin_requirement}
-              Total Margin Used: {total_margin_used}
+              NetLiquidation: {NetLiquidation}
 
               Output strictly in JSON with the following structure:
               {{
@@ -187,7 +187,7 @@ def generate_trading_decision(
             "portfolio_cash": f"{portfolio.get('cash', 0):.2f}",
             "portfolio_positions": json.dumps(portfolio.get('positions', {}), indent=2),
             "margin_requirement": f"{portfolio.get('margin_requirement', 0):.2f}",
-            "total_margin_used": f"{portfolio.get('margin_used', 0):.2f}",
+            "NetLiquidation": f"{portfolio.get('NetLiquidation', 0):.2f}",
         }
     )
 

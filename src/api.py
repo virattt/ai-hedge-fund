@@ -67,7 +67,9 @@ if __name__ == "__main__":
             for ticker in tickers
         },
     }
-
+    portfolio = json.load(open("./portfolio.json", 'r'))
+    portfolio["margin_requirement"] = 0.3
+    portfolio["cash"] = portfolio["CashBalance"]
     # Run the hedge fund
     result = run_hedge_fund(
         tickers=tickers,
