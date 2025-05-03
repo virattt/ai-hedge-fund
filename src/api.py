@@ -11,7 +11,7 @@ os.chdir(current_file_path + "/../../")
 if __name__ == "__main__":
 
     # Parse tickers from comma-separated string
-    tickers = ['NVDA', 'AAPL']
+    tickers = ['NVDA', 'AAPL', 'TSLA']
     # Select analysts
     selected_analysts = [
     "ben_graham",
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     "sentiment_analyst",
     "valuation_analyst"
 ]
-    selected_analysts = ['ben_graham', 'warren_buffett', "michael_burry"]
+    #selected_analysts = ['ben_graham', 'warren_buffett', "michael_burry"]
     
     # Select LLM model based on whether Ollama is being used
     model_choice = 'deepseek-chat'
