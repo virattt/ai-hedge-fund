@@ -85,10 +85,15 @@ def run_hedge_fund(
             },
         )
 
+        if not final_state["messages"]:
+            raise ValueError("No messages returned from the hedge fund agent")
+
         return {
             "decisions": parse_hedge_fund_response(final_state["messages"][-1].content),
             "analyst_signals": final_state["data"]["analyst_signals"],
         }
+    except ValueError:
+      print(f"Unexpected error in messages: {e}")
     finally:
         # Stop progress tracking
         progress.stop()
