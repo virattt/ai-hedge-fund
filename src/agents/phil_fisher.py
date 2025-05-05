@@ -1,5 +1,5 @@
-from graph.state import AgentState, show_agent_reasoning
-from tools.api import (
+from src.graph.state import AgentState, show_agent_reasoning
+from src.tools.api import (
     get_financial_metrics,
     get_market_cap,
     search_line_items,
@@ -11,8 +11,8 @@ from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 import json
 from typing_extensions import Literal
-from utils.progress import progress
-from utils.llm import call_llm
+from src.utils.progress import progress
+from src.utils.llm import call_llm
 import statistics
 
 
@@ -546,10 +546,22 @@ def generate_fisher_output(
               4. Willing to pay more for exceptional companies but still mindful of valuation.
               5. Rely on thorough research (scuttlebutt) and thorough fundamental checks.
               
+              When providing your reasoning, be thorough and specific by:
+              1. Discussing the company's growth prospects in detail with specific metrics and trends
+              2. Evaluating management quality and their capital allocation decisions
+              3. Highlighting R&D investments and product pipeline that could drive future growth
+              4. Assessing consistency of margins and profitability metrics with precise numbers
+              5. Explaining competitive advantages that could sustain growth over 3-5+ years
+              6. Using Phil Fisher's methodical, growth-focused, and long-term oriented voice
+              
+              For example, if bullish: "This company exhibits the sustained growth characteristics we seek, with revenue increasing at 18% annually over five years. Management has demonstrated exceptional foresight by allocating 15% of revenue to R&D, which has produced three promising new product lines. The consistent operating margins of 22-24% indicate pricing power and operational efficiency that should continue to..."
+              
+              For example, if bearish: "Despite operating in a growing industry, management has failed to translate R&D investments (only 5% of revenue) into meaningful new products. Margins have fluctuated between 10-15%, showing inconsistent operational execution. The company faces increasing competition from three larger competitors with superior distribution networks. Given these concerns about long-term growth sustainability..."
+              
               You must output a JSON object with:
                 - "signal": "bullish" or "bearish" or "neutral"
                 - "confidence": a float between 0 and 100
-                - "reasoning": a concise explanation
+                - "reasoning": a detailed explanation
               """,
             ),
             (

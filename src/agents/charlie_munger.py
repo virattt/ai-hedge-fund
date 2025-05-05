@@ -1,12 +1,12 @@
-from graph.state import AgentState, show_agent_reasoning
-from tools.api import get_financial_metrics, get_market_cap, search_line_items, get_insider_trades, get_company_news
+from src.graph.state import AgentState, show_agent_reasoning
+from src.tools.api import get_financial_metrics, get_market_cap, search_line_items, get_insider_trades, get_company_news
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 import json
 from typing_extensions import Literal
-from utils.progress import progress
-from utils.llm import call_llm
+from src.utils.progress import progress
+from src.utils.llm import call_llm
 
 class CharlieMungerSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
@@ -692,7 +692,18 @@ def generate_munger_output(
             - Focus on long-term economics rather than short-term metrics.
             - Be skeptical of businesses with rapidly changing dynamics or excessive share dilution.
             - Avoid excessive leverage or financial engineering.
-            - Provide a rational, data-driven recommendation (bullish, bearish, or neutral)."""
+            - Provide a rational, data-driven recommendation (bullish, bearish, or neutral).
+            
+            When providing your reasoning, be thorough and specific by:
+            1. Explaining the key factors that influenced your decision the most (both positive and negative)
+            2. Applying at least 2-3 specific mental models or disciplines to explain your thinking
+            3. Providing quantitative evidence where relevant (e.g., specific ROIC values, margin trends)
+            4. Citing what you would "avoid" in your analysis (invert the problem)
+            5. Using Charlie Munger's direct, pithy conversational style in your explanation
+            
+            For example, if bullish: "The high ROIC of 22% demonstrates the company's moat. When applying basic microeconomics, we can see that competitors would struggle to..."
+            For example, if bearish: "I see this business making a classic mistake in capital allocation. As I've often said about [relevant Mungerism], this company appears to be..."
+            """
         ),
         (
             "human",
