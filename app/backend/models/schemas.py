@@ -17,9 +17,7 @@ class ErrorResponse(BaseModel):
 class HedgeFundRequest(BaseModel):
     tickers: List[str]
     selected_agents: List[str]
-    end_date: Optional[str] = Field(
-        default_factory=lambda: datetime.now().strftime("%Y-%m-%d")
-    )
+    end_date: Optional[str] = Field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d"))
     start_date: Optional[str] = None
     model_name: str = "gpt-4o"
     model_provider: ModelProvider = ModelProvider.OPENAI
@@ -30,6 +28,4 @@ class HedgeFundRequest(BaseModel):
         """Calculate start date if not provided"""
         if self.start_date:
             return self.start_date
-        return (
-            datetime.strptime(self.end_date, "%Y-%m-%d") - timedelta(days=90)
-        ).strftime("%Y-%m-%d")
+        return (datetime.strptime(self.end_date, "%Y-%m-%d") - timedelta(days=90)).strftime("%Y-%m-%d")

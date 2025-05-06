@@ -1,4 +1,5 @@
-# AI Hedge Fund Backend
+# AI Hedge Fund - Backend [WIP] 🚧
+This project is currently a work in progress.  To track progress, please get updates [here](https://x.com/virattt).
 
 This is the backend server for the AI Hedge Fund project. It provides a simple REST API to interact with the AI Hedge Fund system, allowing you to run the hedge fund through a web interface.
 
@@ -23,23 +24,19 @@ cd ai-hedge-fund
 curl -sSL https://install.python-poetry.org | python3 -
 ```
 
-3. Navigate to the backend directory:
+3. Install dependencies:
 ```bash
-cd app/backend
-```
-
-4. Install dependencies:
-```bash
+# From the root directory
 poetry install
 ```
 
-5. Set up your environment variables:
+4. Set up your environment variables:
 ```bash
 # Create .env file for your API keys (in the root directory)
-cp ../../.env.example ../../.env
+cp .env.example .env
 ```
 
-6. Edit the .env file to add your API keys:
+5. Edit the .env file to add your API keys:
 ```bash
 # For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
 OPENAI_API_KEY=your-openai-api-key
@@ -56,8 +53,11 @@ FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 To run the development server:
 
 ```bash
+# Navigate to the backend directory
 cd app/backend
-fastapi dev main.py
+
+# Start the FastAPI server with uvicorn
+poetry run uvicorn main:app --reload
 ```
 
 This will start the FastAPI server with hot-reloading enabled.
@@ -68,7 +68,7 @@ The API will be available at:
 
 ## API Endpoints
 
-- `POST /run-hedge-fund`: Run the AI Hedge Fund with specified parameters
+- `POST /hedge-fund/run`: Run the AI Hedge Fund with specified parameters
 - `GET /ping`: Simple endpoint to test server connectivity
 
 ## Project Structure
@@ -87,9 +87,7 @@ app/backend/
 │   ├── graph.py              # Agent graph functionality
 │   └── portfolio.py          # Portfolio management
 ├── __init__.py               # Package initialization
-├── main.py                   # FastAPI application entry point
-├── pyproject.toml            # Poetry configuration and dependencies
-└── poetry.lock               # Poetry lock file
+└── main.py                   # FastAPI application entry point
 ```
 
 ## Disclaimer

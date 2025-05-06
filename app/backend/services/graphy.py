@@ -1,3 +1,4 @@
+import asyncio
 import json
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
@@ -9,7 +10,6 @@ from src.utils.analysts import ANALYST_CONFIG
 from src.graph.state import AgentState
 
 
-
 # Helper function to create the agent graph
 def create_graph(selected_agents: list[str]) -> StateGraph:
     """Create the workflow with selected agents."""
@@ -17,10 +17,7 @@ def create_graph(selected_agents: list[str]) -> StateGraph:
     graph.add_node("start_node", start)
 
     # Get analyst nodes from the configuration
-    analyst_nodes = {
-        key: (f"{key}_agent", config["agent_func"])
-        for key, config in ANALYST_CONFIG.items()
-    }
+    analyst_nodes = {key: (f"{key}_agent", config["agent_func"]) for key, config in ANALYST_CONFIG.items()}
 
     # Add selected analyst nodes
     for agent_name in selected_agents:
@@ -46,6 +43,15 @@ def create_graph(selected_agents: list[str]) -> StateGraph:
     # Set the entry point to the start node
     graph.set_entry_point("start_node")
     return graph
+
+
+async def run_graph_async(graph, portfolio, tickers, start_date, end_date, model_name, model_provider):
+    """Async wrapper for run_graph to work with asyncio."""
+    # Use run_in_executor to run the synchronous function in a separate thread
+    # so it doesn't block the event loop
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, lambda: run_graph(graph, portfolio, tickers, start_date, end_date, model_name, model_provider))  # Use default executor
+    return result
 
 
 def run_graph(
