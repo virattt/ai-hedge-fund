@@ -1,13 +1,12 @@
-from langchain_openai import ChatOpenAI
-from graph.state import AgentState, show_agent_reasoning
-from tools.api import get_financial_metrics, get_market_cap, search_line_items
+from src.graph.state import AgentState, show_agent_reasoning
+from src.tools.api import get_financial_metrics, get_market_cap, search_line_items
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 import json
 from typing_extensions import Literal
-from utils.progress import progress
-from utils.llm import call_llm
+from src.utils.progress import progress
+from src.utils.llm import call_llm
 import math
 
 
@@ -288,10 +287,11 @@ def generate_graham_output(
     - Return the result in a JSON structure: { signal, confidence, reasoning }.
     """
 
-    template = ChatPromptTemplate.from_messages([
-        (
-            "system",
-            """You are a Benjamin Graham AI agent, making investment decisions using his principles:
+    template = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """You are a Benjamin Graham AI agent, making investment decisions using his principles:
             1. Insist on a margin of safety by buying below intrinsic value (e.g., using Graham Number, net-net).
             2. Emphasize the company's financial strength (low leverage, ample current assets).
             3. Prefer stable earnings over multiple years.
@@ -310,11 +310,11 @@ def generate_graham_output(
             For example, if bearish: "Despite consistent earnings, the current price of $50 exceeds our calculated Graham Number of $35, offering no margin of safety. Additionally, the current ratio of only 1.2 falls below Graham's preferred 2.0 threshold..."
                         
             Return a rational recommendation: bullish, bearish, or neutral, with a confidence level (0-100) and thorough reasoning.
-            """
-        ),
-        (
-            "human",
-            """Based on the following analysis, create a Graham-style investment signal:
+            """,
+            ),
+            (
+                "human",
+                """Based on the following analysis, create a Graham-style investment signal:
 
             Analysis Data for {ticker}:
             {analysis_data}
@@ -325,14 +325,12 @@ def generate_graham_output(
               "confidence": float (0-100),
               "reasoning": "string"
             }}
-            """
-        )
-    ])
+            """,
+            ),
+        ]
+    )
 
-    prompt = template.invoke({
-        "analysis_data": json.dumps(analysis_data, indent=2),
-        "ticker": ticker
-    })
+    prompt = template.invoke({"analysis_data": json.dumps(analysis_data, indent=2), "ticker": ticker})
 
     def create_default_ben_graham_signal():
         return BenGrahamSignal(signal="neutral", confidence=0.0, reasoning="Error in generating analysis; defaulting to neutral.")
