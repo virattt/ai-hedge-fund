@@ -1,35 +1,43 @@
-import { Position, type NodeTypes } from '@xyflow/react';
+import { type NodeTypes } from '@xyflow/react';
 
-import { AgentNode } from './agent-node';
-import { AppNode } from './types';
+import { AgentNode } from './components/agent-node';
+import { StartNode } from './components/start-node';
+import { type AppNode } from './types';
+
+// Types
+export * from './types';
 
 export const initialNodes: AppNode[] = [
   {
     id: 'a',
-    type: 'input',
+    type: 'start',
     position: { x: 0, y: 0 },
-    data: { label: 'Input' },
-    sourcePosition: Position.Right
+    data: {
+      id: 'start',
+      name: 'Input',
+      description: 'Start Node',
+      status: 'Idle',
+    },
   },
   {
     id: 'b',
     type: 'agent',
-    position: { x: 200, y: 0 },
+    position: { x: 300, y: 0 },
     data: {
       id: 'warren_buffett',
       name: 'Warren Buffett',
-      description: 'The Oracle of Omaha',
+      description: 'Oracle of Omaha',
       status: 'Idle'
     },
   },
   {
     id: 'c',
     type: 'agent',
-    position: { x: 500, y: 0 },
+    position: { x: 600, y: 0 },
     data: {
       id: 'portfolio_manager',
       name: 'Portfolio Manager',
-      description: 'The Decision Maker',
+      description: 'Decision Maker',
       status: 'Idle'
     },
   },
@@ -37,5 +45,5 @@ export const initialNodes: AppNode[] = [
 
 export const nodeTypes = {
   'agent': AgentNode,
-  // Add any of your custom nodes here!
+  'start': StartNode,
 } satisfies NodeTypes;
