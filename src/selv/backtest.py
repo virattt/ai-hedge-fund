@@ -1,19 +1,66 @@
 import numpy as np
 import pandas as pd
+from typing import Callable
 
 
-def run_strategy_on_df(df: pd.DataFrame) -> dict:
-    long_entry = (df["MACD_12_26_9"] > df["MACDs_12_26_9"]) & (df["rsi"] > 55)
-    short_entry = (df["MACD_12_26_9"] < df["MACDs_12_26_9"]) & (df["rsi"] < 45)
+def run_strategy_on_df(
+    df: pd.DataFrame,
+    *,
+    long_entry_fun: Callable[[pd.DataFrame], pd.Series] | None = None,
+    short_entry_fun: Callable[[pd.DataFrame], pd.Series] | None = None,
+    tp: float = 0.02,
+    sl: float = 0.01,
+    max_minutes: int = 1440,
+) -> dict:
+    """Back‑test a long/short strategy on an OHLCV‑plus‑indicators DataFrame.
 
-    position = 0
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Must already contain all columns referenced by the entry lambdas.
+    long_entry_fun / short_entry_fun : Callable[[df], pd.Series], optional
+        Functions that return Boolean Series indicating entry bars.  If either
+        is omitted, a default MACD‑RSI crossover rule is used.
+    tp : float
+        Take‑profit expressed as fractional return (e.g. 0.02 → +2 %).
+    sl : float
+        Stop‑loss expressed as fractional return (e.g. 0.01 → −1 % for longs).
+    max_minutes : int
+        Maximum holding period before a position is force‑closed.
+
+    Returns
+    -------
+    dict
+        {'equity', 'sharpe', 'max_dd'}
+    """
+
+    # -------- default rules -------------------------------------------------
+    def _default_long_entry(d: pd.DataFrame) -> pd.Series:
+        """Default long entry rule: MACD crossover and RSI > 55."""
+        return (d["MACD_12_26_9"] > d["MACDs_12_26_9"]) & (d["rsi"] > 55)
+
+    def _default_short_entry(d: pd.DataFrame) -> pd.Series:
+        """Default short entry rule: MACD crossunder and RSI < 45."""
+        return (d["MACD_12_26_9"] < d["MACDs_12_26_9"]) & (d["rsi"] < 45)
+
+    if long_entry_fun is None:
+        long_entry_fun = _default_long_entry
+    if short_entry_fun is None:
+        short_entry_fun = _default_short_entry
+
+    long_entry = long_entry_fun(df)
+    short_entry = short_entry_fun(df)
+
+    position = 0  # +1 long, −1 short, 0 flat
     equity = 1.0
     peak = 1.0
     dds = []
     equity_ts = []
     entry_price = entry_time = None
+
     for ts, row in df.iterrows():
         price = row["close"]
+
         if position == 0:
             if long_entry.loc[ts]:
                 position, entry_price, entry_time = 1, price, ts
@@ -22,26 +69,37 @@ def run_strategy_on_df(df: pd.DataFrame) -> dict:
         else:
             move = (price - entry_price) / entry_price
             minutes_held = (ts - entry_time).total_seconds() / 60
-            hit_tp = move >= 0.02 if position == 1 else move <= -0.02
-            hit_sl = move <= -0.01 if position == 1 else move >= 0.01
-            timed_out = minutes_held >= 1440
+
+            if position == 1:  # long
+                hit_tp = move >= tp
+                hit_sl = move <= -sl
+            else:  # short
+                hit_tp = move <= -tp
+                hit_sl = move >= sl
+
+            timed_out = minutes_held >= max_minutes
+
             if hit_tp or hit_sl or timed_out:
                 equity *= 1 + move * position
                 peak = max(peak, equity)
                 dds.append(1 - equity / peak)
                 position = 0
+
         equity_ts.append(equity)
+
     equity_series = pd.Series(equity_ts, index=df.index)
     returns = np.log(equity_series).diff().dropna()
+
     if len(returns) > 1:
         std_dev = returns.std()
-        if std_dev == 0:
-            # If std is 0, Sharpe is 0 if mean is also 0 (e.g. no trades / flat equity).
-            # If mean is non-zero with 0 std (perfectly consistent returns), Sharpe is undefined or infinite.
-            # For backtesting, 0 is a reasonable value if equity doesn't change.
-            sharpe = 0.0
-        else:
-            sharpe = returns.mean() / std_dev * np.sqrt(365 * 24 * 60)
+        sharpe = (
+            0.0 if std_dev == 0 else returns.mean() / std_dev * np.sqrt(365 * 24 * 60)
+        )
     else:
         sharpe = 0.0
-    return {"equity": equity, "sharpe": sharpe, "max_dd": max(dds) if dds else 0}
+
+    return {
+        "equity": equity,
+        "sharpe": sharpe,
+        "max_dd": max(dds) if dds else 0,
+    }

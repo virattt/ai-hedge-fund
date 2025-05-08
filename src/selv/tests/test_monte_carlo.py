@@ -37,11 +37,27 @@ def test_simulate_path_shape_and_positive():
 
 def test_small_monte_carlo_run_returns_non_empty_stats():
     """
-    Run the main pipeline with three paths to ensure it returns metrics
-    with expected keys – acts as a smoke test without heavy runtime.
+    Run the main pipeline with three paths for a single strategy
+    to ensure it returns metrics with expected keys – acts as a smoke test
+    without heavy runtime.
     """
-    from src.selv.monte_carlo import simulate_and_run
+    from src.selv.monte_carlo import simulate_and_run_strategy, STRATEGIES
 
-    results = [simulate_and_run(i) for i in range(3)]
+    # Pick a strategy for testing, e.g., the original default
+    strategy_name_to_test = "MACD_RSI_Confirm"
+    strategy_funcs = STRATEGIES[strategy_name_to_test]
+
+    args_list = [
+        (
+            i,
+            strategy_name_to_test,
+            strategy_funcs["long_entry_fun"],
+            strategy_funcs["short_entry_fun"],
+        )
+        for i in range(3)  # Test with 3 paths
+    ]
+
+    results = [simulate_and_run_strategy(args) for args in args_list]
     for res in results:
         assert "equity" in res and "sharpe" in res and "max_dd" in res
+        assert res["strategy_name"] == strategy_name_to_test

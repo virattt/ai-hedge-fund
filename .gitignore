@@ -24,6 +24,7 @@ wheels/
 # Virtual Environment
 venv/
 ENV/
+debug/
 
 # Environment Variables
 .env
