@@ -11,13 +11,32 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     Assumes 'close' price exists.
     """
     df = df.copy()
+    # RSI calculation (uses RMA, equivalent to EMA with adjust=False and alpha=1/length)
+    # RSI-14 is standard.
     df["rsi"] = ta.rsi(
         df["close"], length=14
     )  # RSI 14 periods 🡒 traders’ classic choice [oai_citation:7‡Stack Overflow](https://stackoverflow.com/questions/57006437/calculate-rsi-indicator-from-pandas-dataframe?utm_source=chatgpt.com)
-    macd = ta.macd(
-        df["close"], fast=12, slow=26, signal=9
-    )  # MACD line, Signal, Hist. [oai_citation:8‡Medium](https://medium.com/%40financial_python/building-a-macd-indicator-in-python-190b2a4c1777?utm_source=chatgpt.com)
-    df = pd.concat([df, macd], axis=1)
+
+    # MACD calculation
+    # Use pandas_ta.macd directly, ensuring adjust=False is passed to its internal EMA calls.
+    # This makes it consistent with RollingEMA which behaves like adjust=False.
+    # Standard MACD periods: fast=12, slow=26, signal=9.
+    fast_period = 12
+    slow_period = 26
+    signal_period = 9
+
+    macd_df = ta.macd(
+        df["close"],
+        fast=fast_period,
+        slow=slow_period,
+        signal=signal_period,
+        adjust=False,  # Critical for consistency with RollingEMA
+    )
+    # pandas-ta.macd returns a DataFrame with columns like 'MACD_12_26_9',
+    # 'MACDh_12_26_9' (histogram), and 'MACDs_12_26_9' (signal line).
+
+    df = pd.concat([df, macd_df], axis=1)
+    # MACD line, Signal, Hist. [oai_citation:8‡Medium](https://medium.com/%40financial_python/building-a-macd-indicator-in-python-190b2a4c1777?utm_source=chatgpt.com)
     return df
 
 
@@ -57,40 +76,56 @@ class StrategyState:
         self.last_macd = self.last_signal = None
         self.position = 0  # +1 long, –1 short, 0 flat
         self.entry_price = None
+        self.prev_close: float | None = None  # Initialize prev_close
+        self.last_rsi: float | None = None  # To store the latest RSI value
 
     # --------------------------------------------------------------------------
     def _update_rsi(self, close: float) -> float | None:
-        if len(self.gain_queue) == self.rsi_period:
-            # remove oldest contribution
-            old_gain, old_loss = self.gain_queue[0], self.loss_queue[0]
-            self.avg_gain = (
-                self.avg_gain * (self.rsi_period - 1) + old_gain
-            ) / self.rsi_period
-            self.avg_loss = (
-                self.avg_loss * (self.rsi_period - 1) + old_loss
-            ) / self.rsi_period
-        # add newest
-        change = close - self.prev_close if hasattr(self, "prev_close") else 0
+        if self.prev_close is None:
+            self.prev_close = close
+            return None  # Not enough data for a change yet
+
+        change = close - self.prev_close
         gain = max(change, 0)
         loss = max(-change, 0)
+
         self.gain_queue.append(gain)
         self.loss_queue.append(loss)
-        if self.avg_gain is None:  # first full window
-            if len(self.gain_queue) == self.rsi_period:
-                self.avg_gain = np.mean(self.gain_queue)
-                self.avg_loss = np.mean(self.loss_queue)
-        else:
+
+        current_period_gain = gain
+        current_period_loss = loss
+
+        if len(self.gain_queue) < self.rsi_period:  # Not enough periods for initial SMA
+            self.prev_close = close  # Update prev_close for next iteration
+            return None
+
+        # From here, len(self.gain_queue) == self.rsi_period as deque is maxlen
+        if self.avg_gain is None or self.avg_loss is None:  # Initialize with SMA
+            self.avg_gain = np.mean(
+                list(self.gain_queue)
+            )  # Ensure list for np.mean with deque
+            self.avg_loss = np.mean(list(self.loss_queue))
+        else:  # Update with Wilder's smoothing
             self.avg_gain = (
-                self.avg_gain * (self.rsi_period - 1) + gain
+                self.avg_gain * (self.rsi_period - 1) + current_period_gain
             ) / self.rsi_period
             self.avg_loss = (
-                self.avg_loss * (self.rsi_period - 1) + loss
+                self.avg_loss * (self.rsi_period - 1) + current_period_loss
             ) / self.rsi_period
-        self.prev_close = close
-        if self.avg_loss == 0 or self.avg_gain is None:
+
+        self.prev_close = close  # Update prev_close for the *next* call
+
+        if self.avg_gain is None:  # Should be populated by now
             return None
+
+        if self.avg_loss == 0:
+            # If avg_loss is 0: RSI is 100 if avg_gain > 0 (all up moves).
+            # If avg_gain is also 0 (no price changes), RSI is conventionally 50.
+            return 100.0 if self.avg_gain > 0 else 50.0
+
         rs = self.avg_gain / self.avg_loss
-        return 100 - (100 / (1 + rs))
+        rsi = 100.0 - (100.0 / (1.0 + rs))
+        return rsi
 
     # --------------------------------------------------------------------------
     def update(self, ohlcv: dict) -> dict | None:
@@ -101,6 +136,8 @@ class StrategyState:
         """
         close = ohlcv["close"]
         rsi_val = self._update_rsi(close)
+        self.last_rsi = rsi_val  # Store the computed RSI
+
         fast = self.macd_fast.update(close)
         slow = self.macd_slow.update(close)
         if fast is None or slow is None:

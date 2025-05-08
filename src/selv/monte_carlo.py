@@ -3,8 +3,8 @@ import numpy as np
 import pandas as pd
 import tqdm
 from pathlib import Path
-from indicators import add_indicators  # your TA helpers
-from backtest import run_strategy_on_df  # we'll write this wrapper next
+from src.selv.indicators import add_indicators  # your TA helpers
+from src.selv.backtest import run_strategy_on_df  # we'll write this wrapper next
 import multiprocessing as mp
 
 CSV_PATH = Path("btc_data.csv")

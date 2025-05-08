@@ -33,9 +33,15 @@ def run_strategy_on_df(df: pd.DataFrame) -> dict:
         equity_ts.append(equity)
     equity_series = pd.Series(equity_ts, index=df.index)
     returns = np.log(equity_series).diff().dropna()
-    sharpe = (
-        returns.mean() / returns.std() * np.sqrt(365 * 24 * 60)
-        if len(returns) > 1
-        else 0
-    )
+    if len(returns) > 1:
+        std_dev = returns.std()
+        if std_dev == 0:
+            # If std is 0, Sharpe is 0 if mean is also 0 (e.g. no trades / flat equity).
+            # If mean is non-zero with 0 std (perfectly consistent returns), Sharpe is undefined or infinite.
+            # For backtesting, 0 is a reasonable value if equity doesn't change.
+            sharpe = 0.0
+        else:
+            sharpe = returns.mean() / std_dev * np.sqrt(365 * 24 * 60)
+    else:
+        sharpe = 0.0
     return {"equity": equity, "sharpe": sharpe, "max_dd": max(dds) if dds else 0}
