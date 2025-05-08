@@ -31,7 +31,9 @@ def technical_analyst_agent(state: AgentState):
     technical_analysis = {}
 
     for ticker in tickers:
-        progress.update_status("technical_analyst_agent", ticker, "Analyzing price data")
+        progress.update_status(
+            "technical_analyst_agent", ticker, "Analyzing price data"
+        )
 
         # Get the historical price data
         prices = get_prices(
@@ -41,25 +43,37 @@ def technical_analyst_agent(state: AgentState):
         )
 
         if not prices:
-            progress.update_status("technical_analyst_agent", ticker, "Failed: No price data found")
+            progress.update_status(
+                "technical_analyst_agent", ticker, "Failed: No price data found"
+            )
             continue
 
         # Convert prices to a DataFrame
         prices_df = prices_to_df(prices)
 
-        progress.update_status("technical_analyst_agent", ticker, "Calculating trend signals")
+        progress.update_status(
+            "technical_analyst_agent", ticker, "Calculating trend signals"
+        )
         trend_signals = calculate_trend_signals(prices_df)
 
-        progress.update_status("technical_analyst_agent", ticker, "Calculating mean reversion")
+        progress.update_status(
+            "technical_analyst_agent", ticker, "Calculating mean reversion"
+        )
         mean_reversion_signals = calculate_mean_reversion_signals(prices_df)
 
-        progress.update_status("technical_analyst_agent", ticker, "Calculating momentum")
+        progress.update_status(
+            "technical_analyst_agent", ticker, "Calculating momentum"
+        )
         momentum_signals = calculate_momentum_signals(prices_df)
 
-        progress.update_status("technical_analyst_agent", ticker, "Analyzing volatility")
+        progress.update_status(
+            "technical_analyst_agent", ticker, "Analyzing volatility"
+        )
         volatility_signals = calculate_volatility_signals(prices_df)
 
-        progress.update_status("technical_analyst_agent", ticker, "Statistical analysis")
+        progress.update_status(
+            "technical_analyst_agent", ticker, "Statistical analysis"
+        )
         stat_arb_signals = calculate_stat_arb_signals(prices_df)
 
         # Combine all signals using a weighted ensemble approach
@@ -191,7 +205,9 @@ def calculate_mean_reversion_signals(prices_df):
     rsi_28 = calculate_rsi(prices_df, 28)
 
     # Mean reversion signals
-    price_vs_bb = (prices_df["close"].iloc[-1] - bb_lower.iloc[-1]) / (bb_upper.iloc[-1] - bb_lower.iloc[-1])
+    price_vs_bb = (prices_df["close"].iloc[-1] - bb_lower.iloc[-1]) / (
+        bb_upper.iloc[-1] - bb_lower.iloc[-1]
+    )
 
     # Combine signals
     if z_score.iloc[-1] < -2 and price_vs_bb < 0.2:
@@ -406,7 +422,9 @@ def calculate_rsi(prices_df: pd.DataFrame, period: int = 14) -> pd.Series:
     return rsi
 
 
-def calculate_bollinger_bands(prices_df: pd.DataFrame, window: int = 20) -> tuple[pd.Series, pd.Series]:
+def calculate_bollinger_bands(
+    prices_df: pd.DataFrame, window: int = 20
+) -> tuple[pd.Series, pd.Series]:
     sma = prices_df["close"].rolling(window).mean()
     std_dev = prices_df["close"].rolling(window).std()
     upper_band = sma + (std_dev * 2)
@@ -449,12 +467,20 @@ def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
     df["up_move"] = df["high"] - df["high"].shift()
     df["down_move"] = df["low"].shift() - df["low"]
 
-    df["plus_dm"] = np.where((df["up_move"] > df["down_move"]) & (df["up_move"] > 0), df["up_move"], 0)
-    df["minus_dm"] = np.where((df["down_move"] > df["up_move"]) & (df["down_move"] > 0), df["down_move"], 0)
+    df["plus_dm"] = np.where(
+        (df["up_move"] > df["down_move"]) & (df["up_move"] > 0), df["up_move"], 0
+    )
+    df["minus_dm"] = np.where(
+        (df["down_move"] > df["up_move"]) & (df["down_move"] > 0), df["down_move"], 0
+    )
 
     # Calculate ADX
-    df["+di"] = 100 * (df["plus_dm"].ewm(span=period).mean() / df["tr"].ewm(span=period).mean())
-    df["-di"] = 100 * (df["minus_dm"].ewm(span=period).mean() / df["tr"].ewm(span=period).mean())
+    df["+di"] = 100 * (
+        df["plus_dm"].ewm(span=period).mean() / df["tr"].ewm(span=period).mean()
+    )
+    df["-di"] = 100 * (
+        df["minus_dm"].ewm(span=period).mean() / df["tr"].ewm(span=period).mean()
+    )
     df["dx"] = 100 * abs(df["+di"] - df["-di"]) / (df["+di"] + df["-di"])
     df["adx"] = df["dx"].ewm(span=period).mean()
 
@@ -498,7 +524,10 @@ def calculate_hurst_exponent(price_series: pd.Series, max_lag: int = 20) -> floa
     """
     lags = range(2, max_lag)
     # Add small epsilon to avoid log(0)
-    tau = [max(1e-8, np.sqrt(np.std(np.subtract(price_series[lag:], price_series[:-lag])))) for lag in lags]
+    tau = [
+        max(1e-8, np.sqrt(np.std(np.subtract(price_series[lag:], price_series[:-lag]))))
+        for lag in lags
+    ]
 
     # Return the Hurst exponent from linear fit
     try:

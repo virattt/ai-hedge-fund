@@ -1,6 +1,8 @@
 # tests/test_backtest.py
-import pandas as pd, numpy as np
+import pandas as pd
+import numpy as np
 from ..backtest import run_strategy_on_df
+
 
 def test_sharpe_not_zero_on_trending_path():
     # create 100‑min monotonically rising close prices

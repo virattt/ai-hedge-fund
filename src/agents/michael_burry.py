@@ -50,7 +50,9 @@ def michael_burry_agent(state: AgentState):  # noqa: C901  (complexity is fine h
     tickers: list[str] = data["tickers"]
 
     # We look one year back for insider trades / news flow
-    start_date = (datetime.fromisoformat(end_date) - timedelta(days=365)).date().isoformat()
+    start_date = (
+        (datetime.fromisoformat(end_date) - timedelta(days=365)).date().isoformat()
+    )
 
     analysis_data: dict[str, dict] = {}
     burry_analysis: dict[str, dict] = {}
@@ -59,7 +61,9 @@ def michael_burry_agent(state: AgentState):  # noqa: C901  (complexity is fine h
         # ------------------------------------------------------------------
         # Fetch raw data
         # ------------------------------------------------------------------
-        progress.update_status("michael_burry_agent", ticker, "Fetching financial metrics")
+        progress.update_status(
+            "michael_burry_agent", ticker, "Fetching financial metrics"
+        )
         metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=5)
 
         progress.update_status("michael_burry_agent", ticker, "Fetching line items")
@@ -79,10 +83,14 @@ def michael_burry_agent(state: AgentState):  # noqa: C901  (complexity is fine h
         )
 
         progress.update_status("michael_burry_agent", ticker, "Fetching insider trades")
-        insider_trades = get_insider_trades(ticker, end_date=end_date, start_date=start_date)
+        insider_trades = get_insider_trades(
+            ticker, end_date=end_date, start_date=start_date
+        )
 
         progress.update_status("michael_burry_agent", ticker, "Fetching company news")
-        news = get_company_news(ticker, end_date=end_date, start_date=start_date, limit=250)
+        news = get_company_news(
+            ticker, end_date=end_date, start_date=start_date, limit=250
+        )
 
         progress.update_status("michael_burry_agent", ticker, "Fetching market cap")
         market_cap = get_market_cap(ticker, end_date)
@@ -96,10 +104,14 @@ def michael_burry_agent(state: AgentState):  # noqa: C901  (complexity is fine h
         progress.update_status("michael_burry_agent", ticker, "Analyzing balance sheet")
         balance_sheet_analysis = _analyze_balance_sheet(metrics, line_items)
 
-        progress.update_status("michael_burry_agent", ticker, "Analyzing insider activity")
+        progress.update_status(
+            "michael_burry_agent", ticker, "Analyzing insider activity"
+        )
         insider_analysis = _analyze_insider_activity(insider_trades)
 
-        progress.update_status("michael_burry_agent", ticker, "Analyzing contrarian sentiment")
+        progress.update_status(
+            "michael_burry_agent", ticker, "Analyzing contrarian sentiment"
+        )
         contrarian_analysis = _analyze_contrarian_sentiment(news)
 
         # ------------------------------------------------------------------
@@ -158,7 +170,9 @@ def michael_burry_agent(state: AgentState):  # noqa: C901  (complexity is fine h
     # ----------------------------------------------------------------------
     # Return to the graph
     # ----------------------------------------------------------------------
-    message = HumanMessage(content=json.dumps(burry_analysis), name="michael_burry_agent")
+    message = HumanMessage(
+        content=json.dumps(burry_analysis), name="michael_burry_agent"
+    )
 
     if state["metadata"].get("show_reasoning"):
         show_agent_reasoning(burry_analysis, "Michael Burry Agent")
@@ -179,6 +193,7 @@ def _latest_line_item(line_items: list):
 
 
 # ----- Value ----------------------------------------------------------------
+
 
 def _analyze_value(metrics, line_items, market_cap):
     """Free cash‑flow yield, EV/EBIT, other classic deep‑value metrics."""
@@ -228,6 +243,7 @@ def _analyze_value(metrics, line_items, market_cap):
 
 # ----- Balance sheet --------------------------------------------------------
 
+
 def _analyze_balance_sheet(metrics, line_items):
     """Leverage and liquidity checks."""
 
@@ -238,7 +254,9 @@ def _analyze_balance_sheet(metrics, line_items):
     latest_metrics = metrics[0] if metrics else None
     latest_item = _latest_line_item(line_items)
 
-    debt_to_equity = getattr(latest_metrics, "debt_to_equity", None) if latest_metrics else None
+    debt_to_equity = (
+        getattr(latest_metrics, "debt_to_equity", None) if latest_metrics else None
+    )
     if debt_to_equity is not None:
         if debt_to_equity < 0.5:
             score += 2
@@ -269,6 +287,7 @@ def _analyze_balance_sheet(metrics, line_items):
 
 # ----- Insider activity -----------------------------------------------------
 
+
 def _analyze_insider_activity(insider_trades):
     """Net insider buying over the last 12 months acts as a hard catalyst."""
 
@@ -280,8 +299,18 @@ def _analyze_insider_activity(insider_trades):
         details.append("No insider trade data")
         return {"score": score, "max_score": max_score, "details": "; ".join(details)}
 
-    shares_bought = sum(t.transaction_shares or 0 for t in insider_trades if (t.transaction_shares or 0) > 0)
-    shares_sold = abs(sum(t.transaction_shares or 0 for t in insider_trades if (t.transaction_shares or 0) < 0))
+    shares_bought = sum(
+        t.transaction_shares or 0
+        for t in insider_trades
+        if (t.transaction_shares or 0) > 0
+    )
+    shares_sold = abs(
+        sum(
+            t.transaction_shares or 0
+            for t in insider_trades
+            if (t.transaction_shares or 0) < 0
+        )
+    )
     net = shares_bought - shares_sold
     if net > 0:
         score += 2 if net / max(shares_sold, 1) > 1 else 1
@@ -293,6 +322,7 @@ def _analyze_insider_activity(insider_trades):
 
 
 # ----- Contrarian sentiment -------------------------------------------------
+
 
 def _analyze_contrarian_sentiment(news):
     """Very rough gauge: a wall of recent negative headlines can be a *positive* for a contrarian."""
@@ -307,12 +337,16 @@ def _analyze_contrarian_sentiment(news):
 
     # Count negative sentiment articles
     sentiment_negative_count = sum(
-        1 for n in news if n.sentiment and n.sentiment.lower() in ["negative", "bearish"]
+        1
+        for n in news
+        if n.sentiment and n.sentiment.lower() in ["negative", "bearish"]
     )
-    
+
     if sentiment_negative_count >= 5:
         score += 1  # The more hated, the better (assuming fundamentals hold up)
-        details.append(f"{sentiment_negative_count} negative headlines (contrarian opportunity)")
+        details.append(
+            f"{sentiment_negative_count} negative headlines (contrarian opportunity)"
+        )
     else:
         details.append("Limited negative press")
 
@@ -322,6 +356,7 @@ def _analyze_contrarian_sentiment(news):
 ###############################################################################
 # LLM generation
 ###############################################################################
+
 
 def _generate_burry_output(
     ticker: str,
@@ -372,11 +407,17 @@ def _generate_burry_output(
         ]
     )
 
-    prompt = template.invoke({"analysis_data": json.dumps(analysis_data, indent=2), "ticker": ticker})
+    prompt = template.invoke(
+        {"analysis_data": json.dumps(analysis_data, indent=2), "ticker": ticker}
+    )
 
     # Default fallback signal in case parsing fails
     def create_default_michael_burry_signal():
-        return MichaelBurrySignal(signal="neutral", confidence=0.0, reasoning="Parsing error – defaulting to neutral")
+        return MichaelBurrySignal(
+            signal="neutral",
+            confidence=0.0,
+            reasoning="Parsing error – defaulting to neutral",
+        )
 
     return call_llm(
         prompt=prompt,

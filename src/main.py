@@ -34,10 +34,14 @@ def parse_hedge_fund_response(response):
         print(f"JSON decoding error: {e}\nResponse: {repr(response)}")
         return None
     except TypeError as e:
-        print(f"Invalid response type (expected string, got {type(response).__name__}): {e}")
+        print(
+            f"Invalid response type (expected string, got {type(response).__name__}): {e}"
+        )
         return None
     except Exception as e:
-        print(f"Unexpected error while parsing response: {e}\nResponse: {repr(response)}")
+        print(
+            f"Unexpected error while parsing response: {e}\nResponse: {repr(response)}"
+        )
         return None
 
 
@@ -134,18 +138,41 @@ def create_workflow(selected_analysts=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the hedge fund trading system")
-    parser.add_argument("--initial-cash", type=float, default=100000.0, help="Initial cash position. Defaults to 100000.0)")
-    parser.add_argument("--margin-requirement", type=float, default=0.0, help="Initial margin requirement. Defaults to 0.0")
-    parser.add_argument("--tickers", type=str, required=True, help="Comma-separated list of stock ticker symbols")
+    parser.add_argument(
+        "--initial-cash",
+        type=float,
+        default=100000.0,
+        help="Initial cash position. Defaults to 100000.0)",
+    )
+    parser.add_argument(
+        "--margin-requirement",
+        type=float,
+        default=0.0,
+        help="Initial margin requirement. Defaults to 0.0",
+    )
+    parser.add_argument(
+        "--tickers",
+        type=str,
+        required=True,
+        help="Comma-separated list of stock ticker symbols",
+    )
     parser.add_argument(
         "--start-date",
         type=str,
         help="Start date (YYYY-MM-DD). Defaults to 3 months before end date",
     )
-    parser.add_argument("--end-date", type=str, help="End date (YYYY-MM-DD). Defaults to today")
-    parser.add_argument("--show-reasoning", action="store_true", help="Show reasoning from each agent")
-    parser.add_argument("--show-agent-graph", action="store_true", help="Show the agent graph")
-    parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
+    parser.add_argument(
+        "--end-date", type=str, help="End date (YYYY-MM-DD). Defaults to today"
+    )
+    parser.add_argument(
+        "--show-reasoning", action="store_true", help="Show reasoning from each agent"
+    )
+    parser.add_argument(
+        "--show-agent-graph", action="store_true", help="Show the agent graph"
+    )
+    parser.add_argument(
+        "--ollama", action="store_true", help="Use Ollama for local LLM inference"
+    )
 
     args = parser.parse_args()
 
@@ -156,7 +183,9 @@ if __name__ == "__main__":
     selected_analysts = None
     choices = questionary.checkbox(
         "Select your AI analysts.",
-        choices=[questionary.Choice(display, value=value) for display, value in ANALYST_ORDER],
+        choices=[
+            questionary.Choice(display, value=value) for display, value in ANALYST_ORDER
+        ],
         instruction="\n\nInstructions: \n1. Press Space to select/unselect analysts.\n2. Press 'a' to select/unselect all.\n3. Press Enter when done to run the hedge fund.\n",
         validate=lambda x: len(x) > 0 or "You must select at least one analyst.",
         style=questionary.Style(
@@ -174,7 +203,9 @@ if __name__ == "__main__":
         sys.exit(0)
     else:
         selected_analysts = choices
-        print(f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n")
+        print(
+            f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n"
+        )
 
     # Select LLM model based on whether Ollama is being used
     model_choice = None
@@ -186,7 +217,10 @@ if __name__ == "__main__":
         # Select from Ollama-specific models
         model_choice = questionary.select(
             "Select your Ollama model:",
-            choices=[questionary.Choice(display, value=value) for display, value, _ in OLLAMA_LLM_ORDER],
+            choices=[
+                questionary.Choice(display, value=value)
+                for display, value, _ in OLLAMA_LLM_ORDER
+            ],
             style=questionary.Style(
                 [
                     ("selected", "fg:green bold"),
@@ -203,16 +237,23 @@ if __name__ == "__main__":
 
         # Ensure Ollama is installed, running, and the model is available
         if not ensure_ollama_and_model(model_choice):
-            print(f"{Fore.RED}Cannot proceed without Ollama and the selected model.{Style.RESET_ALL}")
+            print(
+                f"{Fore.RED}Cannot proceed without Ollama and the selected model.{Style.RESET_ALL}"
+            )
             sys.exit(1)
 
         model_provider = ModelProvider.OLLAMA.value
-        print(f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+        print(
+            f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n"
+        )
     else:
         # Use the standard cloud-based LLM selection
         model_choice = questionary.select(
             "Select your LLM model:",
-            choices=[questionary.Choice(display, value=value) for display, value, _ in LLM_ORDER],
+            choices=[
+                questionary.Choice(display, value=value)
+                for display, value, _ in LLM_ORDER
+            ],
             style=questionary.Style(
                 [
                     ("selected", "fg:green bold"),
@@ -231,10 +272,14 @@ if __name__ == "__main__":
             model_info = get_model_info(model_choice)
             if model_info:
                 model_provider = model_info.provider.value
-                print(f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+                print(
+                    f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n"
+                )
             else:
                 model_provider = "Unknown"
-                print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+                print(
+                    f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n"
+                )
 
     # Create the workflow with selected analysts
     workflow = create_workflow(selected_analysts)

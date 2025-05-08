@@ -1,22 +1,25 @@
 from __future__ import annotations
 
+import json
+from statistics import median
+
+from langchain_core.messages import HumanMessage
+
+from src.graph.state import AgentState, show_agent_reasoning
+from src.tools.api import (
+    get_financial_metrics,
+    get_market_cap,
+    search_line_items,
+)
+from src.utils.progress import progress
+
+
 """Valuation Agent
 
 Implements four complementary valuation methodologies and aggregates them with
 configurable weights. 
 """
 
-from statistics import median
-import json
-from langchain_core.messages import HumanMessage
-from src.graph.state import AgentState, show_agent_reasoning
-from src.utils.progress import progress
-
-from src.tools.api import (
-    get_financial_metrics,
-    get_market_cap,
-    search_line_items,
-)
 
 def valuation_agent(state: AgentState):
     """Run valuation across tickers and write signals back to `state`."""
@@ -38,7 +41,9 @@ def valuation_agent(state: AgentState):
             limit=8,
         )
         if not financial_metrics:
-            progress.update_status("valuation_agent", ticker, "Failed: No financial metrics found")
+            progress.update_status(
+                "valuation_agent", ticker, "Failed: No financial metrics found"
+            )
             continue
         most_recent_metrics = financial_metrics[0]
 
@@ -58,7 +63,9 @@ def valuation_agent(state: AgentState):
             limit=2,
         )
         if len(line_items) < 2:
-            progress.update_status("valuation_agent", ticker, "Failed: Insufficient financial line items")
+            progress.update_status(
+                "valuation_agent", ticker, "Failed: Insufficient financial line items"
+            )
             continue
         li_curr, li_prev = line_items[0], line_items[1]
 
@@ -101,7 +108,9 @@ def valuation_agent(state: AgentState):
         # ------------------------------------------------------------------
         market_cap = get_market_cap(ticker, end_date)
         if not market_cap:
-            progress.update_status("valuation_agent", ticker, "Failed: Market cap unavailable")
+            progress.update_status(
+                "valuation_agent", ticker, "Failed: Market cap unavailable"
+            )
             continue
 
         method_values = {
@@ -111,33 +120,54 @@ def valuation_agent(state: AgentState):
             "residual_income": {"value": rim_val, "weight": 0.10},
         }
 
-        total_weight = sum(v["weight"] for v in method_values.values() if v["value"] > 0)
+        total_weight = sum(
+            v["weight"] for v in method_values.values() if v["value"] > 0
+        )
         if total_weight == 0:
-            progress.update_status("valuation_agent", ticker, "Failed: All valuation methods zero")
+            progress.update_status(
+                "valuation_agent", ticker, "Failed: All valuation methods zero"
+            )
             continue
 
         for v in method_values.values():
-            v["gap"] = (v["value"] - market_cap) / market_cap if v["value"] > 0 else None
+            v["gap"] = (
+                (v["value"] - market_cap) / market_cap if v["value"] > 0 else None
+            )
 
-        weighted_gap = sum(
-            v["weight"] * v["gap"] for v in method_values.values() if v["gap"] is not None
-        ) / total_weight
+        weighted_gap = (
+            sum(
+                v["weight"] * v["gap"]
+                for v in method_values.values()
+                if v["gap"] is not None
+            )
+            / total_weight
+        )
 
-        signal = "bullish" if weighted_gap > 0.15 else "bearish" if weighted_gap < -0.15 else "neutral"
+        signal = (
+            "bullish"
+            if weighted_gap > 0.15
+            else "bearish"
+            if weighted_gap < -0.15
+            else "neutral"
+        )
         confidence = round(min(abs(weighted_gap) / 0.30 * 100, 100))
 
         reasoning = {
             f"{m}_analysis": {
                 "signal": (
-                    "bullish" if vals["gap"] and vals["gap"] > 0.15 else
-                    "bearish" if vals["gap"] and vals["gap"] < -0.15 else "neutral"
+                    "bullish"
+                    if vals["gap"] and vals["gap"] > 0.15
+                    else "bearish"
+                    if vals["gap"] and vals["gap"] < -0.15
+                    else "neutral"
                 ),
                 "details": (
                     f"Value: ${vals['value']:,.2f}, Market Cap: ${market_cap:,.2f}, "
                     f"Gap: {vals['gap']:.1%}, Weight: {vals['weight']*100:.0f}%"
                 ),
             }
-            for m, vals in method_values.items() if vals["value"] > 0
+            for m, vals in method_values.items()
+            if vals["value"] > 0
         }
 
         valuation_analysis[ticker] = {
@@ -154,9 +184,11 @@ def valuation_agent(state: AgentState):
     state["data"]["analyst_signals"]["valuation_agent"] = valuation_analysis
     return {"messages": [msg], "data": data}
 
+
 #############################
 # Helper Valuation Functions
 #############################
+
 
 def calculate_owner_earnings_value(
     net_income: float | None,
@@ -169,7 +201,10 @@ def calculate_owner_earnings_value(
     num_years: int = 5,
 ) -> float:
     """Buffett owner‑earnings valuation with margin‑of‑safety."""
-    if not all(isinstance(x, (int, float)) for x in [net_income, depreciation, capex, working_capital_change]):
+    if not all(
+        isinstance(x, (int, float))
+        for x in [net_income, depreciation, capex, working_capital_change]
+    ):
         return 0
 
     owner_earnings = net_income + depreciation - capex - working_capital_change
@@ -182,9 +217,9 @@ def calculate_owner_earnings_value(
         pv += future / (1 + required_return) ** yr
 
     terminal_growth = min(growth_rate, 0.03)
-    term_val = (owner_earnings * (1 + growth_rate) ** num_years * (1 + terminal_growth)) / (
-        required_return - terminal_growth
-    )
+    term_val = (
+        owner_earnings * (1 + growth_rate) ** num_years * (1 + terminal_growth)
+    ) / (required_return - terminal_growth)
     pv_term = term_val / (1 + required_return) ** num_years
 
     intrinsic = pv + pv_term
@@ -226,9 +261,13 @@ def calculate_ev_ebitda_value(financial_metrics: list):
         return 0
 
     ebitda_now = m0.enterprise_value / m0.enterprise_value_to_ebitda_ratio
-    med_mult = median([
-        m.enterprise_value_to_ebitda_ratio for m in financial_metrics if m.enterprise_value_to_ebitda_ratio
-    ])
+    med_mult = median(
+        [
+            m.enterprise_value_to_ebitda_ratio
+            for m in financial_metrics
+            if m.enterprise_value_to_ebitda_ratio
+        ]
+    )
     ev_implied = med_mult * ebitda_now
     net_debt = (m0.enterprise_value or 0) - (m0.market_cap or 0)
     return max(ev_implied - net_debt, 0)
@@ -244,7 +283,9 @@ def calculate_residual_income_value(
     num_years: int = 5,
 ):
     """Residual Income Model (Edwards‑Bell‑Ohlson)."""
-    if not (market_cap and net_income and price_to_book_ratio and price_to_book_ratio > 0):
+    if not (
+        market_cap and net_income and price_to_book_ratio and price_to_book_ratio > 0
+    ):
         return 0
 
     book_val = market_cap / price_to_book_ratio
@@ -257,8 +298,10 @@ def calculate_residual_income_value(
         ri_t = ri0 * (1 + book_value_growth) ** yr
         pv_ri += ri_t / (1 + cost_of_equity) ** yr
 
-    term_ri = ri0 * (1 + book_value_growth) ** (num_years + 1) / (
-        cost_of_equity - terminal_growth_rate
+    term_ri = (
+        ri0
+        * (1 + book_value_growth) ** (num_years + 1)
+        / (cost_of_equity - terminal_growth_rate)
     )
     pv_term = term_ri / (1 + cost_of_equity) ** num_years
 

@@ -3,8 +3,17 @@ from fastapi.responses import StreamingResponse
 import asyncio
 
 from app.backend.models.schemas import ErrorResponse, HedgeFundRequest
-from app.backend.models.events import StartEvent, ProgressUpdateEvent, ErrorEvent, CompleteEvent
-from app.backend.services.graphy import create_graph, parse_hedge_fund_response, run_graph_async
+from app.backend.models.events import (
+    StartEvent,
+    ProgressUpdateEvent,
+    ErrorEvent,
+    CompleteEvent,
+)
+from app.backend.services.graphy import (
+    create_graph,
+    parse_hedge_fund_response,
+    run_graph_async,
+)
 from app.backend.services.portfolio import create_portfolio
 from src.utils.progress import progress
 
@@ -25,7 +34,9 @@ async def run_hedge_fund(request: HedgeFundRequest):
         start_date = request.get_start_date()
 
         # Create the portfolio
-        portfolio = create_portfolio(request.initial_cash, request.margin_requirement, request.tickers)
+        portfolio = create_portfolio(
+            request.initial_cash, request.margin_requirement, request.tickers
+        )
 
         # Construct agent graph
         graph = create_graph(request.selected_agents)
@@ -46,7 +57,9 @@ async def run_hedge_fund(request: HedgeFundRequest):
 
             # Simple handler to add updates to the queue
             def progress_handler(agent_name, ticker, status):
-                event = ProgressUpdateEvent(agent=agent_name, ticker=ticker, status=status)
+                event = ProgressUpdateEvent(
+                    agent=agent_name, ticker=ticker, status=status
+                )
                 progress_queue.put_nowait(event)
 
             # Register our handler with the progress tracker
@@ -72,7 +85,9 @@ async def run_hedge_fund(request: HedgeFundRequest):
                 while not run_task.done():
                     # Either get a progress update or wait a bit
                     try:
-                        event = await asyncio.wait_for(progress_queue.get(), timeout=1.0)
+                        event = await asyncio.wait_for(
+                            progress_queue.get(), timeout=1.0
+                        )
                         yield event.to_sse()
                     except asyncio.TimeoutError:
                         # Just continue the loop
@@ -82,14 +97,20 @@ async def run_hedge_fund(request: HedgeFundRequest):
                 result = run_task.result()
 
                 if not result or not result.get("messages"):
-                    yield ErrorEvent(message="Failed to generate hedge fund decisions").to_sse()
+                    yield ErrorEvent(
+                        message="Failed to generate hedge fund decisions"
+                    ).to_sse()
                     return
 
                 # Send the final result
                 final_data = CompleteEvent(
                     data={
-                        "decisions": parse_hedge_fund_response(result.get("messages", [])[-1].content),
-                        "analyst_signals": result.get("data", {}).get("analyst_signals", {}),
+                        "decisions": parse_hedge_fund_response(
+                            result.get("messages", [])[-1].content
+                        ),
+                        "analyst_signals": result.get("data", {}).get(
+                            "analyst_signals", {}
+                        ),
                     }
                 )
                 yield final_data.to_sse()
@@ -106,4 +127,7 @@ async def run_hedge_fund(request: HedgeFundRequest):
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred while processing the request: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"An error occurred while processing the request: {str(e)}",
+        )

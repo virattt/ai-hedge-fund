@@ -1,7 +1,7 @@
-
-
-def create_portfolio(initial_cash: float, margin_requirement: float, tickers: list[str]) -> dict:
-  return {
+def create_portfolio(
+    initial_cash: float, margin_requirement: float, tickers: list[str]
+) -> dict:
+    return {
         "cash": initial_cash,  # Initial cash amount
         "margin_requirement": margin_requirement,  # Initial margin requirement
         "margin_used": 0.0,  # total margin usage across all short positions

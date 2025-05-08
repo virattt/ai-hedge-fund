@@ -1,0 +1,47 @@
+(
+    checks: (
+        custom: [
+            (
+                name: "ts-lint-fix",
+                command: "pnpm biome check ./src --fix --unsafe",
+                globs: ["*.ts"],
+                default_off: true,
+                fail_on_stderr: false,
+                mode: both,
+            ),
+            (
+                name: "ts-build",
+                command: "pnpm biome check ./src",
+                globs: ["*.ts"],
+                default_off: true,
+                fail_on_stderr: false,
+                mode: both,
+            ),
+            (
+                name: "tsc-build",
+                command: "pnpm tsc --noEmit",
+                globs: ["*.ts"],
+                default_off: true,
+                fail_on_stderr: false,
+                mode: both,
+            ),
+            (
+                name: "ts-test",
+                command: "pnpm test",
+                globs: ["*.ts"],
+                default_off: true,
+                fail_on_stderr: false,
+                mode: both,
+            ),
+            (
+                name: "pytest",
+                command: "poetry run pytest",
+                globs: ["**/*.py"],
+            ),
+        ],
+        enable: ["cargo-clippy"],
+    ),
+    models: (
+        default: "gemini-25pro"
+    )
+)

@@ -17,7 +17,10 @@ def create_graph(selected_agents: list[str]) -> StateGraph:
     graph.add_node("start_node", start)
 
     # Get analyst nodes from the configuration
-    analyst_nodes = {key: (f"{key}_agent", config["agent_func"]) for key, config in ANALYST_CONFIG.items()}
+    analyst_nodes = {
+        key: (f"{key}_agent", config["agent_func"])
+        for key, config in ANALYST_CONFIG.items()
+    }
 
     # Add selected analyst nodes
     for agent_name in selected_agents:
@@ -45,12 +48,19 @@ def create_graph(selected_agents: list[str]) -> StateGraph:
     return graph
 
 
-async def run_graph_async(graph, portfolio, tickers, start_date, end_date, model_name, model_provider):
+async def run_graph_async(
+    graph, portfolio, tickers, start_date, end_date, model_name, model_provider
+):
     """Async wrapper for run_graph to work with asyncio."""
     # Use run_in_executor to run the synchronous function in a separate thread
     # so it doesn't block the event loop
     loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(None, lambda: run_graph(graph, portfolio, tickers, start_date, end_date, model_name, model_provider))  # Use default executor
+    result = await loop.run_in_executor(
+        None,
+        lambda: run_graph(
+            graph, portfolio, tickers, start_date, end_date, model_name, model_provider
+        ),
+    )  # Use default executor
     return result
 
 
@@ -99,8 +109,12 @@ def parse_hedge_fund_response(response):
         print(f"JSON decoding error: {e}\nResponse: {repr(response)}")
         return None
     except TypeError as e:
-        print(f"Invalid response type (expected string, got {type(response).__name__}): {e}")
+        print(
+            f"Invalid response type (expected string, got {type(response).__name__}): {e}"
+        )
         return None
     except Exception as e:
-        print(f"Unexpected error while parsing response: {e}\nResponse: {repr(response)}")
+        print(
+            f"Unexpected error while parsing response: {e}\nResponse: {repr(response)}"
+        )
         return None

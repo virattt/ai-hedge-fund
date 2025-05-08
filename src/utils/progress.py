@@ -40,7 +40,9 @@ class AgentProgress:
             self.live.stop()
             self.started = False
 
-    def update_status(self, agent_name: str, ticker: Optional[str] = None, status: str = ""):
+    def update_status(
+        self, agent_name: str, ticker: Optional[str] = None, status: str = ""
+    ):
         """Update the status of an agent."""
         if agent_name not in self.agent_status:
             self.agent_status[agent_name] = {"status": "", "ticker": None}
@@ -58,7 +60,14 @@ class AgentProgress:
 
     def get_all_status(self):
         """Get the current status of all agents as a dictionary."""
-        return {agent_name: {"ticker": info["ticker"], "status": info["status"], "display_name": self._get_display_name(agent_name)} for agent_name, info in self.agent_status.items()}
+        return {
+            agent_name: {
+                "ticker": info["ticker"],
+                "status": info["status"],
+                "display_name": self._get_display_name(agent_name),
+            }
+            for agent_name, info in self.agent_status.items()
+        }
 
     def _get_display_name(self, agent_name: str) -> str:
         """Convert agent_name to a display-friendly format."""

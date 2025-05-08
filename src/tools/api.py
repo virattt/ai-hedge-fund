@@ -27,7 +27,11 @@ def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
     # Check cache first
     if cached_data := _cache.get_prices(ticker):
         # Filter cached data by date range and convert to Price objects
-        filtered_data = [Price(**price) for price in cached_data if start_date <= price["time"] <= end_date]
+        filtered_data = [
+            Price(**price)
+            for price in cached_data
+            if start_date <= price["time"] <= end_date
+        ]
         if filtered_data:
             return filtered_data
 
@@ -39,7 +43,9 @@ def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
     url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
     response = requests.get(url, headers=headers)
     if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+        raise Exception(
+            f"Error fetching data: {ticker} - {response.status_code} - {response.text}"
+        )
 
     # Parse response with Pydantic model
     price_response = PriceResponse(**response.json())
@@ -63,7 +69,11 @@ def get_financial_metrics(
     # Check cache first
     if cached_data := _cache.get_financial_metrics(ticker):
         # Filter cached data by date and limit
-        filtered_data = [FinancialMetrics(**metric) for metric in cached_data if metric["report_period"] <= end_date]
+        filtered_data = [
+            FinancialMetrics(**metric)
+            for metric in cached_data
+            if metric["report_period"] <= end_date
+        ]
         filtered_data.sort(key=lambda x: x.report_period, reverse=True)
         if filtered_data:
             return filtered_data[:limit]
@@ -76,7 +86,9 @@ def get_financial_metrics(
     url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
     response = requests.get(url, headers=headers)
     if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+        raise Exception(
+            f"Error fetching data: {ticker} - {response.status_code} - {response.text}"
+        )
 
     # Parse response with Pydantic model
     metrics_response = FinancialMetricsResponse(**response.json())
@@ -115,7 +127,9 @@ def search_line_items(
     }
     response = requests.post(url, headers=headers, json=body)
     if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+        raise Exception(
+            f"Error fetching data: {ticker} - {response.status_code} - {response.text}"
+        )
     data = response.json()
     response_model = LineItemResponse(**data)
     search_results = response_model.search_results
@@ -136,8 +150,18 @@ def get_insider_trades(
     # Check cache first
     if cached_data := _cache.get_insider_trades(ticker):
         # Filter cached data by date range
-        filtered_data = [InsiderTrade(**trade) for trade in cached_data if (start_date is None or (trade.get("transaction_date") or trade["filing_date"]) >= start_date) and (trade.get("transaction_date") or trade["filing_date"]) <= end_date]
-        filtered_data.sort(key=lambda x: x.transaction_date or x.filing_date, reverse=True)
+        filtered_data = [
+            InsiderTrade(**trade)
+            for trade in cached_data
+            if (
+                start_date is None
+                or (trade.get("transaction_date") or trade["filing_date"]) >= start_date
+            )
+            and (trade.get("transaction_date") or trade["filing_date"]) <= end_date
+        ]
+        filtered_data.sort(
+            key=lambda x: x.transaction_date or x.filing_date, reverse=True
+        )
         if filtered_data:
             return filtered_data
 
@@ -157,7 +181,9 @@ def get_insider_trades(
 
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
-            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+            raise Exception(
+                f"Error fetching data: {ticker} - {response.status_code} - {response.text}"
+            )
 
         data = response.json()
         response_model = InsiderTradeResponse(**data)
@@ -173,7 +199,9 @@ def get_insider_trades(
             break
 
         # Update end_date to the oldest filing date from current batch for next iteration
-        current_end_date = min(trade.filing_date for trade in insider_trades).split("T")[0]
+        current_end_date = min(trade.filing_date for trade in insider_trades).split(
+            "T"
+        )[0]
 
         # If we've reached or passed the start_date, we can stop
         if current_end_date <= start_date:
@@ -197,7 +225,12 @@ def get_company_news(
     # Check cache first
     if cached_data := _cache.get_company_news(ticker):
         # Filter cached data by date range
-        filtered_data = [CompanyNews(**news) for news in cached_data if (start_date is None or news["date"] >= start_date) and news["date"] <= end_date]
+        filtered_data = [
+            CompanyNews(**news)
+            for news in cached_data
+            if (start_date is None or news["date"] >= start_date)
+            and news["date"] <= end_date
+        ]
         filtered_data.sort(key=lambda x: x.date, reverse=True)
         if filtered_data:
             return filtered_data
@@ -218,7 +251,9 @@ def get_company_news(
 
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
-            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+            raise Exception(
+                f"Error fetching data: {ticker} - {response.status_code} - {response.text}"
+            )
 
         data = response.json()
         response_model = CompanyNewsResponse(**data)
