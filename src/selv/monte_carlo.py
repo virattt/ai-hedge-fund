@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from src.selv.indicators import add_indicators  # your TA helpers
-from src.selv.backtest import run_strategy_on_df  # we'll write this wrapper next
+from src.selv.indicators import add_indicators, run_strategy_on_df  # your TA helpers
+from mpmath import erfinv, sqrt
+import math
 
 # CSV_PATH = Path("btc_data.csv")
 # N_PATHS = 5_000  # simulations
@@ -71,88 +72,72 @@ def simulate_path(start_price: float, rng: np.random.Generator, original_df: pd.
 # --- Strategy Entry Functions -------------------------------------------------
 
 
-# Strategy 1: EMA Crossover (10/30 min)
-def long_ema_10_30_cross(df: pd.DataFrame) -> pd.Series:
-    """Long entry for EMA 10/30 crossover."""
-    return df["EMA_10"] > df["EMA_30"]
+# TODO: understand this function 
+def min_track_record_length(sr_hat: float,
+                            sr_bench: float = 0,
+                            skew: float = 0,
+                            kurt: float = 0,
+                            alpha: float = 0.05) -> int:
+    """
+    Return n_min for given Sharpe at (1-alpha) confidence.
+
+    Uses the same denominator as the Probabilistic Sharpe Ratio (Bailey & López de Prado, 2012).
+    Note: kurtosis should be the raw kurtosis (not excess; i.e., Fisher + 3).
+    """
+    from math import isnan
+    if sr_hat == sr_bench or isnan(sr_hat):
+        return float("inf")
+    z = sqrt(2) * erfinv(1 - 2*alpha)        # normal quantile
+    # numerator and denominator per Bailey & López de Prado (2012)
+    num = (1 - skew*sr_hat*sr_bench + (kurt-3)/4 * sr_hat**2) * z**2
+    den = (sr_hat - sr_bench)**2
+    return int(num/den + 1)
 
 
-def short_ema_10_30_cross(df: pd.DataFrame) -> pd.Series:
-    """Short entry for EMA 10/30 crossover."""
-    return df["EMA_10"] < df["EMA_30"]
+# --------------------------------------------------------------------------
+# Probabilistic Sharpe Ratio (Bailey & López de Prado, 2012)
+# --------------------------------------------------------------------------
+def probabilistic_sharpe_ratio(sr_hat: float,
+                               sr_bench: float,
+                               n: int,
+                               skew: float = 0,
+                               kurt: float = 0) -> float:
+    """
+    Compute the Probabilistic Sharpe Ratio (PSR), i.e. the probability
+    that the true Sharpe ratio exceeds `sr_bench`.
 
+    PSR = Φ( (SR_hat - SR_bench) * sqrt(n-1)
+             / sqrt(1 - γ SR_hat SR_bench + ((κ-3)/4) SR_hat²) )
 
-# Strategy 2: SMA Crossover (50/200 min - Golden/Death Cross)
-def long_sma_50_200_cross(df: pd.DataFrame) -> pd.Series:
-    """Long entry for SMA 50/200 crossover."""
-    return df["SMA_50"] > df["SMA_200"]
+    where   γ = skewness, κ = kurtosis, Φ = standard normal CDF.
 
-
-def short_sma_50_200_cross(df: pd.DataFrame) -> pd.Series:
-    """Short entry for SMA 50/200 crossover."""
-    return df["SMA_50"] < df["SMA_200"]
-
-
-# Strategy 3: RSI (Oversold/Overbought)
-def long_rsi_30_70(df: pd.DataFrame) -> pd.Series:
-    """Long entry for RSI < 30."""
-    return df["rsi"] < 30
-
-
-def short_rsi_30_70(df: pd.DataFrame) -> pd.Series:
-    """Short entry for RSI > 70."""
-    return df["rsi"] > 70
-
-
-# Strategy 4: MACD Crossover (Standard)
-def long_macd_cross(df: pd.DataFrame) -> pd.Series:
-    """Long entry for MACD crossover."""
-    return df["MACD_12_26_9"] > df["MACDs_12_26_9"]
-
-
-def short_macd_cross(df: pd.DataFrame) -> pd.Series:
-    """Short entry for MACD crossunder."""
-    return df["MACD_12_26_9"] < df["MACDs_12_26_9"]
-
-
-# Strategy 5: MACD + RSI (Confirmation)
-def long_macd_rsi_confirm(df: pd.DataFrame) -> pd.Series:
-    """Long entry for MACD crossover and RSI > 55."""
-    return (df["MACD_12_26_9"] > df["MACDs_12_26_9"]) & (df["rsi"] > 55)
-
-
-def short_macd_rsi_confirm(df: pd.DataFrame) -> pd.Series:
-    """Short entry for MACD crossunder and RSI < 45."""
-    return (df["MACD_12_26_9"] < df["MACDs_12_26_9"]) & (df["rsi"] < 45)
-
-
-STRATEGIES = {
-    "EMA_10_30_Cross": {
-        "long_entry_fun": long_ema_10_30_cross,
-        "short_entry_fun": short_ema_10_30_cross,
-    },
-    # "SMA_50_200_Cross": {
-    #     "long_entry_fun": long_sma_50_200_cross,
-    #     "short_entry_fun": short_sma_50_200_cross,
-    # },
-    # "RSI_30_70": {
-    #     "long_entry_fun": long_rsi_30_70,
-    #     "short_entry_fun": short_rsi_30_70,
-    # },
-    # "MACD_Cross": {
-    #     "long_entry_fun": long_macd_cross,
-    #     "short_entry_fun": short_macd_cross,
-    # },
-    # "MACD_RSI_Confirm": {  # This is the original default
-    #     "long_entry_fun": long_macd_rsi_confirm,
-    #     "short_entry_fun": short_macd_rsi_confirm,
-    # },
-}
+    Parameters
+    ----------
+    sr_hat : float
+        Observed (sample) Sharpe ratio.
+    sr_bench : float
+        Benchmark Sharpe ratio to beat (often 0).
+    n : int
+        Number of independent return observations.
+    skew, kurt : float
+        Sample skewness and kurtosis (kurtosis *not* excess).
+    """
+    if n <= 1:
+        return 0.0
+    # denominator per Bailey & LdP (2012)
+    denom = math.sqrt(
+        1 - skew * sr_hat * sr_bench + ((kurt - 3) / 4.0) * sr_hat ** 2
+    )
+    if denom == 0:
+        return 0.0
+    z = (sr_hat - sr_bench) * math.sqrt(n - 1) / denom
+    # Φ(z)
+    return 0.5 * (1 + math.erf(z / math.sqrt(2)))
 
 
 def simulate_and_run_strategy(args):
     """Generates a synthetic price path and runs a given strategy."""
-    worker_id, strategy_name, long_entry_fun, short_entry_fun, seed, original_df = args
+    worker_id, strategy_name, long_entry_fun, short_entry_fun, tp, sl, max_minutes, seed, original_df = args
 
     # Generate one synthetic price path
     rng = np.random.default_rng(
@@ -181,9 +166,18 @@ def simulate_and_run_strategy(args):
         synthetic,
         long_entry_fun=long_entry_fun,
         short_entry_fun=short_entry_fun,
+        tp=tp,
+        sl=sl,
+        max_minutes=max_minutes,
     )
     result["path_id"] = worker_id
     result["strategy_name"] = strategy_name
+    sr  = result["sharpe"]
+    sk  = synthetic["close"].pct_change().skew()
+    ku  = synthetic["close"].pct_change().kurt() + 3  # convert excess to regular
+    n_obs = synthetic.shape[0]
+    result["psr"] = probabilistic_sharpe_ratio(sr, 0.0, n_obs, sk, ku)
+    result["MinTRL"] = min_track_record_length(sr, skew=sk, kurt=ku)
     return result
 
 
@@ -193,16 +187,17 @@ def simulate_and_run_strategy(args):
 #     np.random.seed(SEED)
 
 #     tasks = []
+#     # Note: tasks now include tp, sl, max_minutes parameters for each strategy/path
 #     for strategy_name, funcs in STRATEGIES.items():
 #         for i in range(N_PATHS):
-#             # Each task: (unique_id_for_rng_and_path, strategy_name, long_func, short_func)
+#             # Each task: (unique_id_for_rng_and_path, strategy_name, long_func, short_func, tp, sl, max_minutes, seed, original_df)
 #             # To ensure unique paths for each (strategy, path_num) combination,
 #             # we can use a global path counter for the seed or combine strategy index and path index.
 #             # Here, (i) will be the path_id for a given strategy.
 #             # The RNG seed will be SEED + i, meaning path i for strategy A is same as path i for strategy B.
 #             # If truly independent paths are needed for each strategy-path combo, adjust seeding.
 #             tasks.append(
-#                 (i, strategy_name, funcs["long_entry_fun"], funcs["short_entry_fun"])
+#                 (i, strategy_name, funcs["long_entry_fun"], funcs["short_entry_fun"], funcs.get("tp"), funcs.get("sl"), funcs.get("max_minutes"), SEED, original_df)
 #             )
 
 #     with mp.Pool() as pool:

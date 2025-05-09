@@ -11,7 +11,7 @@ def run_strategy_on_df(
     tp: float = 0.02,
     sl: float = 0.01,
     max_minutes: int = 1440,
-    initial_capital: float = 10_000.0,        # ⬅ NEW
+    initial_capital: float = 10_000.0,
 ) -> dict:
     """
     Back‑test a long/short strategy and return both:

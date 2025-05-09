@@ -73,3 +73,6 @@ def download_ohlcv(
         logging.info("Saved %d rows ➜ %s", len(df), outfile)
 
     return df
+
+# Download Five years of data
+# download_ohlcv("BTC/USDT", timeframe="1m", days=1825, exchange_id="coinbase", outfile="btc_1m_5yr.csv")
