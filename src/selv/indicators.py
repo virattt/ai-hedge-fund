@@ -23,10 +23,29 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df.ta.ema(close="close", length=30, append=True)  # EMA_30
     df.ta.sma(close="close", length=50, append=True)  # SMA_50
     df.ta.sma(close="close", length=200, append=True)  # SMA_200
+
+    # --- Additional indicators for advanced strategies --------------------
+    # Bollinger Bands (20, 2)
+    df.ta.bbands(close="close", length=20, std=2, append=True)
+
+    # EMA 21 for Golden‑/Death‑Cross with SMA 50
+    df.ta.ema(close="close", length=21, append=True)   # EMA_21
+
+    # Triple EMA (TEMA) 50
+    df.ta.tema(close="close", length=50, append=True)  # TEMA_50
+
+    # Stochastic RSI (14,14,3,3) – appends %K and %D
+    df.ta.stochrsi(close="close", append=True)
+
+    # VWAP – intraday but still useful on 1‑min data
+    # pandas‑ta v0.3.14 appends column 'VWAP_D'
+    df.ta.vwap(append=True)
+
+    # Ensure no NA rows remain
     df.dropna(inplace=True)
     return df
 
-def run_strategy_on_df(
+def long_short_strategy(
     df: pd.DataFrame,
     *,
     long_entry_fun: Callable[[pd.DataFrame], pd.Series] | None = None,
@@ -129,7 +148,7 @@ def run_strategy_on_df(
 
 
 
-def strategy_buy_sell_strategy(
+def buy_sell_strategy(
     df: pd.DataFrame,
     *,
     long_entry_fun: Callable[[pd.DataFrame], pd.Series] | None = None,

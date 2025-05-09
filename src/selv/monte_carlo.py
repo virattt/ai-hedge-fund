@@ -1,7 +1,11 @@
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from src.selv.indicators import add_indicators, run_strategy_on_df  # your TA helpers
+from src.selv.indicators import (
+    add_indicators,
+    long_short_strategy,
+    buy_sell_strategy,
+)  # strategy executors
 from mpmath import erfinv, sqrt
 import math
 
@@ -137,7 +141,18 @@ def probabilistic_sharpe_ratio(sr_hat: float,
 
 def simulate_and_run_strategy(args):
     """Generates a synthetic price path and runs a given strategy."""
-    worker_id, strategy_name, long_entry_fun, short_entry_fun, tp, sl, max_minutes, seed, original_df = args
+    (
+        worker_id,
+        strategy_name,
+        exec_type,           # 'LS' for long_short_strategy, 'BS' for buy_sell_strategy
+        long_entry_fun,
+        short_entry_fun,
+        tp,
+        sl,
+        max_minutes,
+        seed,
+        original_df,
+    ) = args
 
     # Generate one synthetic price path
     rng = np.random.default_rng(
@@ -156,22 +171,34 @@ def simulate_and_run_strategy(args):
     # Note: worker_id here might not be unique if N_PATHS is small and many strategies
     # A unique path_id for saving could be worker_id * num_strategies + strategy_index
     # For simplicity, we'll just use worker_id and accept potential overwrites if N_PATHS is very small.
-    if worker_id < 200:  # Save first few paths for inspection (per strategy)
-        Path("debug").mkdir(exist_ok=True)
-        # Sanitize strategy_name for filename
-        safe_strategy_name = "".join(c if c.isalnum() else "_" for c in strategy_name)
-        synthetic.to_parquet(f"debug/sim_path_{safe_strategy_name}_{worker_id}.parquet")
+    # if worker_id < 200:  # Save first few paths for inspection (per strategy)
+    #     Path("debug").mkdir(exist_ok=True)
+    #     # Sanitize strategy_name for filename
+    #     safe_strategy_name = "".join(c if c.isalnum() else "_" for c in strategy_name)
+    #     synthetic.to_parquet(f"debug/sim_path_{safe_strategy_name}_{worker_id}.parquet")
 
-    result = run_strategy_on_df(
-        synthetic,
-        long_entry_fun=long_entry_fun,
-        short_entry_fun=short_entry_fun,
-        tp=tp,
-        sl=sl,
-        max_minutes=max_minutes,
-    )
+    if exec_type == "LS":
+        # long + short variant
+        result = long_short_strategy(
+            synthetic,
+            long_entry_fun=long_entry_fun,
+            short_entry_fun=short_entry_fun,
+            tp=tp,
+            sl=sl,
+            max_minutes=max_minutes,
+        )
+    else:  # 'BS' → buy/sell (long‑only)
+        result = buy_sell_strategy(
+            synthetic,
+            long_entry_fun=long_entry_fun,
+            sell_entry_fun=short_entry_fun,   # exit function reused
+            tp=tp,
+            sl=sl,
+            max_minutes=max_minutes,
+        )
     result["path_id"] = worker_id
     result["strategy_name"] = strategy_name
+    result["exec_type"] = exec_type
     sr  = result["sharpe"]
     sk  = synthetic["close"].pct_change().skew()
     ku  = synthetic["close"].pct_change().kurt() + 3  # convert excess to regular
@@ -187,17 +214,31 @@ def simulate_and_run_strategy(args):
 #     np.random.seed(SEED)
 
 #     tasks = []
-#     # Note: tasks now include tp, sl, max_minutes parameters for each strategy/path
+#     # Note: tasks now include exec_type before the long/short functions
+#     # (i, strategy_name, exec_type, long_fun, short_fun, tp, sl, max_minutes, seed, original_df)
 #     for strategy_name, funcs in STRATEGIES.items():
 #         for i in range(N_PATHS):
-#             # Each task: (unique_id_for_rng_and_path, strategy_name, long_func, short_func, tp, sl, max_minutes, seed, original_df)
-#             # To ensure unique paths for each (strategy, path_num) combination,
-#             # we can use a global path counter for the seed or combine strategy index and path index.
-#             # Here, (i) will be the path_id for a given strategy.
-#             # The RNG seed will be SEED + i, meaning path i for strategy A is same as path i for strategy B.
-#             # If truly independent paths are needed for each strategy-path combo, adjust seeding.
+#             # To run both executor types for each strategy and path:
+#             # exec_variants = [("LS", funcs["long_entry_fun"], funcs["short_entry_fun"]),
+#             #                  ("BS", funcs["long_entry_fun"], funcs["short_entry_fun"])]
+#             # for exec_type, le_fun, se_fun in exec_variants:
+#             #     tasks.append(
+#             #         (
+#             #             i,
+#             #             strategy_name,
+#             #             exec_type,
+#             #             le_fun,
+#             #             se_fun,
+#             #             funcs["tp"],
+#             #             funcs["sl"],
+#             #             funcs["max_minutes"],
+#             #             SEED,
+#             #             original_df,
+#             #         )
+#             #     )
+#             # Or for just one exec_type:
 #             tasks.append(
-#                 (i, strategy_name, funcs["long_entry_fun"], funcs["short_entry_fun"], funcs.get("tp"), funcs.get("sl"), funcs.get("max_minutes"), SEED, original_df)
+#                 (i, strategy_name, "LS", funcs["long_entry_fun"], funcs["short_entry_fun"], funcs.get("tp"), funcs.get("sl"), funcs.get("max_minutes"), SEED, original_df)
 #             )
 
 #     with mp.Pool() as pool:
