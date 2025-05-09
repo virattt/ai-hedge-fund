@@ -1,46 +1,17 @@
-import {
-  Background,
-  ColorMode,
-  Controls,
-  ReactFlow,
-  addEdge,
-  useEdgesState,
-  useNodesState,
-  type OnConnect
-} from '@xyflow/react';
-import { useCallback, useState } from 'react';
-
-import '@xyflow/react/dist/style.css';
-
-import { edgeTypes, initialEdges } from './edges';
-import { initialNodes, nodeTypes } from './nodes';
+import { useState } from 'react';
+import { Flow } from './components/Flow';
+import { Layout } from './components/Layout';
 
 export default function App() {
-  const [colorMode, setColorMode] = useState<ColorMode>('dark');
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const proOptions = { hideAttribution: true };
-  const onConnect: OnConnect = useCallback(
-    (connection) => setEdges((edges) => addEdge(connection, edges)),
-    [setEdges]
-  );
+  const [showLeftSidebar] = useState(false);
+  const [showRightSidebar] = useState(false);
 
   return (
-    <ReactFlow
-      nodes={nodes}
-      nodeTypes={nodeTypes}
-      onNodesChange={onNodesChange}
-      edges={edges}
-      edgeTypes={edgeTypes}
-      onEdgesChange={onEdgesChange}
-      onConnect={onConnect}
-      colorMode={colorMode}
-      proOptions={proOptions}
-      fitView
+    <Layout
+      leftSidebar={showLeftSidebar ? <div className="p-4 text-white">Left Sidebar Content</div> : undefined}
+      rightSidebar={showRightSidebar ? <div className="p-4 text-white">Right Sidebar Content</div> : undefined}
     >
-      <Background />
-      {/* <MiniMap /> */}
-      <Controls />
-    </ReactFlow>
+      <Flow />
+    </Layout>
   );
 }

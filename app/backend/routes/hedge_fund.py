@@ -4,7 +4,7 @@ import asyncio
 
 from app.backend.models.schemas import ErrorResponse, HedgeFundRequest
 from app.backend.models.events import StartEvent, ProgressUpdateEvent, ErrorEvent, CompleteEvent
-from app.backend.services.graphy import create_graph, parse_hedge_fund_response, run_graph_async
+from app.backend.services.graph import create_graph, parse_hedge_fund_response, run_graph_async
 from app.backend.services.portfolio import create_portfolio
 from src.utils.progress import progress
 
