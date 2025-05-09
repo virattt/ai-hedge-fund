@@ -1,83 +1,75 @@
-import asyncio
+# data_download.py
+import asyncio, logging
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Optional
+
 import ccxt.async_support as ccxt
 import pandas as pd
-from datetime import datetime, timedelta
 
-# Add logging import and configuration
-import logging
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s  %(levelname)s  %(message)s")
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+async def _fetch_candles_parallel(
+    exchange: ccxt.Exchange,
+    symbol: str,
+    timeframe: str,
+    since_ms: int,
+    limit: int = 1_000,
+) -> list[list]:
+    """Download all OHLCV candles from `since_ms` up to *now* (async, rate‑limit‑aware)."""
+    tf_ms = exchange.parse_timeframe(timeframe) * 1_000
+    windows = list(range(since_ms, exchange.milliseconds(), limit * tf_ms))
 
+    async def fetch_window(start):
+        return await exchange.fetch_ohlcv(symbol, timeframe, since=start, limit=limit)
 
-async def fetch_candles_parallel(exchange, symbol, timeframe, since, limit):
-    # Calculate timeframe in milliseconds
-    timeframe_ms = exchange.parse_timeframe(timeframe) * 1000
-    # Build list of (since, until) windows
-    windows = []
-    current = since
-    now_ms = exchange.milliseconds()
-    while current < now_ms:
-        windows.append(current)
-        current += limit * timeframe_ms
-
-    # Define coroutine for a single window
-    async def fetch_window(start_ts):
-        return await exchange.fetch_ohlcv(
-            symbol, timeframe=timeframe, since=start_ts, limit=limit
-        )
-
+    rate_limit = getattr(exchange, "rateLimit", 1_000) / 1_000
     results = []
-    # Determine exchange rate limit in milliseconds (fallback to 1000 ms)
-    rate_limit_ms = getattr(exchange, "rateLimit", 1000)
-    for start_ts in windows:
-        batch = await fetch_window(start_ts)
-        results.append(batch)
-        # Throttle to respect rate limit
-        await asyncio.sleep(rate_limit_ms / 1000)
-    # Flatten list of lists
-    return [candle for batch in results for candle in batch]
+    for start in windows:
+        results.extend(await fetch_window(start))
+        await asyncio.sleep(rate_limit)
+    return results
 
 
-# Initialize exchange (no API keys needed for public data)
-exchange = ccxt.coinbase()
+def download_ohlcv(
+    symbol: str,
+    timeframe: str = "1m",
+    days: int = 365,
+    *,
+    exchange_id: str = "coinbase",
+    outfile: Optional[Path | str] = None,
+) -> pd.DataFrame:
+    """
+    Fetch historical candles and return a DataFrame.
 
-# Define symbol and timeframe
-symbol = "BTC/USDT"
-timeframe = "1m"
+    Parameters
+    ----------
+    symbol       e.g. "BTC/USDT"
+    timeframe    e.g. "1m", "5m", "1h"
+    days         how many days back from now
+    exchange_id  any ccxt exchange id that supports the symbol
+    outfile      optional CSV path – if given, data is saved to disk
+    """
+    async def _worker():
+        ex = getattr(ccxt, exchange_id)()
+        since_ms = int((datetime.utcnow() - timedelta(days=days)).timestamp() * 1_000)
+        logging.info("Downloading %s %s for %s days via %s",
+                     symbol, timeframe, days, exchange_id)
+        candles = await _fetch_candles_parallel(ex, symbol, timeframe, since_ms)
+        await ex.close()
+        return candles
 
-# Calculate timestamp for one year ago from now
-one_year_ago = datetime.utcnow() - timedelta(days=365)
-# Convert to milliseconds for API
-since = int(one_year_ago.timestamp() * 1000)
+    candles = asyncio.run(_worker())
+    df = pd.DataFrame(candles, columns=["timestamp", "open", "high", "low",
+                                        "close", "volume"])
+    df["datetime"] = pd.to_datetime(df["timestamp"], unit="ms")
+    df.set_index("datetime", inplace=True)
 
-# Fetch historical data in batches (Binance API allows 1000 candles per request)
-batch_limit = 1000
+    if outfile:
+        outfile = Path(outfile)
+        outfile.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(outfile)
+        logging.info("Saved %d rows ➜ %s", len(df), outfile)
 
-# Log the start of data fetching
-logging.info(
-    f"Starting to fetch historical data for {symbol} from {one_year_ago.strftime('%Y-%m-%d')} to present."
-)
-
-# Use async fetch to populate all_candles
-all_candles = asyncio.run(
-    fetch_candles_parallel(exchange, symbol, timeframe, since, batch_limit)
-)
-logging.info(f"Completed fetching data. Total candles fetched: {len(all_candles)}.")
-
-# Create DataFrame from candles
-df = pd.DataFrame(
-    all_candles, columns=["timestamp", "open", "high", "low", "close", "volume"]
-)
-# Convert timestamp to datetime for readability (optional)
-df["datetime"] = pd.to_datetime(df["timestamp"], unit="ms")
-df.set_index("datetime", inplace=True)
-# Log before saving
-logging.info("Saving fetched data to 'btc_data.csv'.")
-df.to_csv("btc_data.csv", index=True)
-# Log after saving
-logging.info("Data successfully saved.")
-
-# Close the async exchange client
-asyncio.run(exchange.close())
+    return df
