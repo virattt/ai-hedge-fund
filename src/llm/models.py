@@ -19,6 +19,7 @@ class ModelProvider(str, Enum):
     GROQ = "Groq"
     OPENAI = "OpenAI"
     OLLAMA = "Ollama"
+    SILICONFLOW = "SiliconFlow"  # <-- Add this line
 
 
 class LLMModel(BaseModel):
@@ -69,6 +70,10 @@ AVAILABLE_MODELS = [
     LLMModel(display_name="[openai] gpt-4o", model_name="gpt-4o", provider=ModelProvider.OPENAI),
     LLMModel(display_name="[openai] o3", model_name="o3", provider=ModelProvider.OPENAI),
     LLMModel(display_name="[openai] o4-mini", model_name="o4-mini", provider=ModelProvider.OPENAI),
+    LLMModel(display_name="[siliconflow] deepseek-ai/DeepSeek-V3", model_name="deepseek-ai/DeepSeek-V3", provider=ModelProvider.SILICONFLOW), # <-- Add this line
+    LLMModel(display_name="[siliconflow] deepseek-ai/DeepSeek-R1", model_name="deepseek-ai/DeepSeek-R1", provider=ModelProvider.SILICONFLOW),
+    LLMModel(display_name="[siliconflow] Qwen/Qwen3-235B-A22B", model_name="Qwen/Qwen3-235B-A22B", provider=ModelProvider.SILICONFLOW),
+    LLMModel(display_name="[siliconflow] Qwen/Qwen3-30B-A3B", model_name="Qwen/Qwen3-30B-A3B", provider=ModelProvider.SILICONFLOW),
 ]
 
 # Define Ollama models separately
@@ -139,3 +144,15 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
             model=model_name,
             base_url=base_url,
         )
+    elif model_provider == ModelProvider.SILICONFLOW:  # <-- Add this block
+        api_key = os.getenv("SILICONFLOW_API_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure SILICONFLOW_API_KEY is set in your .env file.")
+            raise ValueError("SiliconFlow API key not found. Please make sure SILICONFLOW_API_KEY is set in your .env file.")
+        # noinspection PyTypeChecker
+        return ChatOpenAI(  # Assuming SiliconFlow is OpenAI compatible
+            model=model_name,
+            api_key=api_key,
+            base_url="https://api.siliconflow.cn/v1" # The client appends /chat/completions
+        )
+    return None
