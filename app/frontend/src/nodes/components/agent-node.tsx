@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { CardContent } from '@/components/ui/card';
 import { useNodeStatus } from '@/contexts/node-context';
+import { cn } from '@/lib/utils';
 import { NodeMessage, type AgentNode } from '../types';
 import { getStatusColor } from '../utils';
 import { AgentOutputDialog } from './agent-output-dialog';
@@ -24,6 +25,7 @@ export function AgentNode({
     lastUpdated: 0
   };
   const status = nodeData.status;
+  const isInProgress = status === 'IN_PROGRESS';
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   return (
@@ -35,6 +37,7 @@ export function AgentNode({
       iconColor={getStatusColor(status)}
       name={data.name || "Agent"}
       description={data.description}
+      status={status}
     >
       <CardContent className="p-0">
         <div className="border-t border-border p-3">
@@ -43,8 +46,11 @@ export function AgentNode({
               Status
             </div>
 
-            <div className={`text-foreground text-xs rounded p-2 ${getStatusColor(status)}`}>
-              {status}
+            <div className={cn(
+              "text-foreground text-xs rounded p-2",
+              isInProgress ? "gradient-animation" : getStatusColor(status)
+            )}>
+              <span className="capitalize">{status.toLowerCase().replace(/_/g, ' ')}</span>
             </div>
             
             {nodeData.message && (
