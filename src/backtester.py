@@ -606,43 +606,47 @@ class Backtester:
 
 
 ### 4. Run the Backtest #####
+import argparse
+
+# Define argument parser
+parser = argparse.ArgumentParser(description="Run backtesting simulation")
+parser.add_argument(
+    "--tickers",
+    type=str,
+    required=False,
+    help="Comma-separated list of stock ticker symbols (e.g., AAPL,MSFT,GOOGL)",
+)
+parser.add_argument(
+    "--end-date",
+    type=str,
+    default=datetime.now().strftime("%Y-%m-%d"),
+    help="End date in YYYY-MM-DD format",
+)
+parser.add_argument(
+    "--start-date",
+    type=str,
+    default=(datetime.now() - relativedelta(months=1)).strftime("%Y-%m-%d"),
+    help="Start date in YYYY-MM-DD format",
+)
+parser.add_argument(
+    "--initial-capital",
+    type=float,
+    default=100000,
+    help="Initial capital amount (default: 100000)",
+)
+parser.add_argument(
+    "--margin-requirement",
+    type=float,
+    default=0.0,
+    help="Margin ratio for short positions, e.g. 0.5 for 50% (default: 0.0)",
+)
+parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
+parser.add_argument("--model", type=str, help="Specify which Ollama model to use (e.g., deepseek-coder:r1)")
+
+# Parse the arguments
+args = parser.parse_args()
+
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Run backtesting simulation")
-    parser.add_argument(
-        "--tickers",
-        type=str,
-        required=False,
-        help="Comma-separated list of stock ticker symbols (e.g., AAPL,MSFT,GOOGL)",
-    )
-    parser.add_argument(
-        "--end-date",
-        type=str,
-        default=datetime.now().strftime("%Y-%m-%d"),
-        help="End date in YYYY-MM-DD format",
-    )
-    parser.add_argument(
-        "--start-date",
-        type=str,
-        default=(datetime.now() - relativedelta(months=1)).strftime("%Y-%m-%d"),
-        help="Start date in YYYY-MM-DD format",
-    )
-    parser.add_argument(
-        "--initial-capital",
-        type=float,
-        default=100000,
-        help="Initial capital amount (default: 100000)",
-    )
-    parser.add_argument(
-        "--margin-requirement",
-        type=float,
-        default=0.0,
-        help="Margin ratio for short positions, e.g. 0.5 for 50% (default: 0.0)",
-    )
-    parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
-
-    args = parser.parse_args()
 
     # Parse tickers from comma-separated string
     tickers = [ticker.strip() for ticker in args.tickers.split(",")] if args.tickers else []
@@ -678,23 +682,28 @@ if __name__ == "__main__":
     if args.ollama:
         print(f"{Fore.CYAN}Using Ollama for local LLM inference.{Style.RESET_ALL}")
 
-        # Select from Ollama-specific models
-        model_choice = questionary.select(
-            "Select your Ollama model:",
-            choices=[questionary.Choice(display, value=value) for display, value, _ in OLLAMA_LLM_ORDER],
-            style=questionary.Style(
-                [
-                    ("selected", "fg:green bold"),
-                    ("pointer", "fg:green bold"),
-                    ("highlighted", "fg:green"),
-                    ("answer", "fg:green bold"),
-                ]
-            ),
-        ).ask()
+        # Use model from command line if provided, otherwise ask user to select
+        if args.model:
+            model_choice = args.model
+            print(f"Using specified model: {model_choice}")
+        else:
+            # Select from Ollama-specific models
+            model_choice = questionary.select(
+                "Select your Ollama model:",
+                choices=[questionary.Choice(display, value=value) for display, value, _ in OLLAMA_LLM_ORDER],
+                style=questionary.Style(
+                    [
+                        ("selected", "fg:green bold"),
+                        ("pointer", "fg:green bold"),
+                        ("highlighted", "fg:green"),
+                        ("answer", "fg:green bold"),
+                    ]
+                ),
+            ).ask()
 
-        if not model_choice:
-            print("\n\nInterrupt received. Exiting...")
-            sys.exit(0)
+            if not model_choice:
+                print("\n\nInterrupt received. Exiting...")
+                sys.exit(0)
 
         # Ensure Ollama is installed, running, and the model is available
         if not ensure_ollama_and_model(model_choice):

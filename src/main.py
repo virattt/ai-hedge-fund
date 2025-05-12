@@ -132,22 +132,26 @@ def create_workflow(selected_analysts=None):
     return workflow
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run the hedge fund trading system")
-    parser.add_argument("--initial-cash", type=float, default=100000.0, help="Initial cash position. Defaults to 100000.0)")
-    parser.add_argument("--margin-requirement", type=float, default=0.0, help="Initial margin requirement. Defaults to 0.0")
-    parser.add_argument("--tickers", type=str, required=True, help="Comma-separated list of stock ticker symbols")
-    parser.add_argument(
-        "--start-date",
-        type=str,
-        help="Start date (YYYY-MM-DD). Defaults to 3 months before end date",
-    )
-    parser.add_argument("--end-date", type=str, help="End date (YYYY-MM-DD). Defaults to today")
-    parser.add_argument("--show-reasoning", action="store_true", help="Show reasoning from each agent")
-    parser.add_argument("--show-agent-graph", action="store_true", help="Show the agent graph")
-    parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
+# Define the argument parser
+parser = argparse.ArgumentParser(description="Run the hedge fund trading system")
+parser.add_argument("--initial-cash", type=float, default=100000.0, help="Initial cash position. Defaults to 100000.0)")
+parser.add_argument("--margin-requirement", type=float, default=0.0, help="Initial margin requirement. Defaults to 0.0")
+parser.add_argument("--tickers", type=str, required=True, help="Comma-separated list of stock ticker symbols")
+parser.add_argument(
+    "--start-date",
+    type=str,
+    help="Start date (YYYY-MM-DD). Defaults to 3 months before end date",
+)
+parser.add_argument("--end-date", type=str, help="End date (YYYY-MM-DD). Defaults to today")
+parser.add_argument("--show-reasoning", action="store_true", help="Show reasoning from each agent")
+parser.add_argument("--show-agent-graph", action="store_true", help="Show the agent graph")
+parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
+parser.add_argument("--model", type=str, help="Specify which Ollama model to use (e.g., deepseek-coder:r1)")
 
-    args = parser.parse_args()
+# Parse the arguments
+args = parser.parse_args()
+
+if __name__ == "__main__":
 
     # Parse tickers from comma-separated string
     tickers = [ticker.strip() for ticker in args.tickers.split(",")]
@@ -183,23 +187,28 @@ if __name__ == "__main__":
     if args.ollama:
         print(f"{Fore.CYAN}Using Ollama for local LLM inference.{Style.RESET_ALL}")
 
-        # Select from Ollama-specific models
-        model_choice = questionary.select(
-            "Select your Ollama model:",
-            choices=[questionary.Choice(display, value=value) for display, value, _ in OLLAMA_LLM_ORDER],
-            style=questionary.Style(
-                [
-                    ("selected", "fg:green bold"),
-                    ("pointer", "fg:green bold"),
-                    ("highlighted", "fg:green"),
-                    ("answer", "fg:green bold"),
-                ]
-            ),
-        ).ask()
+        # Use model from command line if provided, otherwise ask user to select
+        if args.model:
+            model_choice = args.model
+            print(f"Using specified model: {model_choice}")
+        else:
+            # Select from Ollama-specific models
+            model_choice = questionary.select(
+                "Select your Ollama model:",
+                choices=[questionary.Choice(display, value=value) for display, value, _ in OLLAMA_LLM_ORDER],
+                style=questionary.Style(
+                    [
+                        ("selected", "fg:green bold"),
+                        ("pointer", "fg:green bold"),
+                        ("highlighted", "fg:green"),
+                        ("answer", "fg:green bold"),
+                    ]
+                ),
+            ).ask()
 
-        if not model_choice:
-            print("\n\nInterrupt received. Exiting...")
-            sys.exit(0)
+            if not model_choice:
+                print("\n\nInterrupt received. Exiting...")
+                sys.exit(0)
 
         # Ensure Ollama is installed, running, and the model is available
         if not ensure_ollama_and_model(model_choice):

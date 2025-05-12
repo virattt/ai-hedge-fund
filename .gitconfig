@@ -1,0 +1,5 @@
+[user]
+	name = rishav1305
+	email = rishav.chatt@gmail.com
+[credential]
+	helper = store --file=/root/.git-credentials

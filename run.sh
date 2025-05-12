@@ -13,6 +13,7 @@ show_help() {
   echo "  --initial-cash AMT  Initial cash position (default: 100000.0)"
   echo "  --margin-requirement RATIO  Margin requirement ratio (default: 0.0)"
   echo "  --ollama            Use Ollama for local LLM inference"
+  echo "  --model MODEL       Specify which Ollama model to use (e.g., deepseek-coder:r1)"
   echo "  --show-reasoning    Show reasoning from each agent"
   echo ""
   echo "Commands:"
@@ -27,6 +28,7 @@ show_help() {
   echo "Examples:"
   echo "  ./run.sh --ticker AAPL,MSFT,NVDA main"
   echo "  ./run.sh --ticker AAPL,MSFT,NVDA --ollama main"
+  echo "  ./run.sh --ticker AAPL,MSFT,NVDA --ollama --model deepseek-coder:r1 main"
   echo "  ./run.sh --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 backtest"
   echo "  ./run.sh compose    # Run with Docker Compose (includes Ollama)"
   echo "  ./run.sh ollama     # Start only the Ollama container"
@@ -44,6 +46,7 @@ MARGIN_REQUIREMENT="0.0"
 SHOW_REASONING=""
 COMMAND=""
 MODEL_NAME=""
+OLLAMA_MODEL_NAME=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -71,6 +74,10 @@ while [[ $# -gt 0 ]]; do
     --ollama)
       USE_OLLAMA="--ollama"
       shift
+      ;;
+    --model)
+      OLLAMA_MODEL_NAME="$2"
+      shift 2
       ;;
     --show-reasoning)
       SHOW_REASONING="--show-reasoning"
@@ -295,12 +302,27 @@ if [ -n "$USE_OLLAMA" ]; then
   # Use the appropriate service based on command and reasoning flag
   if [ "$COMMAND" = "main" ]; then
     if [ -n "$SHOW_REASONING" ]; then
-      $COMPOSE_CMD $GPU_CONFIG run --rm hedge-fund-reasoning python src/main.py --ticker $TICKER $COMMAND_OVERRIDE $SHOW_REASONING --ollama
+      # Check if model is specified
+      if [ -n "$OLLAMA_MODEL_NAME" ]; then
+        $COMPOSE_CMD $GPU_CONFIG run --rm hedge-fund-reasoning python -m src.main --ticker $TICKER $COMMAND_OVERRIDE $SHOW_REASONING --ollama --model $OLLAMA_MODEL_NAME
+      else
+        $COMPOSE_CMD $GPU_CONFIG run --rm hedge-fund-reasoning python -m src.main --ticker $TICKER $COMMAND_OVERRIDE $SHOW_REASONING --ollama
+      fi
     else
-      $COMPOSE_CMD $GPU_CONFIG run --rm hedge-fund-ollama python src/main.py --ticker $TICKER $COMMAND_OVERRIDE --ollama
+      # Check if model is specified
+      if [ -n "$OLLAMA_MODEL_NAME" ]; then
+        $COMPOSE_CMD $GPU_CONFIG run --rm hedge-fund-ollama python -m src.main --ticker $TICKER $COMMAND_OVERRIDE --ollama --model $OLLAMA_MODEL_NAME
+      else
+        $COMPOSE_CMD $GPU_CONFIG run --rm hedge-fund-ollama python -m src.main --ticker $TICKER $COMMAND_OVERRIDE --ollama
+      fi
     fi
   elif [ "$COMMAND" = "backtest" ]; then
-    $COMPOSE_CMD $GPU_CONFIG run --rm backtester-ollama python src/backtester.py --ticker $TICKER $COMMAND_OVERRIDE $SHOW_REASONING --ollama
+    # Check if model is specified
+    if [ -n "$OLLAMA_MODEL_NAME" ]; then
+      $COMPOSE_CMD $GPU_CONFIG run --rm backtester-ollama python -m src.backtester --ticker $TICKER $COMMAND_OVERRIDE $SHOW_REASONING --ollama --model $OLLAMA_MODEL_NAME
+    else 
+      $COMPOSE_CMD $GPU_CONFIG run --rm backtester-ollama python -m src.backtester --ticker $TICKER $COMMAND_OVERRIDE $SHOW_REASONING --ollama
+    fi
   fi
   
   exit 0
@@ -311,7 +333,12 @@ fi
 CMD="docker run -it --rm -v $(pwd)/.env:/app/.env"
 
 # Add the command
-CMD="$CMD ai-hedge-fund python $SCRIPT_PATH --ticker $TICKER $START_DATE $END_DATE $INITIAL_PARAM --margin-requirement $MARGIN_REQUIREMENT $SHOW_REASONING"
+# Use python -m to run modules instead of direct script paths to fix import issues
+if [ "$COMMAND" = "main" ]; then
+  CMD="$CMD ai-hedge-fund python -m src.main --ticker $TICKER $START_DATE $END_DATE $INITIAL_PARAM --margin-requirement $MARGIN_REQUIREMENT $SHOW_REASONING"
+elif [ "$COMMAND" = "backtest" ]; then
+  CMD="$CMD ai-hedge-fund python -m src.backtester --ticker $TICKER $START_DATE $END_DATE $INITIAL_PARAM --margin-requirement $MARGIN_REQUIREMENT $SHOW_REASONING"
+fi
 
 # Run the command
 echo "Running: $CMD"

@@ -20,9 +20,10 @@ services:
       - ollama
     volumes:
       - ./.env:/app/.env
-    command: python src/main.py --ticker AAPL,MSFT,NVDA
+    command: python -m src.main --ticker AAPL,MSFT,NVDA
     environment:
       - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
       - OLLAMA_BASE_URL=http://ollama:11434
     tty: true
     stdin_open: true
@@ -34,9 +35,10 @@ services:
       - ollama
     volumes:
       - ./.env:/app/.env
-    command: python src/main.py --ticker AAPL,MSFT,NVDA --show-reasoning
+    command: python -m src.main --ticker AAPL,MSFT,NVDA --show-reasoning
     environment:
       - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
       - OLLAMA_BASE_URL=http://ollama:11434
     tty: true
     stdin_open: true
@@ -48,9 +50,10 @@ services:
       - ollama
     volumes:
       - ./.env:/app/.env
-    command: python src/main.py --ticker AAPL,MSFT,NVDA --ollama
+    command: python -m src.main --ticker AAPL,MSFT,NVDA --ollama
     environment:
       - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
       - OLLAMA_BASE_URL=http://ollama:11434
     tty: true
     stdin_open: true
@@ -62,9 +65,10 @@ services:
       - ollama
     volumes:
       - ./.env:/app/.env
-    command: python src/backtester.py --ticker AAPL,MSFT,NVDA
+    command: python -m src.backtester --ticker AAPL,MSFT,NVDA
     environment:
       - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
       - OLLAMA_BASE_URL=http://ollama:11434
     tty: true
     stdin_open: true
@@ -76,10 +80,36 @@ services:
       - ollama
     volumes:
       - ./.env:/app/.env
-    command: python src/backtester.py --ticker AAPL,MSFT,NVDA --ollama
+    command: python -m src.backtester --ticker AAPL,MSFT,NVDA --ollama
     environment:
       - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
       - OLLAMA_BASE_URL=http://ollama:11434
+    tty: true
+    stdin_open: true
+
+  test-imports:
+    build: .
+    image: ai-hedge-fund
+    volumes:
+      - ./.env:/app/.env
+    command: python test_imports.py
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+    tty: true
+    stdin_open: true
+    
+  debug-args:
+    build: .
+    image: ai-hedge-fund
+    volumes:
+      - ./.env:/app/.env
+      - ./debug_args.py:/app/debug_args.py
+    command: python debug_args.py
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
     tty: true
     stdin_open: true
 

@@ -1,5 +1,14 @@
-@echo off
-setlocal enabledelayedexpansion
+@ec::: Default values
+set TICKER=AAPL,MSFT,NVDA
+set USE_OLLAMA=
+set START_DATE=
+set END_DATE=
+set INITIAL_AMOUNT=100000.0
+set MARGIN_REQUIREMENT=0.0
+set SHOW_REASONING=
+set COMMAND=
+set MODEL_NAME=
+set OLLAMA_MODEL=local enabledelayedexpansion
 
 :: Default values
 set TICKER=AAPL,MSFT,NVDA
@@ -25,6 +34,7 @@ echo   --end-date DATE     End date in YYYY-MM-DD format
 echo   --initial-cash AMT  Initial cash position (default: 100000.0)
 echo   --margin-requirement RATIO  Margin requirement ratio (default: 0.0)
 echo   --ollama            Use Ollama for local LLM inference
+echo   --model MODEL       Specify which Ollama model to use (e.g., deepseek-coder:r1)
 echo   --show-reasoning    Show reasoning from each agent
 echo.
 echo Commands:
@@ -81,6 +91,12 @@ if "%~1"=="--margin-requirement" (
 )
 if "%~1"=="--ollama" (
     set USE_OLLAMA=--ollama
+    shift
+    goto :parse_args
+)
+if "%~1"=="--model" (
+    set OLLAMA_MODEL=--model %~2
+    shift
     shift
     goto :parse_args
 )
@@ -326,12 +342,12 @@ if not "!USE_OLLAMA!"=="" (
     :: Use the appropriate service based on command and reasoning flag
     if "!COMMAND!"=="main" (
         if not "!SHOW_REASONING!"=="" (
-            !COMPOSE_CMD! run --rm hedge-fund-reasoning python src/main.py --ticker !TICKER! !COMMAND_OVERRIDE! !SHOW_REASONING! --ollama
+            !COMPOSE_CMD! run --rm hedge-fund-reasoning python src/main.py --ticker !TICKER! !COMMAND_OVERRIDE! !SHOW_REASONING! --ollama !OLLAMA_MODEL!
         ) else (
-            !COMPOSE_CMD! run --rm hedge-fund-ollama python src/main.py --ticker !TICKER! !COMMAND_OVERRIDE! --ollama
+            !COMPOSE_CMD! run --rm hedge-fund-ollama python src/main.py --ticker !TICKER! !COMMAND_OVERRIDE! --ollama !OLLAMA_MODEL!
         )
     ) else if "!COMMAND!"=="backtest" (
-        !COMPOSE_CMD! run --rm backtester-ollama python src/backtester.py --ticker !TICKER! !COMMAND_OVERRIDE! !SHOW_REASONING! --ollama
+        !COMPOSE_CMD! run --rm backtester-ollama python src/backtester.py --ticker !TICKER! !COMMAND_OVERRIDE! !SHOW_REASONING! --ollama !OLLAMA_MODEL!
     )
     
     exit /b 0
