@@ -153,6 +153,8 @@ def fundamentals_agent(state: AgentState):
     # Add the signal to the analyst_signals list
     state["data"]["analyst_signals"]["fundamentals_agent"] = fundamental_analysis
 
+    progress.update_status("fundamentals_agent", None, "Done")
+    
     return {
         "messages": [message],
         "data": data,

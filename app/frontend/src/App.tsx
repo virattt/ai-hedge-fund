@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Flow } from './components/Flow';
-import { Layout } from './components/Layout';
+import { Flow } from './components/flow';
+import { Layout } from './components/layout';
+
 
 export default function App() {
   const [showLeftSidebar] = useState(false);

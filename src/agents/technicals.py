@@ -129,6 +129,8 @@ def technical_analyst_agent(state: AgentState):
     # Add the signal to the analyst_signals list
     state["data"]["analyst_signals"]["technical_analyst_agent"] = technical_analysis
 
+    progress.update_status("technical_analyst_agent", None, "Done")
+
     return {
         "messages": state["messages"] + [message],
         "data": data,

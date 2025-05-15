@@ -9,33 +9,36 @@ class BaseEvent(BaseModel):
 
     def to_sse(self) -> str:
         """Convert to Server-Sent Event format"""
-        return f"data: {self.model_dump_json()}\n\n"
+        event_type = self.type.lower()
+        return f"event: {event_type}\ndata: {self.model_dump_json()}\n\n"
 
 
 class StartEvent(BaseEvent):
     """Event indicating the start of processing"""
 
     type: Literal["start"] = "start"
-
+    timestamp: Optional[str] = None
 
 class ProgressUpdateEvent(BaseEvent):
     """Event containing an agent's progress update"""
 
-    type: Literal["IN_PROGRESS"] = "IN_PROGRESS"
+    type: Literal["progress"] = "progress"
     agent: str
     ticker: Optional[str] = None
     status: str
-
+    timestamp: Optional[str] = None
 
 class ErrorEvent(BaseEvent):
     """Event indicating an error occurred"""
 
-    type: Literal["ERROR"] = "ERROR"
+    type: Literal["error"] = "error"
     message: str
+    timestamp: Optional[str] = None
 
 
 class CompleteEvent(BaseEvent):
     """Event indicating successful completion with results"""
 
-    type: Literal["COMPLETE"] = "COMPLETE"
+    type: Literal["complete"] = "complete"
     data: Dict[str, Any]
+    timestamp: Optional[str] = None

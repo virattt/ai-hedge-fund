@@ -1,0 +1,42 @@
+[
+  {
+    "display_name": "[google] gemma3 (4B)",
+    "model_name": "gemma3:4b",
+    "provider": "Ollama"
+  },
+  {
+    "display_name": "[alibaba] qwen3 (4B)",
+    "model_name": "qwen3:4b",
+    "provider": "Ollama"
+  },
+  {
+    "display_name": "[meta] llama3.1 (8B)",
+    "model_name": "llama3.1:latest",
+    "provider": "Ollama"
+  },
+  {
+    "display_name": "[google] gemma3 (12B)",
+    "model_name": "gemma3:12b",
+    "provider": "Ollama"
+  },
+  {
+    "display_name": "[mistral] mistral-small3.1 (24B)",
+    "model_name": "mistral-small3.1",
+    "provider": "Ollama"
+  },
+  {
+    "display_name": "[google] gemma3 (27B)",
+    "model_name": "gemma3:27b",
+    "provider": "Ollama"
+  },
+  {
+    "display_name": "[alibaba] qwen3 (30B-a3B)",
+    "model_name": "qwen3:30b-a3b",
+    "provider": "Ollama"
+  },
+  {
+    "display_name": "[meta] llama-3.3 (70B)",
+    "model_name": "llama3.3:70b-instruct-q4_0",
+    "provider": "Ollama"
+  }
+] 

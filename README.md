@@ -4,23 +4,24 @@ This is a proof of concept for an AI-powered hedge fund.  The goal of this proje
 
 This system employs several agents working together:
 
-1. Ben Graham Agent - The godfather of value investing, only buys hidden gems with a margin of safety
-2. Bill Ackman Agent - An activist investors, takes bold positions and pushes for change
-3. Cathie Wood Agent - The queen of growth investing, believes in the power of innovation and disruption
-4. Charlie Munger Agent - Warren Buffett's partner, only buys wonderful businesses at fair prices
-5. Michael Burry Agent - The Big Short contrarian who hunts for deep value
-6. Peter Lynch Agent - Practical investor who seeks "ten-baggers" in everyday businesses
-7. Phil Fisher Agent - Meticulous growth investor who uses deep "scuttlebutt" research 
-8. Stanley Druckenmiller Agent - Macro legend who hunts for asymmetric opportunities with growth potential
-9. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
-10. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
-11. Sentiment Agent - Analyzes market sentiment and generates trading signals
-12. Fundamentals Agent - Analyzes fundamental data and generates trading signals
-13. Technicals Agent - Analyzes technical indicators and generates trading signals
-14. Risk Manager - Calculates risk metrics and sets position limits
-15. Portfolio Manager - Makes final trading decisions and generates orders
+1. Aswath Damodaran Agent - The Dean of Valuation, focuses on story, numbers, and disciplined valuation
+2. Ben Graham Agent - The godfather of value investing, only buys hidden gems with a margin of safety
+3. Bill Ackman Agent - An activist investor, takes bold positions and pushes for change
+4. Cathie Wood Agent - The queen of growth investing, believes in the power of innovation and disruption
+5. Charlie Munger Agent - Warren Buffett's partner, only buys wonderful businesses at fair prices
+6. Michael Burry Agent - The Big Short contrarian who hunts for deep value
+7. Peter Lynch Agent - Practical investor who seeks "ten-baggers" in everyday businesses
+8. Phil Fisher Agent - Meticulous growth investor who uses deep "scuttlebutt" research 
+9. Stanley Druckenmiller Agent - Macro legend who hunts for asymmetric opportunities with growth potential
+10. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
+11. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
+12. Sentiment Agent - Analyzes market sentiment and generates trading signals
+13. Fundamentals Agent - Analyzes fundamental data and generates trading signals
+14. Technicals Agent - Analyzes technical indicators and generates trading signals
+15. Risk Manager - Calculates risk metrics and sets position limits
+16. Portfolio Manager - Makes final trading decisions and generates orders
     
-<img width="1042" alt="Screenshot 2025-03-22 at 6 19 07 PM" src="https://github.com/user-attachments/assets/cbae3dcf-b571-490d-b0ad-3f0f035ac0d4" />
+<img width="1042" alt="Screenshot 2025-03-22 at 6 19 07 PM" src="https://github.com/user-attachments/assets/cbae3dcf-b571-490d-b0ad-3f0f035ac0d4" />
 
 
 **Note**: the system simulates trading decisions, it does not actually trade.
@@ -245,6 +246,9 @@ ai-hedge-fund/
 │   │   ├── valuation.py          # Valuation analysis agent
 │   │   ├── ...                   # Other agents
 │   │   ├── warren_buffett.py     # Warren Buffett agent
+│   │   ├── aswath_damodaran.py   # Aswath Damodaran agent
+│   │   ├── ...                   # Other agents
+│   │   ├── ...                   # Other agents
 │   ├── tools/                    # Agent tools
 │   │   ├── api.py                # API tools
 │   ├── backtester.py             # Backtesting tools

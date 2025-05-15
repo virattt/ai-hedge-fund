@@ -125,6 +125,8 @@ def bill_ackman_agent(state: AgentState):
     # Add signals to the overall state
     state["data"]["analyst_signals"]["bill_ackman_agent"] = ackman_analysis
 
+    progress.update_status("bill_ackman_agent", None, "Done")
+
     return {
         "messages": [message],
         "data": state["data"]

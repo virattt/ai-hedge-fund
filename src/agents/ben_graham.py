@@ -87,6 +87,8 @@ def ben_graham_agent(state: AgentState):
     # Store signals in the overall state
     state["data"]["analyst_signals"]["ben_graham_agent"] = graham_analysis
 
+    progress.update_status("ben_graham_agent", None, "Done")
+
     return {"messages": [message], "data": state["data"]}
 
 

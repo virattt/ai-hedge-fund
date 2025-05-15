@@ -145,6 +145,8 @@ def charlie_munger_agent(state: AgentState):
     # Show reasoning if requested
     if state["metadata"]["show_reasoning"]:
         show_agent_reasoning(munger_analysis, "Charlie Munger Agent")
+
+    progress.update_status("charlie_munger_agent", None, "Done")
     
     # Add signals to the overall state
     state["data"]["analyst_signals"]["charlie_munger_agent"] = munger_analysis

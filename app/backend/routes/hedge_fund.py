@@ -45,8 +45,8 @@ async def run_hedge_fund(request: HedgeFundRequest):
             progress_queue = asyncio.Queue()
 
             # Simple handler to add updates to the queue
-            def progress_handler(agent_name, ticker, status):
-                event = ProgressUpdateEvent(agent=agent_name, ticker=ticker, status=status)
+            def progress_handler(agent_name, ticker, status, timestamp):
+                event = ProgressUpdateEvent(agent=agent_name, ticker=ticker, status=status, timestamp=timestamp)
                 progress_queue.put_nowait(event)
 
             # Register our handler with the progress tracker

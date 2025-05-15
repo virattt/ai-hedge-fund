@@ -165,6 +165,8 @@ def michael_burry_agent(state: AgentState):  # noqa: C901  (complexity is fine h
 
     state["data"]["analyst_signals"]["michael_burry_agent"] = burry_analysis
 
+    progress.update_status("michael_burry_agent", None, "Done")
+
     return {"messages": [message], "data": state["data"]}
 
 

@@ -151,7 +151,12 @@ def valuation_agent(state: AgentState):
     msg = HumanMessage(content=json.dumps(valuation_analysis), name="valuation_agent")
     if state["metadata"].get("show_reasoning"):
         show_agent_reasoning(valuation_analysis, "Valuation Analysis Agent")
+
+    # Add the signal to the analyst_signals list
     state["data"]["analyst_signals"]["valuation_agent"] = valuation_analysis
+
+    progress.update_status("valuation_agent", None, "Done")
+    
     return {"messages": [msg], "data": data}
 
 #############################

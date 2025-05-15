@@ -156,6 +156,9 @@ def stanley_druckenmiller_agent(state: AgentState):
         show_agent_reasoning(druck_analysis, "Stanley Druckenmiller Agent")
 
     state["data"]["analyst_signals"]["stanley_druckenmiller_agent"] = druck_analysis
+
+    progress.update_status("stanley_druckenmiller_agent", None, "Done")
+    
     return {"messages": [message], "data": state["data"]}
 
 

@@ -131,6 +131,8 @@ def warren_buffett_agent(state: AgentState):
     # Add the signal to the analyst_signals list
     state["data"]["analyst_signals"]["warren_buffett_agent"] = buffett_analysis
 
+    progress.update_status("warren_buffett_agent", None, "Done")
+
     return {"messages": [message], "data": state["data"]}
 
 

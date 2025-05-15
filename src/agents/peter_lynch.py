@@ -160,6 +160,8 @@ def peter_lynch_agent(state: AgentState):
     # Save signals to state
     state["data"]["analyst_signals"]["peter_lynch_agent"] = lynch_analysis
 
+    progress.update_status("peter_lynch_agent", None, "Done")
+
     return {"messages": [message], "data": state["data"]}
 
 

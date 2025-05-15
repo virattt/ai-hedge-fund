@@ -94,6 +94,8 @@ def sentiment_agent(state: AgentState):
     # Add the signal to the analyst_signals list
     state["data"]["analyst_signals"]["sentiment_agent"] = sentiment_analysis
 
+    progress.update_status("sentiment_agent", None, "Done")
+
     return {
         "messages": [message],
         "data": data,

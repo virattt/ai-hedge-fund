@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from rich.console import Console
 from rich.live import Live
 from rich.table import Table
@@ -50,9 +51,13 @@ class AgentProgress:
         if status:
             self.agent_status[agent_name]["status"] = status
 
+        # Set the timestamp as UTC datetime
+        timestamp = datetime.now(timezone.utc).isoformat()
+        self.agent_status[agent_name]["timestamp"] = timestamp
+
         # Notify all registered handlers
         for handler in self.update_handlers:
-            handler(agent_name, ticker, status)
+            handler(agent_name, ticker, status, timestamp)
 
         self._refresh_display()
 
@@ -82,7 +87,6 @@ class AgentProgress:
         for agent_name, info in sorted(self.agent_status.items(), key=sort_key):
             status = info["status"]
             ticker = info["ticker"]
-
             # Create the status text with appropriate styling
             if status.lower() == "done":
                 style = Style(color="green", bold=True)

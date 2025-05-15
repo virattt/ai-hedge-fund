@@ -101,6 +101,8 @@ def cathie_wood_agent(state: AgentState):
 
     state["data"]["analyst_signals"]["cathie_wood_agent"] = cw_analysis
 
+    progress.update_status("cathie_wood_agent", None, "Done")
+
     return {"messages": [message], "data": state["data"]}
 
 

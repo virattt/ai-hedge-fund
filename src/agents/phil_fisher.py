@@ -35,7 +35,6 @@ def phil_fisher_agent(state: AgentState):
     Returns a bullish/bearish/neutral signal with confidence and reasoning.
     """
     data = state["data"]
-    start_date = data["start_date"]
     end_date = data["end_date"]
     tickers = data["tickers"]
 
@@ -162,6 +161,9 @@ def phil_fisher_agent(state: AgentState):
         show_agent_reasoning(fisher_analysis, "Phil Fisher Agent")
 
     state["data"]["analyst_signals"]["phil_fisher_agent"] = fisher_analysis
+
+    progress.update_status("phil_fisher_agent", None, "Done")
+    
     return {"messages": [message], "data": state["data"]}
 
 
