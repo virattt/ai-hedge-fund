@@ -6,6 +6,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
+from openai import OpenAI
+from httpx import Client
 from enum import Enum
 from pydantic import BaseModel
 from typing import Tuple, List
@@ -21,6 +23,7 @@ class ModelProvider(str, Enum):
     GROQ = "Groq"
     OPENAI = "OpenAI"
     OLLAMA = "Ollama"
+    OPENROUTER = "OpenRouter"
 
 
 class LLMModel(BaseModel):
@@ -29,6 +32,7 @@ class LLMModel(BaseModel):
     display_name: str
     model_name: str
     provider: ModelProvider
+    api_base: str | None = None
 
     def to_choice_tuple(self) -> Tuple[str, str, str]:
         """Convert to format needed for questionary choices"""
@@ -55,6 +59,10 @@ class LLMModel(BaseModel):
         """Check if the model is an Ollama model"""
         return self.provider == ModelProvider.OLLAMA
 
+    def is_openrouter(self) -> bool:
+        """Check if the model is an OpenRouter model"""
+        return self.provider == ModelProvider.OPENROUTER
+
 
 # Load models from JSON file
 def load_models_from_json(json_path: str) -> List[LLMModel]:
@@ -70,7 +78,8 @@ def load_models_from_json(json_path: str) -> List[LLMModel]:
             LLMModel(
                 display_name=model_data["display_name"],
                 model_name=model_data["model_name"],
-                provider=provider_enum
+                provider=provider_enum,
+                api_base=model_data.get("api_base")
             )
         )
     return models
@@ -134,6 +143,71 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
             print(f"API Key Error: Please make sure GOOGLE_API_KEY is set in your .env file.")
             raise ValueError("Google API key not found.  Please make sure GOOGLE_API_KEY is set in your .env file.")
         return ChatGoogleGenerativeAI(model=model_name, api_key=api_key)
+    elif model_provider == ModelProvider.OPENROUTER:
+        # Use OpenRouter's API directly
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure OPENROUTER_API_KEY is set in your .env file.")
+            raise ValueError("OpenRouter API key not found.  Please make sure OPENROUTER_API_KEY is set in your .env file.")
+        model_info = get_model_info(model_name)
+        if not model_info:
+            raise ValueError(f"Model {model_name} not found in configuration")
+            
+        # Create a custom ChatOpenAI class that uses OpenRouter
+        class ChatOpenRouter(ChatOpenAI):
+            def __init__(self, model_name: str, api_key: str, api_base: str | None):
+                super().__init__(
+                    model=model_name,
+                    api_key=api_key
+                )
+                if not api_base:
+                    raise ValueError("API base URL is required for OpenRouter")
+                
+                # Ensure the base URL ends with a slash
+                if not api_base.endswith('/'):
+                    api_base += '/'
+                
+                # Create an HTTP client with proper headers
+                self._http_client = Client(
+                    base_url=api_base,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "HTTP-Referer": "https://your-app.com",
+                        "X-Title": "HF"
+                    },
+                    timeout=30.0
+                )
+                
+                # Configure OpenAI client with custom HTTP client
+                self._client = OpenAI(
+                    api_key=api_key,
+                    base_url=api_base,
+                    http_client=self._http_client
+                )
+
+            def invoke(self, prompt, stop=None, response_format=None, ls_structured_output_format=None):
+                # Create a chat completion using OpenAI client with OpenRouter configuration
+                messages = [{"role": "user", "content": prompt}]
+                
+                # If response_format is provided, add it to the messages
+                if response_format:
+                    messages[0]["content"] = "{}\n\nPlease respond in the following format:\n{}".format(prompt, response_format)
+                
+                # If ls_structured_output_format is provided, add it to the messages
+                if ls_structured_output_format:
+                    messages[0]["content"] = "{}\n\nPlease respond in the following structured format:\n{}".format(messages[0]["content"], ls_structured_output_format)
+                
+                response = self._client.chat.completions.create(
+                    model=self.model_name,
+                    messages=messages
+                )
+                return response.choices[0].message.content
+
+        return ChatOpenRouter(
+            model_name=model_name,
+            api_key=api_key,
+            api_base=model_info.api_base
+        )
     elif model_provider == ModelProvider.OLLAMA:
         # For Ollama, we use a base URL instead of an API key
         # Check if OLLAMA_HOST is set (for Docker on macOS)

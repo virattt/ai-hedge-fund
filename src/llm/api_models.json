@@ -63,5 +63,35 @@
     "display_name": "[openai] o4-mini",
     "model_name": "o4-mini",
     "provider": "OpenAI"
+  },
+  {
+    "display_name": "[openrouter] mistral-4.0-128k",
+    "model_name": "openrouter:mistral-4.0-128k",
+    "provider": "OpenRouter",
+    "api_base": "https://openrouter.ai/api/v1"
+  },
+  {
+    "display_name": "[openrouter] llama-4-70b",
+    "model_name": "openrouter:llama-4-70b",
+    "provider": "OpenRouter",
+    "api_base": "https://openrouter.ai/api/v1"
+  },
+  {
+    "display_name": "[openrouter] llama-4-70b-16k",
+    "model_name": "openrouter:llama-4-70b-16k",
+    "provider": "OpenRouter",
+    "api_base": "https://openrouter.ai/api/v1"
+  },
+  {
+    "display_name": "[openrouter] llama-4-70b-128k",
+    "model_name": "openrouter:llama-4-70b-128k",
+    "provider": "OpenRouter",
+    "api_base": "https://openrouter.ai/api/v1"
+  },
+  {
+    "display_name": "[openrouter] gemini-flash-2.0",
+    "model_name": "google/gemini-2.0-flash-001",
+    "provider": "OpenRouter",
+    "api_base": "https://openrouter.ai/api/v1"
   }
-] 
+]
