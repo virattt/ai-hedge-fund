@@ -3,9 +3,11 @@
 import json
 from typing import TypeVar, Type, Optional, Any
 from pydantic import BaseModel
-from ..utils.progress import progress
+from src.llm.models import get_model, get_model_info
+from src.utils.progress import progress
 
-T = TypeVar('T', bound=BaseModel)
+T = TypeVar("T", bound=BaseModel)
+
 
 def call_llm(
     prompt: Any,
@@ -14,10 +16,10 @@ def call_llm(
     pydantic_model: Type[T],
     agent_name: Optional[str] = None,
     max_retries: int = 3,
-    default_factory = None
+    default_factory=None,
 ) -> T:
     """
-    Makes an LLM call with retry logic, handling both Deepseek and non-Deepseek models.
+    Makes an LLM call with retry logic, handling both JSON supported and non-JSON supported models.
 
     Args:
         prompt: The prompt to send to the LLM
@@ -31,7 +33,7 @@ def call_llm(
     Returns:
         An instance of the specified Pydantic model
     """
-    from ..llm.models import get_model, get_model_info
+
 
     model_info = get_model_info(model_name)
     llm = get_model(model_name, model_provider)
@@ -51,7 +53,7 @@ def call_llm(
 
             # For non-JSON support models, we need to extract and parse the JSON manually
             if model_info and not model_info.has_json_mode():
-                parsed_result = extract_json_from_deepseek_response(result.content)
+                parsed_result = extract_json_from_response(result.content)
                 if parsed_result:
                     return pydantic_model(**parsed_result)
             else:
@@ -70,6 +72,7 @@ def call_llm(
 
     # This should never be reached due to the retry logic above
     return create_default_response(pydantic_model)
+
 
 def create_default_response(model_class: Type[T]) -> T:
     """Creates a safe default response based on the model's fields."""
@@ -92,16 +95,17 @@ def create_default_response(model_class: Type[T]) -> T:
 
     return model_class(**default_values)
 
-def extract_json_from_deepseek_response(content: str) -> Optional[dict]:
-    """Extracts JSON from Deepseek's markdown-formatted response."""
+
+def extract_json_from_response(content: str) -> Optional[dict]:
+    """Extracts JSON from markdown-formatted response."""
     try:
         json_start = content.find("```json")
         if json_start != -1:
-            json_text = content[json_start + 7:]  # Skip past ```json
+            json_text = content[json_start + 7 :]  # Skip past ```json
             json_end = json_text.find("```")
             if json_end != -1:
                 json_text = json_text[:json_end].strip()
                 return json.loads(json_text)
     except Exception as e:
-        print(f"Error extracting JSON from Deepseek response: {e}")
+        print(f"Error extracting JSON from response: {e}")
     return None
