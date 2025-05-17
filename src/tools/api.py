@@ -59,34 +59,45 @@ def get_financial_metrics(
     period: str = "ttm",
     limit: int = 10,
 ) -> list[FinancialMetrics]:
-    """Fetch financial metrics from cache or API."""
-    # Check cache first
-    if cached_data := _cache.get_financial_metrics(ticker):
-        # Filter cached data by date and limit
-        filtered_data = [FinancialMetrics(**metric) for metric in cached_data if metric["report_period"] <= end_date]
-        filtered_data.sort(key=lambda x: x.report_period, reverse=True)
-        if filtered_data:
-            return filtered_data[:limit]
+    "Fetch financial metrics from cache or API."
 
-    # If not in cache or insufficient data, fetch from API
+    # Check cache first
+    cached_data = _cache.get_financial_metrics(ticker)
+    if cached_data:
+        filtered_data = [
+            FinancialMetrics(**metric)
+            for metric in cached_data
+            if metric["report_period"] <= end_date
+        ]
+        filtered_data.sort(key=lambda x: x.report_period, reverse=True)
+
+        # Only return cache if it contains data up to end date
+        if filtered_data:
+            latest_cached = filtered_data[0].report_period
+            if latest_cached >= end_date:
+                return filtered_data[:limit]
+
+    # If cache is missing or outdated, fetch latest cache from API
     headers = {}
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
         headers["X-API-KEY"] = api_key
 
-    url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
+    url = (
+        f"https://api.financialdatasets.ai/financial-metrics/"
+        f"?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
+    )
     response = requests.get(url, headers=headers)
     if response.status_code != 200:
         raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
 
     # Parse response with Pydantic model
     metrics_response = FinancialMetricsResponse(**response.json())
-    # Return the FinancialMetrics objects directly instead of converting to dict
     financial_metrics = metrics_response.financial_metrics
 
     if not financial_metrics:
         return []
 
-    # Cache the results as dicts
+    # Cache the results as dictionary
     _cache.set_financial_metrics(ticker, [m.model_dump() for m in financial_metrics])
     return financial_metrics
 
