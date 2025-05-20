@@ -1,0 +1,114 @@
+# AI Hedge Fund [WIP] 🚧
+
+This project is currently a work in progress. To track progress, please get updates [here](https://x.com/virattt).
+
+The AI Hedge Fund app is a complete system with both frontend and backend components that enables you to run an AI-powered hedge fund trading system through a web interface on your own computer.
+
+<img width="1692" alt="Screenshot 2025-05-15 at 8 57 56 PM" src="https://github.com/user-attachments/assets/2173fa5b-1029-49dd-8b04-d7583616de1b" />
+
+
+## Overview
+
+The AI Hedge Fund consists of:
+
+- **Backend**: A FastAPI application that provides a REST API to run the hedge fund trading system and backtester
+- **Frontend**: A React/Vite application that offers a user-friendly interface to visualize and control the hedge fund operations
+
+## Quick Setup
+
+Follow these steps to get both the frontend and backend running:
+
+### Prerequisites
+
+- Node.js and npm for the frontend
+- Python 3.8+ and Poetry for the backend
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/virattt/ai-hedge-fund.git
+cd ai-hedge-fund
+```
+
+2. Set up your environment variables:
+```bash
+# Create .env file for your API keys (in the root directory)
+cp .env.example .env
+```
+
+3. Edit the .env file to add your API keys:
+```bash
+# For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
+OPENAI_API_KEY=your-openai-api-key
+
+# For running LLMs hosted by groq (deepseek, llama3, etc.)
+GROQ_API_KEY=your-groq-api-key
+
+# For getting financial data to power the hedge fund
+FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
+```
+
+4. Install Poetry (if not already installed):
+```bash
+curl -sSL https://install.python-poetry.org | python3 -
+```
+
+5. Install root project dependencies:
+```bash
+# From the root directory
+poetry install
+```
+
+6. Install backend app dependencies:
+```bash
+# Navigate to the backend directory
+cd app/backend
+pip install -r requirements.txt  # If there's a requirements.txt file
+# OR
+poetry install  # If there's a pyproject.toml in the backend directory
+```
+
+7. Install frontend app dependencies:
+```bash
+cd app/frontend
+npm install  # or pnpm install or yarn install
+```
+
+### Running the Application
+
+1. Start the backend server:
+```bash
+# In one terminal, from the backend directory
+cd app/backend
+poetry run uvicorn main:app --reload
+```
+
+2. Start the frontend application:
+```bash
+# In another terminal, from the frontend directory
+cd app/frontend
+npm run dev
+```
+
+You can now access:
+- Frontend application: http://localhost:5173
+- Backend API: http://localhost:8000
+- API Documentation: http://localhost:8000/docs
+
+## Detailed Documentation
+
+For more detailed information:
+- [Backend Documentation](./backend/README.md)
+- [Frontend Documentation](./frontend/README.md)
+
+## Disclaimer
+
+This project is for **educational and research purposes only**.
+
+- Not intended for real trading or investment
+- No warranties or guarantees provided
+- Creator assumes no liability for financial losses
+- Consult a financial advisor for investment decisions
+
+By using this software, you agree to use it solely for learning purposes. 

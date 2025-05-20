@@ -1,9 +1,9 @@
 from langchain_core.messages import HumanMessage
-from graph.state import AgentState, show_agent_reasoning
-from utils.progress import progress
+from src.graph.state import AgentState, show_agent_reasoning
+from src.utils.progress import progress
 import json
 
-from tools.api import get_financial_metrics
+from src.tools.api import get_financial_metrics
 
 
 ##### Fundamental Agent #####
@@ -153,6 +153,8 @@ def fundamentals_agent(state: AgentState):
     # Add the signal to the analyst_signals list
     state["data"]["analyst_signals"]["fundamentals_agent"] = fundamental_analysis
 
+    progress.update_status("fundamentals_agent", None, "Done")
+    
     return {
         "messages": [message],
         "data": data,

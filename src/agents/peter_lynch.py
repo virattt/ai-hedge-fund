@@ -1,5 +1,5 @@
-from graph.state import AgentState, show_agent_reasoning
-from tools.api import (
+from src.graph.state import AgentState, show_agent_reasoning
+from src.tools.api import (
     get_financial_metrics,
     get_market_cap,
     search_line_items,
@@ -12,9 +12,8 @@ from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 import json
 from typing_extensions import Literal
-from utils.progress import progress
-from utils.llm import call_llm
-import statistics
+from src.utils.progress import progress
+from src.utils.llm import call_llm
 
 
 class PeterLynchSignal(BaseModel):
@@ -160,6 +159,8 @@ def peter_lynch_agent(state: AgentState):
 
     # Save signals to state
     state["data"]["analyst_signals"]["peter_lynch_agent"] = lynch_analysis
+
+    progress.update_status("peter_lynch_agent", None, "Done")
 
     return {"messages": [message], "data": state["data"]}
 
