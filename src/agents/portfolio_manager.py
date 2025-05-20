@@ -1,12 +1,13 @@
 import json
+
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
-
-from src.graph.state import AgentState, show_agent_reasoning
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
-from src.utils.progress import progress
+
+from src.graph.state import AgentState, show_agent_reasoning
 from src.utils.llm import call_llm
+from src.utils.progress import progress
 
 
 class PortfolioDecision(BaseModel):
@@ -69,14 +70,16 @@ def portfolio_management_agent(state: AgentState):
     )
 
     # Create the portfolio management message
+    # Wrap decisions under a top-level "decisions" key so the caller can parse
+    # them consistently
     message = HumanMessage(
-        content=json.dumps({ticker: decision.model_dump() for ticker, decision in result.decisions.items()}),
+        content=json.dumps({"decisions": {ticker: decision.model_dump() for ticker, decision in result.decisions.items()}}),
         name="portfolio_manager",
     )
 
     # Print the decision if the flag is set
     if state["metadata"]["show_reasoning"]:
-        show_agent_reasoning({ticker: decision.model_dump() for ticker, decision in result.decisions.items()}, "Portfolio Manager")
+        show_agent_reasoning({"decisions": {ticker: decision.model_dump() for ticker, decision in result.decisions.items()}}, "Portfolio Manager")
 
     progress.update_status("portfolio_manager", None, "Done")
 
