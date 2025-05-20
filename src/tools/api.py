@@ -1,4 +1,5 @@
 import datetime
+import json
 import os
 import pandas as pd
 import requests
@@ -22,10 +23,15 @@ def _polygon_get(url: str, params: dict | None = None) -> dict:
         params = {}
     if api_key := os.environ.get("POLYGON_API_KEY"):
         params["apiKey"] = api_key
+    if os.environ.get("SHOW_POLYGON_DATA") == "1":
+        print(f"Querying Polygon: {url} params={params}")
     response = requests.get(url, params=params)
     if response.status_code != 200:
         raise Exception(f"Error fetching data: {response.status_code} - {response.text}")
-    return response.json()
+    data = response.json()
+    if os.environ.get("SHOW_POLYGON_DATA") == "1":
+        print(f"Polygon response: {json.dumps(data, indent=2)}")
+    return data
 
 
 def _to_numeric(value):

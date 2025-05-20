@@ -14,6 +14,7 @@ show_help() {
   echo "  --margin-requirement RATIO  Margin requirement ratio (default: 0.0)"
   echo "  --ollama            Use Ollama for local LLM inference"
   echo "  --show-reasoning    Show reasoning from each agent"
+  echo "  --show-polygon-data Print Polygon queries and responses"
   echo ""
   echo "Commands:"
   echo "  main                Run the main hedge fund application"
@@ -42,6 +43,7 @@ END_DATE=""
 INITIAL_AMOUNT="100000.0"
 MARGIN_REQUIREMENT="0.0"
 SHOW_REASONING=""
+SHOW_POLYGON_DATA=""
 COMMAND=""
 MODEL_NAME=""
 
@@ -74,6 +76,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --show-reasoning)
       SHOW_REASONING="--show-reasoning"
+      shift
+      ;;
+    --show-polygon-data)
+      SHOW_POLYGON_DATA="--show-polygon-data"
       shift
       ;;
     main|backtest|build|help|compose|ollama)
@@ -288,19 +294,19 @@ if [ -n "$USE_OLLAMA" ]; then
   if [ -n "$MARGIN_REQUIREMENT" ]; then
     COMMAND_OVERRIDE="$COMMAND_OVERRIDE --margin-requirement $MARGIN_REQUIREMENT"
   fi
-  
+
   # Run the command with Docker Compose
   echo "Running AI Hedge Fund with Ollama using Docker Compose..."
   
   # Use the appropriate service based on command and reasoning flag
   if [ "$COMMAND" = "main" ]; then
     if [ -n "$SHOW_REASONING" ]; then
-      $COMPOSE_CMD $GPU_CONFIG run --rm hedge-fund-reasoning python src/main.py --ticker $TICKER $COMMAND_OVERRIDE $SHOW_REASONING --ollama
+      $COMPOSE_CMD $GPU_CONFIG run --rm hedge-fund-reasoning python src/main.py --ticker $TICKER $COMMAND_OVERRIDE $SHOW_REASONING $SHOW_POLYGON_DATA --ollama
     else
-      $COMPOSE_CMD $GPU_CONFIG run --rm hedge-fund-ollama python src/main.py --ticker $TICKER $COMMAND_OVERRIDE --ollama
+      $COMPOSE_CMD $GPU_CONFIG run --rm hedge-fund-ollama python src/main.py --ticker $TICKER $COMMAND_OVERRIDE $SHOW_POLYGON_DATA --ollama
     fi
   elif [ "$COMMAND" = "backtest" ]; then
-    $COMPOSE_CMD $GPU_CONFIG run --rm backtester-ollama python src/backtester.py --ticker $TICKER $COMMAND_OVERRIDE $SHOW_REASONING --ollama
+    $COMPOSE_CMD $GPU_CONFIG run --rm backtester-ollama python src/backtester.py --ticker $TICKER $COMMAND_OVERRIDE $SHOW_REASONING $SHOW_POLYGON_DATA --ollama
   fi
   
   exit 0
@@ -312,6 +318,7 @@ CMD="docker run -it --rm -v $(pwd)/.env:/app/.env"
 
 # Add the command
 CMD="$CMD ai-hedge-fund python $SCRIPT_PATH --ticker $TICKER $START_DATE $END_DATE $INITIAL_PARAM --margin-requirement $MARGIN_REQUIREMENT $SHOW_REASONING"
+CMD="$CMD $SHOW_POLYGON_DATA"
 
 # Run the command
 echo "Running: $CMD"

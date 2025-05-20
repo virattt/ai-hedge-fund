@@ -173,6 +173,19 @@ poetry run python src/main.py --ticker AAPL,MSFT,NVDA --show-reasoning
 run.bat --ticker AAPL,MSFT,NVDA --show-reasoning main
 ```
 
+You can specify a `--show-polygon-data` flag to print the requests made to Polygon and the data returned. This is helpful for debugging API queries.
+
+```bash
+# With Poetry:
+poetry run python src/main.py --ticker AAPL,MSFT,NVDA --show-polygon-data
+
+# With Docker (on Linux/Mac):
+./run.sh --ticker AAPL,MSFT,NVDA --show-polygon-data main
+
+# With Docker (on Windows):
+run.bat --ticker AAPL,MSFT,NVDA --show-polygon-data main
+```
+
 You can optionally specify the start and end dates to make decisions for a specific time period.
 
 ```bash
