@@ -86,8 +86,10 @@ def run_hedge_fund(
             },
         )
 
+        parsed_response = parse_hedge_fund_response(final_state["messages"][-1].content)
+        decisions = parsed_response.get("decisions") if isinstance(parsed_response, dict) else None
         return {
-            "decisions": parse_hedge_fund_response(final_state["messages"][-1].content),
+            "decisions": decisions,
             "analyst_signals": final_state["data"]["analyst_signals"],
         }
     finally:
