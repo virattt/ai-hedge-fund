@@ -150,13 +150,15 @@ def print_trading_output(result: dict) -> None:
             if current_line:
                 wrapped_reasoning += current_line
 
+        confidence_value = decision.get("confidence")
+        confidence_display = (
+            f"{confidence_value:.1f}%" if isinstance(confidence_value, (int, float)) else "N/A"
+        )
+
         decision_data = [
             ["Action", f"{action_color}{action}{Style.RESET_ALL}"],
             ["Quantity", f"{action_color}{decision.get('quantity')}{Style.RESET_ALL}"],
-            [
-                "Confidence",
-                f"{Fore.WHITE}{decision.get('confidence'):.1f}%{Style.RESET_ALL}",
-            ],
+            ["Confidence", f"{Fore.WHITE}{confidence_display}{Style.RESET_ALL}"],
             ["Reasoning", f"{Fore.WHITE}{wrapped_reasoning}{Style.RESET_ALL}"],
         ]
         
