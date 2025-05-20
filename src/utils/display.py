@@ -1,5 +1,8 @@
 from colorama import Fore, Style
 from tabulate import tabulate
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
 from .analysts import ANALYST_ORDER
 import os
 import json
@@ -98,15 +101,24 @@ def print_trading_output(result: dict) -> None:
         # Sort the signals according to the predefined order
         table_data = sort_agent_signals(table_data)
 
+        # Diagnostic logging for table data
+        logging.debug("Ticker %s table_data rows: %d", ticker, len(table_data))
+        logging.debug("Ticker %s table_data content: %s", ticker, table_data)
+
         print(f"\n{Fore.WHITE}{Style.BRIGHT}AGENT ANALYSIS:{Style.RESET_ALL} [{Fore.CYAN}{ticker}{Style.RESET_ALL}]")
-        print(
-            tabulate(
-                table_data,
-                headers=[f"{Fore.WHITE}Agent", "Signal", "Confidence", "Reasoning"],
-                tablefmt="grid",
-                colalign=("left", "center", "right", "left"),
+
+        if not table_data:
+            logging.debug("No analyst signals found for ticker %s", ticker)
+            print(f"{Fore.YELLOW}No analyst signals available{Style.RESET_ALL}")
+        else:
+            print(
+                tabulate(
+                    table_data,
+                    headers=[f"{Fore.WHITE}Agent", "Signal", "Confidence", "Reasoning"],
+                    tablefmt="grid",
+                    colalign=("left", "center", "right", "left"),
+                )
             )
-        )
 
         # Print Trading Decision Table
         action = decision.get("action", "").upper()
