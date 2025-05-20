@@ -53,8 +53,9 @@ def call_llm(
             # For non-JSON support models, we need to extract and parse the JSON manually
             if model_info and not model_info.has_json_mode():
                 parsed_result = extract_json_from_response(result.content)
-                if parsed_result:
-                    return pydantic_model(**parsed_result)
+                if parsed_result is None:
+                    raise ValueError("Failed to parse JSON from LLM response")
+                return pydantic_model(**parsed_result)
             else:
                 return result
 
