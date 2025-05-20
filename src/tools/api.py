@@ -28,6 +28,16 @@ def _polygon_get(url: str, params: dict | None = None) -> dict:
     return response.json()
 
 
+def _to_numeric(value):
+    """Return numeric value from polygon field which may be a dict."""
+    if isinstance(value, dict):
+        value = value.get("value")
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
     """Fetch price data from cache or API."""
     # Check cache first
@@ -95,26 +105,26 @@ def get_financial_metrics(
         bal = fs.get("balance_sheet", {})
         cfs = fs.get("cash_flow_statement", {})
 
-        revenue = inc.get("revenue") or inc.get("revenues")
-        gross_profit = inc.get("gross_profit")
-        operating_income = inc.get("operating_income") or inc.get("operating_income_loss")
-        net_income = inc.get("net_income") or inc.get("net_income_loss")
-        interest_expense = inc.get("interest_expense")
-        ebit = inc.get("ebit") or operating_income
+        revenue = _to_numeric(inc.get("revenue") or inc.get("revenues"))
+        gross_profit = _to_numeric(inc.get("gross_profit"))
+        operating_income = _to_numeric(inc.get("operating_income") or inc.get("operating_income_loss"))
+        net_income = _to_numeric(inc.get("net_income") or inc.get("net_income_loss"))
+        interest_expense = _to_numeric(inc.get("interest_expense"))
+        ebit = _to_numeric(inc.get("ebit") or operating_income)
 
-        total_assets = bal.get("assets") or bal.get("total_assets")
-        total_liabilities = bal.get("liabilities") or bal.get("total_liabilities")
-        equity = bal.get("shareholder_equity") or bal.get("total_shareholder_equity") or bal.get("equity")
+        total_assets = _to_numeric(bal.get("assets") or bal.get("total_assets"))
+        total_liabilities = _to_numeric(bal.get("liabilities") or bal.get("total_liabilities"))
+        equity = _to_numeric(bal.get("shareholder_equity") or bal.get("total_shareholder_equity") or bal.get("equity"))
 
-        current_assets = bal.get("current_assets")
-        current_liabilities = bal.get("current_liabilities")
-        cash = bal.get("cash_and_cash_equivalents")
+        current_assets = _to_numeric(bal.get("current_assets"))
+        current_liabilities = _to_numeric(bal.get("current_liabilities"))
+        cash = _to_numeric(bal.get("cash_and_cash_equivalents"))
 
-        ocf = cfs.get("net_cash_flow_from_operating_activities") or cfs.get("operating_cash_flow")
-        capex = cfs.get("capital_expenditure")
-        free_cash_flow = cfs.get("free_cash_flow")
+        ocf = _to_numeric(cfs.get("net_cash_flow_from_operating_activities") or cfs.get("operating_cash_flow"))
+        capex = _to_numeric(cfs.get("capital_expenditure"))
+        free_cash_flow = _to_numeric(cfs.get("free_cash_flow"))
 
-        shares = result.get("weighted_average_shares_outstanding") or result.get("shares_outstanding")
+        shares = _to_numeric(result.get("weighted_average_shares_outstanding") or result.get("shares_outstanding"))
 
         return FinancialMetrics(
             ticker=ticker,
@@ -193,28 +203,28 @@ def search_line_items(
         bal = fs.get("balance_sheet", {})
         cfs = fs.get("cash_flow_statement", {})
         if name == "free_cash_flow":
-            return cfs.get("free_cash_flow")
+            return _to_numeric(cfs.get("free_cash_flow"))
         if name == "ebit":
-            return inc.get("ebit") or inc.get("operating_income") or inc.get("operating_income_loss")
+            return _to_numeric(inc.get("ebit") or inc.get("operating_income") or inc.get("operating_income_loss"))
         if name == "interest_expense":
-            return inc.get("interest_expense")
+            return _to_numeric(inc.get("interest_expense"))
         if name == "capital_expenditure":
-            return cfs.get("capital_expenditure")
+            return _to_numeric(cfs.get("capital_expenditure"))
         if name == "depreciation_and_amortization":
-            return cfs.get("depreciation_and_amortization")
+            return _to_numeric(cfs.get("depreciation_and_amortization"))
         if name == "outstanding_shares":
-            return res.get("weighted_average_shares_outstanding") or res.get("shares_outstanding")
+            return _to_numeric(res.get("weighted_average_shares_outstanding") or res.get("shares_outstanding"))
         if name == "net_income":
-            return inc.get("net_income") or inc.get("net_income_loss")
+            return _to_numeric(inc.get("net_income") or inc.get("net_income_loss"))
         if name == "revenue":
-            return inc.get("revenue") or inc.get("revenues")
+            return _to_numeric(inc.get("revenue") or inc.get("revenues"))
         if name == "working_capital":
-            ca = bal.get("current_assets")
-            cl = bal.get("current_liabilities")
+            ca = _to_numeric(bal.get("current_assets"))
+            cl = _to_numeric(bal.get("current_liabilities"))
             if ca is not None and cl is not None:
                 return ca - cl
         if name == "total_debt":
-            return bal.get("total_debt") or bal.get("liabilities") or bal.get("total_liabilities")
+            return _to_numeric(bal.get("total_debt") or bal.get("liabilities") or bal.get("total_liabilities"))
         return None
 
     line_item_results = []
