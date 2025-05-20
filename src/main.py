@@ -1,4 +1,5 @@
 import sys
+import os
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
@@ -145,9 +146,17 @@ if __name__ == "__main__":
     parser.add_argument("--end-date", type=str, help="End date (YYYY-MM-DD). Defaults to today")
     parser.add_argument("--show-reasoning", action="store_true", help="Show reasoning from each agent")
     parser.add_argument("--show-agent-graph", action="store_true", help="Show the agent graph")
+    parser.add_argument(
+        "--show-polygon-data",
+        action="store_true",
+        help="Print Polygon queries and responses",
+    )
     parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
 
     args = parser.parse_args()
+
+    if args.show_polygon_data:
+        os.environ["SHOW_POLYGON_DATA"] = "1"
 
     # Parse tickers from comma-separated string
     tickers = [ticker.strip() for ticker in args.tickers.split(",")]

@@ -9,6 +9,7 @@ set END_DATE=
 set INITIAL_AMOUNT=100000.0
 set MARGIN_REQUIREMENT=0.0
 set SHOW_REASONING=
+set SHOW_POLYGON_DATA=
 set COMMAND=
 set MODEL_NAME=
 
@@ -26,6 +27,7 @@ echo   --initial-cash AMT  Initial cash position (default: 100000.0)
 echo   --margin-requirement RATIO  Margin requirement ratio (default: 0.0)
 echo   --ollama            Use Ollama for local LLM inference
 echo   --show-reasoning    Show reasoning from each agent
+echo   --show-polygon-data Print Polygon queries and responses
 echo.
 echo Commands:
 echo   main                Run the main hedge fund application
@@ -86,6 +88,11 @@ if "%~1"=="--ollama" (
 )
 if "%~1"=="--show-reasoning" (
     set SHOW_REASONING=--show-reasoning
+    shift
+    goto :parse_args
+)
+if "%~1"=="--show-polygon-data" (
+    set SHOW_POLYGON_DATA=--show-polygon-data
     shift
     goto :parse_args
 )
@@ -326,12 +333,12 @@ if not "!USE_OLLAMA!"=="" (
     :: Use the appropriate service based on command and reasoning flag
     if "!COMMAND!"=="main" (
         if not "!SHOW_REASONING!"=="" (
-            !COMPOSE_CMD! run --rm hedge-fund-reasoning python src/main.py --ticker !TICKER! !COMMAND_OVERRIDE! !SHOW_REASONING! --ollama
+            !COMPOSE_CMD! run --rm hedge-fund-reasoning python src/main.py --ticker !TICKER! !COMMAND_OVERRIDE! !SHOW_REASONING! !SHOW_POLYGON_DATA! --ollama
         ) else (
-            !COMPOSE_CMD! run --rm hedge-fund-ollama python src/main.py --ticker !TICKER! !COMMAND_OVERRIDE! --ollama
+            !COMPOSE_CMD! run --rm hedge-fund-ollama python src/main.py --ticker !TICKER! !COMMAND_OVERRIDE! !SHOW_POLYGON_DATA! --ollama
         )
     ) else if "!COMMAND!"=="backtest" (
-        !COMPOSE_CMD! run --rm backtester-ollama python src/backtester.py --ticker !TICKER! !COMMAND_OVERRIDE! !SHOW_REASONING! --ollama
+        !COMPOSE_CMD! run --rm backtester-ollama python src/backtester.py --ticker !TICKER! !COMMAND_OVERRIDE! !SHOW_REASONING! !SHOW_POLYGON_DATA! --ollama
     )
     
     exit /b 0
@@ -343,6 +350,7 @@ set CMD=docker run -it --rm -v %cd%\.env:/app/.env
 
 :: Add the command
 set CMD=!CMD! ai-hedge-fund python !SCRIPT_PATH! --ticker !TICKER! !START_DATE! !END_DATE! !INITIAL_PARAM! --margin-requirement !MARGIN_REQUIREMENT! !SHOW_REASONING!
+set CMD=!CMD! !SHOW_POLYGON_DATA!
 
 :: Run the command
 echo Running: !CMD!
