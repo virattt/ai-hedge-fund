@@ -70,7 +70,7 @@ def sentiment_agent(state: AgentState):
         total_weighted_signals = len(insider_signals) * insider_weight + len(news_signals) * news_weight
         confidence = 0  # Default confidence when there are no signals
         if total_weighted_signals > 0:
-            confidence = round(max(bullish_signals, bearish_signals) / total_weighted_signals, 2) * 100
+            confidence = round((max(bullish_signals, bearish_signals) / total_weighted_signals) * 100, 2)
         reasoning = f"Weighted Bullish signals: {bullish_signals:.1f}, Weighted Bearish signals: {bearish_signals:.1f}"
 
         sentiment_analysis[ticker] = {

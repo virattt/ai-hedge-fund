@@ -16,54 +16,87 @@ def risk_management_agent(state: AgentState):
     risk_analysis = {}
     current_prices = {}  # Store prices here to avoid redundant API calls
 
-    for ticker in tickers:
-        progress.update_status("risk_management_agent", ticker, "Analyzing price data")
-
+    # First, fetch prices for all relevant tickers
+    all_tickers = set(tickers) | set(portfolio.get("positions", {}).keys())
+    
+    for ticker in all_tickers:
+        progress.update_status("risk_management_agent", ticker, "Fetching price data")
+        
         prices = get_prices(
             ticker=ticker,
-            start_date=data["start_date"],
+            start_date=data["end_date"],  # Just get the latest price
             end_date=data["end_date"],
         )
 
         if not prices:
-            progress.update_status("risk_management_agent", ticker, "Failed: No price data found")
+            progress.update_status("risk_management_agent", ticker, "Warning: No price data found")
             continue
 
         prices_df = prices_to_df(prices)
+        
+        if not prices_df.empty:
+            current_price = prices_df["close"].iloc[-1]
+            current_prices[ticker] = current_price
+            progress.update_status("risk_management_agent", ticker, f"Current price: {current_price}")
+        else:
+            progress.update_status("risk_management_agent", ticker, "Warning: Empty price data")
 
+    # Calculate total portfolio value based on current market prices (Net Liquidation Value)
+    total_portfolio_value = portfolio.get("cash", 0.0)
+    
+    for ticker, position in portfolio.get("positions", {}).items():
+        if ticker in current_prices:
+            # Add market value of long positions
+            total_portfolio_value += position.get("long", 0) * current_prices[ticker]
+            # Subtract market value of short positions
+            total_portfolio_value -= position.get("short", 0) * current_prices[ticker]
+    
+    progress.update_status("risk_management_agent", None, f"Total portfolio value: {total_portfolio_value}")
+
+    # Calculate risk limits for each ticker in the universe
+    for ticker in tickers:
         progress.update_status("risk_management_agent", ticker, "Calculating position limits")
-
-        # Calculate portfolio value
-        current_price = prices_df["close"].iloc[-1]
-        current_prices[ticker] = current_price  # Store the current price
-
-        # Calculate current position value for this ticker
-        current_position_value = portfolio.get("cost_basis", {}).get(ticker, 0)
-
-        # Calculate total portfolio value using stored prices
-        total_portfolio_value = portfolio.get("cash", 0) + sum(portfolio.get("cost_basis", {}).get(t, 0) for t in portfolio.get("cost_basis", {}))
-
-        # Base limit is 20% of portfolio for any single position
+        
+        if ticker not in current_prices:
+            progress.update_status("risk_management_agent", ticker, "Failed: No price data available")
+            risk_analysis[ticker] = {
+                "remaining_position_limit": 0.0,
+                "current_price": 0.0,
+                "reasoning": {
+                    "error": "Missing price data for risk calculation"
+                }
+            }
+            continue
+            
+        current_price = current_prices[ticker]
+        
+        # Calculate current market value of this position
+        position = portfolio.get("positions", {}).get(ticker, {})
+        long_value = position.get("long", 0) * current_price
+        short_value = position.get("short", 0) * current_price
+        current_position_value = abs(long_value - short_value)  # Use absolute exposure
+        
+        # Calculate position limit (20% of total portfolio)
         position_limit = total_portfolio_value * 0.20
-
-        # For existing positions, subtract current position value from limit
+        
+        # Calculate remaining limit for this position
         remaining_position_limit = position_limit - current_position_value
-
+        
         # Ensure we don't exceed available cash
         max_position_size = min(remaining_position_limit, portfolio.get("cash", 0))
-
+        
         risk_analysis[ticker] = {
             "remaining_position_limit": float(max_position_size),
             "current_price": float(current_price),
             "reasoning": {
                 "portfolio_value": float(total_portfolio_value),
-                "current_position": float(current_position_value),
+                "current_position_value": float(current_position_value),
                 "position_limit": float(position_limit),
                 "remaining_limit": float(remaining_position_limit),
                 "available_cash": float(portfolio.get("cash", 0)),
             },
         }
-
+        
         progress.update_status("risk_management_agent", ticker, "Done")
 
     message = HumanMessage(
