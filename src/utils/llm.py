@@ -54,12 +54,18 @@ def call_llm(
             if model_info and not model_info.has_json_mode():
                 parsed_result = extract_json_from_response(result.content)
                 if parsed_result is None:
+                    # Check if result.content exists before printing
+                    if hasattr(result, 'content'):
+                        print(f"LLM_RESPONSE_ERROR: Raw response content that caused error: {result.content}")
                     raise ValueError("Failed to parse JSON from LLM response")
                 return pydantic_model(**parsed_result)
             else:
                 return result
 
         except Exception as e:
+            # Check if result and result.content exist before printing
+            if 'result' in locals() and hasattr(result, 'content'):
+                print(f"LLM_RESPONSE_ERROR: Raw response content that caused error: {result.content}")
             if agent_name:
                 progress.update_status(agent_name, None, f"Error - retry {attempt + 1}/{max_retries}")
 
