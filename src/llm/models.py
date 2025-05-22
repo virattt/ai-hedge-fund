@@ -66,7 +66,7 @@ class LLMModel(BaseModel):
 # Load models from JSON file
 def load_models_from_json(json_path: str, is_ollama_file: bool = False) -> List[LLMModel]:
     """Load models from a JSON file.
-    
+
     Args:
         json_path: Path to the JSON file.
         is_ollama_file: Boolean indicating if the file is the ollama_models.json.
@@ -126,7 +126,7 @@ def load_models_from_json(json_path: str, is_ollama_file: bool = False) -> List[
                     print(f"Warning: Invalid provider name '{provider_name}' in {json_path}. Skipping.")
         else:
             print(f"Warning: Expected a dictionary of providers in {json_path}, but got {type(data)}")
-            
+
     return models
 
 
@@ -230,6 +230,6 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
         except ValueError as e: # Catches API key errors specifically
             print(e) # The factory function already prints a detailed message
             return None # Or re-raise if you want the caller to handle it more explicitly
-    
+
     print(f"Unsupported model provider: {model_provider}")
     return None

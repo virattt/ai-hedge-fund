@@ -30,8 +30,8 @@ const models: Record<ModelProvider, ModelItem[]> = {
   ],
   "Gemini": [
     {
-      "display_name": "gemini-2.0-flash",
-      "model_name": "gemini-2.0-flash"
+      "display_name": "gemini-2.5-flash",
+      "model_name": "gemini-2.5-flash-preview-05-20"
     },
     {
       "display_name": "gemini-2.5-pro",
