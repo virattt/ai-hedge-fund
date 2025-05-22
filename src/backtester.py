@@ -651,6 +651,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Use all available analysts (overrides --analysts)",
     )
+    parser.add_argument(
+        "--llm",
+        type=str,
+        default=None,
+        help="Specify LLM as provider:model (e.g., openai:gpt-4, ollama:llama3) to override interactive selection",
+    )
     parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
 
     args = parser.parse_args()
@@ -687,11 +693,26 @@ if __name__ == "__main__":
             selected_analysts = choices
             print(f"\nSelected analysts: " f"{', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}")
 
-    # Select LLM model based on whether Ollama is being used
+    # Select LLM model based on argument or interactive selection
     model_name = ""
     model_provider = None
 
-    if args.ollama:
+    # If command-line LLM is provided, use it directly
+    if args.llm is not None:
+        if ':' not in args.llm:
+            print(f"{Fore.RED}--llm argument must be in provider:model format (e.g., openai:gpt-4){Style.RESET_ALL}")
+            sys.exit(1)
+        model_provider, model_name = args.llm.split(':', 1)
+        if model_provider.lower() == ModelProvider.OLLAMA.value or args.ollama:
+            # For Ollama, ensure model is available
+            if not ensure_ollama_and_model(model_name):
+                print(f"{Fore.RED}Cannot proceed without Ollama and the selected model.{Style.RESET_ALL}")
+                sys.exit(1)
+            print(f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
+            model_provider = ModelProvider.OLLAMA.value
+        else:
+            print(f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
+    elif args.ollama:
         print(f"{Fore.CYAN}Using Ollama for local LLM inference.{Style.RESET_ALL}")
 
         # Select from Ollama-specific models
@@ -774,3 +795,5 @@ if __name__ == "__main__":
 
     performance_metrics = backtester.run_backtest()
     performance_df = backtester.analyze_performance()
+
+    print_backtest_results(performance_df, performance_metrics)
