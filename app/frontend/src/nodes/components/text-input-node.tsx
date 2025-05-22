@@ -8,8 +8,9 @@ import { CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useNodeContext } from '@/contexts/node-context';
-import { apiModels, defaultModel, ModelItem } from '@/data/models';
+import { apiModels, defaultModel, ModelItemWithProvider } from '@/data/models';
 import { api } from '@/services/api';
+import { modelProviderToHedgeFundModelProvider } from '@/services/types';
 import { type TextInputNode } from '../types';
 import { NodeShell } from './node-shell';
 
@@ -20,17 +21,17 @@ export function TextInputNode({
   isConnectable,
 }: NodeProps<TextInputNode>) {
   const [tickers, setTickers] = useState('');
-  const [selectedModel, setSelectedModel] = useState<ModelItem | null>(defaultModel);
+  const [selectedModel, setSelectedModel] = useState<ModelItemWithProvider | null>(defaultModel);
   const nodeContext = useNodeContext();
   const { resetAllNodes, agentNodeData } = nodeContext;
   const { getNodes, getEdges } = useReactFlow();
   const abortControllerRef = useRef<(() => void) | null>(null);
-  
+
   // Check if any agent is in progress
   const isProcessing = Object.values(agentNodeData).some(
     agent => agent.status === 'IN_PROGRESS'
   );
-  
+
   // Clean up SSE connection on unmount
   useEffect(() => {
     return () => {
@@ -39,7 +40,7 @@ export function TextInputNode({
       }
     };
   }, []);
-  
+
   const handleTickersChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setTickers(e.target.value);
   };
@@ -47,23 +48,23 @@ export function TextInputNode({
   const handlePlay = () => {
     // First, reset all nodes to IDLE
     resetAllNodes();
-    
+
     // Clean up any existing connection
     if (abortControllerRef.current) {
       abortControllerRef.current();
     }
-    
+
     // Call the backend API with SSE
     const tickerList = tickers.split(',').map(t => t.trim());
-    
+
     // Get the nodes and edges
     const nodes = getNodes();
     const edges = getEdges();
     const connectedEdges = getConnectedEdges(nodes, edges);
-    
+
     // Get all nodes that are agents and are connected in the flow
     const selectedAgents = new Set<string>();
-    
+
     // First, collect all the target node IDs from connected edges
     const connectedNodeIds = new Set<string>();
     connectedEdges.forEach(edge => {
@@ -71,20 +72,20 @@ export function TextInputNode({
         connectedNodeIds.add(edge.target);
       }
     });
-    
+
     // Then filter for nodes that are agents
     nodes.forEach(node => {
       if (node.type === 'agent-node' && connectedNodeIds.has(node.id)) {
         selectedAgents.add(node.id);
       }
     });
-        
+
     abortControllerRef.current = api.runHedgeFund(
       {
         tickers: tickerList,
         selected_agents: Array.from(selectedAgents),
         model_name: selectedModel?.model_name || undefined,
-        model_provider: selectedModel?.provider as any || undefined,
+        model_provider: modelProviderToHedgeFundModelProvider(selectedModel?.provider),
       },
       // Pass the node status context to the API
       nodeContext
@@ -122,8 +123,8 @@ export function TextInputNode({
                     value={tickers}
                     onChange={handleTickersChange}
                   />
-                  <Button 
-                    size="icon" 
+                  <Button
+                    size="icon"
                     variant="secondary"
                     className="flex-shrink-0 transition-all duration-200 hover:bg-primary hover:text-primary-foreground active:scale-95"
                     onClick={handlePlay}
