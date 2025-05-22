@@ -655,7 +655,7 @@ if __name__ == "__main__":
         "--llm",
         type=str,
         default=None,
-        help="Specify LLM as provider:model (e.g., openai:gpt-4, ollama:llama3) to override interactive selection",
+        help="Specify LLM as provider:model (e.g., Openai:gpt-4, Ollama:llama3) to override interactive selection",
     )
     parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
 
@@ -703,7 +703,7 @@ if __name__ == "__main__":
             print(f"{Fore.RED}--llm argument must be in provider:model format (e.g., openai:gpt-4){Style.RESET_ALL}")
             sys.exit(1)
         model_provider, model_name = args.llm.split(':', 1)
-        if model_provider.lower() == ModelProvider.OLLAMA.value or args.ollama:
+        if model_provider.lower() == ModelProvider.OLLAMA.value:
             # For Ollama, ensure model is available
             if not ensure_ollama_and_model(model_name):
                 print(f"{Fore.RED}Cannot proceed without Ollama and the selected model.{Style.RESET_ALL}")
