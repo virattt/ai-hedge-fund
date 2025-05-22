@@ -795,5 +795,3 @@ if __name__ == "__main__":
 
     performance_metrics = backtester.run_backtest()
     performance_df = backtester.analyze_performance()
-
-    print_backtest_results(performance_df, performance_metrics)
