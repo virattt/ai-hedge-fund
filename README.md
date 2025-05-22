@@ -158,7 +158,7 @@ poetry run python src/main.py --ticker AAPL,MSFT,NVDA --llm Ollama:llama3
 ./run.sh --ticker AAPL,MSFT,NVDA --llm Openai:gpt-4
 
 # With Docker (on Windows):
-run.bat --ticker AAPL,MSFT,NVDA --llm Ollama:llama3
+run.bat --ticker AAPL,MSFT,NVDA --llm Openai:gpt-4
 ```
 
 If you do not specify `--llm`, you will be prompted to select a provider and model interactively.
