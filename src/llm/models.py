@@ -197,11 +197,12 @@ def _get_groq_model(model_name: str):
 def _get_openai_model(model_name: str):
     # Get and validate API key
     api_key = os.getenv("OPENAI_API_KEY")
+    base_url = os.getenv("OPENAI_API_BASE")
     if not api_key:
         # Print error to console
         print(f"API Key Error: Please make sure OPENAI_API_KEY is set in your .env file.")
         raise ValueError("OpenAI API key not found.  Please make sure OPENAI_API_KEY is set in your .env file.")
-    return ChatOpenAI(model=model_name, api_key=api_key)
+    return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
 
 def _get_ollama_model(model_name: str):
     # For Ollama, we use a base URL instead of an API key
