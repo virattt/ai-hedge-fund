@@ -17,7 +17,7 @@ import '@xyflow/react/dist/style.css';
 
 import { AppNode } from '@/nodes/types';
 import { edgeTypes } from '../edges';
-import { initialEdges, initialNodes, nodeTypes } from '../nodes';
+import { initialNodes, nodeTypes } from '../nodes';
 import { Button } from './ui/button';
 
 type FlowProps = {
@@ -27,7 +27,7 @@ type FlowProps = {
 export function Flow({ className = '' }: FlowProps) {
   const [colorMode] = useState<ColorMode>('dark');
   const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initialEdges);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const proOptions = { hideAttribution: true };
   
@@ -57,7 +57,7 @@ export function Flow({ className = '' }: FlowProps) {
   // Reset the flow to initial state
   const resetFlow = useCallback(() => {
     setNodes(initialNodes);
-    setEdges(initialEdges);
+    setEdges([]);
   }, [setNodes, setEdges]);
 
   return (
@@ -76,15 +76,11 @@ export function Flow({ className = '' }: FlowProps) {
         fitView
       >
         <Background gap={13}/>
-        <div 
-          className="absolute bottom-4 left-1/2 z-10"
-          style={{ 
-            width: 'auto',
-            transform: 'translateX(calc(-50% - 80px))'
-          }}
-        >
-          <Controls orientation='horizontal' />
-        </div>
+        <Controls 
+          position="bottom-center" 
+          orientation="horizontal" 
+          style={{ bottom: 20 }}
+        />
         <Panel position="top-right">
           <Button
             onClick={resetFlow}

@@ -20,13 +20,6 @@ interface FlowProviderProps {
   children: ReactNode;
 }
 
-/**
- * Generate a unique ID string
- */
-function generateId(prefix: string = ''): string {
-  return `${prefix}${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
-}
-
 export function FlowProvider({ children }: FlowProviderProps) {
   const reactFlowInstance = useReactFlow();
 
@@ -63,7 +56,7 @@ export function FlowProvider({ children }: FlowProviderProps) {
     
     // Add some randomness to prevent perfect overlap if multiple nodes are added
     position.x += Math.random() * 100 - 50;
-    position.y += Math.random() * 100 - 50;
+    position.y = 0;
     
     // Create the new node
     const newNode = nodeTypeDefinition.createNode(position);

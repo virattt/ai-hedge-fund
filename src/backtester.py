@@ -640,6 +640,17 @@ if __name__ == "__main__":
         default=0.0,
         help="Margin ratio for short positions, e.g. 0.5 for 50% (default: 0.0)",
     )
+    parser.add_argument(
+        "--analysts",
+        type=str,
+        required=False,
+        help="Comma-separated list of analysts to use (e.g., michael_burry,other_analyst)",
+    )
+    parser.add_argument(
+        "--analysts-all",
+        action="store_true",
+        help="Use all available analysts (overrides --analysts)",
+    )
     parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
 
     args = parser.parse_args()
@@ -647,39 +658,44 @@ if __name__ == "__main__":
     # Parse tickers from comma-separated string
     tickers = [ticker.strip() for ticker in args.tickers.split(",")] if args.tickers else []
 
-    # Choose analysts
+    # Parse analysts from command-line flags
     selected_analysts = None
-    choices = questionary.checkbox(
-        "Use the Space bar to select/unselect analysts.",
-        choices=[questionary.Choice(display, value=value) for display, value in ANALYST_ORDER],
-        instruction="\n\nPress 'a' to toggle all.\n\nPress Enter when done to run the hedge fund.",
-        validate=lambda x: len(x) > 0 or "You must select at least one analyst.",
-        style=questionary.Style(
-            [
-                ("checkbox-selected", "fg:green"),
-                ("selected", "fg:green noinherit"),
-                ("highlighted", "noinherit"),
-                ("pointer", "noinherit"),
-            ]
-        ),
-    ).ask()
-
-    if not choices:
-        print("\n\nInterrupt received. Exiting...")
-        sys.exit(0)
+    if args.analysts_all:
+        selected_analysts = [a[1] for a in ANALYST_ORDER]
+    elif args.analysts:
+        selected_analysts = [a.strip() for a in args.analysts.split(",") if a.strip()]
     else:
-        selected_analysts = choices
-        print(f"\nSelected analysts: " f"{', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}")
+        # Choose analysts interactively
+        choices = questionary.checkbox(
+            "Use the Space bar to select/unselect analysts.",
+            choices=[questionary.Choice(display, value=value) for display, value in ANALYST_ORDER],
+            instruction="\n\nPress 'a' to toggle all.\n\nPress Enter when done to run the hedge fund.",
+            validate=lambda x: len(x) > 0 or "You must select at least one analyst.",
+            style=questionary.Style(
+                [
+                    ("checkbox-selected", "fg:green"),
+                    ("selected", "fg:green noinherit"),
+                    ("highlighted", "noinherit"),
+                    ("pointer", "noinherit"),
+                ]
+            ),
+        ).ask()
+        if not choices:
+            print("\n\nInterrupt received. Exiting...")
+            sys.exit(0)
+        else:
+            selected_analysts = choices
+            print(f"\nSelected analysts: " f"{', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}")
 
     # Select LLM model based on whether Ollama is being used
-    model_choice = None
+    model_name = ""
     model_provider = None
 
     if args.ollama:
         print(f"{Fore.CYAN}Using Ollama for local LLM inference.{Style.RESET_ALL}")
 
         # Select from Ollama-specific models
-        model_choice = questionary.select(
+        model_name = questionary.select(
             "Select your Ollama model:",
             choices=[questionary.Choice(display, value=value) for display, value, _ in OLLAMA_LLM_ORDER],
             style=questionary.Style(
@@ -692,22 +708,28 @@ if __name__ == "__main__":
             ),
         ).ask()
 
-        if not model_choice:
+        if not model_name:
             print("\n\nInterrupt received. Exiting...")
             sys.exit(0)
 
+        if model_name == "-":
+            model_name = questionary.text("Enter the custom model name:").ask()
+            if not model_name:
+                print("\n\nInterrupt received. Exiting...")
+                sys.exit(0)
+
         # Ensure Ollama is installed, running, and the model is available
-        if not ensure_ollama_and_model(model_choice):
+        if not ensure_ollama_and_model(model_name):
             print(f"{Fore.RED}Cannot proceed without Ollama and the selected model.{Style.RESET_ALL}")
             sys.exit(1)
 
         model_provider = ModelProvider.OLLAMA.value
-        print(f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+        print(f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
     else:
         # Use the standard cloud-based LLM selection
         model_choice = questionary.select(
             "Select your LLM model:",
-            choices=[questionary.Choice(display, value=value) for display, value, _ in LLM_ORDER],
+            choices=[questionary.Choice(display, value=(name, provider)) for display, name, provider in LLM_ORDER],
             style=questionary.Style(
                 [
                     ("selected", "fg:green bold"),
@@ -721,14 +743,21 @@ if __name__ == "__main__":
         if not model_choice:
             print("\n\nInterrupt received. Exiting...")
             sys.exit(0)
+        
+        model_name, model_provider = model_choice
+
+        model_info = get_model_info(model_name, model_provider)
+        if model_info:
+            if model_info.is_custom():
+                model_name = questionary.text("Enter the custom model name:").ask()
+                if not model_name:
+                    print("\n\nInterrupt received. Exiting...")
+                    sys.exit(0)
+
+            print(f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
         else:
-            model_info = get_model_info(model_choice)
-            if model_info:
-                model_provider = model_info.provider.value
-                print(f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
-            else:
-                model_provider = "Unknown"
-                print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+            model_provider = "Unknown"
+            print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
 
     # Create and run the backtester
     backtester = Backtester(
@@ -737,7 +766,7 @@ if __name__ == "__main__":
         start_date=args.start_date,
         end_date=args.end_date,
         initial_capital=args.initial_capital,
-        model_name=model_choice,
+        model_name=model_name,
         model_provider=model_provider,
         selected_analysts=selected_analysts,
         initial_margin_requirement=args.margin_requirement,

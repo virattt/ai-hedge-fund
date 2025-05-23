@@ -69,14 +69,13 @@ export function TextOutputDialog({
 
   const getConfidenceBadge = (confidence: number) => {
     let variant = 'outline';
-    
     if (confidence >= 50) variant = 'success';
     else if (confidence >= 0) variant = 'warning';
     else variant = 'outline';
-    
+    const rounded = Number(confidence.toFixed(1));
     return (
       <Badge variant={variant as any}>
-        {confidence}%
+        {rounded}%
       </Badge>
     );
   };
@@ -202,4 +201,4 @@ export function TextOutputDialog({
       </DialogContent>
     </Dialog>
   );
-} 
+}

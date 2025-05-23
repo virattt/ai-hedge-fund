@@ -34,7 +34,7 @@ def call_llm(
         An instance of the specified Pydantic model
     """
 
-    model_info = get_model_info(model_name)
+    model_info = get_model_info(model_name, model_provider)
     llm = get_model(model_name, model_provider)
 
     # For non-JSON support models, we can use structured output

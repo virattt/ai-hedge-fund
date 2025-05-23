@@ -5,6 +5,7 @@ import {
   LucideIcon,
   Type
 } from 'lucide-react';
+import { agents } from './agents';
 
 // Define component items by group
 export interface ComponentItem {
@@ -21,6 +22,15 @@ export interface ComponentGroup {
 
 // Define all component groups and items
 export const componentGroups: ComponentGroup[] = [
+  {
+    name: "agents",
+    icon: Bot,
+    iconColor: "text-red-400",
+    items: agents.map(agent => ({
+      name: agent.display_name,
+      icon: Bot
+    }))
+  },
   {
     name: "inputs",
     icon: ArrowDownToLine,
@@ -57,14 +67,4 @@ export const componentGroups: ComponentGroup[] = [
   //     { name: "Function", icon: Zap }
   //   ]
   // },
-  {
-    name: "agents",
-    icon: Bot,
-    iconColor: "text-red-400",
-    items: [
-      { name: "Ben Graham", icon: Bot },
-      { name: "Charlie Munger", icon: Bot },
-      { name: "Warren Buffett", icon: Bot }
-    ]
-  }
 ]; 

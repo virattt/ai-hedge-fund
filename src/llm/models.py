@@ -34,6 +34,10 @@ class LLMModel(BaseModel):
         """Convert to format needed for questionary choices"""
         return (self.display_name, self.model_name, self.provider.value)
 
+    def is_custom(self) -> bool:
+        """Check if the model is a Gemini model"""
+        return self.model_name == "-"
+
     def has_json_mode(self) -> bool:
         """Check if the model supports JSON mode"""
         if self.is_deepseek() or self.is_gemini():
@@ -94,10 +98,10 @@ LLM_ORDER = [model.to_choice_tuple() for model in AVAILABLE_MODELS]
 OLLAMA_LLM_ORDER = [model.to_choice_tuple() for model in OLLAMA_MODELS]
 
 
-def get_model_info(model_name: str) -> LLMModel | None:
+def get_model_info(model_name: str, model_provider: str) -> LLMModel | None:
     """Get model information by model_name"""
     all_models = AVAILABLE_MODELS + OLLAMA_MODELS
-    return next((model for model in all_models if model.model_name == model_name), None)
+    return next((model for model in all_models if model.model_name == model_name and model.provider == model_provider), None)
 
 
 def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | ChatGroq | ChatOllama | None:
@@ -111,11 +115,12 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
     elif model_provider == ModelProvider.OPENAI:
         # Get and validate API key
         api_key = os.getenv("OPENAI_API_KEY")
+        base_url = os.getenv("OPENAI_API_BASE")
         if not api_key:
             # Print error to console
             print(f"API Key Error: Please make sure OPENAI_API_KEY is set in your .env file.")
             raise ValueError("OpenAI API key not found.  Please make sure OPENAI_API_KEY is set in your .env file.")
-        return ChatOpenAI(model=model_name, api_key=api_key)
+        return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
     elif model_provider == ModelProvider.ANTHROPIC:
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:

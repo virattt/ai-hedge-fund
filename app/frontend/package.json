@@ -11,6 +11,7 @@
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.10",
     "@radix-ui/react-dialog": "^1.1.13",
+    "@radix-ui/react-popover": "^1.1.13",
     "@radix-ui/react-separator": "^1.1.6",
     "@radix-ui/react-slot": "^1.2.0",
     "@radix-ui/react-tabs": "^1.1.11",

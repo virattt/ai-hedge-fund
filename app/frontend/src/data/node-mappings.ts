@@ -1,4 +1,5 @@
 import { AppNode } from "@/nodes/types";
+import { agents } from "./agents";
 
 // Map of sidebar item names to node creation functions
 export interface NodeTypeDefinition {
@@ -31,42 +32,22 @@ const nodeTypeDefinitions: Record<string, NodeTypeDefinition> = {
       },
     }),
   },
-  "Ben Graham": {
-    createNode: (position: { x: number, y: number }): AppNode => ({
-      id: `ben_graham`,
-      type: "agent-node",
-      position,
-      data: {
-        name: "Ben Graham",
-        description: "The Father of Value Investing",
-        status: "Idle",
-      },
-    }),
-  },
-  "Charlie Munger": {
-    createNode: (position: { x: number, y: number }): AppNode => ({
-      id: `charlie_munger`,
-      type: "agent-node",
-      position,
-      data: {
-        name: "Charlie Munger",
-        description: "The Abominable No-Man",
-        status: "Idle",
-      },
-    }),
-  },
-  "Warren Buffett": {
-    createNode: (position: { x: number, y: number }): AppNode => ({
-      id: `warren_buffett`,
-      type: "agent-node", 
-      position,
-      data: {
-        name: "Warren Buffett",
-        description: "The Oracle of Omaha",
-        status: "Idle",
-      },
-    }),
-  },
+  // Dynamic node creation for all agents
+  ...agents.reduce((acc, agent) => {
+    acc[agent.display_name] = {
+      createNode: (position: { x: number, y: number }): AppNode => ({
+        id: agent.key,
+        type: "agent-node",
+        position,
+        data: {
+          name: agent.display_name,
+          description: agent.description || "",
+          status: "Idle",
+        },
+      }),
+    };
+    return acc;
+  }, {} as Record<string, NodeTypeDefinition>),
 };
 
 export function getNodeTypeDefinition(componentName: string): NodeTypeDefinition | null {

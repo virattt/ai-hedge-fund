@@ -177,14 +177,14 @@ if __name__ == "__main__":
         print(f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n")
 
     # Select LLM model based on whether Ollama is being used
-    model_choice = None
-    model_provider = None
+    model_name = ""
+    model_provider = ""
 
     if args.ollama:
         print(f"{Fore.CYAN}Using Ollama for local LLM inference.{Style.RESET_ALL}")
 
         # Select from Ollama-specific models
-        model_choice = questionary.select(
+        model_name: str = questionary.select(
             "Select your Ollama model:",
             choices=[questionary.Choice(display, value=value) for display, value, _ in OLLAMA_LLM_ORDER],
             style=questionary.Style(
@@ -197,22 +197,28 @@ if __name__ == "__main__":
             ),
         ).ask()
 
-        if not model_choice:
+        if not model_name:
             print("\n\nInterrupt received. Exiting...")
             sys.exit(0)
 
+        if model_name == "-":
+            model_name = questionary.text("Enter the custom model name:").ask()
+            if not model_name:
+                print("\n\nInterrupt received. Exiting...")
+                sys.exit(0)
+
         # Ensure Ollama is installed, running, and the model is available
-        if not ensure_ollama_and_model(model_choice):
+        if not ensure_ollama_and_model(model_name):
             print(f"{Fore.RED}Cannot proceed without Ollama and the selected model.{Style.RESET_ALL}")
             sys.exit(1)
 
         model_provider = ModelProvider.OLLAMA.value
-        print(f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+        print(f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
     else:
         # Use the standard cloud-based LLM selection
         model_choice = questionary.select(
             "Select your LLM model:",
-            choices=[questionary.Choice(display, value=value) for display, value, _ in LLM_ORDER],
+            choices=[questionary.Choice(display, value=(name, provider)) for display, name, provider in LLM_ORDER],
             style=questionary.Style(
                 [
                     ("selected", "fg:green bold"),
@@ -226,15 +232,22 @@ if __name__ == "__main__":
         if not model_choice:
             print("\n\nInterrupt received. Exiting...")
             sys.exit(0)
+
+        model_name, model_provider = model_choice
+
+        # Get model info using the helper function
+        model_info = get_model_info(model_name, model_provider)
+        if model_info:
+            if model_info.is_custom():
+                model_name = questionary.text("Enter the custom model name:").ask()
+                if not model_name:
+                    print("\n\nInterrupt received. Exiting...")
+                    sys.exit(0)
+
+            print(f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
         else:
-            # Get model info using the helper function
-            model_info = get_model_info(model_choice)
-            if model_info:
-                model_provider = model_info.provider.value
-                print(f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
-            else:
-                model_provider = "Unknown"
-                print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+            model_provider = "Unknown"
+            print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
 
     # Create the workflow with selected analysts
     workflow = create_workflow(selected_analysts)
@@ -302,7 +315,7 @@ if __name__ == "__main__":
         portfolio=portfolio,
         show_reasoning=args.show_reasoning,
         selected_analysts=selected_analysts,
-        model_name=model_choice,
+        model_name=model_name,
         model_provider=model_provider,
     )
     print_trading_output(result)

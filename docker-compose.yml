@@ -24,6 +24,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - OLLAMA_BASE_URL=http://ollama:11434
+      - PYTHONPATH=/app
     tty: true
     stdin_open: true
 
@@ -38,6 +39,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - OLLAMA_BASE_URL=http://ollama:11434
+      - PYTHONPATH=/app
     tty: true
     stdin_open: true
 
@@ -52,6 +54,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - OLLAMA_BASE_URL=http://ollama:11434
+      - PYTHONPATH=/app
     tty: true
     stdin_open: true
 
@@ -66,6 +69,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - OLLAMA_BASE_URL=http://ollama:11434
+      - PYTHONPATH=/app
     tty: true
     stdin_open: true
 
@@ -80,6 +84,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - OLLAMA_BASE_URL=http://ollama:11434
+      - PYTHONPATH=/app
     tty: true
     stdin_open: true
 
