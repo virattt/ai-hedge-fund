@@ -178,6 +178,41 @@ ai-hedge-fund/
 
 If you have a feature request, please open an [issue](https://github.com/virattt/ai-hedge-fund/issues) and make sure it is tagged with `enhancement`.
 
+## Interactive Timeline Sphere
+
+The `web/` folder contains a small React application that visualizes the
+blockchain timeline on an interactive globe using the [Cobe](https://cobe.vercel.app/) library.
+
+### Plotly Timeline Sphere
+
+You can also render the timeline in Python using Plotly:
+
+```bash
+python src/visualization/timeline_sphere.py
+```
+
+This launches a 3‑D sphere where each marker represents a historical event.
+
+### Launching the Web Interface
+
+```bash
+cd web
+npm install
+npm start
+```
+
+After running `npm start` the app will be available on <http://localhost:5173>
+(or the port printed by Vite).
+
+The markers displayed on the globe are loaded from `web/timeline.json`. Edit
+this file to customize the events shown.
+
+### Exporting Data to Obsidian
+
+The blockchain timeline is stored in `docs/blockchain_timeline.md`. Copy this
+file into your Obsidian vault (or create a symlink) to view and edit the notes
+alongside your other documents.
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
