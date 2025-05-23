@@ -10,51 +10,55 @@ export type ModelItemWithProvider = ModelItem & { provider: ModelProvider };
 const models: Record<ModelProvider, ModelItem[]> = {
   "Anthropic": [
     {
-      "display_name": "claude-3.5-haiku",
+      "display_name": "Claude Haiku 3.5",
       "model_name": "claude-3-5-haiku-latest"
     },
     {
-      "display_name": "claude-3.7-sonnet",
-      "model_name": "claude-3-7-sonnet-latest"
+      "display_name": "Claude Sonnet 4",
+      "model_name": "claude-sonnet-4-20250514"
+    },
+    {
+      "display_name": "Claude Opus 4",
+      "model_name": "claude-opus-4-20250514"
     }
   ],
   "DeepSeek": [
     {
-      "display_name": "deepseek-r1",
+      "display_name": "DeepSeek R1",
       "model_name": "deepseek-reasoner"
     },
     {
-      "display_name": "deepseek-v3",
+      "display_name": "DeepSeek V3",
       "model_name": "deepseek-chat"
     }
   ],
   "Gemini": [
     {
-      "display_name": "gemini-2.5-flash",
+      "display_name": "Gemini 2.5 Flash",
       "model_name": "gemini-2.5-flash-preview-05-20"
     },
     {
-      "display_name": "gemini-2.5-pro",
+      "display_name": "Gemini 2.5 Pro",
       "model_name": "gemini-2.5-pro-exp-03-25"
     }
   ],
   "Groq": [
     {
-      "display_name": "llama-4-scout-17b",
+      "display_name": "Llama 4 Scout (17b)",
       "model_name": "meta-llama/llama-4-scout-17b-16e-instruct"
     },
     {
-      "display_name": "llama-4-maverick-17b",
+      "display_name": "Llama 4 Maverick (17b)",
       "model_name": "meta-llama/llama-4-maverick-17b-128e-instruct"
     }
   ],
   "OpenAI": [
     {
-      "display_name": "gpt-4.5",
+      "display_name": "GPT 4.5",
       "model_name": "gpt-4.5-preview"
     },
     {
-      "display_name": "gpt-4o",
+      "display_name": "GPT 4o",
       "model_name": "gpt-4o"
     },
     {
@@ -62,7 +66,7 @@ const models: Record<ModelProvider, ModelItem[]> = {
       "model_name": "o3"
     },
     {
-      "display_name": "o4-mini",
+      "display_name": "o4 Mini",
       "model_name": "o4-mini"
     }
   ]
