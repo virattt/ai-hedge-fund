@@ -16,4 +16,12 @@ RUN poetry config virtualenvs.create false \
 COPY . /app/
 
 # Default command (will be overridden by Docker Compose)
+# Create a non-root user
+RUN groupadd -r appuser && useradd -r -g appuser -s /bin/false appuser
+
+# Change ownership of application files to appuser
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
 CMD ["python", "src/main.py"] 
