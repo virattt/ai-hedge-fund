@@ -205,6 +205,35 @@ run.bat --ticker AAPL,MSFT,NVDA backtest
 **Example Output:**
 <img width="941" alt="Screenshot 2025-01-06 at 5 47 52 PM" src="https://github.com/user-attachments/assets/00e794ea-8628-44e6-9a84-8f8a31ad3b47" />
 
+To specify the LLM provider and model directly, use the `--llm` argument in the format `Provider:Model` (e.g., `Openai:gpt-4`, `Ollama:llama3`). This will override the interactive model selection.
+
+```bash
+# With Poetry:
+poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --llm Openai:gpt-4
+poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --llm Ollama:llama3
+
+# With Docker (on Linux/Mac):
+./run.sh --ticker AAPL,MSFT,NVDA --llm Openai:gpt-4
+
+# With Docker (on Windows):
+run.bat --ticker AAPL,MSFT,NVDA --llm Openai:gpt-4
+```
+
+If you do not specify `--llm`, you will be prompted to select a provider and model interactively.
+
+- Use `--ollama` for interactive local model selection (no need for --llm):
+
+```bash
+# With Poetry:
+poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --ollama
+
+# With Docker (on Linux/Mac):
+./run.sh --ticker AAPL,MSFT,NVDA --ollama backtest
+
+# With Docker (on Windows):
+run.bat --ticker AAPL,MSFT,NVDA --ollama backtest
+```
+
 
 You can optionally specify the start and end dates to backtest over a specific time period.
 
@@ -218,19 +247,6 @@ poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --start-date 2024-01
 # With Docker (on Windows):
 run.bat --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 backtest
 ```
-
-You can also specify a `--ollama` flag to run the backtester using local LLMs.
-```bash
-# With Poetry:
-poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --ollama
-
-# With Docker (on Linux/Mac):
-./run.sh --ticker AAPL,MSFT,NVDA --ollama backtest
-
-# With Docker (on Windows):
-run.bat --ticker AAPL,MSFT,NVDA --ollama backtest
-```
-
 
 ## Project Structure 
 ```
