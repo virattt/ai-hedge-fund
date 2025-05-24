@@ -11,7 +11,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/
@@ -33,7 +32,22 @@ ENV/
 .vscode/
 *.swp
 *.swo
+.cursorrules
+.cursorignore
+.cursorindexingignore
 
 # OS
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# graph
+*.png
+
+# Txt files
+*.txt
+
+# PDF files
+*.pdf
+
+# Frontend
+node_modules
