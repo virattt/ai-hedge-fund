@@ -121,9 +121,23 @@ export function HedgeFund() {
                                                 checked={selectedAgents.includes(agent.name)}
                                                 onCheckedChange={() => toggleAgent(agent.name)}
                                             />
-                                            <Label htmlFor={agent.name} className="flex-1">
-                                                {agent.name.replace(/_/g, ' ').toUpperCase()}
-                                            </Label>
+                                            <div className="flex items-center space-x-2 flex-1">
+                                                <img
+                                                    src={`/images/analysts/${agent.name.toLowerCase().replace(/\s+/g, '_')}.png`}
+                                                    alt={agent.name}
+                                                    className="w-8 h-8 rounded-full object-cover"
+                                                    onError={(e) => {
+                                                        if (e.currentTarget.src.endsWith('.png')) {
+                                                            e.currentTarget.src = e.currentTarget.src.replace('.png', '.jpg');
+                                                        } else {
+                                                            e.currentTarget.src = '/images/analysts/default.png';
+                                                        }
+                                                    }}
+                                                />
+                                                <Label htmlFor={agent.name} className="flex-1">
+                                                    {agent.name.replace(/_/g, ' ').toUpperCase()}
+                                                </Label>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -319,7 +333,21 @@ export function HedgeFund() {
                                                             <div key={index} className="p-4 rounded-lg border border-border">
                                                                 <div className="flex items-center justify-between mb-2">
                                                                     <div className="flex items-center space-x-2">
-                                                                        <span className="font-medium">{signal.analyst || 'Unknown Analyst'}</span>
+                                                                        <div className="flex items-center space-x-2">
+                                                                            <img
+                                                                                src={`/images/analysts/${signal.analyst.toLowerCase().replace(/\s+/g, '_')}.png`}
+                                                                                alt={signal.analyst}
+                                                                                className="w-10 h-10 rounded-full object-cover"
+                                                                                onError={(e) => {
+                                                                                    if (e.currentTarget.src.endsWith('.png')) {
+                                                                                        e.currentTarget.src = e.currentTarget.src.replace('.png', '.jpg');
+                                                                                    } else {
+                                                                                        e.currentTarget.src = '/images/analysts/default.png';
+                                                                                    }
+                                                                                }}
+                                                                            />
+                                                                            <span className="font-medium">{signal.analyst || 'Unknown Analyst'}</span>
+                                                                        </div>
                                                                         <span className={`px-2 py-1 rounded text-sm ${
                                                                             signal.signal === 'BUY' ? 'bg-green-100 text-green-800' :
                                                                             signal.signal === 'SELL' ? 'bg-red-100 text-red-800' :
