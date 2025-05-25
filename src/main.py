@@ -1,4 +1,4 @@
-import sy
+import sys
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
