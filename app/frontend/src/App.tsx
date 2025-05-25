@@ -1,18 +1,18 @@
-import { useState } from 'react';
-import { Flow } from './components/flow';
-import { Layout } from './components/layout';
+import { HedgeFund } from './components/HedgeFund';
 
-
-export default function App() {
-  const [showLeftSidebar] = useState(false);
-  const [showRightSidebar] = useState(false);
-
-  return (
-    <Layout
-      leftSidebar={showLeftSidebar ? <div className="p-4 text-white">Left Sidebar Content</div> : undefined}
-      rightSidebar={showRightSidebar ? <div className="p-4 text-white">Right Sidebar Content</div> : undefined}
-    >
-      <Flow />
-    </Layout>
-  );
+function App() {
+    return (
+        <div className="min-h-screen bg-gray-50">
+            <header className="bg-white shadow">
+                <div className="container mx-auto px-4 py-6">
+                    <h1 className="text-2xl font-bold text-gray-900">AI Hedge Fund</h1>
+                </div>
+            </header>
+            <main>
+                <HedgeFund />
+            </main>
+        </div>
+    );
 }
+
+export default App;

@@ -35,10 +35,15 @@ def call_llm(
     """
 
     model_info = get_model_info(model_name, model_provider)
+    if not model_info:
+        raise ValueError(f"Model {model_name} from provider {model_provider} not found")
+
     llm = get_model(model_name, model_provider)
+    if not llm:
+        raise ValueError(f"Failed to initialize model {model_name} from provider {model_provider}")
 
     # For non-JSON support models, we can use structured output
-    if not (model_info and not model_info.has_json_mode()):
+    if not model_info.has_json_mode():
         llm = llm.with_structured_output(
             pydantic_model,
             method="json_mode",
@@ -56,7 +61,19 @@ def call_llm(
                 if parsed_result:
                     return pydantic_model(**parsed_result)
             else:
-                return result
+                # For JSON support models, the result should be a Pydantic model instance
+                if isinstance(result, pydantic_model):
+                    return result
+                # If not, try to parse the content as JSON
+                try:
+                    parsed_result = json.loads(result.content)
+                    return pydantic_model(**parsed_result)
+                except (json.JSONDecodeError, TypeError):
+                    # If that fails, try to extract JSON from markdown
+                    parsed_result = extract_json_from_response(result.content)
+                    if parsed_result:
+                        return pydantic_model(**parsed_result)
+                    raise ValueError(f"Could not parse LLM response as JSON: {result.content}")
 
         except Exception as e:
             if agent_name:

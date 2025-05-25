@@ -1,40 +1,40 @@
 from typing import Dict, Optional, Any, Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from datetime import datetime
 
 
 class BaseEvent(BaseModel):
     """Base class for all Server-Sent Event events"""
 
-    type: str
-
     def to_sse(self) -> str:
-        """Convert to Server-Sent Event format"""
-        event_type = self.type.lower()
-        return f"event: {event_type}\ndata: {self.model_dump_json()}\n\n"
+        """Convert event to Server-Sent Events format"""
+        event_type = self.__class__.__name__.lower()
+        data = self.model_dump_json()
+        return f"event: {event_type}\ndata: {data}\n\n"
 
 
 class StartEvent(BaseEvent):
     """Event indicating the start of processing"""
 
     type: Literal["start"] = "start"
-    timestamp: Optional[str] = None
+    timestamp: datetime = Field(default_factory=datetime.now)
 
 class ProgressUpdateEvent(BaseEvent):
     """Event containing an agent's progress update"""
 
     type: Literal["progress"] = "progress"
     agent: str
-    ticker: Optional[str] = None
+    ticker: str
     status: str
-    timestamp: Optional[str] = None
     analysis: Optional[str] = None
+    timestamp: datetime = Field(default_factory=datetime.now)
 
 class ErrorEvent(BaseEvent):
     """Event indicating an error occurred"""
 
     type: Literal["error"] = "error"
     message: str
-    timestamp: Optional[str] = None
+    timestamp: datetime = Field(default_factory=datetime.now)
 
 
 class CompleteEvent(BaseEvent):
@@ -42,4 +42,4 @@ class CompleteEvent(BaseEvent):
 
     type: Literal["complete"] = "complete"
     data: Dict[str, Any]
-    timestamp: Optional[str] = None
+    timestamp: datetime = Field(default_factory=datetime.now)

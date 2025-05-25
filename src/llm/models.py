@@ -15,12 +15,12 @@ from pathlib import Path
 class ModelProvider(str, Enum):
     """Enum for supported LLM providers"""
 
-    ANTHROPIC = "Anthropic"
-    DEEPSEEK = "DeepSeek"
-    GEMINI = "Gemini"
-    GROQ = "Groq"
-    OPENAI = "OpenAI"
-    OLLAMA = "Ollama"
+    ANTHROPIC = "ANTHROPIC"
+    DEEPSEEK = "DEEPSEEK"
+    GEMINI = "GEMINI"
+    GROQ = "GROQ"
+    OPENAI = "OPENAI"
+    OLLAMA = "OLLAMA"
 
 
 class LLMModel(BaseModel):
@@ -101,10 +101,19 @@ OLLAMA_LLM_ORDER = [model.to_choice_tuple() for model in OLLAMA_MODELS]
 def get_model_info(model_name: str, model_provider: str) -> LLMModel | None:
     """Get model information by model_name"""
     all_models = AVAILABLE_MODELS + OLLAMA_MODELS
-    return next((model for model in all_models if model.model_name == model_name and model.provider == model_provider), None)
+    # Convert both the input provider and model provider to uppercase for case-insensitive comparison
+    provider_upper = model_provider.upper()
+    return next((model for model in all_models if model.model_name == model_name and model.provider.value.upper() == provider_upper), None)
 
 
 def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | ChatGroq | ChatOllama | None:
+    # Convert string provider to enum if needed
+    if isinstance(model_provider, str):
+        try:
+            model_provider = ModelProvider(model_provider.upper())
+        except ValueError:
+            raise ValueError(f"Invalid model provider: {model_provider}")
+
     if model_provider == ModelProvider.GROQ:
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:

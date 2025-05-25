@@ -13,6 +13,7 @@ from src.utils.analysts import ANALYST_ORDER, get_analyst_nodes
 from src.utils.progress import progress
 from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider
 from src.utils.ollama import ensure_ollama_and_model
+from src.tools.api import get_financial_metrics, get_market_cap, search_line_items, get_current_price
 
 import argparse
 from datetime import datetime
@@ -48,7 +49,7 @@ def run_hedge_fund(
     end_date: str,
     portfolio: dict,
     show_reasoning: bool = False,
-    selected_analysts: list[str] = [],
+    selected_agents: list[str] = [],
     model_name: str = "gpt-4o",
     model_provider: str = "OpenAI",
 ):
@@ -56,9 +57,14 @@ def run_hedge_fund(
     progress.start()
 
     try:
-        # Create a new workflow if analysts are customized
-        if selected_analysts:
-            workflow = create_workflow(selected_analysts)
+        # Get current prices for all tickers
+        current_prices = {}
+        for ticker in tickers:
+            current_prices[ticker] = get_current_price(ticker)
+
+        # Create a new workflow if agents are customized
+        if selected_agents:
+            workflow = create_workflow(selected_agents)
             agent = workflow.compile()
         else:
             agent = app
@@ -85,9 +91,67 @@ def run_hedge_fund(
             },
         )
 
+        # Reorganize analyst signals by ticker
+        analyst_signals_by_ticker = {}
+        for ticker in tickers:
+            analyst_signals_by_ticker[ticker] = []
+            for analyst_name, signals in final_state["data"]["analyst_signals"].items():
+                if ticker in signals:
+                    signal = signals[ticker]
+                    # Map signal types
+                    signal_type = signal.get("signal", "neutral").upper()
+                    if signal_type == "BULLISH":
+                        signal_type = "BUY"
+                    elif signal_type == "BEARISH":
+                        signal_type = "SELL"
+                    else:  # NEUTRAL
+                        signal_type = "HOLD"
+                    
+                    analyst_signals_by_ticker[ticker].append({
+                        "analyst": analyst_name.replace("_agent", "").replace("_", " ").title(),
+                        "signal": signal_type,
+                        "confidence": signal.get("confidence", 0.5),
+                        "reasoning": signal.get("reasoning", "No reasoning provided"),
+                        "timestamp": datetime.now().isoformat()
+                    })
+
+        # Parse and transform the trading decisions
+        raw_decisions = parse_hedge_fund_response(final_state["messages"][-1].content)
+        decisions = []
+        if raw_decisions and "decisions" in raw_decisions:
+            for ticker, decision in raw_decisions["decisions"].items():
+                decisions.append({
+                    "ticker": ticker,
+                    "action": decision["action"].upper(),
+                    "quantity": decision["quantity"],
+                    "price": current_prices.get(ticker, 0.0),
+                    "reasoning": decision["reasoning"],
+                    "confidence": decision["confidence"] / 100.0,  # Convert from 0-100 to 0-1
+                    "timestamp": datetime.now().isoformat()
+                })
+
         return {
-            "decisions": parse_hedge_fund_response(final_state["messages"][-1].content),
-            "analyst_signals": final_state["data"]["analyst_signals"],
+            "decisions": decisions,
+            "analyst_signals": analyst_signals_by_ticker,
+            "portfolio_snapshot": {
+                "cash": portfolio["cash"],
+                "positions": {
+                    ticker: {
+                        "quantity": pos["long"] - pos["short"],
+                        "average_price": pos["long_cost_basis"] if pos["long"] > 0 else pos["short_cost_basis"],
+                        "current_price": current_prices.get(ticker, 0.0),
+                        "market_value": (pos["long"] - pos["short"]) * current_prices.get(ticker, 0.0),
+                        "unrealized_pnl": 0.0,  # This should be calculated based on current prices
+                        "unrealized_pnl_percent": 0.0  # This should be calculated based on current prices
+                    }
+                    for ticker, pos in portfolio["positions"].items()
+                },
+                "total_value": portfolio["cash"] + sum(
+                    (pos["long"] - pos["short"]) * current_prices.get(ticker, 0.0)
+                    for ticker, pos in portfolio["positions"].items()
+                ),
+                "timestamp": datetime.now().isoformat()
+            }
         }
     finally:
         # Stop progress tracking
@@ -99,8 +163,8 @@ def start(state: AgentState):
     return state
 
 
-def create_workflow(selected_analysts=None):
-    """Create the workflow with selected analysts."""
+def create_workflow(selected_agents=None):
+    """Create the workflow with selected agents."""
     workflow = StateGraph(AgentState)
     workflow.add_node("start_node", start)
 
@@ -108,10 +172,10 @@ def create_workflow(selected_analysts=None):
     analyst_nodes = get_analyst_nodes()
 
     # Default to all analysts if none selected
-    if selected_analysts is None:
-        selected_analysts = list(analyst_nodes.keys())
+    if selected_agents is None:
+        selected_agents = list(analyst_nodes.keys())
     # Add selected analyst nodes
-    for analyst_key in selected_analysts:
+    for analyst_key in selected_agents:
         node_name, node_func = analyst_nodes[analyst_key]
         workflow.add_node(node_name, node_func)
         workflow.add_edge("start_node", node_name)
@@ -121,7 +185,7 @@ def create_workflow(selected_analysts=None):
     workflow.add_node("portfolio_manager", portfolio_management_agent)
 
     # Connect selected analysts to risk management
-    for analyst_key in selected_analysts:
+    for analyst_key in selected_agents:
         node_name = analyst_nodes[analyst_key][0]
         workflow.add_edge(node_name, "risk_management_agent")
 
@@ -153,7 +217,7 @@ if __name__ == "__main__":
     tickers = [ticker.strip() for ticker in args.tickers.split(",")]
 
     # Select analysts
-    selected_analysts = None
+    selected_agents = None
     choices = questionary.checkbox(
         "Select your AI analysts.",
         choices=[questionary.Choice(display, value=value) for display, value in ANALYST_ORDER],
@@ -173,7 +237,7 @@ if __name__ == "__main__":
         print("\n\nInterrupt received. Exiting...")
         sys.exit(0)
     else:
-        selected_analysts = choices
+        selected_agents = choices
         print(f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n")
 
     # Select LLM model based on whether Ollama is being used
@@ -250,14 +314,14 @@ if __name__ == "__main__":
             print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
 
     # Create the workflow with selected analysts
-    workflow = create_workflow(selected_analysts)
+    workflow = create_workflow(selected_agents)
     app = workflow.compile()
 
     if args.show_agent_graph:
         file_path = ""
-        if selected_analysts is not None:
-            for selected_analyst in selected_analysts:
-                file_path += selected_analyst + "_"
+        if selected_agents is not None:
+            for selected_agent in selected_agents:
+                file_path += selected_agent + "_"
             file_path += "graph.png"
         save_graph_as_png(app, file_path)
 
@@ -314,7 +378,7 @@ if __name__ == "__main__":
         end_date=end_date,
         portfolio=portfolio,
         show_reasoning=args.show_reasoning,
-        selected_analysts=selected_analysts,
+        selected_agents=selected_agents,
         model_name=model_name,
         model_provider=model_provider,
     )
