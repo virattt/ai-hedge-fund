@@ -329,7 +329,9 @@ export function HedgeFund() {
                                                 <h3 className="text-lg font-bold mb-2">{ticker}</h3>
                                                 {Array.isArray(signals) && signals.length > 0 ? (
                                                     <div className="space-y-4">
-                                                        {signals.map((signal, index) => (
+                                                        {signals
+                                                            .filter(signal => signal.analyst !== 'Risk Management')
+                                                            .map((signal, index) => (
                                                             <div key={index} className="p-4 rounded-lg border border-border">
                                                                 <div className="flex items-center justify-between mb-2">
                                                                     <div className="flex items-center space-x-2">
