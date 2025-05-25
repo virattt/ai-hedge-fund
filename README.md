@@ -185,16 +185,13 @@ blockchain timeline on an interactive globe using the [Cobe](https://cobe.vercel
 
 ### Plotly Timeline Sphere
 
-You can also render the timeline in Python using Plotly. From the project root,
-execute the module with Python's `-m` flag:
+You can also render the timeline in Python using Plotly:
 
 ```bash
-python -m src.visualization.timeline_sphere
+python src/visualization/timeline_sphere.py
 ```
 
-The script loads events from `docs/blockchain_timeline.json` and opens an
-interactive Plotly window. Each marker on the sphere represents a historical
-event.
+This launches a 3‑D sphere where each marker represents a historical event.
 
 ### Launching the Web Interface
 
