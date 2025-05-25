@@ -2,6 +2,7 @@ import datetime
 import os
 import pandas as pd
 import requests
+import time
 
 from src.data.cache import get_cache
 from src.data.models import (
@@ -192,6 +193,8 @@ def get_company_news(
     end_date: str,
     start_date: str | None = None,
     limit: int = 1000,
+    max_retries: int = 3,
+    retry_delay: int = 30
 ) -> list[CompanyNews]:
     """Fetch company news from cache or API."""
     # Check cache first
@@ -202,50 +205,57 @@ def get_company_news(
         if filtered_data:
             return filtered_data
 
-    # If not in cache or insufficient data, fetch from API
-    headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
+    retries = 0
+    while retries < max_retries:
+        # If not in cache or insufficient data, fetch from API
+        headers = {}
+        if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
+            headers["X-API-KEY"] = api_key
 
-    all_news = []
-    current_end_date = end_date
+        all_news = []
+        current_end_date = end_date
 
-    while True:
-        url = f"https://api.financialdatasets.ai/news/?ticker={ticker}&end_date={current_end_date}"
-        if start_date:
-            url += f"&start_date={start_date}"
-        url += f"&limit={limit}"
+        while True:
+            url = f"https://api.financialdatasets.ai/news/?ticker={ticker}&end_date={current_end_date}"
+            if start_date:
+                url += f"&start_date={start_date}"
+            url += f"&limit={limit}"
 
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                response_model = CompanyNewsResponse(**data)
+                company_news = response_model.news
 
-        data = response.json()
-        response_model = CompanyNewsResponse(**data)
-        company_news = response_model.news
+                if not company_news:
+                    break
 
-        if not company_news:
-            break
+                all_news.extend(company_news)
 
-        all_news.extend(company_news)
+                # Only continue pagination if we have a start_date and got a full page
+                if not start_date or len(company_news) < limit:
+                    break
 
-        # Only continue pagination if we have a start_date and got a full page
-        if not start_date or len(company_news) < limit:
-            break
+                # Update end_date to the oldest date from current batch for next iteration
+                current_end_date = min(news.date for news in company_news).split("T")[0]
 
-        # Update end_date to the oldest date from current batch for next iteration
-        current_end_date = min(news.date for news in company_news).split("T")[0]
+                # If we've reached or passed the start_date, we can stop
+                if current_end_date <= start_date:
+                    break
+            elif response.status_code == 429:
+                print(f"Request throttled. Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                retries += 1
+                break
+            else:
+                raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
 
-        # If we've reached or passed the start_date, we can stop
-        if current_end_date <= start_date:
-            break
+        if all_news:
+            # Cache the results
+            _cache.set_company_news(ticker, [news.model_dump() for news in all_news])
+            return all_news
 
-    if not all_news:
-        return []
-
-    # Cache the results
-    _cache.set_company_news(ticker, [news.model_dump() for news in all_news])
-    return all_news
+    raise Exception(f"Failed to fetch data after {max_retries} retries.")
 
 
 def get_market_cap(
