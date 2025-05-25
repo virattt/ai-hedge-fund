@@ -5,7 +5,6 @@ import createGlobe from 'cobe';
 function Globe() {
   const canvasRef = useRef(null);
   const [markers, setMarkers] = useState([]);
-  const [events, setEvents] = useState([]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -38,55 +37,13 @@ function Globe() {
           size: 0.1,
         }));
         setMarkers(m);
-        setEvents(data);
       })
       .catch(() => {
         /* ignore errors */
       });
   }, []);
 
-  const project = (lat, lon) => {
-    const phi = (lat * Math.PI) / 180;
-    const theta = (lon * Math.PI) / 180;
-    const x = Math.cos(phi) * Math.sin(theta);
-    const y = Math.sin(phi);
-    const z = Math.cos(phi) * Math.cos(theta);
-    if (z < 0) return null;
-    const r = 300; // canvas width / 2
-    return { left: 300 + x * r, top: 300 - y * r };
-  };
-
-  return (
-    <div style={{ position: 'relative', width: 600, height: 600 }}>
-      <canvas ref={canvasRef} width={600} height={600}></canvas>
-      {events.map((ev, idx) => {
-        const pos = project(0, (idx / events.length) * 360 - 180);
-        if (!pos) return null;
-        return (
-          <div
-            key={idx}
-            title={`${ev.year}: ${ev.event}`}
-            style={{
-              position: 'absolute',
-              left: pos.left,
-              top: pos.top,
-              transform: 'translate(-50%, -50%)',
-              pointerEvents: 'auto',
-            }}
-          >
-            <div
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                backgroundColor: '#ff0',
-              }}
-            ></div>
-          </div>
-        );
-      })
-    </div>
-  );
+  return <canvas ref={canvasRef}></canvas>;
 }
 
 createRoot(document.getElementById('root')).render(<Globe />);
