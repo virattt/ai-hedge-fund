@@ -1,14 +1,14 @@
 [
-  {"year": 2008, "event": "Bitcoin white paper released"},
-  {"year": 2009, "event": "Bitcoin network goes live"},
-  {"year": 2010, "event": "First bitcoin exchange appears"},
-  {"year": 2011, "event": "Litecoin launches"},
-  {"year": 2014, "event": "Mt. Gox collapse"},
-  {"year": 2015, "event": "Ethereum mainnet"},
-  {"year": 2017, "event": "ICO boom"},
-  {"year": 2020, "event": "DeFi summer"},
-  {"year": 2021, "event": "NFTs go mainstream"},
-  {"year": 2022, "event": "FTX collapse"},
-  {"year": 2023, "event": "Stablecoin adoption"},
-  {"year": 2024, "event": "Tokenized assets"}
+  {"year": 2008, "event": "Bitcoin white paper released", "market": "Crypto"},
+  {"year": 2009, "event": "Bitcoin network goes live", "market": "Crypto"},
+  {"year": 2010, "event": "First bitcoin exchange appears", "market": "Crypto exchanges"},
+  {"year": 2011, "event": "Litecoin launches as an alternative", "market": "Altcoins"},
+  {"year": 2014, "event": "Mt. Gox collapse shakes confidence", "market": "Crypto exchanges"},
+  {"year": 2015, "event": "Ethereum mainnet enables smart contracts", "market": "Smart-contract platforms"},
+  {"year": 2017, "event": "ICO boom drives token market", "market": "Token sales"},
+  {"year": 2020, "event": "DeFi summer kicks off decentralized lending", "market": "DeFi"},
+  {"year": 2021, "event": "NFTs gain mainstream attention", "market": "NFTs"},
+  {"year": 2022, "event": "FTX collapse triggers regulation", "market": "Crypto exchanges"},
+  {"year": 2023, "event": "Stablecoin adoption in payments", "market": "Payments"},
+  {"year": 2024, "event": "Tokenized real-world assets grow", "market": "Securities"}
 ]
