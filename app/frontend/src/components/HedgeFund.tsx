@@ -200,105 +200,164 @@ export function HedgeFund() {
                     </TabsList>
                     <TabsContent value="decisions">
                         <Card>
-                            <CardContent className="p-4">
-                                <ScrollArea className="h-[400px]">
-                                    {Array.isArray(result.decisions) ? result.decisions.map((decision, index) => (
-                                        <div key={index} className="mb-4 p-4 border rounded-md">
-                                            <div className="flex justify-between items-center">
-                                                <h3 className="font-bold">{decision.ticker}</h3>
-                                                <span className={`px-2 py-1 rounded ${
-                                                    decision.action === 'BUY' ? 'bg-green-100 text-green-800' :
-                                                    decision.action === 'SELL' ? 'bg-red-100 text-red-800' :
-                                                    'bg-gray-100 text-gray-800'
-                                                }`}>
-                                                    {decision.action}
-                                                </span>
+                            <CardHeader>
+                                <CardTitle>Trading Decisions</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {result.decisions && result.decisions.length > 0 ? (
+                                    <ScrollArea className="h-[400px]">
+                                        {result.decisions.map((decision, index) => (
+                                            <div key={index} className="mb-4 p-4 rounded-lg border border-border">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="flex items-center space-x-2">
+                                                        <span className="font-bold text-primary">{decision.ticker}</span>
+                                                        <span className={`px-2 py-1 rounded text-sm ${
+                                                            decision.action === 'BUY' ? 'bg-green-100 text-green-800' :
+                                                            decision.action === 'SELL' ? 'bg-red-100 text-red-800' :
+                                                            'bg-gray-100 text-gray-800'
+                                                        }`}>
+                                                            {decision.action}
+                                                        </span>
+                                                    </div>
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {new Date(decision.timestamp).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    {decision.quantity && (
+                                                        <p className="text-sm">
+                                                            <span className="font-medium">Quantity:</span> {decision.quantity}
+                                                        </p>
+                                                    )}
+                                                    {decision.price && (
+                                                        <p className="text-sm">
+                                                            <span className="font-medium">Price:</span> {formatCurrency(decision.price)}
+                                                        </p>
+                                                    )}
+                                                    <p className="text-sm">
+                                                        <span className="font-medium">Confidence:</span> {formatPercent(decision.confidence)}
+                                                    </p>
+                                                    <p className="text-sm text-muted-foreground">{decision.reasoning}</p>
+                                                </div>
                                             </div>
-                                            {decision.quantity && (
-                                                <p>Quantity: {decision.quantity}</p>
-                                            )}
-                                            {decision.price && (
-                                                <p>Price: {formatCurrency(decision.price)}</p>
-                                            )}
-                                            <p className="mt-2">{decision.reasoning}</p>
-                                            <p className="text-sm text-gray-600 mt-1">
-                                                Confidence: {formatPercent(decision.confidence)}
-                                            </p>
-                                        </div>
-                                    )) : (
-                                        <div className="text-center text-gray-500">No trading decisions available</div>
-                                    )}
-                                </ScrollArea>
+                                        ))}
+                                    </ScrollArea>
+                                ) : (
+                                    <div className="text-center py-8 text-muted-foreground">
+                                        No trading decisions available
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     </TabsContent>
                     <TabsContent value="portfolio">
                         <Card>
-                            <CardContent className="p-4">
-                                {result.portfolio_snapshot ? (
-                                    <>
-                                        <div className="mb-4">
-                                            <h3 className="font-bold">Portfolio Summary</h3>
-                                            <p>Cash: {formatCurrency(result.portfolio_snapshot.cash)}</p>
-                                            <p>Total Value: {formatCurrency(result.portfolio_snapshot.total_value)}</p>
+                            <CardHeader>
+                                <CardTitle>Portfolio Summary</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <p className="text-sm font-medium">Cash</p>
+                                            <p className="text-2xl font-bold">{formatCurrency(result.portfolio_snapshot.cash)}</p>
                                         </div>
-                                        <ScrollArea className="h-[300px]">
-                                            {Object.entries(result.portfolio_snapshot.positions).map(([ticker, position]) => (
-                                                <div key={ticker} className="mb-4 p-4 border rounded-md">
-                                                    <h4 className="font-bold">{ticker}</h4>
-                                                    <p>Quantity: {position.quantity}</p>
-                                                    <p>Average Price: {formatCurrency(position.average_price)}</p>
-                                                    <p>Current Price: {formatCurrency(position.current_price)}</p>
-                                                    <p>Market Value: {formatCurrency(position.market_value)}</p>
-                                                    <p className={`${
-                                                        position.unrealized_pnl >= 0 ? 'text-green-600' : 'text-red-600'
-                                                    }`}>
-                                                        Unrealized P&L: {formatCurrency(position.unrealized_pnl)} ({formatPercent(position.unrealized_pnl_percent)})
-                                                    </p>
+                                        <div>
+                                            <p className="text-sm font-medium">Total Value</p>
+                                            <p className="text-2xl font-bold">{formatCurrency(result.portfolio_snapshot.total_value)}</p>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-4">
+                                        {Object.entries(result.portfolio_snapshot.positions).map(([ticker, position]) => (
+                                            <div key={ticker} className="p-4 rounded-lg border border-border">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className="font-bold text-primary">{ticker}</span>
                                                 </div>
-                                            ))}
-                                        </ScrollArea>
-                                    </>
-                                ) : (
-                                    <div className="text-center text-gray-500">No portfolio data available</div>
-                                )}
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <p className="text-sm font-medium">Quantity</p>
+                                                        <p className="text-lg">{position.quantity}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-medium">Average Price</p>
+                                                        <p className="text-lg">{formatCurrency(position.average_price)}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-medium">Current Price</p>
+                                                        <p className="text-lg">{formatCurrency(position.current_price)}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-medium">Market Value</p>
+                                                        <p className="text-lg">{formatCurrency(position.market_value)}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-medium">Unrealized P&L</p>
+                                                        <p className="text-lg">{formatCurrency(position.unrealized_pnl)} ({formatPercent(position.unrealized_pnl_percent)})</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             </CardContent>
                         </Card>
                     </TabsContent>
                     <TabsContent value="signals">
                         <Card>
-                            <CardContent className="p-4">
-                                <ScrollArea className="h-[400px]">
-                                    {result.analyst_signals ? (
+                            <CardHeader>
+                                <CardTitle>Analyst Signals</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {result && result.analyst_signals ? (
+                                    Object.keys(result.analyst_signals).length > 0 ? (
                                         Object.entries(result.analyst_signals).map(([ticker, signals]) => (
-                                            <div key={ticker} className="mb-4">
-                                                <h3 className="font-bold mb-2">{ticker}</h3>
-                                                {Array.isArray(signals) ? signals.map((signal, index) => (
-                                                    <div key={index} className="mb-2 p-4 border rounded-md">
-                                                        <div className="flex justify-between items-center">
-                                                            <span className="font-bold">{signal.analyst}</span>
-                                                            <span className={`px-2 py-1 rounded ${
-                                                                signal.signal === 'BUY' ? 'bg-green-100 text-green-800' :
-                                                                signal.signal === 'SELL' ? 'bg-red-100 text-red-800' :
-                                                                'bg-gray-100 text-gray-800'
-                                                            }`}>
-                                                                {signal.signal}
-                                                            </span>
-                                                        </div>
-                                                        <p className="mt-2">{signal.reasoning}</p>
-                                                        <p className="text-sm text-gray-600 mt-1">
-                                                            Confidence: {formatPercent(signal.confidence)}
-                                                        </p>
+                                            <div key={ticker} className="mb-6">
+                                                <h3 className="text-lg font-bold mb-2">{ticker}</h3>
+                                                {Array.isArray(signals) && signals.length > 0 ? (
+                                                    <div className="space-y-4">
+                                                        {signals.map((signal, index) => (
+                                                            <div key={index} className="p-4 rounded-lg border border-border">
+                                                                <div className="flex items-center justify-between mb-2">
+                                                                    <div className="flex items-center space-x-2">
+                                                                        <span className="font-medium">{signal.analyst || 'Unknown Analyst'}</span>
+                                                                        <span className={`px-2 py-1 rounded text-sm ${
+                                                                            signal.signal === 'BUY' ? 'bg-green-100 text-green-800' :
+                                                                            signal.signal === 'SELL' ? 'bg-red-100 text-red-800' :
+                                                                            'bg-gray-100 text-gray-800'
+                                                                        }`}>
+                                                                            {signal.signal || 'HOLD'}
+                                                                        </span>
+                                                                    </div>
+                                                                    <span className="text-xs text-muted-foreground">
+                                                                        {signal.timestamp ? new Date(signal.timestamp).toLocaleString() : 'No timestamp'}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="space-y-2">
+                                                                    <p className="text-sm">
+                                                                        <span className="font-medium">Confidence:</span> {formatPercent(signal.confidence || 0)}
+                                                                    </p>
+                                                                    <p className="text-sm text-muted-foreground">{signal.reasoning || 'No reasoning provided'}</p>
+                                                                </div>
+                                                            </div>
+                                                        ))}
                                                     </div>
-                                                )) : (
-                                                    <div className="text-center text-gray-500">No signals available for this ticker</div>
+                                                ) : (
+                                                    <div className="text-center py-4 text-muted-foreground">
+                                                        No analyst signals available for {ticker}
+                                                    </div>
                                                 )}
                                             </div>
                                         ))
                                     ) : (
-                                        <div className="text-center text-gray-500">No analyst signals available</div>
-                                    )}
-                                </ScrollArea>
+                                        <div className="text-center py-8 text-muted-foreground">
+                                            No analyst signals available
+                                        </div>
+                                    )
+                                ) : (
+                                    <div className="text-center py-8 text-muted-foreground">
+                                        No analyst signals available
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     </TabsContent>

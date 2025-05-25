@@ -30,7 +30,10 @@ init(autoreset=True)
 def parse_hedge_fund_response(response):
     """Parses a JSON string and returns a dictionary."""
     try:
-        return json.loads(response)
+        print(f"Raw response: {repr(response)}")  # Debug log
+        parsed = json.loads(response)
+        print(f"Parsed response: {parsed}")  # Debug log
+        return parsed
     except json.JSONDecodeError as e:
         print(f"JSON decoding error: {e}\nResponse: {repr(response)}")
         return None
@@ -95,63 +98,76 @@ def run_hedge_fund(
         analyst_signals_by_ticker = {}
         for ticker in tickers:
             analyst_signals_by_ticker[ticker] = []
-            for analyst_name, signals in final_state["data"]["analyst_signals"].items():
-                if ticker in signals:
-                    signal = signals[ticker]
-                    # Map signal types
-                    signal_type = signal.get("signal", "neutral").upper()
-                    if signal_type == "BULLISH":
-                        signal_type = "BUY"
-                    elif signal_type == "BEARISH":
-                        signal_type = "SELL"
-                    else:  # NEUTRAL
-                        signal_type = "HOLD"
-                    
-                    analyst_signals_by_ticker[ticker].append({
-                        "analyst": analyst_name.replace("_agent", "").replace("_", " ").title(),
-                        "signal": signal_type,
-                        "confidence": signal.get("confidence", 0.5),
-                        "reasoning": signal.get("reasoning", "No reasoning provided"),
-                        "timestamp": datetime.now().isoformat()
-                    })
+            if "analyst_signals" in final_state["data"] and final_state["data"]["analyst_signals"]:
+                for analyst_name, signals in final_state["data"]["analyst_signals"].items():
+                    if ticker in signals:
+                        signal = signals[ticker]
+                        # Map signal types
+                        signal_type = signal.get("signal", "neutral").upper()
+                        if signal_type == "BULLISH":
+                            signal_type = "BUY"
+                        elif signal_type == "BEARISH":
+                            signal_type = "SELL"
+                        else:  # NEUTRAL
+                            signal_type = "HOLD"
+                        
+                        analyst_signals_by_ticker[ticker].append({
+                            "analyst": analyst_name.replace("_agent", "").replace("_", " ").title(),
+                            "signal": signal_type,
+                            "confidence": float(signal.get("confidence", 0.5)),
+                            "reasoning": str(signal.get("reasoning", "No reasoning provided")),
+                            "timestamp": datetime.now().isoformat()
+                        })
 
         # Parse and transform the trading decisions
         raw_decisions = parse_hedge_fund_response(final_state["messages"][-1].content)
+        print(f"Raw decisions: {raw_decisions}")  # Debug log
         decisions = []
-        if raw_decisions and "decisions" in raw_decisions:
-            for ticker, decision in raw_decisions["decisions"].items():
+        if raw_decisions:  # Remove the "decisions" key check since the raw response is already in the right format
+            print(f"Processing decisions: {raw_decisions}")  # Debug log
+            for ticker, decision in raw_decisions.items():
+                print(f"Processing decision for {ticker}: {decision}")  # Debug log
                 decisions.append({
-                    "ticker": ticker,
-                    "action": decision["action"].upper(),
-                    "quantity": decision["quantity"],
-                    "price": current_prices.get(ticker, 0.0),
-                    "reasoning": decision["reasoning"],
-                    "confidence": decision["confidence"] / 100.0,  # Convert from 0-100 to 0-1
+                    "ticker": str(ticker),
+                    "action": str(decision.get("action", "HOLD")).upper(),
+                    "quantity": int(decision.get("quantity", 0)),
+                    "price": float(current_prices.get(ticker, 0.0)),
+                    "reasoning": str(decision.get("reasoning", "No reasoning provided")),
+                    "confidence": min(max(float(decision.get("confidence", 50)) / 100.0, 0.0), 1.0),
                     "timestamp": datetime.now().isoformat()
                 })
+        print(f"Final decisions: {decisions}")  # Debug log
+
+        # Calculate portfolio values
+        portfolio_snapshot = {
+            "cash": float(portfolio["cash"]),
+            "positions": {},
+            "total_value": float(portfolio["cash"]),
+            "timestamp": datetime.now().isoformat()
+        }
+
+        for ticker, pos in portfolio["positions"].items():
+            current_price = float(current_prices.get(ticker, 0.0))
+            quantity = int(pos["long"] - pos["short"])
+            market_value = float(quantity * current_price)
+            cost_basis = float(pos["long_cost_basis"] if pos["long"] > 0 else pos["short_cost_basis"])
+            unrealized_pnl = float(market_value - (quantity * cost_basis))
+            unrealized_pnl_percent = float((unrealized_pnl / (quantity * cost_basis)) * 100 if quantity * cost_basis != 0 else 0)
+
+            portfolio_snapshot["positions"][ticker] = {
+                "quantity": quantity,
+                "average_price": cost_basis,
+                "current_price": current_price,
+                "market_value": market_value,
+                "unrealized_pnl": unrealized_pnl,
+                "unrealized_pnl_percent": unrealized_pnl_percent
+            }
+            portfolio_snapshot["total_value"] += market_value
 
         return {
             "decisions": decisions,
             "analyst_signals": analyst_signals_by_ticker,
-            "portfolio_snapshot": {
-                "cash": portfolio["cash"],
-                "positions": {
-                    ticker: {
-                        "quantity": pos["long"] - pos["short"],
-                        "average_price": pos["long_cost_basis"] if pos["long"] > 0 else pos["short_cost_basis"],
-                        "current_price": current_prices.get(ticker, 0.0),
-                        "market_value": (pos["long"] - pos["short"]) * current_prices.get(ticker, 0.0),
-                        "unrealized_pnl": 0.0,  # This should be calculated based on current prices
-                        "unrealized_pnl_percent": 0.0  # This should be calculated based on current prices
-                    }
-                    for ticker, pos in portfolio["positions"].items()
-                },
-                "total_value": portfolio["cash"] + sum(
-                    (pos["long"] - pos["short"]) * current_prices.get(ticker, 0.0)
-                    for ticker, pos in portfolio["positions"].items()
-                ),
-                "timestamp": datetime.now().isoformat()
-            }
+            "portfolio_snapshot": portfolio_snapshot
         }
     finally:
         # Stop progress tracking
