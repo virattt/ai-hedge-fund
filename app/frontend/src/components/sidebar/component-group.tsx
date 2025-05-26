@@ -5,14 +5,12 @@ import { SidebarItem } from './sidebar-item';
 interface ComponentGroupProps {
   group: ComponentGroup;
   activeItem: string | null;
-  onItemClick: (itemName: string) => void;
   onComponentAdd?: (componentName: string) => void;
 }
 
 export function ComponentGroupItem({ 
   group, 
   activeItem, 
-  onItemClick,
   onComponentAdd
 }: ComponentGroupProps) {
   const { name, icon: Icon, iconColor, items } = group;
@@ -33,7 +31,7 @@ export function ComponentGroupItem({
               icon={item.icon} 
               label={item.name} 
               isActive={activeItem === item.name}
-              onClick={() => onItemClick(item.name)}
+              onClick={onComponentAdd ? () => onComponentAdd(item.name) : undefined}
               onAddClick={onComponentAdd ? () => onComponentAdd(item.name) : undefined}
             />
           ))}

@@ -5,14 +5,14 @@ from src.agents.ben_graham import ben_graham_agent
 from src.agents.bill_ackman import bill_ackman_agent
 from src.agents.cathie_wood import cathie_wood_agent
 from src.agents.charlie_munger import charlie_munger_agent
-from src.agents.fundamentals import fundamentals_agent
+from src.agents.fundamentals import fundamentals_analyst_agent
 from src.agents.michael_burry import michael_burry_agent
 from src.agents.phil_fisher import phil_fisher_agent
 from src.agents.peter_lynch import peter_lynch_agent
-from src.agents.sentiment import sentiment_agent
+from src.agents.sentiment import sentiment_analyst_agent
 from src.agents.stanley_druckenmiller import stanley_druckenmiller_agent
 from src.agents.technicals import technical_analyst_agent
-from src.agents.valuation import valuation_agent
+from src.agents.valuation import valuation_analyst_agent
 from src.agents.warren_buffett import warren_buffett_agent
 
 # Define analyst configuration - single source of truth
@@ -74,17 +74,17 @@ ANALYST_CONFIG = {
     },
     "fundamentals_analyst": {
         "display_name": "Fundamentals Analyst",
-        "agent_func": fundamentals_agent,
+        "agent_func": fundamentals_analyst_agent,
         "order": 11,
     },
     "sentiment_analyst": {
         "display_name": "Sentiment Analyst",
-        "agent_func": sentiment_agent,
+        "agent_func": sentiment_analyst_agent,
         "order": 12,
     },
     "valuation_analyst": {
         "display_name": "Valuation Analyst",
-        "agent_func": valuation_agent,
+        "agent_func": valuation_analyst_agent,
         "order": 13,
     },
 }

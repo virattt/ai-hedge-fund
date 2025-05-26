@@ -152,7 +152,7 @@ def phil_fisher_agent(state: AgentState):
             "reasoning": fisher_output.reasoning,
         }
 
-        progress.update_status("phil_fisher_agent", ticker, "Done")
+        progress.update_status("phil_fisher_agent", ticker, "Done", analysis=fisher_output.reasoning)
 
     # Wrap results in a single message
     message = HumanMessage(content=json.dumps(fisher_analysis), name="phil_fisher_agent")

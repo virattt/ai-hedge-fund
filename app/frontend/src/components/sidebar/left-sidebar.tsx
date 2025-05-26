@@ -30,7 +30,6 @@ export function LeftSidebar({
     activeItem, 
     openGroups, 
     filteredGroups,
-    handleItemClick, 
     handleAccordionChange 
   } = useComponentGroups(componentGroups);
   const { addNodeFromComponent } = useFlowContext();
@@ -84,7 +83,6 @@ export function LeftSidebar({
               key={group.name} 
               group={group}
               activeItem={activeItem}
-              onItemClick={handleItemClick}
               onComponentAdd={handleComponentAdd}
             />
           ))}

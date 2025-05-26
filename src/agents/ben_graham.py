@@ -75,7 +75,7 @@ def ben_graham_agent(state: AgentState):
 
         graham_analysis[ticker] = {"signal": graham_output.signal, "confidence": graham_output.confidence, "reasoning": graham_output.reasoning}
 
-        progress.update_status("ben_graham_agent", ticker, "Done")
+        progress.update_status("ben_graham_agent", ticker, "Done", analysis=graham_output.reasoning)
 
     # Wrap results in a single message for the chain
     message = HumanMessage(content=json.dumps(graham_analysis), name="ben_graham_agent")

@@ -21,9 +21,6 @@ router = APIRouter(prefix="/hedge-fund")
 )
 async def run_hedge_fund(request: HedgeFundRequest):
     try:
-        # Get the start date if not provided
-        start_date = request.get_start_date()
-
         # Create the portfolio
         portfolio = create_portfolio(request.initial_cash, request.margin_requirement, request.tickers)
 
@@ -45,8 +42,8 @@ async def run_hedge_fund(request: HedgeFundRequest):
             progress_queue = asyncio.Queue()
 
             # Simple handler to add updates to the queue
-            def progress_handler(agent_name, ticker, status, timestamp):
-                event = ProgressUpdateEvent(agent=agent_name, ticker=ticker, status=status, timestamp=timestamp)
+            def progress_handler(agent_name, ticker, status, analysis, timestamp):
+                event = ProgressUpdateEvent(agent=agent_name, ticker=ticker, status=status, timestamp=timestamp, analysis=analysis)
                 progress_queue.put_nowait(event)
 
             # Register our handler with the progress tracker
@@ -59,7 +56,7 @@ async def run_hedge_fund(request: HedgeFundRequest):
                         graph=graph,
                         portfolio=portfolio,
                         tickers=request.tickers,
-                        start_date=start_date,
+                        start_date=request.start_date,
                         end_date=request.end_date,
                         model_name=request.model_name,
                         model_provider=model_provider,

@@ -42,12 +42,12 @@ export function ModelSelector({
           aria-expanded={open}
           className="w-full justify-between"
         >
-          <span className="text-subtitle text-muted-foreground">
+          <span className="text-subtitle">
             {value
               ? models.find((model) => model.model_name === value)?.display_name
               : placeholder}
           </span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-full min-w-[300px] p-0">

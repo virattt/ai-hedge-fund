@@ -153,7 +153,7 @@ def michael_burry_agent(state: AgentState):  # noqa: C901  (complexity is fine h
             "reasoning": burry_output.reasoning,
         }
 
-        progress.update_status("michael_burry_agent", ticker, "Done")
+        progress.update_status("michael_burry_agent", ticker, "Done", analysis=burry_output.reasoning)
 
     # ----------------------------------------------------------------------
     # Return to the graph
