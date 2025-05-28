@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Hedge Fund - Simple UI</title>
+    <style>
+        :root {
+            --primary-color: #1a73e8;
+            --primary-dark: #0d47a1;
+            --primary-light: #e8f0fe;
+            --success-color: #0f9d58;
+            --warning-color: #f57c00;
+            --danger-color: #d93025;
+            --neutral-color: #5f6368;
+            --background-color: #f8f9fa;
+            --card-background: #ffffff;
+            --border-color: #dadce0;
+            --text-primary: #202124;
+            --text-secondary: #5f6368;
+            --shadow-sm: 0 1px 2px rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+            --shadow-md: 0 2px 6px rgba(60, 64, 67, 0.3), 0 1px 2px rgba(60, 64, 67, 0.15);
+            --border-radius: 8px;
+            --transition: all 0.2s ease;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 20px 0;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        header .container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .logo-icon {
+            font-size: 24px;
+        }
+        
+        h1 {
+            font-size: 24px;
+            font-weight: 500;
+            margin: 0;
+        }
+        
+        .card {
+            background-color: var(--card-background);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-sm);
+            padding: 24px;
+            margin-bottom: 24px;
+            transition: var(--transition);
+        }
+        
+        .card:hover {
+            box-shadow: var(--shadow-md);
+        }
+        
+        .card-title {
+            font-size: 18px;
+            font-weight: 500;
+            color: var(--primary-color);
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 14px;
+            transition: var(--transition);
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+        }
+        
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        button:hover {
+            background-color: var(--primary-dark);
+            box-shadow: var(--shadow-sm);
+        }
+        
+        button:disabled {
+            background-color: var(--neutral-color);
+            cursor: not-allowed;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 8px;
+        }
+        
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            background-color: var(--primary-light);
+            padding: 8px 12px;
+            border-radius: 4px;
+            transition: var(--transition);
+        }
+        
+        .checkbox-item:hover {
+            background-color: rgba(26, 115, 232, 0.15);
+        }
+        
+        .checkbox-item input {
+            width: auto;
+            margin-right: 8px;
+            accent-color: var(--primary-color);
+        }
+        
+        .error {
+            color: var(--danger-color);
+            margin-top: 5px;
+            display: none;
+            font-size: 14px;
+        }
+        
+        #response {
+            margin-top: 30px;
+        }
+        
+        .data-card {
+            background-color: var(--card-background);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 24px;
+            overflow: hidden;
+        }
+        
+        .data-card-header {
+            background-color: var(--primary-light);
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            font-weight: 500;
+            color: var(--primary-dark);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .data-card-body {
+            padding: 16px;
+        }
+        
+        pre {
+            background-color: #f5f5f5;
+            padding: 12px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+        }
+        
+        .loading-indicator {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+            padding: 16px;
+            background-color: var(--primary-light);
+            border-radius: var(--border-radius);
+            color: var(--primary-dark);
+            font-weight: 500;
+        }
+        
+        .loading-indicator:after {
+            content: '.';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60% { content: '...'; }
+            80%, 100% { content: ''; }
+        }
+        
+        .progress-container {
+            margin-top: 20px;
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .progress-header {
+            background-color: var(--primary-light);
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            font-weight: 500;
+            color: var(--primary-dark);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .progress-body {
+            background-color: white;
+            padding: 16px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .progress-item {
+            margin-bottom: 8px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            border-left: 3px solid var(--primary-color);
+            transition: var(--transition);
+        }
+        
+        .progress-item.analysis {
+            background-color: var(--primary-light);
+            border-left-color: var(--primary-dark);
+        }
+        
+        .agent-name {
+            font-weight: 500;
+            color: var(--success-color);
+        }
+        
+        .ticker-name {
+            font-weight: 500;
+            color: var(--primary-color);
+        }
+        
+        .status {
+            color: var(--neutral-color);
+        }
+        
+        .timestamp {
+            font-size: 0.75em;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+        
+        .final-result {
+            margin-top: 20px;
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .final-result-header {
+            background-color: var(--primary-color);
+            padding: 12px 16px;
+            font-weight: 500;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .final-result-body {
+            background-color: white;
+            padding: 16px;
+        }
+        
+        .decision {
+            margin-bottom: 16px;
+            padding: 16px;
+            background-color: #f8f9fa;
+            border-radius: var(--border-radius);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            transition: var(--transition);
+        }
+        
+        .decision:hover {
+            box-shadow: var(--shadow-sm);
+            transform: translateY(-2px);
+        }
+        
+        .decision-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .decision-ticker {
+            font-weight: 600;
+            font-size: 1.1em;
+            color: var(--primary-color);
+        }
+        
+        .decision-action {
+            font-weight: 500;
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 14px;
+        }
+        
+        .decision-action.buy {
+            background-color: rgba(15, 157, 88, 0.1);
+            color: var(--success-color);
+        }
+        
+        .decision-action.sell {
+            background-color: rgba(217, 48, 37, 0.1);
+            color: var(--danger-color);
+        }
+        
+        .decision-action.hold {
+            background-color: rgba(245, 124, 0, 0.1);
+            color: var(--warning-color);
+        }
+        
+        .decision-detail {
+            margin-bottom: 8px;
+            display: flex;
+            gap: 8px;
+        }
+        
+        .detail-label {
+            font-weight: 500;
+            color: var(--text-secondary);
+            min-width: 80px;
+        }
+        
+        .confidence-bar {
+            height: 6px;
+            background-color: #e0e0e0;
+            border-radius: 3px;
+            margin-top: 4px;
+            overflow: hidden;
+        }
+        
+        .confidence-value {
+            height: 100%;
+            background-color: var(--primary-color);
+        }
+        
+        .two-columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .two-columns {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        
+        @media (max-width: 576px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .analysis-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 4px 0;
+            background: var(--card-bg);
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        .analysis-table.root {
+            margin-top: 8px;
+        }
+
+        .analysis-table.nested {
+            margin: 4px 0;
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        .analysis-table tr {
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .analysis-table tr:last-child {
+            border-bottom: none;
+        }
+
+        .analysis-table td {
+            padding: 8px 12px;
+            vertical-align: top;
+        }
+
+        .analysis-table td.key {
+            font-weight: 500;
+            color: var(--text-secondary);
+            width: 30%;
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        .analysis-table td.value {
+            color: var(--text-primary);
+        }
+
+        .analysis-table .nested {
+            margin-left: 0;
+            width: 100%;
+        }
+
+        /* Signal color style */
+        .value:contains("bullish") {
+            color: var(--success-color);
+        }
+
+        .value:contains("bearish") {
+            color: var(--danger-color);
+        }
+
+        .value:contains("neutral") {
+            color: var(--warning-color);
+        }
+        
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="logo">
+                <span class="logo-icon">📈</span>
+                <h1>AI Hedge Fund - Simple UI</h1>
+            </div>
+            <div class="version">v1.0</div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="card">
+            <div class="card-title">Analysis Configuration</div>
+            <form id="hedgeFundForm">
+                <div class="form-group">
+                    <label for="api_base_url">API Base URL:</label>
+                    <input type="text" id="api_base_url" name="api_base_url" placeholder="Example: http://localhost:8000" title="If it is not localhost, please modify 'allow_origins' in backend/main.py to '*'">
+                </div>
+                
+                <div class="form-group">
+                    <label for="tickers">Stock Symbols (comma separated):</label>
+                    <input type="text" id="tickers" name="tickers" placeholder="Example: AAPL,MSFT,GOOGL" required>
+                    <div id="tickersError" class="error">Please enter at least one stock code</div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Select Analyst:</label>
+                    <div id="analystsContainer" class="checkbox-group">
+                        <!-- Will be populated dynamically via the API -->
+                        <div class="loading">Loading...</div>
+                    </div>
+                    <div id="analystsError" class="error">Please select at least one analyst</div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="start_date">Start Date:</label>
+                        <input type="date" id="start_date" name="start_date">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="end_date">End Date:</label>
+                        <input type="date" id="end_date" name="end_date">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="model_provider">Model Provider:</label>
+                        <select id="model_provider" name="model_provider">
+                            <!-- Will be populated dynamically via the API -->
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="model_name">Model NameName:</label>
+                        <select id="model_name" name="model_name">
+                            <!-- Will be populated dynamically based on the selected provider -->
+                            <option value="">Please select a model provider first</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="initial_cash">Initial capital:</label>
+                        <input type="number" id="initial_cash" name="initial_cash" value="100000" min="1000" step="1000">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="margin_requirement">Margin Requirements:</label>
+                        <input type="number" id="margin_requirement" name="margin_requirement" value="0" min="0" step="0.01">
+                    </div>
+                </div>
+                
+                <button type="submit" id="submitBtn">Start Analysis <span>→</span></button>
+            </form>
+        </div>
+        
+        <div id="response" style="display:none;">
+            <div class="data-card">
+                <div class="data-card-header">
+                    <span>📋</span> Request data
+                </div>
+                <div class="data-card-body">
+                    <pre id="requestData"></pre>
+                </div>
+            </div>
+            
+            <div id="loadingIndicator" class="loading-indicator">Analysis in progress</div>
+            
+            <div id="progressContainer" class="progress-container" style="display:none;">
+                <div class="progress-header">
+                    <span>🔄</span> Analysis progress
+                </div>
+                <div class="progress-body">
+                    <div id="progressItems"></div>
+                </div>
+            </div>
+            
+            <div id="finalResult" class="final-result" style="display:none;">
+                <div class="final-result-header">
+                    <span>🎯</span> Final Result
+                </div>
+                <div class="final-result-body">
+                    <div id="decisions"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Set Default Date
+        function setDefaultDates() {
+            const today = new Date();
+            const threeMonthsAgo = new Date();
+            threeMonthsAgo.setMonth(today.getMonth() - 3);
+            
+            const formatDate = (date) => {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+            
+            document.getElementById('end_date').value = formatDate(today);
+            document.getElementById('start_date').value = formatDate(threeMonthsAgo);
+        }
+        
+        // Get the API base URL
+        function getApiBaseUrl() {
+            return document.getElementById('api_base_url').value.trim() || 'http://localhost:8000';
+        }
+
+        // Get a list of analysts
+        async function fetchAnalysts() {
+            try {
+                const baseUrl = getApiBaseUrl();
+                const response = await fetch(`${baseUrl}/hedge-fund/agents`);
+                if (!response.ok) {
+                    throw new Error('Failed to obtain analyst data');
+                }
+                const data = await response.json();
+                
+                const container = document.getElementById('analystsContainer');
+                container.innerHTML = '';
+                
+                // Sort by order
+                const sortedAnalysts = Object.entries(data).sort((a, b) => a[1].order - b[1].order);
+                
+                sortedAnalysts.forEach(([key, value]) => {
+                    const checkboxItem = document.createElement('div');
+                    checkboxItem.className = 'checkbox-item';
+                    
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.id = `analyst-${key}`;
+                    checkbox.name = 'selected_agents';
+                    checkbox.value = key;
+                    
+                    const label = document.createElement('label');
+                    label.htmlFor = `analyst-${key}`;
+                    label.textContent = value.display_name;
+                    
+                    checkboxItem.appendChild(checkbox);
+                    checkboxItem.appendChild(label);
+                    container.appendChild(checkboxItem);
+                });
+            } catch (error) {
+                console.error('Failed to get analyst:', error);
+                document.getElementById('analystsContainer').innerHTML = 
+                    '<div class="error">Failed to load analyst data, please refresh the page and try again</div>';
+            }
+        }
+        
+        // Get the model list
+        async function fetchModels() {
+            try {
+                const baseUrl = getApiBaseUrl();
+                const response = await fetch(`${baseUrl}/hedge-fund/llm-models`);
+                if (!response.ok) {
+                    throw new Error('Failed to obtain model data');
+                }
+                const models = await response.json();
+                
+                // Get all unique providers
+                const providers = [...new Set(models.map(model => model.provider))];
+                
+                // Populate the Provider drop-down list
+                const providerSelect = document.getElementById('model_provider');
+                providerSelect.innerHTML = '';
+                
+                providers.forEach(provider => {
+                    const option = document.createElement('option');
+                    option.value = provider;
+                    option.textContent = provider;
+                    providerSelect.appendChild(option);
+                });
+                
+                // Set the default to OpenAI
+                const defaultProvider = 'OpenAI';
+                providerSelect.value = defaultProvider;
+                
+                // Initialize the model drop-down list
+                updateModelOptions(defaultProvider, models);
+                
+                // Update model list when provider changes
+                providerSelect.addEventListener('change', function() {
+                    updateModelOptions(this.value, models);
+                });
+            } catch (error) {
+                console.error('Failed to get model:', error);
+                document.getElementById('model_provider').innerHTML = 
+                    '<option value="">Failed to load model data</option>';
+            }
+        }
+        
+        // Update model options based on selected provider
+        function updateModelOptions(provider, allModels) {
+            const modelSelect = document.getElementById('model_name');
+            modelSelect.innerHTML = '';
+            
+            const filteredModels = allModels.filter(model => model.provider === provider);
+            
+            filteredModels.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.model_name;
+                option.textContent = model.display_name;
+                modelSelect.appendChild(option);
+            });
+            
+            // Setting the Default Model
+            if (provider === 'OpenAI') {
+                const gpt4oModel = filteredModels.find(model => model.model_name === 'gpt-4o');
+                if (gpt4oModel) {
+                    modelSelect.value = 'gpt-4o';
+                }
+            }
+        }
+        
+        // Form submission processing
+        document.getElementById('hedgeFundForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Reset error message
+            document.querySelectorAll('.error').forEach(el => el.style.display = 'none');
+            
+            // Verify stock code
+            const tickersInput = document.getElementById('tickers').value.trim();
+            if (!tickersInput) {
+                document.getElementById('tickersError').style.display = 'block';
+                return;
+            }
+            const tickers = tickersInput.split(',').map(ticker => ticker.trim()).filter(ticker => ticker);
+            
+            // Verify Analyst Selection
+            const selectedAnalysts = Array.from(
+                document.querySelectorAll('input[name="selected_agents"]:checked')
+            ).map(checkbox => checkbox.value);
+            
+            if (selectedAnalysts.length === 0) {
+                document.getElementById('analystsError').style.display = 'block';
+                return;
+            }
+            
+            // Constructing request data
+            const requestData = {
+                tickers: tickers,
+                selected_agents: selectedAnalysts,
+                start_date: document.getElementById('start_date').value,
+                end_date: document.getElementById('end_date').value,
+                model_name: document.getElementById('model_name').value,
+                model_provider: document.getElementById('model_provider').value,
+                initial_cash: parseFloat(document.getElementById('initial_cash').value),
+                margin_requirement: parseFloat(document.getElementById('margin_requirement').value)
+            };
+            
+            // Disable submit button and change text
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            const originalBtnText = submitBtn.textContent;
+            submitBtn.textContent = "Processing...";
+            
+            // Display request data
+            const responseDiv = document.getElementById('response');
+            responseDiv.style.display = 'block';
+            document.getElementById('requestData').textContent = JSON.stringify(requestData, null, 2);
+            
+            // Reset previous results
+            document.getElementById('progressItems').innerHTML = '';
+            document.getElementById('decisions').innerHTML = '';
+            document.getElementById('progressContainer').style.display = 'none';
+            document.getElementById('finalResult').style.display = 'none';
+            document.getElementById('loadingIndicator').style.display = 'block';
+            
+            // Use fetch to send a POST request and process the SSE response
+            const baseUrl = getApiBaseUrl();
+            fetch(`${baseUrl}/hedge-fund/run`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP Error: ${response.status}`);
+                }
+                
+                // Create a new TextDecoder to decode the response stream
+                const decoder = new TextDecoder();
+                const reader = response.body.getReader();
+                
+                // Storing unfinished event data
+                let buffer = '';
+                
+                // Processing event streams
+                function processStream() {
+                    reader.read().then(({ done, value }) => {
+                        if (done) {
+                            console.log('Stream closed');
+                            // Restore button state and text
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = originalBtnText;
+                            document.getElementById('loadingIndicator').style.display = 'none';
+                            return;
+                        }
+                        
+                        // Decode received data and add to buffer
+                        buffer += decoder.decode(value, { stream: true });
+                        
+                        // Processing the complete event
+                        const events = buffer.split('\n\n');
+                        buffer = events.pop() || ''; // Keep the last possibly incomplete event
+                        
+                        // Process each complete event
+                        events.forEach(eventText => {
+                            if (!eventText.trim()) return;
+                            
+                            // Parsing event types and data
+                            const eventLines = eventText.split('\n');
+                            let eventType = '';
+                            let eventData = '';
+                            
+                            eventLines.forEach(line => {
+                                if (line.startsWith('event:')) {
+                                    eventType = line.substring(6).trim();
+                                } else if (line.startsWith('data:')) {
+                                    eventData = line.substring(5).trim();
+                                }
+                            });
+                            
+                            if (eventType && eventData) {
+                                // Create a simulated event object
+                                const event = { type: eventType, data: eventData };
+                                console.log('Processing events:', event);
+                                
+                                // Process according to event type
+                                handleEvent(event);
+                            }
+                        });
+                        
+                        // Continue processing the flow
+                        processStream();
+                    }).catch(error => {
+                        console.error('Error reading stream:', error);
+                        // Restore button state and text
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = originalBtnText;
+                        document.getElementById('loadingIndicator').style.display = 'none';
+                        
+                        const errorDiv = document.createElement('div');
+                        errorDiv.style.color = 'red';
+                        errorDiv.textContent = `Connection Error: ${error.message}`;
+                        document.getElementById('progressItems').appendChild(errorDiv);
+                    });
+                }
+                
+                processStream();
+            })
+            .catch(error => {
+                console.error('Request Error:', error);
+                // Restore button state and text
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalBtnText;
+                document.getElementById('loadingIndicator').style.display = 'none';
+                
+                const errorDiv = document.createElement('div');
+                errorDiv.style.color = 'red';
+                errorDiv.textContent = `Request Error: ${error.message}`;
+                document.getElementById('progressItems').appendChild(errorDiv);
+            });
+        });
+
+        // Add functions for handling nested JSON
+        function createNestedTable(data, level = 0) {
+            if (typeof data !== 'object' || data === null) {
+                return String(data);
+            }
+
+            let table = `<table class="analysis-table${level === 0 ? ' root' : ' nested'}">`;
+            
+            for (const [key, value] of Object.entries(data)) {
+                table += '<tr>';
+                table += `<td class="key">${key}</td>`;
+                
+                if (typeof value === 'object' && value !== null) {
+                    // Object type, creating nested tables
+                    if (Object.keys(value).length === 0) {
+                        table += '<td class="value">Empty Object</td>';
+                    } else {
+                        table += `<td class="value">${createNestedTable(value, level + 1)}</td>`;
+                    }
+                } else {
+                    // Simple type, directly display the value
+                    const displayValue = formatValue(value);
+                    table += `<td class="value">${displayValue}</td>`;
+                }
+                
+                table += '</tr>';
+            }
+            
+            table += '</table>';
+            return table;
+        }
+
+        function formatValue(value) {
+            if (typeof value === 'number') {
+                if (value > 0 && value < 1) {
+                    return `${(value * 100).toFixed(2)}%`;
+                }
+                return Number.isInteger(value) ? value : value.toFixed(2);
+            }
+            return String(value);
+        }
+
+
+        // Handling SSE Events
+        function handleEvent(event) {
+            const progressItems = document.getElementById('progressItems');
+            const decisions = document.getElementById('decisions');
+            const progressContainer = document.getElementById('progressContainer');
+            const finalResult = document.getElementById('finalResult');
+            
+            // Store analysis results to avoid repeated display
+            const analysisResults = {};
+            
+            switch(event.type) {
+                case 'start':
+                    progressContainer.style.display = 'block';
+                    console.log('Analysis starts:', event.data);
+                    break;
+                    
+                case 'progress':
+                    const data = JSON.parse(event.data);
+                    console.log('Analysis progress update:', data);
+                    
+                    // If it is a signal that all analysis is completed
+                    if (data.status === 'Done' && !data.ticker) {
+                        return;
+                    }
+                    
+                    // Create or update a progress item
+                    const itemId = data.agent && data.ticker ? `${data.agent}-${data.ticker}` : 
+                                   data.agent ? `${data.agent}` : 
+                                   data.ticker ? `${data.ticker}` : 'unknown';
+                    
+                    let progressItem = document.getElementById(itemId);
+                    
+                    // If it is an analysis result and has been displayed, it will not be displayed again
+                    if (data.analysis) {
+                        if (analysisResults[itemId]) {
+                            return;
+                        }
+                        analysisResults[itemId] = true;
+                    }
+                    
+                    if (!progressItem) {
+                        progressItem = document.createElement('div');
+                        progressItem.id = itemId;
+                        progressItem.className = data.analysis ? 'progress-item analysis' : 'progress-item';
+                        progressItems.appendChild(progressItem);
+                    }
+                    
+                    // Formatting timestamps
+                    let formattedTime = '';
+                    if (data.timestamp) {
+                        const date = new Date(data.timestamp);
+                        formattedTime = date.toLocaleTimeString();
+                    }
+                    
+                    // Updates
+                    if (data.analysis) {
+                        // Try to parse the content to see if it is JSON
+                        let analysisContent = data.analysis;
+                        try {
+                            const jsonData = JSON.parse(data.analysis);
+                            // Convert JSON object to nested table
+                            analysisContent = createNestedTable(jsonData);
+                        } catch (e) {
+                            // If it is not JSON, keep it as is
+                            analysisContent = data.analysis;
+                        }
+                        
+                        progressItem.innerHTML = `
+                            <div><span class="agent-name">${formatAgentName(data.agent)}</span> Analysis of <span class="ticker-name">${data.ticker}</span>: <span class="timestamp">${formattedTime}</span></div>
+                            <div style="margin-top:3px;">${analysisContent}</div>
+                        `;
+                    } else {
+                        // This is a progress update
+                        progressItem.innerHTML = `
+                            <div>
+                                ${data.agent ? `<span class="agent-name">${formatAgentName(data.agent)}</span>` : ''} 
+                                ${data.ticker ? `<span class="ticker-name">${data.ticker}</span>` : ''}
+                                <span class="status">${data.status}</span>
+                                <span class="timestamp">${formattedTime}</span>
+                            </div>
+                        `;
+                    }
+                    break;
+                    
+                case 'complete':
+                    const completeData = JSON.parse(event.data);
+                    console.log('Analysis Complete:', completeData);
+                    
+                    // Hide loading indicator
+                    document.getElementById('loadingIndicator').style.display = 'none';
+                    
+                    // Display the final result container
+                    finalResult.style.display = 'block';
+                    
+                    // Clear previous decisions
+                    decisions.innerHTML = '';
+                    
+                    // Add decision results
+                    if (completeData.data && completeData.data.decisions) {
+                        const decisionData = completeData.data.decisions;
+                        
+                        Object.entries(decisionData).forEach(([ticker, decision]) => {
+                            const decisionEl = document.createElement('div');
+                            decisionEl.className = 'decision';
+                            
+                            const actionClass = decision.action.toLowerCase();
+                            
+                            decisionEl.innerHTML = `
+                                <div class="decision-header">
+                                    <span class="decision-ticker">${ticker}</span>
+                                    <span class="decision-action ${actionClass}">${formatAction(decision.action)}</span>
+                                </div>
+                                <div>Quantity: ${decision.quantity}</div>
+                                <div>Confidence: ${decision.confidence}%</div>
+                                <div>Reasoning: ${decision.reasoning}</div>
+                            `;
+                            
+                            decisions.appendChild(decisionEl);
+                        });
+                    }
+                    break;
+                    
+                default:
+                    console.log('Unknown event type:', event.type, event.data);
+            }
+        }
+
+        // Format analyst name
+        function formatAgentName(agentName) {
+            if (!agentName) return '';
+            
+            let name = agentName.replace('_agent', '');
+            name = name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            
+            return name;
+        }
+
+        // Formatting Operations
+        function formatAction(action) {
+            const actionMap = {
+                'buy': 'BUY',
+                'sell': 'SELL',
+                'hold': 'HOLD'
+            };
+            
+            return actionMap[action.toLowerCase()] || action;
+        }
+        
+        // Initialized when the page loads
+        window.addEventListener('DOMContentLoaded', function() {
+            setDefaultDates();
+            document.getElementById('api_base_url').value = 'http://localhost:8000';
+            fetchAnalysts();
+            fetchModels();
+        });
+    </script>
+</body>
+</html>

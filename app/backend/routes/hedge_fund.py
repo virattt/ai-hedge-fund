@@ -7,8 +7,33 @@ from app.backend.models.events import StartEvent, ProgressUpdateEvent, ErrorEven
 from app.backend.services.graph import create_graph, parse_hedge_fund_response, run_graph_async
 from app.backend.services.portfolio import create_portfolio
 from src.utils.progress import progress
+from src.utils.analysts import ANALYST_CONFIG
+import json
+from pathlib import Path
+
+def read_json_file(file_path):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        data = json.load(file)
+    return data
+
+current_dir = Path(__file__).parent
+models_json_path = current_dir / "../../../src/llm/api_models.json"
+LLM_MODELS=read_json_file(models_json_path)
+
 
 router = APIRouter(prefix="/hedge-fund")
+
+
+@router.get("/agents")
+async def get_agents():
+    ANALYST_CONFIG_WITHOUT_FUNC = {key: {k: v for k, v in config.items() if k != 'agent_func'} for key, config in ANALYST_CONFIG.items()}
+    return ANALYST_CONFIG_WITHOUT_FUNC
+
+
+
+@router.get("/llm-models")
+async def get_llm_models():
+    return LLM_MODELS
 
 
 @router.post(
