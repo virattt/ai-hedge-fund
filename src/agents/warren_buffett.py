@@ -1,12 +1,12 @@
-from graph.state import AgentState, show_agent_reasoning
+from src.graph.state import AgentState, show_agent_reasoning
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 import json
 from typing_extensions import Literal
-from tools.api import get_financial_metrics, get_market_cap, search_line_items
-from utils.llm import call_llm
-from utils.progress import progress
+from src.tools.api import get_financial_metrics, get_market_cap, search_line_items
+from src.utils.llm import call_llm
+from src.utils.progress import progress
 
 
 class WarrenBuffettSignal(BaseModel):
@@ -115,11 +115,11 @@ def warren_buffett_agent(state: AgentState):
         # Store analysis in consistent format with other agents
         buffett_analysis[ticker] = {
             "signal": buffett_output.signal,
-            "confidence": buffett_output.confidence, # Normalize between 0 to 100
+            "confidence": buffett_output.confidence,  # Normalize between 0 to 100
             "reasoning": buffett_output.reasoning,
         }
 
-        progress.update_status("warren_buffett_agent", ticker, "Done")
+        progress.update_status("warren_buffett_agent", ticker, "Done", analysis=buffett_output.reasoning)
 
     # Create the message
     message = HumanMessage(content=json.dumps(buffett_analysis), name="warren_buffett_agent")
@@ -130,6 +130,8 @@ def warren_buffett_agent(state: AgentState):
 
     # Add the signal to the analyst_signals list
     state["data"]["analyst_signals"]["warren_buffett_agent"] = buffett_analysis
+
+    progress.update_status("warren_buffett_agent", None, "Done")
 
     return {"messages": [message], "data": state["data"]}
 

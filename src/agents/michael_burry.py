@@ -4,20 +4,20 @@ from datetime import datetime, timedelta
 import json
 from typing_extensions import Literal
 
-from graph.state import AgentState, show_agent_reasoning
+from src.graph.state import AgentState, show_agent_reasoning
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel
 
-from tools.api import (
+from src.tools.api import (
     get_company_news,
     get_financial_metrics,
     get_insider_trades,
     get_market_cap,
     search_line_items,
 )
-from utils.llm import call_llm
-from utils.progress import progress
+from src.utils.llm import call_llm
+from src.utils.progress import progress
 
 __all__ = [
     "MichaelBurrySignal",
@@ -153,7 +153,7 @@ def michael_burry_agent(state: AgentState):  # noqa: C901  (complexity is fine h
             "reasoning": burry_output.reasoning,
         }
 
-        progress.update_status("michael_burry_agent", ticker, "Done")
+        progress.update_status("michael_burry_agent", ticker, "Done", analysis=burry_output.reasoning)
 
     # ----------------------------------------------------------------------
     # Return to the graph
@@ -164,6 +164,8 @@ def michael_burry_agent(state: AgentState):  # noqa: C901  (complexity is fine h
         show_agent_reasoning(burry_analysis, "Michael Burry Agent")
 
     state["data"]["analyst_signals"]["michael_burry_agent"] = burry_analysis
+
+    progress.update_status("michael_burry_agent", None, "Done")
 
     return {"messages": [message], "data": state["data"]}
 

@@ -1,13 +1,13 @@
 from langchain_openai import ChatOpenAI
-from graph.state import AgentState, show_agent_reasoning
-from tools.api import get_financial_metrics, get_market_cap, search_line_items
+from src.graph.state import AgentState, show_agent_reasoning
+from src.tools.api import get_financial_metrics, get_market_cap, search_line_items
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 import json
 from typing_extensions import Literal
-from utils.progress import progress
-from utils.llm import call_llm
+from src.utils.progress import progress
+from src.utils.llm import call_llm
 
 
 class BillAckmanSignal(BaseModel):
@@ -110,7 +110,7 @@ def bill_ackman_agent(state: AgentState):
             "reasoning": ackman_output.reasoning
         }
         
-        progress.update_status("bill_ackman_agent", ticker, "Done")
+        progress.update_status("bill_ackman_agent", ticker, "Done", analysis=ackman_output.reasoning)
     
     # Wrap results in a single message for the chain
     message = HumanMessage(
@@ -124,6 +124,8 @@ def bill_ackman_agent(state: AgentState):
     
     # Add signals to the overall state
     state["data"]["analyst_signals"]["bill_ackman_agent"] = ackman_analysis
+
+    progress.update_status("bill_ackman_agent", None, "Done")
 
     return {
         "messages": [message],
@@ -149,7 +151,7 @@ def analyze_business_quality(metrics: list, financial_line_items: list) -> dict:
     # 1. Multi-period revenue growth analysis
     revenues = [item.revenue for item in financial_line_items if item.revenue is not None]
     if len(revenues) >= 2:
-        initial, final = revenues[0], revenues[-1]
+        initial, final = revenues[-1], revenues[0]
         if initial and final and final > initial:
             growth_rate = (final - initial) / abs(initial)
             if growth_rate > 0.5:  # e.g., 50% cumulative growth
@@ -269,7 +271,8 @@ def analyze_financial_discipline(metrics: list, financial_line_items: list) -> d
     # Check for decreasing share count (simple approach)
     shares = [item.outstanding_shares for item in financial_line_items if item.outstanding_shares is not None]
     if len(shares) >= 2:
-        if shares[-1] < shares[0]:
+        # For buybacks, the newest count should be less than the oldest count
+        if shares[0] < shares[-1]:
             score += 1
             details.append("Outstanding shares have decreased over time (possible buybacks).")
         else:
@@ -308,7 +311,7 @@ def analyze_activism_potential(financial_line_items: list) -> dict:
             "details": "Not enough data to assess activism potential (need multi-year revenue + margins)."
         }
     
-    initial, final = revenues[0], revenues[-1]
+    initial, final = revenues[-1], revenues[0]
     revenue_growth = (final - initial) / abs(initial) if initial else 0
     avg_margin = sum(op_margins) / len(op_margins)
     
@@ -339,7 +342,9 @@ def analyze_valuation(financial_line_items: list, market_cap: float) -> dict:
             "details": "Insufficient data to perform valuation"
         }
     
-    latest = financial_line_items[-1]
+    # Since financial_line_items are in descending order (newest first),
+    # the most recent period is the first element
+    latest = financial_line_items[0]
     fcf = latest.free_cash_flow if latest.free_cash_flow else 0
     
     if fcf <= 0:

@@ -1,12 +1,12 @@
-from graph.state import AgentState, show_agent_reasoning
-from tools.api import get_financial_metrics, get_market_cap, search_line_items, get_insider_trades, get_company_news
+from src.graph.state import AgentState, show_agent_reasoning
+from src.tools.api import get_financial_metrics, get_market_cap, search_line_items, get_insider_trades, get_company_news
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 import json
 from typing_extensions import Literal
-from utils.progress import progress
-from utils.llm import call_llm
+from src.utils.progress import progress
+from src.utils.llm import call_llm
 
 class CharlieMungerSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
@@ -134,7 +134,7 @@ def charlie_munger_agent(state: AgentState):
             "reasoning": munger_output.reasoning
         }
         
-        progress.update_status("charlie_munger_agent", ticker, "Done")
+        progress.update_status("charlie_munger_agent", ticker, "Done", analysis=munger_output.reasoning)
     
     # Wrap results in a single message for the chain
     message = HumanMessage(
@@ -145,6 +145,8 @@ def charlie_munger_agent(state: AgentState):
     # Show reasoning if requested
     if state["metadata"]["show_reasoning"]:
         show_agent_reasoning(munger_analysis, "Charlie Munger Agent")
+
+    progress.update_status("charlie_munger_agent", None, "Done")
     
     # Add signals to the overall state
     state["data"]["analyst_signals"]["charlie_munger_agent"] = munger_analysis
