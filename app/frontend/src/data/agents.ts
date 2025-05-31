@@ -37,66 +37,71 @@ export const agents: AgentItem[] = [
     "order": 4
   },
   {
+    "key": "jim_simons",
+    "display_name": "Jim Simons",
+    "description": "The Quant King",
+    "order": 5
+  },
+  {
     "key": "michael_burry",
     "display_name": "Michael Burry",
     "description": "The Big Short Contrarian",
-    "order": 5
+    "order": 6
   },
   {
     "key": "peter_lynch",
     "display_name": "Peter Lynch",
     "description": "The 10-Bagger Investor",
-    "order": 6
+    "order": 7
   },
   {
     "key": "phil_fisher",
     "display_name": "Phil Fisher",
     "description": "The Scuttlebutt Investor",
-    "order": 7
+    "order": 8
   },
   {
     "key": "rakesh_jhunjhunwala",
     "display_name": "Rakesh Jhunjhunwala",
     "description": "The Big Bull Of India",
-    "order": 8
+    "order": 9
   },
   {
     "key": "stanley_druckenmiller",
     "display_name": "Stanley Druckenmiller",
     "description": "The Macro Investor",
-    "order": 9
+    "order": 10
   },
   {
     "key": "warren_buffett",
     "display_name": "Warren Buffett",
     "description": "The Oracle of Omaha",
-    "order": 10
+    "order": 11
   },
   {
     "key": "technical_analyst",
     "display_name": "Technical Analyst",
     "description": "Chart Pattern Specialist",
-    "order": 11
+    "order": 12
   },
   {
     "key": "fundamentals_analyst",
     "display_name": "Fundamentals Analyst",
     "description": "Financial Statement Specialist",
-    "order": 12
+    "order": 13
   },
   {
     "key": "sentiment_analyst",
     "display_name": "Sentiment Analyst",
     "description": "Market Sentiment Specialist",
-    "order": 13
+    "order": 14
   },
   {
     "key": "valuation_analyst",
     "display_name": "Valuation Analyst",
     "description": "Company Valuation Specialist",
-    "order": 14
-  },
-  
+    "order": 15
+  }
 ];
 
 // Get agent by key
