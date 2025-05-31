@@ -2,6 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Set PYTHONPATH to include the app directory
+ENV PYTHONPATH=/app
+
 # Install Poetry
 RUN pip install poetry==1.7.1
 

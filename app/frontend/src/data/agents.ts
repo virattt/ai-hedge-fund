@@ -55,41 +55,48 @@ export const agents: AgentItem[] = [
     "order": 7
   },
   {
+    "key": "rakesh_jhunjhunwala",
+    "display_name": "Rakesh Jhunjhunwala",
+    "description": "The Big Bull Of India",
+    "order": 8
+  },
+  {
     "key": "stanley_druckenmiller",
     "display_name": "Stanley Druckenmiller",
     "description": "The Macro Investor",
-    "order": 8
+    "order": 9
   },
   {
     "key": "warren_buffett",
     "display_name": "Warren Buffett",
     "description": "The Oracle of Omaha",
-    "order": 9
+    "order": 10
   },
   {
     "key": "technical_analyst",
     "display_name": "Technical Analyst",
     "description": "Chart Pattern Specialist",
-    "order": 10
+    "order": 11
   },
   {
     "key": "fundamentals_analyst",
     "display_name": "Fundamentals Analyst",
     "description": "Financial Statement Specialist",
-    "order": 11
+    "order": 12
   },
   {
     "key": "sentiment_analyst",
     "display_name": "Sentiment Analyst",
     "description": "Market Sentiment Specialist",
-    "order": 12
+    "order": 13
   },
   {
     "key": "valuation_analyst",
     "display_name": "Valuation Analyst",
     "description": "Company Valuation Specialist",
-    "order": 13
-  }
+    "order": 14
+  },
+  
 ];
 
 // Get agent by key

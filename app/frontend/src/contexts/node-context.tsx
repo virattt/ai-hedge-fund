@@ -7,6 +7,7 @@ export interface MessageItem {
   timestamp: string;
   message: string;
   ticker: string | null;
+  analysis: Record<string, string>;
 }
 
 // Agent node state structure
@@ -17,6 +18,7 @@ export interface AgentNodeData {
   lastUpdated: number;
   messages: MessageItem[];
   timestamp?: string;
+  analysis: string | null;
 }
 
 // Data structure for the output node data (from complete event)
@@ -31,7 +33,8 @@ const DEFAULT_AGENT_NODE_STATE: AgentNodeData = {
   ticker: null,
   message: '',
   messages: [],
-  lastUpdated: Date.now()
+  lastUpdated: Date.now(),
+  analysis: null,
 };
 
 interface NodeContextType {
@@ -71,13 +74,24 @@ export function NodeProvider({ children }: { children: ReactNode }) {
       const existingNode = prev[nodeId] || { ...DEFAULT_AGENT_NODE_STATE };
       const newMessages = [...existingNode.messages];
       
-      // Add message to history if it's new
-      if (data.message && data.message !== existingNode.message) {
-        newMessages.push({
+      // Add message to history if it's new based on timestamp
+      if (data.message && data.timestamp !== existingNode.timestamp) {
+        // Get the reasoning for the current ticker if available
+        const ticker = data.ticker || null;
+
+        const messageItem: MessageItem = {
           timestamp: data.timestamp || new Date().toISOString(),
           message: data.message,
-          ticker: data.ticker || existingNode.ticker
-        });
+          ticker: ticker,
+          analysis: {} as Record<string, string>,
+        }
+
+        // Add analysis for ticker to messageItem if ticker is not null
+        if (ticker && data.analysis) {
+          messageItem.analysis[ticker] = data.analysis;
+        }
+
+        newMessages.push(messageItem);
       }
       
       return {

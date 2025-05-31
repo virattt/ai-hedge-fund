@@ -147,7 +147,7 @@ def stanley_druckenmiller_agent(state: AgentState):
             "reasoning": druck_output.reasoning,
         }
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Done")
+        progress.update_status("stanley_druckenmiller_agent", ticker, "Done", analysis=druck_output.reasoning)
 
     # Wrap results in a single message
     message = HumanMessage(content=json.dumps(druck_analysis), name="stanley_druckenmiller_agent")

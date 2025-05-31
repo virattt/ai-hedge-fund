@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { CardContent } from '@/components/ui/card';
 import { useNodeContext } from '@/contexts/node-context';
 import { cn } from '@/lib/utils';
-import { NodeMessage, type AgentNode } from '../types';
+import { type AgentNode } from '../types';
 import { getStatusColor } from '../utils';
 import { AgentOutputDialog } from './agent-output-dialog';
 import { NodeShell } from './node-shell';
@@ -65,7 +65,7 @@ export function AgentNode({
           isOpen={isDialogOpen}
           onOpenChange={setIsDialogOpen}
           name={data.name || "Agent"}
-          messages={nodeData.messages as NodeMessage[]}
+          nodeId={id}
         />
       </CardContent>
     </NodeShell>

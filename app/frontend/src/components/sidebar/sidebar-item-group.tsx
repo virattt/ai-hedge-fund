@@ -1,21 +1,23 @@
 import { AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { useFlowContext } from '@/contexts/flow-context';
 import { ComponentGroup, ComponentItem } from '@/data/sidebar-components';
 import { SidebarItem } from './sidebar-item';
 
-interface ComponentGroupProps {
+interface SidebarItemGroupProps {
   group: ComponentGroup;
   activeItem: string | null;
-  onItemClick: (itemName: string) => void;
-  onComponentAdd?: (componentName: string) => void;
 }
 
-export function ComponentGroupItem({ 
+export function SidebarItemGroup({ 
   group, 
-  activeItem, 
-  onItemClick,
-  onComponentAdd
-}: ComponentGroupProps) {
+  activeItem
+}: SidebarItemGroupProps) {
   const { name, icon: Icon, iconColor, items } = group;
+  const { addComponentToFlow } = useFlowContext();
+
+  const handleItemClick = (componentName: string) => {
+    addComponentToFlow(componentName);
+  };
   
   return (
     <AccordionItem key={name} value={name} className="border-none">
@@ -33,8 +35,7 @@ export function ComponentGroupItem({
               icon={item.icon} 
               label={item.name} 
               isActive={activeItem === item.name}
-              onClick={() => onItemClick(item.name)}
-              onAddClick={onComponentAdd ? () => onComponentAdd(item.name) : undefined}
+              onClick={() => handleItemClick(item.name)}
             />
           ))}
         </div>

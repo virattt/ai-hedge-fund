@@ -4,7 +4,7 @@ This project is currently a work in progress. To track progress, please get upda
 
 The AI Hedge Fund app is a complete system with both frontend and backend components that enables you to run an AI-powered hedge fund trading system through a web interface on your own computer.
 
-<img width="1692" alt="Screenshot 2025-05-15 at 8 57 56 PM" src="https://github.com/user-attachments/assets/2173fa5b-1029-49dd-8b04-d7583616de1b" />
+<img width="1692" alt="Screenshot 2025-05-15 at 8 57 56 PM" src="https://github.com/user-attachments/assets/2173fa5b-1029-49dd-8b04-d7583616de1b" />
 
 
 ## Overview
@@ -14,9 +14,70 @@ The AI Hedge Fund consists of:
 - **Backend**: A FastAPI application that provides a REST API to run the hedge fund trading system and backtester
 - **Frontend**: A React/Vite application that offers a user-friendly interface to visualize and control the hedge fund operations
 
-## Quick Setup
+## Table of Contents
 
-Follow these steps to get both the frontend and backend running:
+- [🚀 Quick Start (For Non-Technical Users)](#-quick-start-for-non-technical-users)
+  - [Option 1: Using 1-Line Shell Script (Recommended)](#option-1-using-1-line-shell-script-recommended)
+  - [Option 2: Using npm (Alternative)](#option-2-using-npm-alternative)
+- [🛠️ Manual Setup (For Developers)](#️-manual-setup-for-developers)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Running the Application](#running-the-application)
+- [Detailed Documentation](#detailed-documentation)
+- [Disclaimer](#disclaimer)
+
+## 🚀 Quick Start (For Non-Technical Users)
+
+**One-line setup and run command:**
+
+### Option 1: Using 1-Line Shell Script (Recommended)
+
+#### For Mac/Linux:
+```bash
+./run.sh
+```
+
+If you get a "permission denied" error, run this first:
+```bash
+chmod +x run.sh && ./run.sh
+```
+
+Or alternatively, you can run:
+```bash
+bash run.sh
+```
+
+#### For Windows:
+```cmd
+run.bat
+```
+
+### Option 2: Using npm (Alternative)
+```bash
+cd app && npm install && npm run setup
+```
+
+**That's it!** These scripts will:
+1. Check for required dependencies (Node.js, Python, Poetry)
+2. Install all dependencies automatically
+3. Start both frontend and backend services
+4. **Automatically open your web browser** to the application
+
+**Requirements:**
+- [Node.js](https://nodejs.org/) (includes npm)
+- [Python 3](https://python.org/)
+- [Poetry](https://python-poetry.org/)
+
+**After running, you can access:**
+- Frontend (Web Interface): http://localhost:5173
+- Backend API: http://localhost:8000
+- API Documentation: http://localhost:8000/docs
+
+---
+
+## 🛠️ Manual Setup (For Developers)
+
+If you prefer to set up each component manually or need more control:
 
 ### Prerequisites
 

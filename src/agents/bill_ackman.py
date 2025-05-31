@@ -110,7 +110,7 @@ def bill_ackman_agent(state: AgentState):
             "reasoning": ackman_output.reasoning
         }
         
-        progress.update_status("bill_ackman_agent", ticker, "Done")
+        progress.update_status("bill_ackman_agent", ticker, "Done", analysis=ackman_output.reasoning)
     
     # Wrap results in a single message for the chain
     message = HumanMessage(

@@ -122,7 +122,7 @@ def aswath_damodaran_agent(state: AgentState):
 
         damodaran_signals[ticker] = damodaran_output.model_dump()
 
-        progress.update_status("aswath_damodaran_agent", ticker, "Done")
+        progress.update_status("aswath_damodaran_agent", ticker, "Done", analysis=damodaran_output.reasoning)
 
     # ─── Push message back to graph state ──────────────────────────────────────
     message = HumanMessage(content=json.dumps(damodaran_signals), name="aswath_damodaran_agent")

@@ -110,7 +110,9 @@ export const api = {
                         nodeContext.updateAgentNode(agentId, {
                           status: nodeStatus,
                           ticker: eventData.ticker,
-                          message: eventData.status
+                          message: eventData.status,
+                          analysis: eventData.analysis,
+                          timestamp: eventData.timestamp
                         });
                       }
                       break;

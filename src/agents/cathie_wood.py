@@ -92,7 +92,7 @@ def cathie_wood_agent(state: AgentState):
 
         cw_analysis[ticker] = {"signal": cw_output.signal, "confidence": cw_output.confidence, "reasoning": cw_output.reasoning}
 
-        progress.update_status("cathie_wood_agent", ticker, "Done")
+        progress.update_status("cathie_wood_agent", ticker, "Done", analysis=cw_output.reasoning)
 
     message = HumanMessage(content=json.dumps(cw_analysis), name="cathie_wood_agent")
 

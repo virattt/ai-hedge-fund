@@ -24,7 +24,7 @@ def risk_management_agent(state: AgentState):
         
         prices = get_prices(
             ticker=ticker,
-            start_date=data["end_date"],  # Just get the latest price
+            start_date=data["start_date"],
             end_date=data["end_date"],
         )
 

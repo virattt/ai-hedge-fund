@@ -1,9 +1,11 @@
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
+  BadgeDollarSign,
   Bot,
   LucideIcon,
-  Type
+  Type,
+  Users
 } from 'lucide-react';
 import { agents } from './agents';
 
@@ -41,30 +43,20 @@ export const componentGroups: ComponentGroup[] = [
       // { name: "File Input", icon: FileText }
     ]
   },
-    {
-      name: "outputs",
-      icon: ArrowUpFromLine,
-      iconColor: "text-green-400",
-      items: [
-        { name: "Text Output", icon: Type },
-      ]
-    },
-  // {
-  //   name: "data",
-  //   icon: Database,
-  //   iconColor: "text-yellow-400",
-  //   items: [
-  //     { name: "Data Store", icon: Database },
-  //     { name: "Vector Store", icon: LinkIcon }
-  //   ]
-  // },
-  // {
-  //   name: "processing",
-  //   icon: Zap,
-  //   iconColor: "text-purple-400",
-  //   items: [
-  //     { name: "Code Processor", icon: Code },
-  //     { name: "Function", icon: Zap }
-  //   ]
-  // },
+  {
+    name: "outputs",
+    icon: ArrowUpFromLine,
+    iconColor: "text-green-400",
+    items: [
+      { name: "Text Output", icon: Type },
+    ]
+  },
+  {
+    name: "swarms",
+    icon: Users,
+    iconColor: "text-yellow-400",
+    items: [
+      { name: "Value Investors", icon: BadgeDollarSign },
+    ]
+  }
 ]; 
