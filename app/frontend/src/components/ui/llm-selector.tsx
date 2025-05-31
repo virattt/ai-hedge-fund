@@ -15,21 +15,21 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { type ModelItem } from "@/data/models"
+import { type ModelItemWithProvider } from "@/data/models"
 import { cn } from "@/lib/utils"
 
 interface ModelSelectorProps {
-  models: ModelItem[];
+  models: ModelItemWithProvider[];
   value: string;
-  onChange: (item: ModelItem | null) => void;
+  onChange: (item: ModelItemWithProvider | null) => void;
   placeholder?: string;
 }
 
-export function ModelSelector({ 
-  models, 
-  value, 
-  onChange, 
-  placeholder = "Select a model..." 
+export function ModelSelector({
+  models,
+  value,
+  onChange,
+  placeholder = "Select a model..."
 }: ModelSelectorProps) {
   const [open, setOpen] = React.useState(false)
 
