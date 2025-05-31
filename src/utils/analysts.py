@@ -15,6 +15,7 @@ from src.agents.technicals import technical_analyst_agent
 from src.agents.valuation import valuation_analyst_agent
 from src.agents.warren_buffett import warren_buffett_agent
 from src.agents.rakesh_jhunjhunwala import rakesh_jhunjhunwala_agent
+from src.agents.jim_simons import jim_simons_agent
 
 # Define analyst configuration - single source of truth
 ANALYST_CONFIG = {
@@ -43,55 +44,60 @@ ANALYST_CONFIG = {
         "agent_func": charlie_munger_agent,
         "order": 4,
     },
+    "jim_simons": {
+        "display_name": "Jim Simons",
+        "agent_func": jim_simons_agent,
+        "order": 5,
+    },
     "michael_burry": {
         "display_name": "Michael Burry",
         "agent_func": michael_burry_agent,
-        "order": 5,
+        "order": 6,
     },
     "peter_lynch": {
         "display_name": "Peter Lynch",
         "agent_func": peter_lynch_agent,
-        "order": 6,
+        "order": 7,
     },
     "phil_fisher": {
         "display_name": "Phil Fisher",
         "agent_func": phil_fisher_agent,
-        "order": 7,
+        "order": 8,
     },
     "rakesh_jhunjhunwala": {
         "display_name": "Rakesh Jhunjhunwala",
         "agent_func": rakesh_jhunjhunwala_agent,
-        "order": 8,
+        "order": 9,
     },
     "stanley_druckenmiller": {
         "display_name": "Stanley Druckenmiller",
         "agent_func": stanley_druckenmiller_agent,
-        "order": 9,
+        "order": 10,
     },
     "warren_buffett": {
         "display_name": "Warren Buffett",
         "agent_func": warren_buffett_agent,
-        "order": 10,
+        "order": 11,
     },
     "technical_analyst": {
         "display_name": "Technical Analyst",
         "agent_func": technical_analyst_agent,
-        "order": 11,
+        "order": 12,
     },
     "fundamentals_analyst": {
         "display_name": "Fundamentals Analyst",
         "agent_func": fundamentals_analyst_agent,
-        "order": 12,
+        "order": 13,
     },
     "sentiment_analyst": {
         "display_name": "Sentiment Analyst",
         "agent_func": sentiment_analyst_agent,
-        "order": 13,
+        "order": 14,
     },
     "valuation_analyst": {
         "display_name": "Valuation Analyst",
         "agent_func": valuation_analyst_agent,
-        "order": 14,
+        "order": 15,
     },
 }
 
