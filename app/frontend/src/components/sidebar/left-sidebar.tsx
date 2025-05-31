@@ -1,6 +1,5 @@
 import { Accordion } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
-import { useFlowContext } from '@/contexts/flow-context';
 import { componentGroups } from '@/data/sidebar-components';
 import { useComponentGroups } from '@/hooks/use-component-groups';
 import { useResizable } from '@/hooks/use-resizable';
@@ -32,11 +31,6 @@ export function LeftSidebar({
     filteredGroups,
     handleAccordionChange 
   } = useComponentGroups(componentGroups);
-  const { addNodeFromComponent } = useFlowContext();
-
-  const handleComponentAdd = (componentName: string) => {
-    addNodeFromComponent(componentName);
-  };
 
   return (
     <div 
@@ -83,7 +77,6 @@ export function LeftSidebar({
               key={group.name} 
               group={group}
               activeItem={activeItem}
-              onComponentAdd={handleComponentAdd}
             />
           ))}
         </Accordion>
