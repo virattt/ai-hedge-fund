@@ -1,20 +1,20 @@
 import { type NodeProps } from '@xyflow/react';
-import { Loader2, Type } from 'lucide-react';
+import { FileJson, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { CardContent } from '@/components/ui/card';
 import { useNodeContext } from '@/contexts/node-context';
-import { type TextOutputNode } from '../types';
+import { type JsonOutputNode } from '../types';
+import { JsonOutputDialog } from './json-output-dialog';
 import { NodeShell } from './node-shell';
-import { TextOutputDialog } from './text-output-dialog';
 
-export function TextOutputNode({
+export function JsonOutputNode({
   data,
   selected,
   id,
   isConnectable,
-}: NodeProps<TextOutputNode>) {  
+}: NodeProps<JsonOutputNode>) {  
   const { outputNodeData, agentNodeData } = useNodeContext();
   const [showOutput, setShowOutput] = useState(false);
   
@@ -35,8 +35,8 @@ export function TextOutputNode({
         id={id}
         selected={selected}
         isConnectable={isConnectable}
-        icon={<Type className="h-5 w-5" />}
-        name={data.name || "Text Output"}
+        icon={<FileJson className="h-5 w-5" />}
+        name={data.name || "JSON Output"}
         description={data.description}
         hasRightHandle={false}
       >
@@ -44,7 +44,7 @@ export function TextOutputNode({
           <div className="border-t border-border p-3">
             <div className="flex flex-col gap-2">
               <div className="text-subtitle text-muted-foreground flex items-center gap-1">
-                Results
+                JSON Results
               </div>
               <div className="flex gap-2">
                 {isProcessing ? (
@@ -72,11 +72,11 @@ export function TextOutputNode({
         </CardContent>
       </NodeShell>
 
-      <TextOutputDialog 
+      <JsonOutputDialog 
         isOpen={showOutput} 
         onOpenChange={setShowOutput} 
         outputNodeData={outputNodeData} 
       />
     </>
   );
-}
+} 

@@ -3,6 +3,7 @@ import {
   ArrowUpFromLine,
   BadgeDollarSign,
   Bot,
+  FileJson,
   LucideIcon,
   Type,
   Users
@@ -48,6 +49,7 @@ export const componentGroups: ComponentGroup[] = [
     icon: ArrowUpFromLine,
     iconColor: "text-green-400",
     items: [
+      { name: "JSON Output", icon: FileJson },
       { name: "Text Output", icon: Type },
     ]
   },

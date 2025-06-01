@@ -20,13 +20,25 @@ const nodeTypeDefinitions: Record<string, NodeTypeDefinition> = {
       },
     }),
   },
+  "JSON Output": {
+    createNode: (position: { x: number, y: number }): AppNode => ({
+      id: `json-output-node`,
+      type: "json-output-node",
+      position,
+      data: {
+        name: "JSON Output",
+        description: "JSON Output Node",
+        status: "Idle",
+      },
+    }),
+  },
   "Text Output": {
     createNode: (position: { x: number, y: number }): AppNode => ({
       id: `text-output-node`,
-      type: "output-node",
+      type: "text-output-node",
       position,
       data: {
-        name: "Output",
+        name: "Text Output",
         description: "Output Node",
         status: "Idle",
       },
@@ -61,6 +73,9 @@ export function getNodeIdForComponent(componentName: string): string | null {
   }
   if (componentName === "Text Output") {
     return "text-output-node";
+  }
+  if (componentName === "JSON Output") {
+    return "json-output-node";
   }
   
   // For agents, find by display name

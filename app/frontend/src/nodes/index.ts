@@ -1,6 +1,7 @@
 import { type NodeTypes } from '@xyflow/react';
 
 import { AgentNode } from './components/agent-node';
+import { JsonOutputNode } from './components/json-output-node';
 import { TextInputNode } from './components/text-input-node';
 import { TextOutputNode } from './components/text-output-node';
 import { type AppNode } from './types';
@@ -24,5 +25,6 @@ export const initialNodes: AppNode[] = [
 export const nodeTypes = {
   'agent-node': AgentNode,
   'input-node': TextInputNode,
-  'output-node': TextOutputNode,
+  'text-output-node': TextOutputNode,
+  'json-output-node': JsonOutputNode,
 } satisfies NodeTypes;
