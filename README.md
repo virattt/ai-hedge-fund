@@ -78,6 +78,23 @@ poetry install
 cp .env.example .env
 ```
 
+## 🚀 Crypto Quick-Start
+
+Enable crypto trading by setting the `ASSET_CLASS` environment variable:
+
+```bash
+ASSET_CLASS=CRYPTO python src/main.py --pair BTC/USDT --exchange binance
+```
+
+Set `ALLOW_MARGIN=1` to enable margin trading.
+
+### Environment Variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `ASSET_CLASS` | `EQUITY` or `CRYPTO` | `EQUITY` |
+| `ALLOW_MARGIN` | Enable shorting/margin when set to `1` | `0` |
+
 4. Set your API keys:
 ```bash
 # For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)

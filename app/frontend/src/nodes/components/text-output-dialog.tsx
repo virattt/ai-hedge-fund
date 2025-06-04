@@ -108,7 +108,7 @@ export function TextOutputDialog({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Ticker</TableHead>
+                      <TableHead>Pair</TableHead>
                       <TableHead>Price</TableHead>
                       <TableHead>Action</TableHead>
                       <TableHead>Quantity</TableHead>

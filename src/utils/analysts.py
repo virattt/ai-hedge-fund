@@ -5,16 +5,20 @@ from src.agents.ben_graham import ben_graham_agent
 from src.agents.bill_ackman import bill_ackman_agent
 from src.agents.cathie_wood import cathie_wood_agent
 from src.agents.charlie_munger import charlie_munger_agent
+from src.agents.crypto_sentiment_analyst import crypto_sentiment_analyst_agent
 from src.agents.fundamentals import fundamentals_analyst_agent
 from src.agents.michael_burry import michael_burry_agent
-from src.agents.phil_fisher import phil_fisher_agent
+from src.agents.on_chain_analyst import on_chain_analyst_agent
 from src.agents.peter_lynch import peter_lynch_agent
+from src.agents.phil_fisher import phil_fisher_agent
+from src.agents.rakesh_jhunjhunwala import rakesh_jhunjhunwala_agent
 from src.agents.sentiment import sentiment_analyst_agent
 from src.agents.stanley_druckenmiller import stanley_druckenmiller_agent
 from src.agents.technicals import technical_analyst_agent
+from src.agents.tokenomics_analyst import tokenomics_analyst_agent
 from src.agents.valuation import valuation_analyst_agent
 from src.agents.warren_buffett import warren_buffett_agent
-from src.agents.rakesh_jhunjhunwala import rakesh_jhunjhunwala_agent
+from src.config import IS_CRYPTO
 
 # Define analyst configuration - single source of truth
 ANALYST_CONFIG = {
@@ -94,6 +98,27 @@ ANALYST_CONFIG = {
         "order": 14,
     },
 }
+
+if IS_CRYPTO:
+    ANALYST_CONFIG.update(
+        {
+            "on_chain_analyst": {
+                "display_name": "On-Chain Analyst",
+                "agent_func": on_chain_analyst_agent,
+                "order": 15,
+            },
+            "tokenomics_analyst": {
+                "display_name": "Tokenomics Analyst",
+                "agent_func": tokenomics_analyst_agent,
+                "order": 16,
+            },
+            "crypto_sentiment_analyst": {
+                "display_name": "Crypto Sentiment Analyst",
+                "agent_func": crypto_sentiment_analyst_agent,
+                "order": 17,
+            },
+        }
+    )
 
 # Derive ANALYST_ORDER from ANALYST_CONFIG for backwards compatibility
 ANALYST_ORDER = [(config["display_name"], key) for key, config in sorted(ANALYST_CONFIG.items(), key=lambda x: x[1]["order"])]

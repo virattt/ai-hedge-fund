@@ -88,5 +88,21 @@ services:
     tty: true
     stdin_open: true
 
+  hedge-fund-crypto:
+    build: .
+    image: ai-hedge-fund
+    depends_on:
+      - ollama
+    volumes:
+      - ./.env:/app/.env
+    command: python src/main.py --pair BTC/USDT --exchange binance
+    environment:
+      - PYTHONUNBUFFERED=1
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - PYTHONPATH=/app
+      - ASSET_CLASS=CRYPTO
+    tty: true
+    stdin_open: true
+
 volumes:
   ollama_data: 

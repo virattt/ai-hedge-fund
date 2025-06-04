@@ -1,18 +1,24 @@
 import json
 
+import ccxt  # type: ignore
+import pandas as pd
 from langchain_core.messages import HumanMessage
 
+from src.data.api import get_price_ohlcv
+from src.data.models import Price
 from src.graph.state import AgentState, show_agent_reasoning
-from src.tools.api import get_prices, prices_to_df
+from src.tools.api import prices_to_df
 from src.utils.progress import progress
 
 
-def _max_position_size(portfolio: dict, remaining: float) -> float:
-    """Calculate max position size for equity trades."""
-    return min(remaining, portfolio.get("cash", 0))
-
-
 ##### Risk Management Agent #####
+def _max_position_size(portfolio: dict, remaining: float, ex: ccxt.Exchange, pair: str) -> float:
+    fee = ex.fetch_trading_fee(pair).get("taker", 0)
+    available = portfolio.get("cash", 0)
+    cost_with_fee = available / (1 + fee)
+    return min(remaining, cost_with_fee)
+
+
 def risk_management_agent(state: AgentState):
     """Controls position sizing based on real-world risk factors for multiple tickers."""
     portfolio = state["data"]["portfolio"]
@@ -26,20 +32,23 @@ def risk_management_agent(state: AgentState):
     # First, fetch prices for all relevant tickers
     all_tickers = set(tickers) | set(portfolio.get("positions", {}).keys())
 
+    ex = getattr(ccxt, data.get("exchange", "binance"))()
+
     for ticker in all_tickers:
         progress.update_status("risk_management_agent", ticker, "Fetching price data")
 
-        prices = get_prices(
-            ticker=ticker,
-            start_date=data["start_date"],
-            end_date=data["end_date"],
+        prices = get_price_ohlcv(
+            symbol_or_pair=ticker,
+            start=data["start_date"],
+            end=data["end_date"],
+            exchange=data.get("exchange", "binance"),
         )
 
         if not prices:
             progress.update_status("risk_management_agent", ticker, "Warning: No price data found")
             continue
 
-        prices_df = prices_to_df(prices)
+        prices_df = prices_to_df([Price(**p) for p in prices])
 
         if not prices_df.empty:
             current_price = prices_df["close"].iloc[-1]
@@ -84,7 +93,7 @@ def risk_management_agent(state: AgentState):
         remaining_position_limit = position_limit - current_position_value
 
         # Ensure we don't exceed available cash
-        max_position_size = _max_position_size(portfolio, remaining_position_limit)
+        max_position_size = _max_position_size(portfolio, remaining_position_limit, ex, ticker)
 
         risk_analysis[ticker] = {
             "remaining_position_limit": float(max_position_size),
