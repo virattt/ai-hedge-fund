@@ -129,16 +129,16 @@ export function TextInputNode({
                 <div className="text-subtitle text-muted-foreground flex items-center gap-1">
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
-                      <span>Tickers</span>
+                      <span>Pairs</span>
                     </TooltipTrigger>
                     <TooltipContent side="right">
-                      You can add multiple tickers using commas (AAPL,NVDA,TSLA)
+                      You can add multiple pairs using commas (BTC/USDT,ETH/USDT)
                     </TooltipContent>
                   </Tooltip>
                 </div>
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Enter tickers"
+                    placeholder="Enter pairs"
                     value={tickers}
                     onChange={handleTickersChange}
                   />

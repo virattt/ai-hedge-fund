@@ -138,10 +138,10 @@ export function AgentOutputDialog({
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-medium text-primary">Analysis</h3>
               <div className="flex items-center gap-2">
-                {/* Ticker selector */}
+                {/* Pair selector */}
                 {tickersWithDecisions.length > 0 && (
                   <div className="flex items-center gap-1">
-                    <span className="text-xs text-muted-foreground font-medium">Ticker:</span>
+                    <span className="text-xs text-muted-foreground font-medium">Pair:</span>
                     <select 
                       className="text-xs p-1 rounded bg-background border border-border cursor-pointer"
                       value={selectedTicker || ''}
