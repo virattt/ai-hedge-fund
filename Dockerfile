@@ -13,7 +13,8 @@ COPY pyproject.toml poetry.lock* /app/
 
 # Configure Poetry to not use a virtual environment
 RUN poetry config virtualenvs.create false \
-    && poetry install --no-interaction --no-ansi
+    && poetry install --no-interaction --no-ansi --no-root \
+    && pip install ccxt pycoingecko
 
 # Copy rest of the source code
 COPY . /app/

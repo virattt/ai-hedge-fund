@@ -70,10 +70,8 @@ def start_ollama_server() -> bool:
     system = platform.system().lower()
 
     try:
-        if system == "darwin" or system == "linux":  # macOS or Linux
+        if system in ("darwin", "linux", "windows"):
             subprocess.Popen(["ollama", "serve"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        elif system == "windows":  # Windows
-            subprocess.Popen(["ollama", "serve"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         else:
             print(f"{Fore.RED}Unsupported operating system: {system}{Style.RESET_ALL}")
             return False

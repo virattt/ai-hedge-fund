@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
-from typing_extensions import Literal
+from typing import Any
+
+from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel
+from typing_extensions import Literal
 
 from src.graph.state import AgentState, show_agent_reasoning
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage
-
 from src.tools.api import (
     get_financial_metrics,
     get_market_cap,
@@ -19,7 +20,7 @@ from src.utils.progress import progress
 
 class AswathDamodaranSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
-    confidence: float          # 0‒100
+    confidence: float  # 0‒100
     reasoning: str
 
 
@@ -32,9 +33,9 @@ def aswath_damodaran_agent(state: AgentState):
       • Cross‑check with relative valuation (PE vs. Fwd PE sector median proxy)
     Produces a trading signal and explanation in Damodaran’s analytical voice.
     """
-    data      = state["data"]
-    end_date  = data["end_date"]
-    tickers   = data["tickers"]
+    data = state["data"]
+    end_date = data["end_date"]
+    tickers = data["tickers"]
 
     analysis_data: dict[str, dict] = {}
     damodaran_signals: dict[str, dict] = {}
@@ -77,17 +78,11 @@ def aswath_damodaran_agent(state: AgentState):
         relative_val_analysis = analyze_relative_valuation(metrics)
 
         # ─── Score & margin of safety ──────────────────────────────────────────
-        total_score = (
-            growth_analysis["score"]
-            + risk_analysis["score"]
-            + relative_val_analysis["score"]
-        )
+        total_score = growth_analysis["score"] + risk_analysis["score"] + relative_val_analysis["score"]
         max_score = growth_analysis["max_score"] + risk_analysis["max_score"] + relative_val_analysis["max_score"]
 
         intrinsic_value = intrinsic_val_analysis["intrinsic_value"]
-        margin_of_safety = (
-            (intrinsic_value - market_cap) / market_cap if intrinsic_value and market_cap else None
-        )
+        margin_of_safety = (intrinsic_value - market_cap) / market_cap if intrinsic_value and market_cap else None
 
         # Decision rules (Damodaran tends to act with ~20‑25 % MOS)
         if margin_of_safety is not None and margin_of_safety >= 0.25:
@@ -139,7 +134,7 @@ def aswath_damodaran_agent(state: AgentState):
 # ────────────────────────────────────────────────────────────────────────────────
 # Helper analyses
 # ────────────────────────────────────────────────────────────────────────────────
-def analyze_growth_and_reinvestment(metrics: list, line_items: list) -> dict[str, any]:
+def analyze_growth_and_reinvestment(metrics: list, line_items: list) -> dict[str, Any]:
     """
     Growth score (0‑4):
       +2  5‑yr CAGR of revenue > 8 %
@@ -189,7 +184,7 @@ def analyze_growth_and_reinvestment(metrics: list, line_items: list) -> dict[str
     return {"score": score, "max_score": max_score, "details": "; ".join(details), "metrics": latest.model_dump()}
 
 
-def analyze_risk_profile(metrics: list, line_items: list) -> dict[str, any]:
+def analyze_risk_profile(metrics: list, line_items: list) -> dict[str, Any]:
     """
     Risk score (0‑3):
       +1  Beta < 1.3
@@ -250,7 +245,7 @@ def analyze_risk_profile(metrics: list, line_items: list) -> dict[str, any]:
     }
 
 
-def analyze_relative_valuation(metrics: list) -> dict[str, any]:
+def analyze_relative_valuation(metrics: list) -> dict[str, Any]:
     """
     Simple PE check vs. historical median (proxy since sector comps unavailable):
       +1 if TTM P/E < 70 % of 5‑yr median
@@ -281,7 +276,7 @@ def analyze_relative_valuation(metrics: list) -> dict[str, any]:
 # ────────────────────────────────────────────────────────────────────────────────
 # Intrinsic value via FCFF DCF (Damodaran style)
 # ────────────────────────────────────────────────────────────────────────────────
-def calculate_intrinsic_value_dcf(metrics: list, line_items: list, risk_analysis: dict) -> dict[str, any]:
+def calculate_intrinsic_value_dcf(metrics: list, line_items: list, risk_analysis: dict) -> dict[str, Any]:
     """
     FCFF DCF with:
       • Base FCFF = latest free cash flow
@@ -322,12 +317,7 @@ def calculate_intrinsic_value_dcf(metrics: list, line_items: list, risk_analysis
         g += g_step
 
     # Terminal value (perpetuity with terminal growth)
-    tv = (
-        fcff0
-        * (1 + terminal_growth)
-        / (discount - terminal_growth)
-        / (1 + discount) ** years
-    )
+    tv = fcff0 * (1 + terminal_growth) / (discount - terminal_growth) / (1 + discount) ** years
 
     equity_value = pv_sum + tv
     intrinsic_per_share = equity_value / shares
@@ -348,8 +338,8 @@ def calculate_intrinsic_value_dcf(metrics: list, line_items: list, risk_analysis
 
 def estimate_cost_of_equity(beta: float | None) -> float:
     """CAPM: r_e = r_f + β × ERP (use Damodaran’s long‑term averages)."""
-    risk_free = 0.04          # 10‑yr US Treasury proxy
-    erp = 0.05                # long‑run US equity risk premium
+    risk_free = 0.04  # 10‑yr US Treasury proxy
+    erp = 0.05  # long‑run US equity risk premium
     beta = beta if beta is not None else 1.0
     return risk_free + beta * erp
 
@@ -359,7 +349,7 @@ def estimate_cost_of_equity(beta: float | None) -> float:
 # ────────────────────────────────────────────────────────────────────────────────
 def generate_damodaran_output(
     ticker: str,
-    analysis_data: dict[str, any],
+    analysis_data: dict[str, Any],
     model_name: str,
     model_provider: str,
 ) -> AswathDamodaranSignal:

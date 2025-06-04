@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
-from pydantic import BaseModel, Field
 from typing import List, Optional
+
+from pydantic import BaseModel, Field
+
 from src.llm.models import ModelProvider
 
 
@@ -15,7 +17,9 @@ class ErrorResponse(BaseModel):
 
 
 class HedgeFundRequest(BaseModel):
-    tickers: List[str]
+    pairs: List[str] = Field(..., example=["BTC/USDT"])
+    exchange: str = Field("binance", example="binance")
+    tickers: Optional[List[str]] = Field(None, deprecated=True)
     selected_agents: List[str]
     end_date: Optional[str] = Field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d"))
     start_date: Optional[str] = None

@@ -1,10 +1,17 @@
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
 import asyncio
 
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
+
+from app.backend.models.events import (
+    CompleteEvent,
+    ErrorEvent,
+    ProgressUpdateEvent,
+    StartEvent,
+)
 from app.backend.models.schemas import ErrorResponse, HedgeFundRequest
-from app.backend.models.events import StartEvent, ProgressUpdateEvent, ErrorEvent, CompleteEvent
-from app.backend.services.graph import create_graph, parse_hedge_fund_response, run_graph_async
+from app.backend.services.graph import create_graph, run_graph_async
+from src.utils.parsing import parse_hedge_fund_response
 from app.backend.services.portfolio import create_portfolio
 from src.utils.progress import progress
 
@@ -22,7 +29,8 @@ router = APIRouter(prefix="/hedge-fund")
 async def run_hedge_fund(request: HedgeFundRequest):
     try:
         # Create the portfolio
-        portfolio = create_portfolio(request.initial_cash, request.margin_requirement, request.tickers)
+        symbols = request.pairs or request.tickers
+        portfolio = create_portfolio(request.initial_cash, request.margin_requirement, symbols)
 
         # Construct agent graph
         graph = create_graph(request.selected_agents)
@@ -55,11 +63,12 @@ async def run_hedge_fund(request: HedgeFundRequest):
                     run_graph_async(
                         graph=graph,
                         portfolio=portfolio,
-                        tickers=request.tickers,
+                        tickers=symbols,
                         start_date=request.start_date,
                         end_date=request.end_date,
                         model_name=request.model_name,
                         model_provider=model_provider,
+                        exchange=request.exchange,
                     )
                 )
                 # Send initial message

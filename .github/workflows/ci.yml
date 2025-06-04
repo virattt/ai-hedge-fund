@@ -1,0 +1,22 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install Poetry
+        run: pip install poetry
+      - name: Install deps
+        run: poetry install --no-interaction --no-root
+      - name: Run equity tests
+        run: pytest -q
+      - name: Run crypto tests
+        env:
+          ASSET_CLASS: CRYPTO
+        run: pytest -q

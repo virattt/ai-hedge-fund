@@ -1,13 +1,16 @@
 import asyncio
 import json
+
+from src.utils.parsing import parse_hedge_fund_response
+
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
 
 from src.agents.portfolio_manager import portfolio_management_agent
 from src.agents.risk_manager import risk_management_agent
+from src.graph.state import AgentState
 from src.main import start
 from src.utils.analysts import ANALYST_CONFIG
-from src.graph.state import AgentState
 
 
 # Helper function to create the agent graph
@@ -48,12 +51,15 @@ def create_graph(selected_agents: list[str]) -> StateGraph:
     return graph
 
 
-async def run_graph_async(graph, portfolio, tickers, start_date, end_date, model_name, model_provider):
+async def run_graph_async(graph, portfolio, tickers, start_date, end_date, model_name, model_provider, exchange=""):
     """Async wrapper for run_graph to work with asyncio."""
     # Use run_in_executor to run the synchronous function in a separate thread
     # so it doesn't block the event loop
     loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(None, lambda: run_graph(graph, portfolio, tickers, start_date, end_date, model_name, model_provider))  # Use default executor
+    result = await loop.run_in_executor(
+        None,
+        lambda: run_graph(graph, portfolio, tickers, start_date, end_date, model_name, model_provider, exchange),
+    )
     return result
 
 
@@ -65,6 +71,7 @@ def run_graph(
     end_date: str,
     model_name: str,
     model_provider: str,
+    exchange: str = "",
 ) -> dict:
     """
     Run the graph with the given portfolio, tickers,
@@ -84,6 +91,7 @@ def run_graph(
                 "start_date": start_date,
                 "end_date": end_date,
                 "analyst_signals": {},
+                "exchange": exchange,
             },
             "metadata": {
                 "show_reasoning": False,
@@ -92,18 +100,3 @@ def run_graph(
             },
         },
     )
-
-
-def parse_hedge_fund_response(response):
-    """Parses a JSON string and returns a dictionary."""
-    try:
-        return json.loads(response)
-    except json.JSONDecodeError as e:
-        print(f"JSON decoding error: {e}\nResponse: {repr(response)}")
-        return None
-    except TypeError as e:
-        print(f"Invalid response type (expected string, got {type(response).__name__}): {e}")
-        return None
-    except Exception as e:
-        print(f"Unexpected error while parsing response: {e}\nResponse: {repr(response)}")
-        return None

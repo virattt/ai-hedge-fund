@@ -27,6 +27,9 @@ colorama = "^0.4.6"
 questionary = "^2.1.0"
 rich = "^13.9.4"
 langchain-google-genai = "^2.0.11"
+# Crypto dependencies
+ccxt = "^4.2.69"
+pycoingecko = "^3.1.0"
 # Backend dependencies
 fastapi = {extras = ["standard"], version = "^0.104.0"}
 fastapi-cli = "^0.0.7"
