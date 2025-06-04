@@ -10,11 +10,8 @@ from app.backend.models.events import (
     StartEvent,
 )
 from app.backend.models.schemas import ErrorResponse, HedgeFundRequest
-from app.backend.services.graph import (
-    create_graph,
-    parse_hedge_fund_response,
-    run_graph_async,
-)
+from app.backend.services.graph import create_graph, run_graph_async
+from src.utils.parsing import parse_hedge_fund_response
 from app.backend.services.portfolio import create_portfolio
 from src.utils.progress import progress
 
