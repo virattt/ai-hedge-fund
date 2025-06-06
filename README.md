@@ -9,18 +9,20 @@ This system employs several agents working together:
 3. Bill Ackman Agent - An activist investor, takes bold positions and pushes for change
 4. Cathie Wood Agent - The queen of growth investing, believes in the power of innovation and disruption
 5. Charlie Munger Agent - Warren Buffett's partner, only buys wonderful businesses at fair prices
-6. Michael Burry Agent - The Big Short contrarian who hunts for deep value
-7. Peter Lynch Agent - Practical investor who seeks "ten-baggers" in everyday businesses
-8. Phil Fisher Agent - Meticulous growth investor who uses deep "scuttlebutt" research 
-9. Rakesh Jhunjhunwala Agent - The Big Bull of India
-10. Stanley Druckenmiller Agent - Macro legend who hunts for asymmetric opportunities with growth potential
-11. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
-12. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
-13. Sentiment Agent - Analyzes market sentiment and generates trading signals
-14. Fundamentals Agent - Analyzes fundamental data and generates trading signals
-15. Technicals Agent - Analyzes technical indicators and generates trading signals
-16. Risk Manager - Calculates risk metrics and sets position limits
-17. Portfolio Manager - Makes final trading decisions and generates orders
+6. Jim Simons Agent - The Quant King – Turns data into dollars with algorithmic precision.
+7. Michael Burry Agent - The Big Short contrarian who hunts for deep value
+8. Peter Lynch Agent - Practical investor who seeks "ten-baggers" in everyday businesses
+9. Phil Fisher Agent - Meticulous growth investor who uses deep "scuttlebutt" research 
+10. Rakesh Jhunjhunwala Agent - The Big Bull of India, rides on conviction, patience, and long-term India growth stories.
+11. Stanley Druckenmiller Agent - Macro legend who hunts for asymmetric opportunities with growth potential
+12. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
+13. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
+14. Sentiment Agent - Analyzes market sentiment and generates trading signals
+15. Fundamentals Agent - Analyzes fundamental data and generates trading signals
+16. Technicals Agent - Analyzes technical indicators and generates trading signals
+17. Risk Manager - Calculates risk metrics and sets position limits
+18. Portfolio Manager - Makes final trading decisions and generates orders
+
     
 <img width="1042" alt="Screenshot 2025-03-22 at 6 19 07 PM" src="https://github.com/user-attachments/assets/cbae3dcf-b571-490d-b0ad-3f0f035ac0d4" />
 
