@@ -1,20 +1,21 @@
 """Constants and utilities related to analysts configuration."""
 
-from src.agents.aswath_damodaran import aswath_damodaran_agent
+from src.agents.warren_buffett import warren_buffett_agent
+from src.agents.peter_lynch import peter_lynch_agent
+from src.agents.charlie_munger import charlie_munger_agent
+from src.agents.phil_fisher import phil_fisher_agent
 from src.agents.ben_graham import ben_graham_agent
 from src.agents.bill_ackman import bill_ackman_agent
 from src.agents.cathie_wood import cathie_wood_agent
-from src.agents.charlie_munger import charlie_munger_agent
-from src.agents.fundamentals import fundamentals_analyst_agent
 from src.agents.michael_burry import michael_burry_agent
-from src.agents.phil_fisher import phil_fisher_agent
-from src.agents.peter_lynch import peter_lynch_agent
-from src.agents.sentiment import sentiment_analyst_agent
 from src.agents.stanley_druckenmiller import stanley_druckenmiller_agent
-from src.agents.technicals import technical_analyst_agent
-from src.agents.valuation import valuation_analyst_agent
-from src.agents.warren_buffett import warren_buffett_agent
 from src.agents.rakesh_jhunjhunwala import rakesh_jhunjhunwala_agent
+from src.agents.aswath_damodaran import aswath_damodaran_agent
+from src.agents.technicals import technical_agent
+from src.agents.fundamentals import fundamental_agent
+from src.agents.sentiment import sentiment_agent
+from src.agents.valuation import valuation_agent
+from src.agents.moex_analyst import moex_analysis_agent
 
 # Define analyst configuration - single source of truth
 ANALYST_CONFIG = {
@@ -73,25 +74,30 @@ ANALYST_CONFIG = {
         "agent_func": warren_buffett_agent,
         "order": 10,
     },
-    "technical_analyst": {
-        "display_name": "Technical Analyst",
-        "agent_func": technical_analyst_agent,
+    "technical": {
+        "display_name": "Technical Analysis",
+        "agent_func": technical_agent,
         "order": 11,
     },
-    "fundamentals_analyst": {
-        "display_name": "Fundamentals Analyst",
-        "agent_func": fundamentals_analyst_agent,
+    "fundamental": {
+        "display_name": "Fundamental Analysis",
+        "agent_func": fundamental_agent,
         "order": 12,
     },
-    "sentiment_analyst": {
-        "display_name": "Sentiment Analyst",
-        "agent_func": sentiment_analyst_agent,
+    "sentiment": {
+        "display_name": "Sentiment Analysis",
+        "agent_func": sentiment_agent,
         "order": 13,
     },
-    "valuation_analyst": {
-        "display_name": "Valuation Analyst",
-        "agent_func": valuation_analyst_agent,
+    "valuation": {
+        "display_name": "Valuation Analysis",
+        "agent_func": valuation_agent,
         "order": 14,
+    },
+    "moex_analyst": {
+        "display_name": "MOEX/SPB Analysis",
+        "agent_func": moex_analysis_agent,
+        "order": 15,
     },
 }
 
