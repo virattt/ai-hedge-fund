@@ -92,6 +92,32 @@ GROQ_API_KEY=your-groq-api-key
 # Get your Financial Datasets API key from https://financialdatasets.ai/
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
+# Set up in Win11
+
+1. open Anaconda prompt (you must install Anaconda or Miniconda first, I used Miniconda)
+   all operation is in Anaconda prompt
+3. create virtual environment
+```Anaconda Prompt
+conda create -n ai-hedge-fund python=3.11
+```
+3. Active virtual environment
+``` Anaconda Prompt
+conda activate ai-hedge-fund
+```
+4. Install pip
+``` Anaconda Prompt
+conda install pip
+```
+5. Install Poetry
+``` Anaconda Prompt
+pip install poetry
+```
+6. Clone the repository in any folder
+7. in Anaconda Prompt, cd the folder where the repository is in
+8. copy .env.example to .env
+``` Anaconda Prompt
+copy .env.example .env
+```
 
 ### Using Docker
 
