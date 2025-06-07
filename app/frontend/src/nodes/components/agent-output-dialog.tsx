@@ -1,3 +1,4 @@
+import DOMPurify from "dompurify";
 import {
   Dialog,
   DialogContent,
@@ -195,7 +196,7 @@ export function AgentOutputDialog({
                                 margin: 0,
                               }}
                             >
-                              <code dangerouslySetInnerHTML={{ __html: highlightedJson }} />
+                              <code dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content || "") }} />
                             </pre>
                           </div>
                         );
