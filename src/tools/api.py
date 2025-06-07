@@ -18,6 +18,25 @@ from src.data.models import (
     CompanyFactsResponse,
 )
 
+import re
+import time
+import json
+
+def _parse_retry_after(response_text: str) -> int | None:
+    """
+    Parses the 'Expected available in X seconds' message from FinancialDatasets.ai.
+    Returns the number of seconds to wait, or None if not found.
+    """
+    try:
+        data = json.loads(response_text)
+        detail = data.get("detail", "")
+        match = re.search(r"Expected available in (\\d+) seconds", detail)
+        if match:
+            return int(match.group(1))
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        pass
+    return None
+
 # Global cache instance
 _cache = get_cache()
 
@@ -37,9 +56,25 @@ def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
         headers["X-API-KEY"] = api_key
 
     url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+    max_retries = 3
+    for attempt in range(max_retries):
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            price_response = PriceResponse(**response.json())
+            prices = price_response.prices
+            if not prices:
+                return []
+            _cache.set_prices(ticker, [p.model_dump() for p in prices])
+            return prices
+        elif response.status_code == 429:
+            retry_seconds = _parse_retry_after(response.text)
+            wait = retry_seconds + 1 if retry_seconds is not None else 5 * (attempt + 1)
+            print(f"Rate limited fetching prices for {ticker}. Waiting {wait}s before retry {attempt+1}/{max_retries}.")
+            time.sleep(wait)
+            continue
+        else:
+            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+    raise Exception(f"Failed to fetch data for {ticker} after {max_retries} retries due to rate limiting.")
 
     # Parse response with Pydantic model
     price_response = PriceResponse(**response.json())
@@ -73,9 +108,25 @@ def get_financial_metrics(
         headers["X-API-KEY"] = api_key
 
     url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+    max_retries = 3
+    for attempt in range(max_retries):
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            metrics_response = FinancialMetricsResponse(**response.json())
+            financial_metrics = metrics_response.financial_metrics
+            if not financial_metrics:
+                return []
+            _cache.set_financial_metrics(ticker, [m.model_dump() for m in financial_metrics])
+            return financial_metrics
+        elif response.status_code == 429:
+            retry_seconds = _parse_retry_after(response.text)
+            wait = retry_seconds + 1 if retry_seconds is not None else 5 * (attempt + 1)
+            print(f"Rate limited fetching metrics for {ticker}. Waiting {wait}s before retry {attempt+1}/{max_retries}.")
+            time.sleep(wait)
+            continue
+        else:
+            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+    raise Exception(f"Failed to fetch data for {ticker} after {max_retries} retries due to rate limiting.")
 
     # Parse response with Pydantic model
     metrics_response = FinancialMetricsResponse(**response.json())
@@ -111,9 +162,25 @@ def search_line_items(
         "period": period,
         "limit": limit,
     }
-    response = requests.post(url, headers=headers, json=body)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+    max_retries = 3
+    for attempt in range(max_retries):
+        response = requests.post(url, headers=headers, json=body)
+        if response.status_code == 200:
+            data = response.json()
+            response_model = LineItemResponse(**data)
+            results = response_model.search_results
+            if not results:
+                return []
+            return results[:limit]
+        elif response.status_code == 429:
+            retry_seconds = _parse_retry_after(response.text)
+            wait = retry_seconds + 1 if retry_seconds is not None else 5 * (attempt + 1)
+            print(f"Rate limited searching line items for {ticker}. Waiting {wait}s before retry {attempt+1}/{max_retries}.")
+            time.sleep(wait)
+            continue
+        else:
+            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+    raise Exception(f"Failed to fetch data for {ticker} after {max_retries} retries due to rate limiting.")
     data = response.json()
     response_model = LineItemResponse(**data)
     search_results = response_model.search_results
