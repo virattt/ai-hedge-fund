@@ -93,5 +93,10 @@
     "display_name": "[openai] custom",
     "model_name": "-",
     "provider": "OpenAI"
+  },
+  {
+    "display_name": "[perplexity] r1-1776",
+    "model_name": "r1-1776",
+    "provider": "Perplexity"
   }
 ]
