@@ -7,7 +7,12 @@ import {
   FileJson,
   LucideIcon,
   Type,
-  Users
+  Users,
+  TrendingUp,
+  Shield,
+  BarChart3,
+  Globe,
+  Crown
 } from 'lucide-react';
 import { agents } from './agents';
 
@@ -60,6 +65,12 @@ export const componentGroups: ComponentGroup[] = [
     iconColor: "text-yellow-400",
     items: [
       { name: "Value Investors", icon: BadgeDollarSign },
+      { name: "Growth Investors", icon: TrendingUp },
+      { name: "Contrarian Investors", icon: Shield },
+      { name: "Technical Analysis Team", icon: BarChart3 },
+      { name: "Fundamental Analysis Team", icon: Brain },
+      { name: "Macro Strategy Team", icon: Globe },
+      { name: "All Agents", icon: Crown },
     ]
   }
 ]; 

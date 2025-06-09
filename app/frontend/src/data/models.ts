@@ -100,5 +100,5 @@ export const apiModels: ModelItem[] = [
   }
 ];
 
-// Find the GPT-4o model to use as default
-export const defaultModel = apiModels.find(model => model.model_name === "gpt-4o") || null; 
+// Find the Gemini 2.5 Flash model to use as default
+export const defaultModel = apiModels.find(model => model.model_name === "gemini-2.5-flash-preview-05-20") || null; 

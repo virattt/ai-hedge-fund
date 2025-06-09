@@ -21,8 +21,12 @@ router = APIRouter(prefix="/hedge-fund")
 )
 async def run_hedge_fund(request: HedgeFundRequest):
     try:
-        # Create the portfolio
-        portfolio = create_portfolio(request.initial_cash, request.margin_requirement, request.tickers)
+        # Use existing portfolio or create a new one
+        if request.portfolio:
+            portfolio = request.portfolio
+        else:
+            # Create the portfolio
+            portfolio = create_portfolio(request.initial_cash, request.margin_requirement, request.tickers)
 
         # Construct agent graph
         graph = create_graph(request.selected_agents)

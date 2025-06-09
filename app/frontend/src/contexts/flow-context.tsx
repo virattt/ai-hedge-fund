@@ -5,6 +5,7 @@ import { createContext, ReactNode, useCallback, useContext } from 'react';
 
 interface FlowContextType {
   addComponentToFlow: (componentName: string) => void;
+  clearFlow: () => void;
 }
 
 const FlowContext = createContext<FlowContextType | null>(null);
@@ -23,6 +24,12 @@ interface FlowProviderProps {
 
 export function FlowProvider({ children }: FlowProviderProps) {
   const reactFlowInstance = useReactFlow();
+
+  // Clear all nodes and edges from the flow
+  const clearFlow = useCallback(() => {
+    reactFlowInstance.setNodes([]);
+    reactFlowInstance.setEdges([]);
+  }, [reactFlowInstance]);
 
   // Calculate viewport center position with optional randomness
   const getViewportPosition = useCallback((addRandomness = false): XYPosition => {
@@ -72,6 +79,9 @@ export function FlowProvider({ children }: FlowProviderProps) {
       console.warn(`No multi node definition found for: ${name}`);
       return;
     }
+
+    // Clear existing flow when adding a swarm
+    clearFlow();
 
     const basePosition = getViewportPosition();
 
@@ -129,9 +139,9 @@ export function FlowProvider({ children }: FlowProviderProps) {
     }).filter((edge): edge is NonNullable<typeof edge> => edge !== null);
 
     // Add nodes and edges to flow
-    reactFlowInstance.setNodes((nodes) => [...nodes, ...newNodes]);
-    reactFlowInstance.setEdges((edges) => [...edges, ...newEdges]);
-  }, [reactFlowInstance, getViewportPosition]);
+    reactFlowInstance.setNodes(newNodes);
+    reactFlowInstance.setEdges(newEdges);
+  }, [reactFlowInstance, getViewportPosition, clearFlow]);
 
   // Main entry point - route to single node or multi node
   const addComponentToFlow = useCallback((componentName: string) => {
@@ -144,6 +154,7 @@ export function FlowProvider({ children }: FlowProviderProps) {
 
   const value = {
     addComponentToFlow,
+    clearFlow,
   };
 
   return (

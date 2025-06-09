@@ -30,6 +30,7 @@ class HedgeFundRequest(BaseModel):
     model_provider: ModelProvider = ModelProvider.OPENAI
     initial_cash: float = 100000.0
     margin_requirement: float = 0.0
+    portfolio: Optional[dict] = None  # Allow existing portfolio data
 
     def get_start_date(self) -> str:
         """Calculate start date if not provided"""
