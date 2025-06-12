@@ -8,13 +8,20 @@ from src.tools.api import get_financial_metrics, get_market_cap, search_line_ite
 from src.utils.llm import call_llm
 from src.utils.progress import progress
 
-
 class WarrenBuffettSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
     confidence: float
     reasoning: str
+    
+BUFFETT_SECTORS = [
+    "Consumer Staples", "Insurance", "Utilities", "Railroads", "Simple Industrials", "Banks"
+]
 
-
+def get_ticker_info(ticker):
+    # TODO: Implement this function to fetch sector/industry info for the ticker
+    # For now, we just mock it:
+    return {"sector": "Consumer Staples"}  # Replace with actual sector logic
+    
 def warren_buffett_agent(state: AgentState):
     """Analyzes stocks using Buffett's principles and LLM reasoning."""
     data = state["data"]
@@ -26,6 +33,14 @@ def warren_buffett_agent(state: AgentState):
     buffett_analysis = {}
 
     for ticker in tickers:
+        ticker_info = get_ticker_info(ticker)
+        if not is_within_buffett_competence(ticker_info):
+            buffett_analysis[ticker] = {
+                "signal": "neutral",
+                "confidence": 30.0,
+                "reasoning": "Outside my circle of competence—Buffett would pass."
+            }
+            continue
         progress.update_status("warren_buffett_agent", ticker, "Fetching financial metrics")
         # Fetch required data - request more periods for better trend analysis
         metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=10)
