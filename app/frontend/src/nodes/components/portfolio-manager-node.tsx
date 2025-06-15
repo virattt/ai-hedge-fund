@@ -30,6 +30,8 @@ export function PortfolioManagerNode({
   
   const [startDate, setStartDate] = useState(threeMonthsAgo.toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(today.toISOString().split('T')[0]);
+  const [initialCash, setInitialCash] = useState(100000.0);
+  const [marginRequirement, setMarginRequirement] = useState(0.0);
   
   const nodeContext = useNodeContext();
   const { resetAllNodes, agentNodeData } = nodeContext;
@@ -60,6 +62,14 @@ export function PortfolioManagerNode({
 
   const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setEndDate(e.target.value);
+  };
+
+  const handleInitialCashChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInitialCash(parseFloat(e.target.value));
+  };
+
+  const handleMarginRequirementChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setMarginRequirement(parseFloat(e.target.value));
   };
 
   const handlePlay = () => {
@@ -121,6 +131,8 @@ export function PortfolioManagerNode({
         model_provider: selectedModel?.provider as any || undefined,
         start_date: startDate,
         end_date: endDate,
+        initial_cash: initialCash,
+        margin_requirement: marginRequirement,
       },
       // Pass the node status context to the API
       nodeContext
@@ -209,6 +221,26 @@ export function PortfolioManagerNode({
                           type="date"
                           value={startDate}
                           onChange={handleStartDateChange}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <div className="text-subtitle text-muted-foreground flex items-center gap-1">
+                          Initial Cash
+                        </div>
+                        <Input
+                          type="number"
+                          value={initialCash}
+                          onChange={handleInitialCashChange}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <div className="text-subtitle text-muted-foreground flex items-center gap-1">
+                          Margin Requirement
+                        </div>
+                        <Input
+                          type="number"
+                          value={marginRequirement}
+                          onChange={handleMarginRequirementChange}
                         />
                       </div>
                     </div>
