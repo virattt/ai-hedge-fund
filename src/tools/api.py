@@ -20,6 +20,7 @@ from src.data.models import (
 
 # Global cache instance
 _cache = get_cache()
+API_FAILURE_THRESHOLD = 5  # Number of consecutive failures before stopping retries
 
 
 def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
@@ -207,18 +208,31 @@ def get_company_news(
     current_end_date = end_date
 
     while True:
+        company_news = None
         url = f"https://api.financialdatasets.ai/news/?ticker={ticker}&end_date={current_end_date}"
         if start_date:
             url += f"&start_date={start_date}"
         url += f"&limit={limit}"
 
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
-
-        data = response.json()
-        response_model = CompanyNewsResponse(**data)
-        company_news = response_model.news
+        leaf_retry = 0
+        while leaf_retry < API_FAILURE_THRESHOLD:
+            leaf_retry += 1
+            try:
+                # Attempt to fetch the news data
+                response = requests.get(url, headers=headers, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    response_model = CompanyNewsResponse(**data)
+                    company_news = response_model.news
+                    break  # Exit retry loop on success
+                else:
+                    print(f"Failed due to non-200 status: {response.status_code}")
+            except requests.exceptions.RequestException as e:
+                print(f"Error handling company news response: {ticker} - {e}")    
+            if leaf_retry < API_FAILURE_THRESHOLD:
+                print(f"Retrying... ({leaf_retry}/3)")
+            else:
+                print(f"Max retries reached for company news: {ticker}. Skipping.")
 
         if not company_news:
             break
@@ -230,7 +244,14 @@ def get_company_news(
             break
 
         # Update end_date to the oldest date from current batch for next iteration
-        current_end_date = min(news.date for news in company_news).split("T")[0]
+        new_end_date = min(news.date for news in company_news).split("T")[0]
+        if new_end_date == current_end_date:
+            # IF the new end date is the same as the current, we have to skip to avoid infinite loop
+            print(f"New end date {new_end_date} is the same as current end date {current_end_date}. ")
+            current_end_date = datetime.datetime.strptime(new_end_date, "%Y-%m-%d") - datetime.timedelta(days=1)
+            current_end_date = current_end_date.strftime("%Y-%m-%d")
+        else:
+            current_end_date = new_end_date
 
         # If we've reached or passed the start_date, we can stop
         if current_end_date <= start_date:
