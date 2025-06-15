@@ -1,7 +1,10 @@
 import datetime
 import os
+import time
+import threading
 import pandas as pd
 import requests
+from typing import Optional
 
 from src.data.cache import get_cache
 from src.data.models import (
@@ -21,6 +24,74 @@ from src.data.models import (
 # Global cache instance
 _cache = get_cache()
 
+# Global rate limiter
+_rate_limit_lock = threading.Lock()
+_last_request_time = 0
+_min_request_interval = 1.0  # Minimum 1.0 seconds between API requests
+
+
+def _make_api_request(url: str, headers: Optional[dict] = None, max_retries: int = 3, method: str = "GET", json_data: Optional[dict] = None) -> requests.Response:
+    """Make an API request with retry logic for rate limiting."""
+    global _last_request_time
+    
+    for attempt in range(max_retries):
+        try:
+            # Enforce rate limiting
+            with _rate_limit_lock:
+                current_time = time.time()
+                time_since_last = current_time - _last_request_time
+                if time_since_last < _min_request_interval:
+                    sleep_time = _min_request_interval - time_since_last
+                    time.sleep(sleep_time)
+                _last_request_time = time.time()
+            
+            if method.upper() == "POST":
+                response = requests.post(url, headers=headers, json=json_data)
+            else:
+                response = requests.get(url, headers=headers)
+            
+            if response.status_code == 200:
+                return response
+            elif response.status_code == 429:
+                # Handle rate limiting
+                retry_after = response.headers.get('Retry-After', '60')
+                try:
+                    # Check if the detail contains expected time
+                    if response.text:
+                        import json
+                        data = json.loads(response.text)
+                        if 'detail' in data and 'Expected available in' in data['detail']:
+                            # Extract seconds from message
+                            import re
+                            match = re.search(r'Expected available in (\d+) seconds', data['detail'])
+                            if match:
+                                retry_after = int(match.group(1))
+                except:
+                    pass
+                
+                wait_time = int(retry_after) if isinstance(retry_after, str) else retry_after
+                wait_time = min(wait_time, 120)  # Cap at 2 minutes
+                
+                if attempt < max_retries - 1:
+                    print(f"Rate limited. Waiting {wait_time} seconds before retry...")
+                    time.sleep(wait_time + 1)  # Add 1 second buffer
+                    continue
+                else:
+                    raise Exception(f"Rate limit exceeded after {max_retries} attempts: {response.status_code} - {response.text}")
+            else:
+                raise Exception(f"API error: {response.status_code} - {response.text}")
+                
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries - 1:
+                wait_time = (2 ** attempt) * 5  # Exponential backoff: 5, 10, 20 seconds
+                print(f"Request failed ({e}). Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+                continue
+            else:
+                raise
+    
+    raise Exception(f"Failed to complete request after {max_retries} attempts")
+
 
 def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
     """Fetch price data from cache or API."""
@@ -37,9 +108,7 @@ def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
         headers["X-API-KEY"] = api_key
 
     url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+    response = _make_api_request(url, headers=headers)
 
     # Parse response with Pydantic model
     price_response = PriceResponse(**response.json())
@@ -73,9 +142,7 @@ def get_financial_metrics(
         headers["X-API-KEY"] = api_key
 
     url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+    response = _make_api_request(url, headers=headers)
 
     # Parse response with Pydantic model
     metrics_response = FinancialMetricsResponse(**response.json())
@@ -111,9 +178,7 @@ def search_line_items(
         "period": period,
         "limit": limit,
     }
-    response = requests.post(url, headers=headers, json=body)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+    response = _make_api_request(url, headers=headers, method="POST", json_data=body)
     data = response.json()
     response_model = LineItemResponse(**data)
     search_results = response_model.search_results
@@ -152,9 +217,7 @@ def get_insider_trades(
             url += f"&filing_date_gte={start_date}"
         url += f"&limit={limit}"
 
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+        response = _make_api_request(url, headers=headers)
 
         data = response.json()
         response_model = InsiderTradeResponse(**data)
@@ -212,9 +275,7 @@ def get_company_news(
             url += f"&start_date={start_date}"
         url += f"&limit={limit}"
 
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+        response = _make_api_request(url, headers=headers)
 
         data = response.json()
         response_model = CompanyNewsResponse(**data)
@@ -257,9 +318,10 @@ def get_market_cap(
             headers["X-API-KEY"] = api_key
 
         url = f"https://api.financialdatasets.ai/company/facts/?ticker={ticker}"
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            print(f"Error fetching company facts: {ticker} - {response.status_code}")
+        try:
+            response = _make_api_request(url, headers=headers)
+        except Exception as e:
+            print(f"Error fetching company facts: {ticker} - {str(e)}")
             return None
 
         data = response.json()
