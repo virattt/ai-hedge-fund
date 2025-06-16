@@ -27,55 +27,73 @@ def charlie_munger_agent(state: AgentState):
     munger_analysis = {}
     
     for ticker in tickers:
-        progress.update_status("charlie_munger_agent", ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=10)  # Munger looks at longer periods
+        try:
+            progress.update_status("charlie_munger_agent", ticker, "Fetching financial metrics")
+            metrics = get_financial_metrics(ticker, end_date, period="annual", limit=10)  # Munger looks at longer periods
+            
+            progress.update_status("charlie_munger_agent", ticker, "Gathering financial line items")
+            financial_line_items = search_line_items(
+                ticker,
+                [
+                    "revenue",
+                    "net_income",
+                    "operating_income",
+                    "return_on_invested_capital",
+                    "gross_margin",
+                    "operating_margin",
+                    "free_cash_flow",
+                    "capital_expenditure",
+                    "cash_and_equivalents",
+                    "total_debt",
+                    "shareholders_equity",
+                    "outstanding_shares",
+                    "research_and_development",
+                    "goodwill_and_intangible_assets",
+                ],
+                end_date,
+                period="annual",
+                limit=10  # Munger examines long-term trends
+            )
+        except Exception as e:
+            print(f"Warning: Failed to fetch financial data for {ticker}: {str(e)}")
+            # Use empty data and continue with analysis
+            metrics = []
+            financial_line_items = []
         
-        progress.update_status("charlie_munger_agent", ticker, "Gathering financial line items")
-        financial_line_items = search_line_items(
-            ticker,
-            [
-                "revenue",
-                "net_income",
-                "operating_income",
-                "return_on_invested_capital",
-                "gross_margin",
-                "operating_margin",
-                "free_cash_flow",
-                "capital_expenditure",
-                "cash_and_equivalents",
-                "total_debt",
-                "shareholders_equity",
-                "outstanding_shares",
-                "research_and_development",
-                "goodwill_and_intangible_assets",
-            ],
-            end_date,
-            period="annual",
-            limit=10  # Munger examines long-term trends
-        )
+        try:
+            progress.update_status("charlie_munger_agent", ticker, "Getting market cap")
+            market_cap = get_market_cap(ticker, end_date)
+        except Exception as e:
+            print(f"Warning: Failed to fetch market cap for {ticker}: {str(e)}")
+            market_cap = None
         
-        progress.update_status("charlie_munger_agent", ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date)
+        try:
+            progress.update_status("charlie_munger_agent", ticker, "Fetching insider trades")
+            # Munger values management with skin in the game
+            insider_trades = get_insider_trades(
+                ticker,
+                end_date,
+                # Look back 2 years for insider trading patterns
+                start_date=None,
+                limit=100
+            )
+        except Exception as e:
+            print(f"Warning: Failed to fetch insider trades for {ticker}: {str(e)}")
+            insider_trades = []
         
-        progress.update_status("charlie_munger_agent", ticker, "Fetching insider trades")
-        # Munger values management with skin in the game
-        insider_trades = get_insider_trades(
-            ticker,
-            end_date,
-            # Look back 2 years for insider trading patterns
-            start_date=None,
-            limit=100
-        )
-        
-        progress.update_status("charlie_munger_agent", ticker, "Fetching company news")
-        # Munger avoids businesses with frequent negative press
-        company_news = get_company_news(
-            ticker,
-            end_date,
-            # Look back 1 year for news
-            start_date=None,
-            limit=100
-        )
+        try:
+            progress.update_status("charlie_munger_agent", ticker, "Fetching company news")
+            # Munger avoids businesses with frequent negative press
+            company_news = get_company_news(
+                ticker,
+                end_date,
+                # Look back 1 year for news
+                start_date=None,
+                limit=100
+            )
+        except Exception as e:
+            print(f"Warning: Failed to fetch company news for {ticker}: {str(e)}")
+            company_news = []
         
         progress.update_status("charlie_munger_agent", ticker, "Analyzing moat strength")
         moat_analysis = analyze_moat_strength(metrics, financial_line_items)

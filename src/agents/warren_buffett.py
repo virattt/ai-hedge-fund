@@ -307,11 +307,15 @@ def analyze_moat(metrics: list) -> dict[str, any]:
         # Calculate coefficient of variation (stability measure)
         roe_avg = sum(historical_roes) / len(historical_roes)
         roe_variance = sum((roe - roe_avg) ** 2 for roe in historical_roes) / len(historical_roes)
-        roe_stability = 1 - (roe_variance ** 0.5) / roe_avg if roe_avg > 0 else 0
+        # FIX: Ensure variance is non-negative before taking square root to prevent complex numbers
+        # Floating-point precision issues can sometimes make variance slightly negative
+        roe_stability = 1 - (max(0, roe_variance) ** 0.5) / roe_avg if roe_avg > 0 else 0
         
         margin_avg = sum(historical_margins) / len(historical_margins)
         margin_variance = sum((margin - margin_avg) ** 2 for margin in historical_margins) / len(historical_margins)
-        margin_stability = 1 - (margin_variance ** 0.5) / margin_avg if margin_avg > 0 else 0
+        # FIX: Ensure variance is non-negative before taking square root to prevent complex numbers
+        # This prevents the error: '<' not supported between instances of 'float' and 'complex'
+        margin_stability = 1 - (max(0, margin_variance) ** 0.5) / margin_avg if margin_avg > 0 else 0
         
         overall_stability = (roe_stability + margin_stability) / 2
         

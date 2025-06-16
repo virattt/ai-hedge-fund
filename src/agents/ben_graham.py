@@ -250,8 +250,16 @@ def analyze_valuation_graham(financial_line_items: list, market_cap: float) -> d
     #   If GrahamNumber >> price, indicates undervaluation
     graham_number = None
     if eps > 0 and book_value_ps > 0:
-        graham_number = math.sqrt(22.5 * eps * book_value_ps)
-        details.append(f"Graham Number = {graham_number:.2f}")
+        # FIX: Additional safety check to prevent complex numbers
+        # When EPS or book_value_ps are negative, their product can be negative
+        # Taking sqrt of negative number creates complex number, causing comparison errors
+        # Error: '<' not supported between instances of 'float' and 'complex'
+        product = 22.5 * eps * book_value_ps
+        if product > 0:
+            graham_number = math.sqrt(product)
+            details.append(f"Graham Number = {graham_number:.2f}")
+        else:
+            details.append("Unable to compute Graham Number (negative product in calculation).")
     else:
         details.append("Unable to compute Graham Number (EPS or Book Value missing/<=0).")
 
