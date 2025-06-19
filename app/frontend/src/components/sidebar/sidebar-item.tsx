@@ -7,7 +7,6 @@ interface SidebarItemProps {
   icon: LucideIcon;
   label: string;
   onClick?: () => void;
-  onAddClick?: () => void;
   className?: string;
   isActive?: boolean;
 }
@@ -16,7 +15,6 @@ export function SidebarItem({
   icon: Icon, 
   label, 
   onClick, 
-  onAddClick,
   className, 
   isActive = false 
 }: SidebarItemProps) {
@@ -24,7 +22,7 @@ export function SidebarItem({
   
   const handlePlusClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent triggering the parent onClick
-    if (onAddClick) onAddClick();
+    if (onClick) onClick();
   };
   
   return (

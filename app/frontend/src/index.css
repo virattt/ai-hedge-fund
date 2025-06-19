@@ -234,3 +234,12 @@
   background-size: 200% 100%;
   animation: gradientFlow 3s linear infinite;
 }
+
+/* Remove white lines between ReactFlow Controls buttons */
+.react-flow__controls .react-flow__controls-button {
+  border-right: none !important;
+}
+
+.react-flow__controls .react-flow__controls-button + .react-flow__controls-button {
+  border-left: none !important;
+}

@@ -143,8 +143,7 @@ def michael_burry_agent(state: AgentState):  # noqa: C901  (complexity is fine h
         burry_output = _generate_burry_output(
             ticker=ticker,
             analysis_data=analysis_data,
-            model_name=state["metadata"]["model_name"],
-            model_provider=state["metadata"]["model_provider"],
+            state=state,
         )
 
         burry_analysis[ticker] = {
@@ -328,9 +327,7 @@ def _analyze_contrarian_sentiment(news):
 def _generate_burry_output(
     ticker: str,
     analysis_data: dict,
-    *,
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
 ) -> MichaelBurrySignal:
     """Call the LLM to craft the final trading signal in Burry's voice."""
 
@@ -382,9 +379,8 @@ def _generate_burry_output(
 
     return call_llm(
         prompt=prompt,
-        model_name=model_name,
-        model_provider=model_provider,
         pydantic_model=MichaelBurrySignal,
         agent_name="michael_burry_agent",
+        state=state,
         default_factory=create_default_michael_burry_signal,
     )

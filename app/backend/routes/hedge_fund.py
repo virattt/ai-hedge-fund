@@ -7,9 +7,10 @@ from app.backend.models.events import StartEvent, ProgressUpdateEvent, ErrorEven
 from app.backend.services.graph import create_graph, parse_hedge_fund_response, run_graph_async
 from app.backend.services.portfolio import create_portfolio
 from src.utils.progress import progress
+from src.utils.analysts import get_agents_list
+from src.llm.models import get_models_list
 
 router = APIRouter(prefix="/hedge-fund")
-
 
 @router.post(
     path="/run",
@@ -60,6 +61,7 @@ async def run_hedge_fund(request: HedgeFundRequest):
                         end_date=request.end_date,
                         model_name=request.model_name,
                         model_provider=model_provider,
+                        request=request,  # Pass the full request for agent-specific model access
                     )
                 )
                 # Send initial message
@@ -104,3 +106,33 @@ async def run_hedge_fund(request: HedgeFundRequest):
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred while processing the request: {str(e)}")
+
+@router.get(
+    path="/agents",
+    responses={
+        200: {"description": "List of available agents"},
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+)
+async def get_agents():
+    """Get the list of available agents."""
+    try:
+        return {"agents": get_agents_list()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve agents: {str(e)}")
+
+
+@router.get(
+    path="/language-models",
+    responses={
+        200: {"description": "List of available LLMs"},
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+)
+async def get_language_models():
+    """Get the list of available models."""
+    try:
+        return {"models": get_models_list()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve models: {str(e)}")
+

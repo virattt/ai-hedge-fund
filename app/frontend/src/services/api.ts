@@ -1,13 +1,22 @@
 import { NodeStatus, OutputNodeData, useNodeContext } from '@/contexts/node-context';
+import { Agent } from '@/data/agents';
+import { LanguageModel } from '@/data/models';
 import { ModelProvider } from '@/services/types';
+
+interface AgentModelConfig {
+  agent_id: string;
+  model_name?: string;
+  model_provider?: ModelProvider;
+}
 
 interface HedgeFundRequest {
   tickers: string[];
   selected_agents: string[];
+  agent_models?: AgentModelConfig[];
   end_date?: string;
   start_date?: string;
-  model_name?: string;
-  model_provider?: ModelProvider;
+  model_name?: string; // Keep for backwards compatibility, will be removed later
+  model_provider?: ModelProvider; // Keep for backwards compatibility, will be removed later
   initial_cash?: number;
   margin_requirement?: number;
 }
@@ -15,6 +24,41 @@ interface HedgeFundRequest {
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export const api = {
+  /**
+   * Gets the list of available agents from the backend
+   * @returns Promise that resolves to the list of agents
+   */
+  getAgents: async (): Promise<Agent[]> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/hedge-fund/agents`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      return data.agents;
+    } catch (error) {
+      console.error('Failed to fetch agents:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Gets the list of available models from the backend
+   * @returns Promise that resolves to the list of models
+   */
+  getLanguageModels: async (): Promise<LanguageModel[]> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/hedge-fund/language-models`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      return data.models;
+    } catch (error) {
+      console.error('Failed to fetch models:', error);
+      throw error;
+    }
+  },
   /**
    * Runs a hedge fund simulation with the given parameters and streams the results
    * @param params The hedge fund request parameters

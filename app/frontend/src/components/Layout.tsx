@@ -44,7 +44,7 @@ export function Layout({ leftSidebar, rightSidebar, children }: LayoutProps) {
             {/* Sidebar toggle button - visible when sidebar is collapsed */}
             {isCollapsed && (
               <Button 
-                className="absolute top-4 left-4 z-30 bg-ramp-grey-800 text-white p-2 rounded-md hover:bg-ramp-grey-700"
+                className="absolute top-4 left-4 z-30 bg-ramp-grey-800 text-white p-4 rounded-[20px] hover:bg-ramp-grey-700"
                 onClick={() => setIsCollapsed(false)}
                 aria-label="Show sidebar"
               >

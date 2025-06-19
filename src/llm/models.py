@@ -104,6 +104,18 @@ def get_model_info(model_name: str, model_provider: str) -> LLMModel | None:
     return next((model for model in all_models if model.model_name == model_name and model.provider == model_provider), None)
 
 
+def get_models_list():
+    """Get the list of models for API responses."""
+    return [
+        {
+            "display_name": model.display_name,
+            "model_name": model.model_name,
+            "provider": model.provider.value
+        }
+        for model in AVAILABLE_MODELS
+    ]
+
+
 def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | ChatGroq | ChatOllama | None:
     if model_provider == ModelProvider.GROQ:
         api_key = os.getenv("GROQ_API_KEY")
