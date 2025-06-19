@@ -128,11 +128,28 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
         # Get and validate API key
         api_key = os.getenv("OPENAI_API_KEY")
         base_url = os.getenv("OPENAI_API_BASE")
-        if not api_key:
+        
+        # Check if this is Azure OpenAI
+        azure_api_key = os.getenv("AZURE_OPENAI_API_KEY")
+        azure_base_url = os.getenv("AZURE_OPENAI_BASE_URL")
+        azure_api_version = os.getenv("AZURE_OPENAI_API_VERSION")
+        
+        if azure_api_key and azure_base_url:
+            # Use Azure OpenAI
+            return ChatOpenAI(
+                model=model_name,
+                api_key=azure_api_key,
+                base_url=azure_base_url,
+                api_version=azure_api_version,
+                default_headers={"api-key": azure_api_key}
+            )
+        elif api_key:
+            # Use regular OpenAI
+            return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
+        else:
             # Print error to console
-            print(f"API Key Error: Please make sure OPENAI_API_KEY is set in your .env file.")
-            raise ValueError("OpenAI API key not found.  Please make sure OPENAI_API_KEY is set in your .env file.")
-        return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
+            print(f"API Key Error: Please make sure OPENAI_API_KEY or AZURE_OPENAI_API_KEY is set in your .env file.")
+            raise ValueError("OpenAI API key not found.  Please make sure OPENAI_API_KEY or AZURE_OPENAI_API_KEY is set in your .env file.")
     elif model_provider == ModelProvider.ANTHROPIC:
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:

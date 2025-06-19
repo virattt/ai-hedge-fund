@@ -40,6 +40,11 @@
     "provider": "Ollama"
   },
   {
+    "display_name": "[deepseek] deepseek-r1 (671B)",
+    "model_name": "deepseek-r1:latest",
+    "provider": "Ollama"
+  },
+  {
     "display_name": "custom",
     "model_name": "-",
     "provider": "Ollama"

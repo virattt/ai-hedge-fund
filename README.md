@@ -84,7 +84,13 @@ cp .env.example .env
 # Get your OpenAI API key from https://platform.openai.com/
 OPENAI_API_KEY=your-openai-api-key
 
-# For running LLMs hosted by groq (deepseek, llama3, etc.)
+# For running LLMs hosted by Azure OpenAI
+# Get your Azure OpenAI credentials from your Azure portal
+AZURE_OPENAI_API_KEY=your-azure-openai-api-key
+AZURE_OPENAI_BASE_URL=https://your-resource-name.openai.azure.com/
+AZURE_OPENAI_API_VERSION=2024-02-15-preview
+
+# For running LLMs hosted by groq (llama models, etc.)
 # Get your Groq API key from https://groq.com/
 GROQ_API_KEY=your-groq-api-key
 
@@ -125,7 +131,14 @@ cd docker
 run.bat build
 ```
 
-**Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY` for the hedge fund to work.  If you want to use LLMs from all providers, you will need to set all API keys.
+**Important**: You must set at least one of the following API keys for the hedge fund to work:
+- `OPENAI_API_KEY` or `AZURE_OPENAI_API_KEY` (for OpenAI/Azure OpenAI models)
+- `GROQ_API_KEY` (for Groq-hosted models)
+- `ANTHROPIC_API_KEY` (for Claude models)
+- `DEEPSEEK_API_KEY` (for DeepSeek API models)
+- `GOOGLE_API_KEY` (for Google Gemini models)
+
+For local models via Ollama (including DeepSeek-R1), ensure Ollama is running and the required models are pulled.
 
 Financial data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key.
 
@@ -169,6 +182,11 @@ poetry run python src/main.py --ticker AAPL,MSFT,NVDA --ollama
 
 # On Windows:
 run.bat --ticker AAPL,MSFT,NVDA --ollama main
+```
+
+**Note**: To use DeepSeek-R1 via Ollama, first pull the model:
+```bash
+ollama pull deepseek-r1:latest
 ```
 
 You can also specify a `--show-reasoning` flag to print the reasoning of each agent to the console.
