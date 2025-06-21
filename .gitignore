@@ -51,3 +51,6 @@ Thumbs.db
 
 # Frontend
 node_modules
+
+# Outputs
+outputs/

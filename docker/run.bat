@@ -162,7 +162,7 @@ if !ERRORLEVEL! EQU 0 (
 
 :: Build the Docker image if 'build' command is provided
 if "!COMMAND!"=="build" (
-    docker build -t ai-hedge-fund .
+    docker build -t ai-hedge-fund -f Dockerfile ..
     exit /b 0
 )
 

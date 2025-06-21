@@ -14,12 +14,14 @@ services:
     restart: unless-stopped
 
   hedge-fund:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     image: ai-hedge-fund
     depends_on:
       - ollama
     volumes:
-      - ./.env:/app/.env
+      - ../.env:/app/.env
     command: python src/main.py --ticker AAPL,MSFT,NVDA
     environment:
       - PYTHONUNBUFFERED=1
@@ -29,12 +31,14 @@ services:
     stdin_open: true
 
   hedge-fund-reasoning:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     image: ai-hedge-fund
     depends_on:
       - ollama
     volumes:
-      - ./.env:/app/.env
+      - ../.env:/app/.env
     command: python src/main.py --ticker AAPL,MSFT,NVDA --show-reasoning
     environment:
       - PYTHONUNBUFFERED=1
@@ -44,12 +48,14 @@ services:
     stdin_open: true
 
   hedge-fund-ollama:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     image: ai-hedge-fund
     depends_on:
       - ollama
     volumes:
-      - ./.env:/app/.env
+      - ../.env:/app/.env
     command: python src/main.py --ticker AAPL,MSFT,NVDA --ollama
     environment:
       - PYTHONUNBUFFERED=1
@@ -59,12 +65,14 @@ services:
     stdin_open: true
 
   backtester:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     image: ai-hedge-fund
     depends_on:
       - ollama
     volumes:
-      - ./.env:/app/.env
+      - ../.env:/app/.env
     command: python src/backtester.py --ticker AAPL,MSFT,NVDA
     environment:
       - PYTHONUNBUFFERED=1
@@ -74,12 +82,14 @@ services:
     stdin_open: true
 
   backtester-ollama:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     image: ai-hedge-fund
     depends_on:
       - ollama
     volumes:
-      - ./.env:/app/.env
+      - ../.env:/app/.env
     command: python src/backtester.py --ticker AAPL,MSFT,NVDA --ollama
     environment:
       - PYTHONUNBUFFERED=1

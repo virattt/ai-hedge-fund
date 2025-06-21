@@ -64,8 +64,7 @@ def portfolio_management_agent(state: AgentState):
         current_prices=current_prices,
         max_shares=max_shares,
         portfolio=portfolio,
-        model_name=state["metadata"]["model_name"],
-        model_provider=state["metadata"]["model_provider"],
+        state=state,
     )
 
     # Create the portfolio management message
@@ -92,8 +91,7 @@ def generate_trading_decision(
     current_prices: dict[str, float],
     max_shares: dict[str, int],
     portfolio: dict[str, float],
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
 ) -> PortfolioManagerOutput:
     """Attempts to get a decision from the LLM with retry logic"""
     # Create the prompt template
@@ -192,4 +190,10 @@ def generate_trading_decision(
     def create_default_portfolio_output():
         return PortfolioManagerOutput(decisions={ticker: PortfolioDecision(action="hold", quantity=0, confidence=0.0, reasoning="Error in portfolio management, defaulting to hold") for ticker in tickers})
 
-    return call_llm(prompt=prompt, model_name=model_name, model_provider=model_provider, pydantic_model=PortfolioManagerOutput, agent_name="portfolio_manager", default_factory=create_default_portfolio_output)
+    return call_llm(
+        prompt=prompt,
+        pydantic_model=PortfolioManagerOutput,
+        agent_name="portfolio_manager",
+        state=state,
+        default_factory=create_default_portfolio_output,
+    )

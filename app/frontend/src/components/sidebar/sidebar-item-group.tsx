@@ -15,8 +15,12 @@ export function SidebarItemGroup({
   const { name, icon: Icon, iconColor, items } = group;
   const { addComponentToFlow } = useFlowContext();
 
-  const handleItemClick = (componentName: string) => {
-    addComponentToFlow(componentName);
+  const handleItemClick = async (componentName: string) => {
+    try {
+      await addComponentToFlow(componentName);
+    } catch (error) {
+      console.error('Failed to add component to flow:', error);
+    }
   };
   
   return (

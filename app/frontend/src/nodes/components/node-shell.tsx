@@ -44,7 +44,6 @@ export function NodeShell({
       {isInProgress && (
         <div className="animated-border-container"></div>
       )}
-      
       {hasLeftHandle && (
         <Handle
           type="target"
@@ -66,17 +65,14 @@ export function NodeShell({
               {name || "Custom Component"}
             </div>
           </CardHeader>
-
           {description && (
             <div className="px-3 py-2 text-subtitle text-muted-foreground">
               {description}
             </div>
           )}
-
           {children}
         </Card>
       </div>
-
       {hasRightHandle && (
         <Handle
           type="source"

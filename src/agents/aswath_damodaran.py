@@ -25,12 +25,12 @@ class AswathDamodaranSignal(BaseModel):
 
 def aswath_damodaran_agent(state: AgentState):
     """
-    Analyze US equities through Aswath Damodaran’s intrinsic‑value lens:
-      • Cost of Equity via CAPM (risk‑free + β·ERP)
-      • 5‑yr revenue / FCFF growth trends & reinvestment efficiency
-      • FCFF‑to‑Firm DCF → equity value → per‑share intrinsic value
-      • Cross‑check with relative valuation (PE vs. Fwd PE sector median proxy)
-    Produces a trading signal and explanation in Damodaran’s analytical voice.
+    Analyze US equities through Aswath Damodaran's intrinsic-value lens:
+      • Cost of Equity via CAPM (risk-free + β·ERP)
+      • 5-yr revenue / FCFF growth trends & reinvestment efficiency
+      • FCFF-to-Firm DCF → equity value → per-share intrinsic value
+      • Cross-check with relative valuation (PE vs. Fwd PE sector median proxy)
+    Produces a trading signal and explanation in Damodaran's analytical voice.
     """
     data      = state["data"]
     end_date  = data["end_date"]
@@ -89,7 +89,7 @@ def aswath_damodaran_agent(state: AgentState):
             (intrinsic_value - market_cap) / market_cap if intrinsic_value and market_cap else None
         )
 
-        # Decision rules (Damodaran tends to act with ~20‑25 % MOS)
+        # Decision rules (Damodaran tends to act with ~20-25 % MOS)
         if margin_of_safety is not None and margin_of_safety >= 0.25:
             signal = "bullish"
         elif margin_of_safety is not None and margin_of_safety <= -0.25:
@@ -97,7 +97,7 @@ def aswath_damodaran_agent(state: AgentState):
         else:
             signal = "neutral"
 
-        confidence = min(max(abs(margin_of_safety or 0) * 200, 10), 100)  # simple proxy 10‑100
+        confidence = min(max(abs(margin_of_safety or 0) * 200, 10), 100)  # simple proxy 10-100
 
         analysis_data[ticker] = {
             "signal": signal,
@@ -111,13 +111,12 @@ def aswath_damodaran_agent(state: AgentState):
             "market_cap": market_cap,
         }
 
-        # ─── LLM: craft Damodaran‑style narrative ──────────────────────────────
+        # ─── LLM: craft Damodaran-style narrative ──────────────────────────────
         progress.update_status("aswath_damodaran_agent", ticker, "Generating Damodaran analysis")
         damodaran_output = generate_damodaran_output(
             ticker=ticker,
             analysis_data=analysis_data,
-            model_name=state["metadata"]["model_name"],
-            model_provider=state["metadata"]["model_provider"],
+            state=state,
         )
 
         damodaran_signals[ticker] = damodaran_output.model_dump()
@@ -128,7 +127,7 @@ def aswath_damodaran_agent(state: AgentState):
     message = HumanMessage(content=json.dumps(damodaran_signals), name="aswath_damodaran_agent")
 
     if state["metadata"]["show_reasoning"]:
-        show_agent_reasoning(damodaran_signals, "Aswath Damodaran Agent")
+        show_agent_reasoning(damodaran_signals, "Aswath Damodaran Agent")
 
     state["data"]["analyst_signals"]["aswath_damodaran_agent"] = damodaran_signals
     progress.update_status("aswath_damodaran_agent", None, "Done")
@@ -141,11 +140,11 @@ def aswath_damodaran_agent(state: AgentState):
 # ────────────────────────────────────────────────────────────────────────────────
 def analyze_growth_and_reinvestment(metrics: list, line_items: list) -> dict[str, any]:
     """
-    Growth score (0‑4):
-      +2  5‑yr CAGR of revenue > 8 %
-      +1  5‑yr CAGR of revenue > 3 %
-      +1  Positive FCFF growth over 5 yr
-    Reinvestment efficiency (ROIC > WACC) adds +1
+    Growth score (0-4):
+      +2  5-yr CAGR of revenue > 8 %
+      +1  5-yr CAGR of revenue > 3 %
+      +1  Positive FCFF growth over 5 yr
+    Reinvestment efficiency (ROIC > WACC) adds +1
     """
     max_score = 4
     if len(metrics) < 2:
@@ -163,10 +162,10 @@ def analyze_growth_and_reinvestment(metrics: list, line_items: list) -> dict[str
     if cagr is not None:
         if cagr > 0.08:
             score += 2
-            details.append(f"Revenue CAGR {cagr:.1%} (> 8 %)")
+            details.append(f"Revenue CAGR {cagr:.1%} (> 8 %)")
         elif cagr > 0.03:
             score += 1
-            details.append(f"Revenue CAGR {cagr:.1%} (> 3 %)")
+            details.append(f"Revenue CAGR {cagr:.1%} (> 3 %)")
         else:
             details.append(f"Sluggish revenue CAGR {cagr:.1%}")
     else:
@@ -180,21 +179,21 @@ def analyze_growth_and_reinvestment(metrics: list, line_items: list) -> dict[str
     else:
         details.append("Flat or declining FCFF")
 
-    # Reinvestment efficiency (ROIC vs. 10 % hurdle)
+    # Reinvestment efficiency (ROIC vs. 10 % hurdle)
     latest = metrics[0]
     if latest.return_on_invested_capital and latest.return_on_invested_capital > 0.10:
         score += 1
-        details.append(f"ROIC {latest.return_on_invested_capital:.1%} (> 10 %)")
+        details.append(f"ROIC {latest.return_on_invested_capital:.1%} (> 10 %)")
 
     return {"score": score, "max_score": max_score, "details": "; ".join(details), "metrics": latest.model_dump()}
 
 
 def analyze_risk_profile(metrics: list, line_items: list) -> dict[str, any]:
     """
-    Risk score (0‑3):
-      +1  Beta < 1.3
-      +1  Debt/Equity < 1
-      +1  Interest Coverage > 3×
+    Risk score (0-3):
+      +1  Beta < 1.3
+      +1  Debt/Equity < 1
+      +1  Interest Coverage > 3×
     """
     max_score = 3
     if not metrics:
@@ -232,9 +231,9 @@ def analyze_risk_profile(metrics: list, line_items: list) -> dict[str, any]:
         coverage = ebit / abs(interest)
         if coverage > 3:
             score += 1
-            details.append(f"Interest coverage × {coverage:.1f}")
+            details.append(f"Interest coverage × {coverage:.1f}")
         else:
-            details.append(f"Weak coverage × {coverage:.1f}")
+            details.append(f"Weak coverage × {coverage:.1f}")
     else:
         details.append("Interest coverage NA")
 
@@ -253,9 +252,9 @@ def analyze_risk_profile(metrics: list, line_items: list) -> dict[str, any]:
 def analyze_relative_valuation(metrics: list) -> dict[str, any]:
     """
     Simple PE check vs. historical median (proxy since sector comps unavailable):
-      +1 if TTM P/E < 70 % of 5‑yr median
-      +0 if between 70 %‑130 %
-      ‑1 if >130 %
+      +1 if TTM P/E < 70 % of 5-yr median
+      +0 if between 70 %-130 %
+      ‑1 if >130 %
     """
     max_score = 1
     if not metrics or len(metrics) < 5:
@@ -284,9 +283,9 @@ def analyze_relative_valuation(metrics: list) -> dict[str, any]:
 def calculate_intrinsic_value_dcf(metrics: list, line_items: list, risk_analysis: dict) -> dict[str, any]:
     """
     FCFF DCF with:
-      • Base FCFF = latest free cash flow
-      • Growth = 5‑yr revenue CAGR (capped 12 %)
-      • Fade linearly to terminal growth 2.5 % by year 10
+      • Base FCFF = latest free cash flow
+      • Growth = 5-yr revenue CAGR (capped 12 %)
+      • Fade linearly to terminal growth 2.5 % by year 10
       • Discount @ cost of equity (no debt split given data limitations)
     """
     if not metrics or len(metrics) < 2 or not line_items:
@@ -347,9 +346,9 @@ def calculate_intrinsic_value_dcf(metrics: list, line_items: list, risk_analysis
 
 
 def estimate_cost_of_equity(beta: float | None) -> float:
-    """CAPM: r_e = r_f + β × ERP (use Damodaran’s long‑term averages)."""
-    risk_free = 0.04          # 10‑yr US Treasury proxy
-    erp = 0.05                # long‑run US equity risk premium
+    """CAPM: r_e = r_f + β × ERP (use Damodaran's long-term averages)."""
+    risk_free = 0.04          # 10-yr US Treasury proxy
+    erp = 0.05                # long-run US equity risk premium
     beta = beta if beta is not None else 1.0
     return risk_free + beta * erp
 
@@ -360,24 +359,23 @@ def estimate_cost_of_equity(beta: float | None) -> float:
 def generate_damodaran_output(
     ticker: str,
     analysis_data: dict[str, any],
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
 ) -> AswathDamodaranSignal:
     """
-    Ask the LLM to channel Prof. Damodaran’s analytical style:
+    Ask the LLM to channel Prof. Damodaran's analytical style:
       • Story → Numbers → Value narrative
-      • Emphasize risk, growth, and cash‑flow assumptions
-      • Cite cost of capital, implied MOS, and valuation cross‑checks
+      • Emphasize risk, growth, and cash-flow assumptions
+      • Cite cost of capital, implied MOS, and valuation cross-checks
     """
     template = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                """You are Aswath Damodaran, Professor of Finance at NYU Stern.
+                """You are Aswath Damodaran, Professor of Finance at NYU Stern.
                 Use your valuation framework to issue trading signals on US equities.
 
-                Speak with your usual clear, data‑driven tone:
-                  ◦ Start with the company “story” (qualitatively)
+                Speak with your usual clear, data-driven tone:
+                  ◦ Start with the company "story" (qualitatively)
                   ◦ Connect that story to key numerical drivers: revenue growth, margins, reinvestment, risk
                   ◦ Conclude with value: your FCFF DCF estimate, margin of safety, and relative valuation sanity checks
                   ◦ Highlight major uncertainties and how they affect value
@@ -393,7 +391,7 @@ def generate_damodaran_output(
                 Respond EXACTLY in this JSON schema:
                 {{
                   "signal": "bullish" | "bearish" | "neutral",
-                  "confidence": float (0‑100),
+                  "confidence": float (0-100),
                   "reasoning": "string"
                 }}""",
             ),
@@ -411,9 +409,8 @@ def generate_damodaran_output(
 
     return call_llm(
         prompt=prompt,
-        model_name=model_name,
-        model_provider=model_provider,
         pydantic_model=AswathDamodaranSignal,
         agent_name="aswath_damodaran_agent",
+        state=state,
         default_factory=default_signal,
     )

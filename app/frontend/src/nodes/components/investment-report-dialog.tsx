@@ -27,8 +27,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ArrowDown, ArrowUp, Minus } from 'lucide-react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
-interface TextOutputDialogProps {
+interface InvestmentReportDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   outputNodeData: any;
@@ -36,11 +38,11 @@ interface TextOutputDialogProps {
 
 type ActionType = 'long' | 'short' | 'hold';
 
-export function TextOutputDialog({ 
+export function InvestmentReportDialog({ 
   isOpen, 
   onOpenChange, 
   outputNodeData 
-}: TextOutputDialogProps) {
+}: InvestmentReportDialogProps) {
   if (!outputNodeData) return null;
 
   const getActionIcon = (action: ActionType) => {
@@ -91,7 +93,7 @@ export function TextOutputDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">Investment Analysis Report</DialogTitle>
+          <DialogTitle className="text-xl font-bold">Investment Report</DialogTitle>
         </DialogHeader>
         
         <div className="space-y-8 my-4">
@@ -133,9 +135,27 @@ export function TextOutputDialog({
                           <TableCell>{decision.quantity}</TableCell>
                           <TableCell>{getConfidenceBadge(decision.confidence)}</TableCell>
                           <TableCell className="max-w-sm">
-                            <p className="text-xs text-muted-foreground line-clamp-2 hover:line-clamp-none">
-                              {decision.reasoning}
-                            </p>
+                            {typeof decision.reasoning === 'string' ? (
+                              <p className="text-xs text-muted-foreground hover:line-clamp-none">
+                                {decision.reasoning}
+                              </p>
+                            ) : (
+                              <div className="max-h-32 overflow-y-auto">
+                                <SyntaxHighlighter
+                                  language="json"
+                                  style={vscDarkPlus}
+                                  className="text-xs rounded-md"
+                                  customStyle={{
+                                    fontSize: '0.75rem',
+                                    margin: 0,
+                                    padding: '8px',
+                                    backgroundColor: 'hsl(var(--muted))',
+                                  }}
+                                >
+                                  {JSON.stringify(decision.reasoning, null, 2)}
+                                </SyntaxHighlighter>
+                              </div>
+                            )}
                           </TableCell>
                         </TableRow>
                       );
@@ -145,7 +165,6 @@ export function TextOutputDialog({
               </CardContent>
             </Card>
           </section>
-
           {/* Analyst Signals Section */}
           <section>
             <h2 className="text-lg font-semibold mb-4">Analyst Signals</h2>
@@ -185,7 +204,27 @@ export function TextOutputDialog({
                                 </div>
                               </CardHeader>
                               <CardContent className="pt-3">
-                                <p className="text-sm whitespace-pre-line">{signal.reasoning}</p>
+                                {typeof signal.reasoning === 'string' ? (
+                                  <p className="text-sm whitespace-pre-line">
+                                    {signal.reasoning}
+                                  </p>
+                                ) : (
+                                  <div className="max-h-48 overflow-y-auto bg-muted/30">
+                                    <SyntaxHighlighter
+                                      language="json"
+                                      style={vscDarkPlus}
+                                      className="text-sm rounded-md"
+                                      customStyle={{
+                                        fontSize: '0.875rem',
+                                        margin: 0,
+                                        padding: '12px',
+                                        backgroundColor: 'hsl(var(--muted))',
+                                      }}
+                                    >
+                                      {JSON.stringify(signal.reasoning, null, 2)}
+                                    </SyntaxHighlighter>
+                                  </div>
+                                )}
                               </CardContent>
                             </Card>
                           );

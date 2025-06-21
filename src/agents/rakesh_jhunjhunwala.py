@@ -137,8 +137,7 @@ def rakesh_jhunjhunwala_agent(state: AgentState):
         jhunjhunwala_output = generate_jhunjhunwala_output(
             ticker=ticker,
             analysis_data=analysis_data[ticker],
-            model_name=state["metadata"]["model_name"],
-            model_provider=state["metadata"]["model_provider"],
+            state=state,
         )
 
         jhunjhunwala_analysis[ticker] = jhunjhunwala_output.model_dump()
@@ -642,8 +641,7 @@ def analyze_rakesh_jhunjhunwala_style(
 def generate_jhunjhunwala_output(
     ticker: str,
     analysis_data: dict[str, any],
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
 ) -> RakeshJhunjhunwalaSignal:
     """Get investment decision from LLM with Jhunjhunwala's principles"""
     template = ChatPromptTemplate.from_messages(
@@ -699,9 +697,8 @@ def generate_jhunjhunwala_output(
 
     return call_llm(
         prompt=prompt,
-        model_name=model_name,
-        model_provider=model_provider,
         pydantic_model=RakeshJhunjhunwalaSignal,
+        state=state,
         agent_name="rakesh_jhunjhunwala_agent",
         default_factory=create_default_rakesh_jhunjhunwala_signal,
     )

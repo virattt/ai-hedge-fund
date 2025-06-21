@@ -106,7 +106,7 @@ def technical_analyst_agent(state: AgentState):
         technical_analysis[ticker] = {
             "signal": combined_signal["signal"],
             "confidence": round(combined_signal["confidence"] * 100),
-            "strategy_signals": {
+            "reasoning": {
                 "trend_following": {
                     "signal": trend_signals["signal"],
                     "confidence": round(trend_signals["confidence"] * 100),

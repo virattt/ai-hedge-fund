@@ -137,8 +137,7 @@ def stanley_druckenmiller_agent(state: AgentState):
         druck_output = generate_druckenmiller_output(
             ticker=ticker,
             analysis_data=analysis_data,
-            model_name=state["metadata"]["model_name"],
-            model_provider=state["metadata"]["model_provider"],
+            state=state,
         )
 
         druck_analysis[ticker] = {
@@ -524,8 +523,7 @@ def analyze_druckenmiller_valuation(financial_line_items: list, market_cap: floa
 def generate_druckenmiller_output(
     ticker: str,
     analysis_data: dict[str, any],
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
 ) -> StanleyDruckenmillerSignal:
     """
     Generates a JSON signal in the style of Stanley Druckenmiller.
@@ -590,9 +588,8 @@ def generate_druckenmiller_output(
 
     return call_llm(
         prompt=prompt,
-        model_name=model_name,
-        model_provider=model_provider,
         pydantic_model=StanleyDruckenmillerSignal,
         agent_name="stanley_druckenmiller_agent",
+        state=state,
         default_factory=create_default_signal,
     )

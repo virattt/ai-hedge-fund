@@ -1,22 +1,25 @@
 import { type NodeProps } from '@xyflow/react';
-import { Bot, Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { FileJson, Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useNodeContext } from '@/contexts/node-context';
-import { type TextOutputNode } from '../types';
+import { api } from '@/services/api';
+import { type JsonOutputNode } from '../types';
+import { JsonOutputDialog } from './json-output-dialog';
 import { NodeShell } from './node-shell';
-import { TextOutputDialog } from './text-output-dialog';
 
-export function TextOutputNode({
+export function JsonOutputNode({
   data,
   selected,
   id,
   isConnectable,
-}: NodeProps<TextOutputNode>) {  
+}: NodeProps<JsonOutputNode>) {  
   const { outputNodeData, agentNodeData } = useNodeContext();
   const [showOutput, setShowOutput] = useState(false);
+  const [saveToFile, setSaveToFile] = useState(false);
   
   // Check if any agent is in progress
   const isProcessing = Object.values(agentNodeData).some(
@@ -24,6 +27,35 @@ export function TextOutputNode({
   );
   
   const isOutputAvailable = !!outputNodeData;
+
+  // Save to file when output is available and saveToFile is enabled
+  useEffect(() => {
+    if (saveToFile && isOutputAvailable && outputNodeData) {
+      saveJsonFile(outputNodeData);
+    }
+  }, [saveToFile, isOutputAvailable, outputNodeData]);
+
+  const saveJsonFile = async (data: any) => {
+    try {
+      // Generate filename with current date and time in user's timezone
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const dateTime = `${year}-${month}-${day}_${hours}h${minutes}m${seconds}s`;
+      const filename = `run_${dateTime}.json`;
+
+      // Save file via API
+      await api.saveJsonFile(filename, data);
+      
+      console.log(`JSON output saved to outputs/${filename}`);
+    } catch (error) {
+      console.error('Failed to save JSON output:', error);
+    }
+  };
 
   const handleViewOutput = () => {
     setShowOutput(true);
@@ -35,8 +67,8 @@ export function TextOutputNode({
         id={id}
         selected={selected}
         isConnectable={isConnectable}
-        icon={<Bot className="h-5 w-5" />}
-        name={data.name || "Output"}
+        icon={<FileJson className="h-5 w-5" />}
+        name={data.name || "JSON Output"}
         description={data.description}
         hasRightHandle={false}
       >
@@ -67,16 +99,30 @@ export function TextOutputNode({
                   </Button>
                 )}
               </div>
+              
+              <div className="flex items-center space-x-2 mt-2">
+                <Checkbox
+                  id="save-to-file"
+                  checked={saveToFile}
+                  onCheckedChange={(checked: boolean) => setSaveToFile(checked)}
+                />
+                <label
+                  htmlFor="save-to-file"
+                  className="text-subtitle text-muted-foreground cursor-pointer"
+                >
+                  Save to File
+                </label>
+              </div>
             </div>
           </div>
         </CardContent>
       </NodeShell>
 
-      <TextOutputDialog 
+      <JsonOutputDialog 
         isOpen={showOutput} 
         onOpenChange={setShowOutput} 
         outputNodeData={outputNodeData} 
       />
     </>
   );
-}
+} 
