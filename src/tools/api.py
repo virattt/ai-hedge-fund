@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import requests
 import time
+from typing import List, Optional
 
 from src.data.cache import get_cache
 from src.data.models import (
@@ -21,6 +22,42 @@ from src.data.models import (
 
 # Global cache instance
 _cache = get_cache()
+
+class TickerValidationError(Exception):
+    """Custom exception for invalid ticker symbols"""
+    def __init__(self, ticker: str, message: str = None):
+        self.ticker = ticker
+        self.message = message or f"'{ticker}' is not a valid ticker symbol"
+        super().__init__(self.message)
+
+def validate_ticker(ticker: str) -> bool:
+    """
+    Validate ticker symbol by attempting a lightweight API call.
+    Returns True if ticker is valid, raises TickerValidationError if invalid.
+    """
+    headers = {}
+    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
+        headers["X-API-KEY"] = api_key
+    
+    # Use company facts endpoint for validation - it's lightweight
+    url = f"https://api.financialdatasets.ai/company/facts/?ticker={ticker}"
+    try:
+        response = _make_api_request(url, headers)
+        if response.status_code == 400:
+            error_text = response.text
+            if "Invalid TICKER" in error_text:
+                raise TickerValidationError(
+                    ticker, 
+                    f"'{ticker}' is not recognized by the financial data provider. Please verify the ticker symbol is correct."
+                )
+        elif response.status_code != 200:
+            print(f"Warning: Could not validate ticker '{ticker}' - API returned {response.status_code}")
+        return True
+    except TickerValidationError:
+        raise
+    except Exception as e:
+        print(f"Warning: Could not validate ticker '{ticker}' due to error: {e}")
+        return True  # Allow processing to continue if validation fails due to technical issues
 
 
 def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: dict = None, max_retries: int = 3) -> requests.Response:
@@ -58,7 +95,10 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
 
 
 def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
-    """Fetch price data from cache or API."""
+    """Fetch price data from cache or API with ticker validation."""
+    # Validate ticker first
+    validate_ticker(ticker)
+    
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date}_{end_date}"
     
@@ -74,6 +114,8 @@ def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
     url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
     response = _make_api_request(url, headers)
     if response.status_code != 200:
+        if response.status_code == 400 and "Invalid TICKER" in response.text:
+            raise TickerValidationError(ticker)
         raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
 
     # Parse response with Pydantic model
@@ -94,7 +136,10 @@ def get_financial_metrics(
     period: str = "ttm",
     limit: int = 10,
 ) -> list[FinancialMetrics]:
-    """Fetch financial metrics from cache or API."""
+    """Fetch financial metrics from cache or API with ticker validation."""
+    # Validate ticker first
+    validate_ticker(ticker)
+    
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{period}_{end_date}_{limit}"
     
@@ -110,6 +155,8 @@ def get_financial_metrics(
     url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
     response = _make_api_request(url, headers)
     if response.status_code != 200:
+        if response.status_code == 400 and "Invalid TICKER" in response.text:
+            raise TickerValidationError(ticker)
         raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
 
     # Parse response with Pydantic model
@@ -131,7 +178,10 @@ def search_line_items(
     period: str = "ttm",
     limit: int = 10,
 ) -> list[LineItem]:
-    """Fetch line items from API."""
+    """Fetch line items from API with ticker validation."""
+    # Validate ticker first
+    validate_ticker(ticker)
+    
     # If not in cache or insufficient data, fetch from API
     headers = {}
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
@@ -148,6 +198,8 @@ def search_line_items(
     }
     response = _make_api_request(url, headers, method="POST", json_data=body)
     if response.status_code != 200:
+        if response.status_code == 400 and "Invalid TICKER" in response.text:
+            raise TickerValidationError(ticker)
         raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
     data = response.json()
     response_model = LineItemResponse(**data)
@@ -165,7 +217,10 @@ def get_insider_trades(
     start_date: str | None = None,
     limit: int = 1000,
 ) -> list[InsiderTrade]:
-    """Fetch insider trades from cache or API."""
+    """Fetch insider trades from cache or API with ticker validation."""
+    # Validate ticker first
+    validate_ticker(ticker)
+    
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
     
@@ -189,6 +244,8 @@ def get_insider_trades(
 
         response = _make_api_request(url, headers)
         if response.status_code != 200:
+            if response.status_code == 400 and "Invalid TICKER" in response.text:
+                raise TickerValidationError(ticker)
             raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
 
         data = response.json()
@@ -225,7 +282,10 @@ def get_company_news(
     start_date: str | None = None,
     limit: int = 1000,
 ) -> list[CompanyNews]:
-    """Fetch company news from cache or API."""
+    """Fetch company news from cache or API with ticker validation."""
+    # Validate ticker first
+    validate_ticker(ticker)
+    
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
     
@@ -249,6 +309,8 @@ def get_company_news(
 
         response = _make_api_request(url, headers)
         if response.status_code != 200:
+            if response.status_code == 400 and "Invalid TICKER" in response.text:
+                raise TickerValidationError(ticker)
             raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
 
         data = response.json()
@@ -283,7 +345,10 @@ def get_market_cap(
     ticker: str,
     end_date: str,
 ) -> float | None:
-    """Fetch market cap from the API."""
+    """Fetch market cap from the API with ticker validation."""
+    # Validate ticker first
+    validate_ticker(ticker)
+    
     # Check if end_date is today
     if end_date == datetime.datetime.now().strftime("%Y-%m-%d"):
         # Get the market cap from company facts API
@@ -294,6 +359,8 @@ def get_market_cap(
         url = f"https://api.financialdatasets.ai/company/facts/?ticker={ticker}"
         response = _make_api_request(url, headers)
         if response.status_code != 200:
+            if response.status_code == 400 and "Invalid TICKER" in response.text:
+                raise TickerValidationError(ticker)
             print(f"Error fetching company facts: {ticker} - {response.status_code}")
             return None
 

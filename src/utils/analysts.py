@@ -6,6 +6,7 @@ from src.agents.bill_ackman import bill_ackman_agent
 from src.agents.cathie_wood import cathie_wood_agent
 from src.agents.charlie_munger import charlie_munger_agent
 from src.agents.fundamentals import fundamentals_analyst_agent
+from src.agents.jim_rogers import jim_rogers_agent
 from src.agents.michael_burry import michael_burry_agent
 from src.agents.phil_fisher import phil_fisher_agent
 from src.agents.peter_lynch import peter_lynch_agent
@@ -72,41 +73,47 @@ ANALYST_CONFIG = {
         "agent_func": rakesh_jhunjhunwala_agent,
         "order": 8,
     },
+    "jim_rogers": {
+        "display_name": "Jim Rogers",
+        "description": "The Commodities King",
+        "agent_func": jim_rogers_agent,
+        "order": 9,
+    },
     "stanley_druckenmiller": {
         "display_name": "Stanley Druckenmiller",
         "description": "The Macro Investor",
         "agent_func": stanley_druckenmiller_agent,
-        "order": 9,
+        "order": 10,
     },
     "warren_buffett": {
         "display_name": "Warren Buffett",
         "description": "The Oracle of Omaha",
         "agent_func": warren_buffett_agent,
-        "order": 10,
+        "order": 11,
     },
     "technical_analyst": {
         "display_name": "Technical Analyst",
         "description": "Chart Pattern Specialist",
         "agent_func": technical_analyst_agent,
-        "order": 11,
+        "order": 12,
     },
     "fundamentals_analyst": {
         "display_name": "Fundamentals Analyst",
         "description": "Financial Statement Specialist",
         "agent_func": fundamentals_analyst_agent,
-        "order": 12,
+        "order": 13,
     },
     "sentiment_analyst": {
         "display_name": "Sentiment Analyst",
         "description": "Market Sentiment Specialist",
         "agent_func": sentiment_analyst_agent,
-        "order": 13,
+        "order": 14,
     },
     "valuation_analyst": {
         "display_name": "Valuation Analyst",
         "description": "Company Valuation Specialist",
         "agent_func": valuation_analyst_agent,
-        "order": 14,
+        "order": 15,
     },
 }
 

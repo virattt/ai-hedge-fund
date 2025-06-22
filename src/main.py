@@ -13,6 +13,7 @@ from src.utils.analysts import ANALYST_ORDER, get_analyst_nodes
 from src.utils.progress import progress
 from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider
 from src.utils.ollama import ensure_ollama_and_model
+from src.tools.api import TickerValidationError
 
 import argparse
 from datetime import datetime
@@ -151,6 +152,35 @@ if __name__ == "__main__":
 
     # Parse tickers from comma-separated string
     tickers = [ticker.strip() for ticker in args.tickers.split(",")]
+
+    # Validate all tickers before proceeding
+    print(f"{Fore.CYAN}Validating ticker symbols...{Style.RESET_ALL}")
+    invalid_tickers = []
+    
+    for ticker in tickers:
+        try:
+            from src.tools.api import validate_ticker
+            validate_ticker(ticker)
+            print(f"✓ {Fore.GREEN}{ticker}{Style.RESET_ALL} - Valid")
+        except TickerValidationError as e:
+            invalid_tickers.append(ticker)
+            print(f"✗ {Fore.RED}{ticker}{Style.RESET_ALL} - {e.message}")
+        except Exception as e:
+            print(f"⚠ {Fore.YELLOW}{ticker}{Style.RESET_ALL} - Warning: Could not validate ({e})")
+    
+    # If any tickers are invalid, show helpful error message and exit
+    if invalid_tickers:
+        print(f"\n{Fore.RED}❌ Invalid ticker symbols detected: {', '.join(invalid_tickers)}{Style.RESET_ALL}")
+        print(f"\n{Fore.CYAN}Suggestions:{Style.RESET_ALL}")
+        print(f"  • Verify ticker symbols are correct on Yahoo Finance or your broker platform")
+        print(f"  • Ensure you're using the correct exchange suffix if needed (e.g., .TO for Toronto)")
+        print(f"  • Check if the company is publicly traded")
+        print(f"  • Some ETFs or newer listings may not be available in this data provider")
+        print(f"\n{Fore.YELLOW}Example valid tickers: AAPL, MSFT, GOOGL, EOG{Style.RESET_ALL}")
+        print(f"\nPlease fix the ticker symbols and try again.")
+        sys.exit(1)
+    
+    print(f"\n{Fore.GREEN}✅ All ticker symbols validated successfully!{Style.RESET_ALL}\n")
 
     # Select analysts
     selected_analysts = None
@@ -308,14 +338,23 @@ if __name__ == "__main__":
     }
 
     # Run the hedge fund
-    result = run_hedge_fund(
-        tickers=tickers,
-        start_date=start_date,
-        end_date=end_date,
-        portfolio=portfolio,
-        show_reasoning=args.show_reasoning,
-        selected_analysts=selected_analysts,
-        model_name=model_name,
-        model_provider=model_provider,
-    )
-    print_trading_output(result)
+    try:
+        result = run_hedge_fund(
+            tickers=tickers,
+            start_date=start_date,
+            end_date=end_date,
+            portfolio=portfolio,
+            show_reasoning=args.show_reasoning,
+            selected_analysts=selected_analysts,
+            model_name=model_name,
+            model_provider=model_provider,
+        )
+        print_trading_output(result)
+    except TickerValidationError as e:
+        print(f"\n{Fore.RED}❌ Ticker validation error: {e.message}{Style.RESET_ALL}")
+        print(f"\n{Fore.CYAN}Please verify your ticker symbols and try again.{Style.RESET_ALL}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n{Fore.RED}❌ An error occurred: {e}{Style.RESET_ALL}")
+        print(f"\n{Fore.CYAN}Please check your input parameters and try again.{Style.RESET_ALL}")
+        sys.exit(1)
