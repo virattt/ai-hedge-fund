@@ -9,12 +9,10 @@ export function getStatusColor(status: NodeStatus): string {
   switch (status) {
     case 'IN_PROGRESS':
       return 'bg-amber-500  dark:bg-amber-80';
-    case 'COMPLETE':
-      return 'bg-secondary';
     case 'ERROR':
       return 'bg-red-500 dark:bg-red-800';
     default:
-      return 'bg-secondary';
+      return 'bg-panel';
   }
 }
 

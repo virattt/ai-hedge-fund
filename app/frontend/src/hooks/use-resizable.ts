@@ -4,12 +4,14 @@ interface UseResizableOptions {
   minWidth?: number;
   maxWidth?: number;
   defaultWidth?: number;
+  side?: 'left' | 'right';
 }
 
 export function useResizable({
   minWidth = 200,
   maxWidth = 500,
-  defaultWidth = 250
+  defaultWidth = 250,
+  side = 'left'
 }: UseResizableOptions = {}) {
   const [width, setWidth] = useState(defaultWidth);
   const [isDragging, setIsDragging] = useState(false);
@@ -31,11 +33,21 @@ export function useResizable({
     // Use the ref value instead of state for checking
     if (!isDraggingRef.current) return;
     
-    // Get element's left position
-    const elementLeft = elementRef.current?.getBoundingClientRect().left || 0;
+    // Get element's position
+    const elementRect = elementRef.current?.getBoundingClientRect();
+    if (!elementRect) return;
+    
+    let newWidth;
+    if (side === 'left') {
+      // For left sidebar: dragging right increases width
+      newWidth = e.clientX - elementRect.left;
+    } else {
+      // For right sidebar: dragging left decreases width
+      newWidth = elementRect.right - e.clientX;
+    }
     
     // Calculate new width (limit between minWidth and maxWidth)
-    const newWidth = Math.max(minWidth, Math.min(maxWidth, e.clientX - elementLeft));
+    newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
     
     setWidth(newWidth);
   };

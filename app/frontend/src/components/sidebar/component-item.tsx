@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { LucideIcon, Plus } from "lucide-react";
 import { useState } from "react";
 
-interface SidebarItemProps {
+interface ComponentItemProps {
   icon: LucideIcon;
   label: string;
   onClick?: () => void;
@@ -11,13 +11,13 @@ interface SidebarItemProps {
   isActive?: boolean;
 }
 
-export function SidebarItem({ 
+export default function ComponentItem({ 
   icon: Icon, 
   label, 
   onClick, 
   className, 
   isActive = false 
-}: SidebarItemProps) {
+}: ComponentItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   
   const handlePlusClick = (e: React.MouseEvent) => {

@@ -1,13 +1,10 @@
-import { Accordion } from '@/components/ui/accordion';
-import { Button } from '@/components/ui/button';
-import { ComponentGroup, getComponentGroups } from '@/data/sidebar-components';
-import { useComponentGroups } from '@/hooks/use-component-groups';
+import { useFlowManagement } from '@/hooks/use-flow-management';
 import { useResizable } from '@/hooks/use-resizable';
 import { cn } from '@/lib/utils';
-import { PanelLeft } from 'lucide-react';
-import { ReactNode, useEffect, useState } from 'react';
-import { SearchBox } from './search-box';
-import { SidebarItemGroup } from './sidebar-item-group';
+import { ReactNode } from 'react';
+import { FlowActions } from './flow-actions';
+import { FlowCreateDialog } from './flow-create-dialog';
+import { FlowList } from './flow-list';
 
 interface LeftSidebarProps {
   children?: ReactNode;
@@ -22,40 +19,39 @@ export function LeftSidebar({
   onToggleCollapse,
 }: LeftSidebarProps) {
   // Use our custom hooks
-  const { width, isDragging, elementRef, startResize } = useResizable();
+  const { width, isDragging, elementRef, startResize } = useResizable({
+    defaultWidth: 280,
+    minWidth: 200,
+    maxWidth: 500,
+    side: 'left',
+  });
   
-  // State for loading component groups
-  const [componentGroups, setComponentGroups] = useState<ComponentGroup[]>([]);
-  
-  // Load component groups on mount
-  useEffect(() => {
-    const loadComponentGroups = async () => {
-      try {
-        const groups = await getComponentGroups();
-        setComponentGroups(groups);
-      } catch (error) {
-        console.error('Failed to load component groups:', error);
-        // Optionally set fallback or show error state
-      }
-    };
-    
-    loadComponentGroups();
-  }, []);
-  
-  const { 
-    searchQuery, 
-    setSearchQuery, 
-    activeItem, 
-    openGroups, 
-    filteredGroups,
-    handleAccordionChange 
-  } = useComponentGroups(componentGroups);
+  // Use flow management hook
+  const {
+    flows,
+    searchQuery,
+    isLoading,
+    openGroups,
+    createDialogOpen,
+    filteredFlows,
+    recentFlows,
+    templateFlows,
+    setSearchQuery,
+    setCreateDialogOpen,
+    handleAccordionChange,
+    handleCreateNewFlow,
+    handleFlowCreated,
+    handleSaveCurrentFlow,
+    handleLoadFlow,
+    handleDeleteFlow,
+    handleRefresh,
+  } = useFlowManagement();
 
   return (
     <div 
       ref={elementRef}
       className={cn(
-        "h-full bg-ramp-grey-800 flex flex-col relative",
+        "h-full bg-panel flex flex-col relative",
         isCollapsed ? "shadow-lg" : "",
         isDragging ? "select-none" : ""
       )}
@@ -64,56 +60,40 @@ export function LeftSidebar({
         borderRight: isDragging ? 'none' : '1px solid var(--ramp-grey-900)' 
       }}
     >
-      <div className="p-2 flex justify-between flex-shrink-0 items-center border-b border-ramp-grey-700 mt-4">
-        <span className="text-white text-sm font-medium ml-4">Components</span>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onToggleCollapse}
-            className="h-6 w-6 text-white hover:bg-ramp-grey-700"
-            aria-label="Toggle sidebar"
-          >
-            <PanelLeft size={16} />
-          </Button>
-        </div>
-      </div>
+      <FlowActions
+        onSave={handleSaveCurrentFlow}
+        onCreate={handleCreateNewFlow}
+        onToggleCollapse={onToggleCollapse}
+      />
       
-      <div className="flex-grow overflow-auto text-white scrollbar-thin scrollbar-thumb-ramp-grey-700">
-        <SearchBox 
-          value={searchQuery} 
-          onChange={setSearchQuery} 
-        />
-        
-        <Accordion 
-          type="multiple" 
-          className="w-full" 
-          value={openGroups} 
-          onValueChange={handleAccordionChange}
-        >
-          {filteredGroups.map(group => (
-            <SidebarItemGroup
-              key={group.name} 
-              group={group}
-              activeItem={activeItem}
-            />
-          ))}
-        </Accordion>
-
-        {filteredGroups.length === 0 && (
-          <div className="text-center py-8 text-gray-400 text-sm">
-            No components match your search
-          </div>
-        )}
-      </div>
+      <FlowList
+        flows={flows}
+        searchQuery={searchQuery}
+        isLoading={isLoading}
+        openGroups={openGroups}
+        filteredFlows={filteredFlows}
+        recentFlows={recentFlows}
+        templateFlows={templateFlows}
+        onSearchChange={setSearchQuery}
+        onAccordionChange={handleAccordionChange}
+        onLoadFlow={handleLoadFlow}
+        onDeleteFlow={handleDeleteFlow}
+        onRefresh={handleRefresh}
+      />
       
-      {/* Resize handle - completely hidden during dragging */}
+      {/* Resize handle - on the right side for left sidebar */}
       {!isDragging && (
         <div 
           className="absolute top-0 right-0 h-full w-1 cursor-ew-resize transition-all duration-150 z-10"
           onMouseDown={startResize}
         />
       )}
+
+      <FlowCreateDialog
+        isOpen={createDialogOpen}
+        onClose={() => setCreateDialogOpen(false)}
+        onFlowCreated={handleFlowCreated}
+      />
     </div>
   );
 } 
