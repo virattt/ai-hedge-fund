@@ -248,13 +248,25 @@ def get_company_news(
             url += f"&start_date={start_date}"
         url += f"&limit={limit}"
 
-        response = _make_api_request(url, headers)
-        if response.status_code != 200:
-            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
-
-        data = response.json()
-        response_model = CompanyNewsResponse(**data)
-        company_news = response_model.news
+        leaf_retry = 0
+        while leaf_retry < API_FAILURE_THRESHOLD:
+            leaf_retry += 1
+            try:
+                # Attempt to fetch the news data
+                response = _make_api_request(url, headers)
+                if response.status_code == 200:
+                    data = response.json()
+                    response_model = CompanyNewsResponse(**data)
+                    company_news = response_model.news
+                    break  # Exit retry loop on success
+                else:
+                    print(f"Failed due to non-200 status: {response.status_code}")
+            except requests.exceptions.RequestException as e:
+                print(f"Error handling company news response: {ticker} - {e}")    
+            if leaf_retry < API_FAILURE_THRESHOLD:
+                print(f"Retrying... ({leaf_retry}/3)")
+            else:
+                print(f"Max retries reached for company news: {ticker}. Skipping.")
 
         if not company_news:
             break
