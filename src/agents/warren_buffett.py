@@ -612,65 +612,72 @@ def calculate_intrinsic_value(financial_line_items: list) -> dict[str, any]:
     }
 
 def analyze_book_value_growth(financial_line_items: list) -> dict[str, any]:
-    """
-    Analyze book value per share growth - a key Buffett metric for long-term value creation.
-    Buffett often talks about companies that compound book value over decades.
-    """
+    """Analyze book value per share growth - a key Buffett metric."""
     if len(financial_line_items) < 3:
         return {"score": 0, "details": "Insufficient data for book value analysis"}
+    
+    # Extract book values per share
+    book_values = [
+        item.shareholders_equity / item.outstanding_shares
+        for item in financial_line_items
+        if hasattr(item, 'shareholders_equity') and hasattr(item, 'outstanding_shares')
+        and item.shareholders_equity and item.outstanding_shares
+    ]
+    
+    if len(book_values) < 3:
+        return {"score": 0, "details": "Insufficient book value data for growth analysis"}
     
     score = 0
     reasoning = []
     
-    # Calculate book value growth (shareholders equity / shares outstanding)
-    book_values = []
-    for item in financial_line_items:
-        if hasattr(item, 'shareholders_equity') and hasattr(item, 'outstanding_shares'):
-            if item.shareholders_equity and item.outstanding_shares:
-                book_value_per_share = item.shareholders_equity / item.outstanding_shares
-                book_values.append(book_value_per_share)
+    # Analyze growth consistency
+    growth_periods = sum(1 for i in range(len(book_values) - 1) if book_values[i] > book_values[i + 1])
+    growth_rate = growth_periods / (len(book_values) - 1)
     
-    if len(book_values) >= 3:
-        # Check for consistent book value growth
-        growth_periods = 0
-        for i in range(len(book_values) - 1):
-            if book_values[i] > book_values[i + 1]:  # Current > Previous (reverse chronological)
-                growth_periods += 1
-        
-        growth_rate = growth_periods / (len(book_values) - 1)
-        
-        if growth_rate >= 0.8:  # 80% of periods show growth
-            score += 3
-            reasoning.append("Consistent book value per share growth (Buffett's favorite metric)")
-        elif growth_rate >= 0.6:
-            score += 2
-            reasoning.append("Good book value per share growth pattern")
-        elif growth_rate >= 0.4:
-            score += 1
-            reasoning.append("Moderate book value per share growth")
-        else:
-            reasoning.append("Inconsistent book value per share growth")
-            
-        # Calculate compound annual growth rate
-        if len(book_values) >= 2:
-            oldest_bv = book_values[-1]
-            latest_bv = book_values[0]
-            years = len(book_values) - 1
-            if oldest_bv > 0:
-                cagr = ((latest_bv / oldest_bv) ** (1/years)) - 1
-                if cagr > 0.15:  # 15%+ CAGR
-                    score += 2
-                    reasoning.append(f"Excellent book value CAGR: {cagr:.1%}")
-                elif cagr > 0.1:  # 10%+ CAGR
-                    score += 1
-                    reasoning.append(f"Good book value CAGR: {cagr:.1%}")
+    # Score based on consistency
+    if growth_rate >= 0.8:
+        score += 3
+        reasoning.append("Consistent book value per share growth (Buffett's favorite metric)")
+    elif growth_rate >= 0.6:
+        score += 2
+        reasoning.append("Good book value per share growth pattern")
+    elif growth_rate >= 0.4:
+        score += 1
+        reasoning.append("Moderate book value per share growth")
     else:
-        reasoning.append("Insufficient book value data for growth analysis")
+        reasoning.append("Inconsistent book value per share growth")
     
-    return {
-        "score": score,
-        "details": "; ".join(reasoning)
-    }
+    # Calculate and score CAGR
+    cagr_score, cagr_reason = _calculate_book_value_cagr(book_values)
+    score += cagr_score
+    reasoning.append(cagr_reason)
+    
+    return {"score": score, "details": "; ".join(reasoning)}
+
+
+def _calculate_book_value_cagr(book_values: list) -> tuple[int, str]:
+    """Helper function to safely calculate book value CAGR and return score + reasoning."""
+    if len(book_values) < 2:
+        return 0, "Insufficient data for CAGR calculation"
+    
+    oldest_bv, latest_bv = book_values[-1], book_values[0]
+    years = len(book_values) - 1
+    
+    # Handle different scenarios
+    if oldest_bv > 0 and latest_bv > 0:
+        cagr = ((latest_bv / oldest_bv) ** (1/years)) - 1
+        if cagr > 0.15:
+            return 2, f"Excellent book value CAGR: {cagr:.1%}"
+        elif cagr > 0.1:
+            return 1, f"Good book value CAGR: {cagr:.1%}"
+        else:
+            return 0, f"Book value CAGR: {cagr:.1%}"
+    elif oldest_bv < 0 < latest_bv:
+        return 3, "Excellent: Company improved from negative to positive book value"
+    elif oldest_bv > 0 > latest_bv:
+        return 0, "Warning: Company declined from positive to negative book value"
+    else:
+        return 0, "Unable to calculate meaningful book value CAGR due to negative values"
 
 
 def analyze_pricing_power(financial_line_items: list, metrics: list) -> dict[str, any]:

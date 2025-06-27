@@ -51,3 +51,17 @@ Thumbs.db
 
 # Frontend
 node_modules
+
+# Outputs
+outputs/
+
+# Database files (users will have their own local databases)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Alembic (keep migration files, but ignore generated/cache files)
+app/backend/alembic/versions/__pycache__/

@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from src.llm.models import ModelProvider
 
 
@@ -48,3 +48,57 @@ class HedgeFundRequest(BaseModel):
                     )
         # Fallback to global model settings
         return self.model_name, self.model_provider
+
+
+# Flow-related schemas
+class FlowCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = None
+    nodes: List[Dict[str, Any]]
+    edges: List[Dict[str, Any]]
+    viewport: Optional[Dict[str, Any]] = None
+    data: Optional[Dict[str, Any]] = None
+    is_template: bool = False
+    tags: Optional[List[str]] = None
+
+
+class FlowUpdateRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = None
+    nodes: Optional[List[Dict[str, Any]]] = None
+    edges: Optional[List[Dict[str, Any]]] = None
+    viewport: Optional[Dict[str, Any]] = None
+    data: Optional[Dict[str, Any]] = None
+    is_template: Optional[bool] = None
+    tags: Optional[List[str]] = None
+
+
+class FlowResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str]
+    nodes: List[Dict[str, Any]]
+    edges: List[Dict[str, Any]]
+    viewport: Optional[Dict[str, Any]]
+    data: Optional[Dict[str, Any]]
+    is_template: bool
+    tags: Optional[List[str]]
+    created_at: datetime
+    updated_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+class FlowSummaryResponse(BaseModel):
+    """Lightweight flow response without nodes/edges for listing"""
+    id: int
+    name: str
+    description: Optional[str]
+    is_template: bool
+    tags: Optional[List[str]]
+    created_at: datetime
+    updated_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True

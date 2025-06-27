@@ -13,8 +13,8 @@ export function SearchBox({
   placeholder = "Search components..." 
 }: SearchBoxProps) {
   return (
-    <div className="px-2 py-2 sticky top-0 bg-ramp-grey-800 z-10">
-      <div className="flex items-center rounded-md bg-ramp-grey-700 px-3 py-1">
+    <div className="px-2 py-2 sticky top-0 bg-panel z-10">
+      <div className="flex items-center rounded-md bg-sidebar-accent px-3 py-1">
         <Search className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0" />
         <input 
           type="text" 

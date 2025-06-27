@@ -59,6 +59,38 @@ export const api = {
       throw error;
     }
   },
+
+  /**
+   * Saves JSON data to a file in the project's /outputs directory
+   * @param filename The name of the file to save
+   * @param data The JSON data to save
+   * @returns Promise that resolves when the file is saved
+   */
+  saveJsonFile: async (filename: string, data: any): Promise<void> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/storage/save-json`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filename,
+          data
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log(result.message);
+    } catch (error) {
+      console.error('Failed to save JSON file:', error);
+      throw error;
+    }
+  },
+
   /**
    * Runs a hedge fund simulation with the given parameters and streams the results
    * @param params The hedge fund request parameters

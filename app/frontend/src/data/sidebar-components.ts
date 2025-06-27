@@ -6,9 +6,9 @@ import {
   FileJson,
   FileText,
   LucideIcon,
+  Monitor,
   Network,
-  Play,
-  StopCircle
+  Play
 } from 'lucide-react';
 import { Agent, getAgents } from './agents';
 
@@ -61,8 +61,8 @@ export const getComponentGroups = async (): Promise<ComponentGroup[]> => {
       ]
     },
     {
-      name: "end nodes",
-      icon: StopCircle,
+      name: "outputs",
+      icon: Monitor,
       iconColor: "text-green-400",
       items: [
         { name: "JSON Output", icon: FileJson },
