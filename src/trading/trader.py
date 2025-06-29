@@ -330,7 +330,41 @@ class Trader:
             
             # Convert action to broker format
             if action == "buy":
-                order = self.broker.place_order(symbol, quantity, "buy")
+                # Handle transition from short to long position
+                if current_short > 0:
+                    print(f"{Fore.CYAN}Detected short position of {current_short} shares, splitting buy order{Style.RESET_ALL}")
+                    
+                    # Step 1: Close short position first (buy to cover)
+                    cover_quantity = min(quantity, current_short)
+                    print(f"{Fore.CYAN}Step 1: Covering {cover_quantity} shares to close short position{Style.RESET_ALL}")
+                    cover_order = self.broker.place_order(symbol, cover_quantity, "buy")
+                    print(f"{Fore.GREEN}Cover order placed: {cover_order.id}{Style.RESET_ALL}")
+                    
+                    # Step 2: Wait for cover order to fill
+                    print(f"{Fore.CYAN}Waiting for cover order to fill...{Style.RESET_ALL}")
+                    max_wait_time = 30  # seconds
+                    wait_time = 0
+                    while wait_time < max_wait_time:
+                        updated_cover_order = self.broker.get_order(cover_order.id)
+                        if updated_cover_order and updated_cover_order.status == "filled":
+                            print(f"{Fore.GREEN}Cover order filled successfully{Style.RESET_ALL}")
+                            break
+                        time.sleep(2)
+                        wait_time += 2
+                    else:
+                        print(f"{Fore.YELLOW}Cover order still pending after {max_wait_time}s, proceeding anyway{Style.RESET_ALL}")
+                    
+                    # Step 3: Place remaining buy order for long position if needed
+                    remaining_quantity = quantity - cover_quantity
+                    if remaining_quantity > 0:
+                        print(f"{Fore.CYAN}Step 2: Buying {remaining_quantity} additional shares for long position{Style.RESET_ALL}")
+                        order = self.broker.place_order(symbol, remaining_quantity, "buy")
+                    else:
+                        print(f"{Fore.CYAN}Short position fully covered, no additional long position needed{Style.RESET_ALL}")
+                        order = cover_order  # Return the cover order as the main order
+                else:
+                    # Normal buy order when no short position exists
+                    order = self.broker.place_order(symbol, quantity, "buy")
             elif action == "sell":
                 # Only sell if we have long positions
                 if current_long > 0:
