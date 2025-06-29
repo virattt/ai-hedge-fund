@@ -35,7 +35,7 @@ class Backtester:
         start_date: str,
         end_date: str,
         initial_capital: float,
-        model_name: str = "gpt-4o",
+        model_name: str = "gpt-4.1",
         model_provider: str = "OpenAI",
         selected_analysts: list[str] = [],
         initial_margin_requirement: float = 0.0,

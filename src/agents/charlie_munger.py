@@ -124,8 +124,7 @@ def charlie_munger_agent(state: AgentState):
         munger_output = generate_munger_output(
             ticker=ticker, 
             analysis_data=analysis_data,
-            model_name=state["metadata"]["model_name"],
-            model_provider=state["metadata"]["model_provider"],
+            state=state,
         )
         
         munger_analysis[ticker] = {
@@ -442,26 +441,33 @@ def analyze_predictability(financial_line_items: list) -> dict:
                if hasattr(item, 'revenue') and item.revenue is not None]
     
     if revenues and len(revenues) >= 5:
-        # Calculate year-over-year growth rates
-        growth_rates = [(revenues[i] / revenues[i+1] - 1) for i in range(len(revenues)-1)]
+        # Calculate year-over-year growth rates, handling zero division
+        growth_rates = []
+        for i in range(len(revenues)-1):
+            if revenues[i+1] != 0:  # Avoid division by zero
+                growth_rate = (revenues[i] / revenues[i+1] - 1)
+                growth_rates.append(growth_rate)
         
-        avg_growth = sum(growth_rates) / len(growth_rates)
-        growth_volatility = sum(abs(r - avg_growth) for r in growth_rates) / len(growth_rates)
-        
-        if avg_growth > 0.05 and growth_volatility < 0.1:
-            # Steady, consistent growth (Munger loves this)
-            score += 3
-            details.append(f"Highly predictable revenue: {avg_growth:.1%} avg growth with low volatility")
-        elif avg_growth > 0 and growth_volatility < 0.2:
-            # Positive but somewhat volatile growth
-            score += 2
-            details.append(f"Moderately predictable revenue: {avg_growth:.1%} avg growth with some volatility")
-        elif avg_growth > 0:
-            # Growing but unpredictable
-            score += 1
-            details.append(f"Growing but less predictable revenue: {avg_growth:.1%} avg growth with high volatility")
+        if not growth_rates:
+            details.append("Cannot calculate revenue growth: zero revenue values found")
         else:
-            details.append(f"Declining or highly unpredictable revenue: {avg_growth:.1%} avg growth")
+            avg_growth = sum(growth_rates) / len(growth_rates)
+            growth_volatility = sum(abs(r - avg_growth) for r in growth_rates) / len(growth_rates)
+            
+            if avg_growth > 0.05 and growth_volatility < 0.1:
+                # Steady, consistent growth (Munger loves this)
+                score += 3
+                details.append(f"Highly predictable revenue: {avg_growth:.1%} avg growth with low volatility")
+            elif avg_growth > 0 and growth_volatility < 0.2:
+                # Positive but somewhat volatile growth
+                score += 2
+                details.append(f"Moderately predictable revenue: {avg_growth:.1%} avg growth with some volatility")
+            elif avg_growth > 0:
+                # Growing but unpredictable
+                score += 1
+                details.append(f"Growing but less predictable revenue: {avg_growth:.1%} avg growth with high volatility")
+            else:
+                details.append(f"Declining or highly unpredictable revenue: {avg_growth:.1%} avg growth")
     else:
         details.append("Insufficient revenue history for predictability analysis")
     
@@ -579,6 +585,12 @@ def calculate_munger_valuation(financial_line_items: list, market_cap: float) ->
         }
     
     # 2. Calculate FCF yield (inverse of P/FCF multiple)
+    if market_cap <= 0:
+        return {
+            "score": 0,
+            "details": f"Invalid market cap ({market_cap}), cannot value"
+        }
+    
     fcf_yield = normalized_fcf / market_cap
     
     # 3. Apply Munger's FCF multiple based on business quality
@@ -664,8 +676,7 @@ def analyze_news_sentiment(news_items: list) -> str:
 def generate_munger_output(
     ticker: str,
     analysis_data: dict[str, any],
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
 ) -> CharlieMungerSignal:
     """
     Generates investment decisions in the style of Charlie Munger.
@@ -737,9 +748,8 @@ def generate_munger_output(
         )
 
     return call_llm(
-        prompt=prompt, 
-        model_name=model_name, 
-        model_provider=model_provider, 
+        prompt=prompt,
+        state=state,
         pydantic_model=CharlieMungerSignal, 
         agent_name="charlie_munger_agent", 
         default_factory=create_default_charlie_munger_signal,

@@ -139,8 +139,7 @@ def peter_lynch_agent(state: AgentState):
         lynch_output = generate_lynch_output(
             ticker=ticker,
             analysis_data=analysis_data[ticker],
-            model_name=state["metadata"]["model_name"],
-            model_provider=state["metadata"]["model_provider"],
+            state=state,
         )
 
         lynch_analysis[ticker] = {
@@ -441,8 +440,7 @@ def analyze_insider_activity(insider_trades: list) -> dict:
 def generate_lynch_output(
     ticker: str,
     analysis_data: dict[str, any],
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
 ) -> PeterLynchSignal:
     """
     Generates a final JSON signal in Peter Lynch's voice & style.
@@ -500,9 +498,8 @@ def generate_lynch_output(
 
     return call_llm(
         prompt=prompt,
-        model_name=model_name,
-        model_provider=model_provider,
         pydantic_model=PeterLynchSignal,
         agent_name="peter_lynch_agent",
+        state=state,
         default_factory=create_default_signal,
     )

@@ -100,8 +100,7 @@ def bill_ackman_agent(state: AgentState):
         ackman_output = generate_ackman_output(
             ticker=ticker, 
             analysis_data=analysis_data,
-            model_name=state["metadata"]["model_name"],
-            model_provider=state["metadata"]["model_provider"],
+            state=state,
         )
         
         ackman_analysis[ticker] = {
@@ -398,8 +397,7 @@ def analyze_valuation(financial_line_items: list, market_cap: float) -> dict:
 def generate_ackman_output(
     ticker: str,
     analysis_data: dict[str, any],
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
 ) -> BillAckmanSignal:
     """
     Generates investment decisions in the style of Bill Ackman.
@@ -460,9 +458,8 @@ def generate_ackman_output(
 
     return call_llm(
         prompt=prompt, 
-        model_name=model_name, 
-        model_provider=model_provider, 
         pydantic_model=BillAckmanSignal, 
         agent_name="bill_ackman_agent", 
+        state=state,
         default_factory=create_default_bill_ackman_signal,
     )

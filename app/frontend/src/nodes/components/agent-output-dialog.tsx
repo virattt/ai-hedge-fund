@@ -7,9 +7,11 @@ import {
 } from '@/components/ui/dialog';
 import { useNodeContext } from '@/contexts/node-context';
 import { formatTimeFromTimestamp } from '@/utils/date-utils';
-import { createHighlightedJson, formatContent } from '@/utils/text-utils';
+import { formatContent } from '@/utils/text-utils';
 import { AlignJustify, Copy, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface AgentOutputDialogProps {
   isOpen: boolean;
@@ -25,7 +27,15 @@ export function AgentOutputDialog({
   nodeId 
 }: AgentOutputDialogProps) {
   const { agentNodeData } = useNodeContext();
-  const messages = agentNodeData[nodeId]?.messages || [];
+  const nodeData = agentNodeData[nodeId] || { 
+    status: 'IDLE', 
+    ticker: null, 
+    message: '', 
+    messages: [],
+    lastUpdated: 0
+  };
+  const messages = nodeData.messages || [];
+  const nodeStatus = nodeData.status;
   
   const [copySuccess, setCopySuccess] = useState(false);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
@@ -126,8 +136,8 @@ export function AgentOutputDialog({
                   ))}
                 </div>
               ) : (
-                <div className="text-center text-muted-foreground py-6">
-                  No activity yet
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  No activity available
                 </div>
               )}
             </div>
@@ -181,22 +191,27 @@ export function AgentOutputDialog({
                       const { isJson, formattedContent } = formatContent(selectedDecision);
                       
                       if (isJson) {
-                        // Use our custom JSON highlighter without line numbers
-                        const highlightedJson = createHighlightedJson(formattedContent as string);
-                        
+                        // Use react-syntax-highlighter for better JSON rendering
                         return (
-                          <div className="rounded-md overflow-auto text-sm">
-                            <pre 
-                              className="overflow-auto whitespace-pre"
-                              style={{ 
-                                fontFamily: 'monospace',
-                                lineHeight: 1.5,
-                                color: '#d4d4d4',
+                          <div className="overflow-auto rounded-md text-xs">
+                            <SyntaxHighlighter
+                              language="json"
+                              style={vscDarkPlus}
+                              customStyle={{
                                 margin: 0,
+                                padding: '0.75rem',
+                                fontSize: '0.875rem',
+                                lineHeight: 1.5,
+                                whiteSpace: 'pre-wrap',
+                                wordWrap: 'break-word',
+                                overflowWrap: 'break-word',
                               }}
+                              showLineNumbers={false}
+                              wrapLines={true}
+                              wrapLongLines={true}
                             >
-                              <code dangerouslySetInnerHTML={{ __html: highlightedJson }} />
-                            </pre>
+                              {formattedContent as string}
+                            </SyntaxHighlighter>
                           </div>
                         );
                       } else {
@@ -208,17 +223,33 @@ export function AgentOutputDialog({
                         );
                       }
                     })()
-                  ) : (
+                  ) : nodeStatus === 'IN_PROGRESS' ? (
                     <div className="flex items-center justify-center h-full text-muted-foreground">
                       <Loader2 className="h-5 w-5 animate-spin mr-2" />
                       Analysis in progress...
                     </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                      No analysis available for {selectedTicker}
+                    </div>
                   )}
                 </div>
-              ) : (
+              ) : nodeStatus === 'IN_PROGRESS' ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
                   <Loader2 className="h-5 w-5 animate-spin mr-2" />
                   Analysis in progress...
+                </div>
+              ) : nodeStatus === 'COMPLETE' ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  Analysis completed with no results
+                </div>
+              ) : nodeStatus === 'ERROR' ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  Analysis failed
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  No analysis available
                 </div>
               )}
             </div>

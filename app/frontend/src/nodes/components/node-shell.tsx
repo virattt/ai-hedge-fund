@@ -44,7 +44,6 @@ export function NodeShell({
       {isInProgress && (
         <div className="animated-border-container"></div>
       )}
-      
       {hasLeftHandle && (
         <Handle
           type="target"
@@ -55,7 +54,7 @@ export function NodeShell({
       )}
       <div className="overflow-hidden rounded-lg">
         <Card className="bg-card rounded-none overflow-hidden border-none">
-          <CardHeader className="p-3 bg-secondary flex flex-row items-center space-x-2 rounded-t-sm">
+          <CardHeader className="p-3 bg-panel flex flex-row items-center space-x-2 rounded-t-sm">
             <div className={cn(
               "flex items-center justify-center h-8 w-8 rounded-lg text-white",
               isInProgress ? "gradient-animation" : iconColor
@@ -66,17 +65,14 @@ export function NodeShell({
               {name || "Custom Component"}
             </div>
           </CardHeader>
-
           {description && (
             <div className="px-3 py-2 text-subtitle text-muted-foreground">
               {description}
             </div>
           )}
-
           {children}
         </Card>
       </div>
-
       {hasRightHandle && (
         <Handle
           type="source"

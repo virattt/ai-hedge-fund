@@ -15,13 +15,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { type ModelItem } from "@/data/models"
+import { type LanguageModel } from "@/data/models"
 import { cn } from "@/lib/utils"
 
 interface ModelSelectorProps {
-  models: ModelItem[];
+  models: LanguageModel[];
   value: string;
-  onChange: (item: ModelItem | null) => void;
+  onChange: (item: LanguageModel | null) => void;
   placeholder?: string;
 }
 

@@ -148,9 +148,10 @@ echo.
 
 REM Start backend
 echo %INFO% Launching backend server...
-cd backend
-start /b poetry run uvicorn main:app --reload
+REM Run from project root to ensure proper Python imports
 cd ..
+start /b poetry run uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
+cd app
 
 timeout /t 3 /nobreak >nul
 

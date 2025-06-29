@@ -75,7 +75,8 @@
     --border: 0 0% 14.9%;
     --input: 0 0% 14.9%;
     --ring: 0 0% 83.1%;
-    --sidebar-background: 240 5.9% 10%;
+    --panel-bg: 240 3% 13%;
+    --sidebar-background: 240 5.9% 16%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -233,4 +234,13 @@
   );
   background-size: 200% 100%;
   animation: gradientFlow 3s linear infinite;
+}
+
+/* Remove white lines between ReactFlow Controls buttons */
+.react-flow__controls .react-flow__controls-button {
+  border-right: none !important;
+}
+
+.react-flow__controls .react-flow__controls-button + .react-flow__controls-button {
+  border-left: none !important;
 }
