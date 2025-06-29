@@ -227,6 +227,17 @@ start_services() {
     print_status "Starting backend server..."
     # Run from the app directory (parent of backend) to ensure proper Python imports
     cd ..
+    
+    # First test that the backend can start without errors
+    print_status "Testing backend startup..."
+    if ! poetry run python -c "from app.backend.main import app; print('Backend imports successful')" > "$LOG_DIR/backend_test.log" 2>&1; then
+        print_error "Backend has import errors. Check the logs:"
+        cat "$LOG_DIR/backend_test.log"
+        print_error "Please fix the import errors before starting the server."
+        exit 1
+    fi
+    
+    # Start the backend server
     poetry run uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000 > "$LOG_DIR/backend.log" 2>&1 &
     BACKEND_PID=$!
     cd app

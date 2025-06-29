@@ -1,4 +1,4 @@
-import { Flow } from '@/components/flow';
+import { Flow } from '@/components/Flow';
 import { useFlowContext } from '@/contexts/flow-context';
 import { useTabsContext } from '@/contexts/tabs-context';
 import { cn } from '@/lib/utils';

@@ -1,4 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from datetime import datetime, date
+from typing import Dict, List, Optional, Any, Literal, Union
+from enum import Enum
 
 
 class Price(BaseModel):
@@ -138,10 +141,31 @@ class CompanyFactsResponse(BaseModel):
     company_facts: CompanyFacts
 
 
+class PositionType(str, Enum):
+    LONG = "long"
+    SHORT = "short"
+    CALL = "call"
+    PUT = "put"
+
+class Greeks(BaseModel):
+    """Options Greeks"""
+    delta: float
+    gamma: float
+    theta: float
+    vega: float
+    rho: float
+
 class Position(BaseModel):
     cash: float = 0.0
     shares: int = 0
     ticker: str
+    position_type: PositionType = PositionType.LONG
+    cost_basis: float = 0.0
+    margin_requirement: float = 0.0  # Margin required for short positions
+    option_type: Optional[Literal["call", "put"]] = None
+    strike_price: Optional[float] = None
+    expiration_date: Optional[date] = None
+    greeks: Optional[Greeks] = None
 
 
 class Portfolio(BaseModel):
@@ -159,6 +183,7 @@ class AnalystSignal(BaseModel):
 class TickerAnalysis(BaseModel):
     ticker: str
     analyst_signals: dict[str, AnalystSignal]  # agent_name -> signal mapping
+    security_info: Optional["SecurityInfo"] = None
 
 
 class AgentStateData(BaseModel):
@@ -167,8 +192,94 @@ class AgentStateData(BaseModel):
     start_date: str
     end_date: str
     ticker_analyses: dict[str, TickerAnalysis]  # ticker -> analysis mapping
+    trading_universe: Optional["TradingUniverse"] = None
+    options_data: Dict[str, List["OptionsInfo"]] = Field(default_factory=dict)  # ticker -> options chain
 
 
+class AssetClass(str, Enum):
+    EQUITY = "equity"
+    ETF = "etf"
+    OPTION = "option"
+    FUTURES = "futures"
+    BONDS = "bonds"
+    COMMODITIES = "commodities"
+
+class MarketCapCategory(str, Enum):
+    MEGA_CAP = "mega_cap"  # >$200B
+    LARGE_CAP = "large_cap"  # $10B-$200B
+    MID_CAP = "mid_cap"  # $2B-$10B
+    SMALL_CAP = "small_cap"  # $300M-$2B
+    MICRO_CAP = "micro_cap"  # <$300M
+
+class Sector(str, Enum):
+    TECHNOLOGY = "technology"
+    HEALTHCARE = "healthcare"
+    FINANCIALS = "financials"
+    CONSUMER_DISCRETIONARY = "consumer_discretionary"
+    INDUSTRIALS = "industrials"
+    COMMUNICATION = "communication"
+    CONSUMER_STAPLES = "consumer_staples"
+    ENERGY = "energy"
+    UTILITIES = "utilities"
+    REAL_ESTATE = "real_estate"
+    MATERIALS = "materials"
+
+class TradingUniverse(BaseModel):
+    """Defines the trading universe with filters and constraints"""
+    name: str
+    description: str
+    asset_classes: List[AssetClass]
+    sectors: Optional[List[Sector]] = None
+    market_cap_categories: Optional[List[MarketCapCategory]] = None
+    min_market_cap: Optional[float] = None  # Minimum market cap in billions
+    min_daily_volume: Optional[float] = None  # Minimum daily volume in shares
+    min_avg_volume: Optional[float] = None  # Minimum 30-day average volume
+    excluded_tickers: List[str] = Field(default_factory=list)
+    included_tickers: List[str] = Field(default_factory=list)  # Force include specific tickers
+    indices: List[str] = Field(default_factory=list)  # SPY, QQQ, etc.
+    max_positions: Optional[int] = None  # Maximum number of positions
+    rebalance_frequency: str = "daily"  # daily, weekly, monthly
+    liquidity_threshold: Optional[float] = None  # Minimum liquidity score
+    
+class SecurityInfo(BaseModel):
+    """Extended security information"""
+    ticker: str
+    name: str
+    asset_class: AssetClass
+    sector: Optional[Sector] = None
+    market_cap: Optional[float] = None  # Market cap in billions
+    market_cap_category: Optional[MarketCapCategory] = None
+    average_volume_30d: Optional[float] = None
+    beta: Optional[float] = None
+    is_sp500: bool = False
+    is_nasdaq100: bool = False
+    is_dow: bool = False
+    options_available: bool = False
+    min_tick_size: float = 0.01
+    lot_size: int = 1
+    trading_hours_extended: bool = True
+    last_updated: datetime = Field(default_factory=datetime.utcnow)
+
+class OptionsInfo(BaseModel):
+    """Options chain information"""
+    underlying_ticker: str
+    strike: float
+    expiration: date
+    option_type: Literal["call", "put"]
+    bid: Optional[float] = None
+    ask: Optional[float] = None
+    last_price: Optional[float] = None
+    volume: Optional[int] = None
+    open_interest: Optional[int] = None
+    implied_volatility: Optional[float] = None
+    delta: Optional[float] = None
+    gamma: Optional[float] = None
+    theta: Optional[float] = None
+    vega: Optional[float] = None
+    rho: Optional[float] = None
+    days_to_expiration: Optional[int] = None
+    option_symbol: str  # Full option symbol
+    
 class AgentStateMetadata(BaseModel):
     show_reasoning: bool = False
     model_config = {"extra": "allow"}

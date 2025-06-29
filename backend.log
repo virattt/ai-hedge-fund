@@ -1,0 +1,441 @@
+INFO:     Will watch for changes in these directories: ['/Users/xunxdd/github/ai-hedge-fund']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [71149] using WatchFiles
+INFO:     Started server process [71154]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:49467 - "GET /flows/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49663 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50403 - "GET /hedge-fund/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50402 - "GET /flows/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50403 - "GET /hedge-fund/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50405 - "GET /flows/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50628 - "GET /hedge-fund/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50627 - "GET /flows/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50630 - "GET /hedge-fund/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50628 - "GET /flows/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50825 - "GET /hedge-fund/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50824 - "GET /flows/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50827 - "GET /hedge-fund/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50825 - "GET /flows/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51329 - "OPTIONS /flows/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51329 - "POST /flows/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51329 - "GET /flows/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51329 - "GET /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51329 - "GET /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51329 - "GET /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51329 - "OPTIONS /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51329 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52883 - "GET /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52883 - "GET /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52885 - "GET /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52885 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53059 - "GET /hedge-fund/language-models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53059 - "GET /hedge-fund/language-models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53061 - "GET /hedge-fund/language-models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53059 - "GET /hedge-fund/language-models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53059 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53140 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53194 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53194 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53232 - "OPTIONS /hedge-fund/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53232 - "POST /hedge-fund/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53238 - "PUT /flows/1 HTTP/1.1" 200 OK
+JSON decoding error: Expecting value: line 1 column 1 (char 0)
+Response: 'Make trading decisions based on the provided data.'
+INFO:     127.0.0.1:53260 - "POST /hedge-fund/run HTTP/1.1" 200 OK
+JSON decoding error: Expecting value: line 1 column 1 (char 0)
+Response: 'Make trading decisions based on the provided data.'
+INFO:     127.0.0.1:53290 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53290 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53484 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53510 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53620 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53620 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53655 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53713 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53747 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53785 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53966 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53988 - "OPTIONS /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53988 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54034 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54034 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54034 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54034 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54061 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54061 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54063 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54065 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54307 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54385 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54385 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54385 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54385 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54385 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54385 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54385 - "POST /hedge-fund/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54397 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54420 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54420 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54427 - "PUT /flows/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54430 - "PUT /flows/1 HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'src/data/models.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [71154]
+Process SpawnProcess-2:
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
+    target(sockets=sockets)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 66, in run
+    return asyncio.run(self.serve(sockets=sockets))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 70, in serve
+    await self._serve(sockets)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 77, in _serve
+    config.load()
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/config.py", line 435, in load
+    self.loaded_app = import_from_string(self.app)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
+    module = importlib.import_module(module_str)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 940, in exec_module
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/main.py", line 4, in <module>
+    from app.backend.routes import api_router
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/routes/__init__.py", line 3, in <module>
+    from app.backend.routes.hedge_fund import router as hedge_fund_router
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/routes/hedge_fund.py", line 7, in <module>
+    from app.backend.services.graph import create_graph, parse_hedge_fund_response, run_graph_async
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/services/graph.py", line 7, in <module>
+    from src.agents.risk_manager import risk_management_agent
+  File "/Users/xunxdd/github/ai-hedge-fund/src/agents/risk_manager.py", line 4, in <module>
+    from src.tools.api import get_prices, prices_to_df
+  File "/Users/xunxdd/github/ai-hedge-fund/src/tools/api.py", line 8, in <module>
+    from src.data.models import (
+  File "/Users/xunxdd/github/ai-hedge-fund/src/data/models.py", line 144, in <module>
+    class Position(BaseModel):
+  File "/Users/xunxdd/github/ai-hedge-fund/src/data/models.py", line 148, in Position
+    position_type: PositionType = PositionType.LONG
+                                  ^^^^^^^^^^^^
+NameError: name 'PositionType' is not defined
+WARNING:  WatchFiles detected changes in 'src/data/trading_universes.py'. Reloading...
+Process SpawnProcess-3:
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
+    target(sockets=sockets)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 66, in run
+    return asyncio.run(self.serve(sockets=sockets))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 70, in serve
+    await self._serve(sockets)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 77, in _serve
+    config.load()
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/config.py", line 435, in load
+    self.loaded_app = import_from_string(self.app)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
+    module = importlib.import_module(module_str)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 940, in exec_module
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/main.py", line 4, in <module>
+    from app.backend.routes import api_router
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/routes/__init__.py", line 3, in <module>
+    from app.backend.routes.hedge_fund import router as hedge_fund_router
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/routes/hedge_fund.py", line 7, in <module>
+    from app.backend.services.graph import create_graph, parse_hedge_fund_response, run_graph_async
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/services/graph.py", line 7, in <module>
+    from src.agents.risk_manager import risk_management_agent
+  File "/Users/xunxdd/github/ai-hedge-fund/src/agents/risk_manager.py", line 4, in <module>
+    from src.tools.api import get_prices, prices_to_df
+  File "/Users/xunxdd/github/ai-hedge-fund/src/tools/api.py", line 8, in <module>
+    from src.data.models import (
+  File "/Users/xunxdd/github/ai-hedge-fund/src/data/models.py", line 144, in <module>
+    class Position(BaseModel):
+  File "/Users/xunxdd/github/ai-hedge-fund/src/data/models.py", line 148, in Position
+    position_type: PositionType = PositionType.LONG
+                                  ^^^^^^^^^^^^
+NameError: name 'PositionType' is not defined
+WARNING:  WatchFiles detected changes in 'src/data/realtime_data.py'. Reloading...
+Process SpawnProcess-4:
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
+    target(sockets=sockets)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 66, in run
+    return asyncio.run(self.serve(sockets=sockets))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 70, in serve
+    await self._serve(sockets)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 77, in _serve
+    config.load()
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/config.py", line 435, in load
+    self.loaded_app = import_from_string(self.app)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
+    module = importlib.import_module(module_str)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 940, in exec_module
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/main.py", line 4, in <module>
+    from app.backend.routes import api_router
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/routes/__init__.py", line 3, in <module>
+    from app.backend.routes.hedge_fund import router as hedge_fund_router
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/routes/hedge_fund.py", line 7, in <module>
+    from app.backend.services.graph import create_graph, parse_hedge_fund_response, run_graph_async
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/services/graph.py", line 7, in <module>
+    from src.agents.risk_manager import risk_management_agent
+  File "/Users/xunxdd/github/ai-hedge-fund/src/agents/risk_manager.py", line 4, in <module>
+    from src.tools.api import get_prices, prices_to_df
+  File "/Users/xunxdd/github/ai-hedge-fund/src/tools/api.py", line 8, in <module>
+    from src.data.models import (
+  File "/Users/xunxdd/github/ai-hedge-fund/src/data/models.py", line 144, in <module>
+    class Position(BaseModel):
+  File "/Users/xunxdd/github/ai-hedge-fund/src/data/models.py", line 148, in Position
+    position_type: PositionType = PositionType.LONG
+                                  ^^^^^^^^^^^^
+NameError: name 'PositionType' is not defined
+WARNING:  WatchFiles detected changes in 'src/data/economic_indicators.py'. Reloading...
+Process SpawnProcess-5:
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
+    target(sockets=sockets)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 66, in run
+    return asyncio.run(self.serve(sockets=sockets))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 70, in serve
+    await self._serve(sockets)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 77, in _serve
+    config.load()
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/config.py", line 435, in load
+    self.loaded_app = import_from_string(self.app)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
+    module = importlib.import_module(module_str)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 940, in exec_module
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/main.py", line 4, in <module>
+    from app.backend.routes import api_router
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/routes/__init__.py", line 3, in <module>
+    from app.backend.routes.hedge_fund import router as hedge_fund_router
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/routes/hedge_fund.py", line 7, in <module>
+    from app.backend.services.graph import create_graph, parse_hedge_fund_response, run_graph_async
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/services/graph.py", line 7, in <module>
+    from src.agents.risk_manager import risk_management_agent
+  File "/Users/xunxdd/github/ai-hedge-fund/src/agents/risk_manager.py", line 4, in <module>
+    from src.tools.api import get_prices, prices_to_df
+  File "/Users/xunxdd/github/ai-hedge-fund/src/tools/api.py", line 8, in <module>
+    from src.data.models import (
+  File "/Users/xunxdd/github/ai-hedge-fund/src/data/models.py", line 144, in <module>
+    class Position(BaseModel):
+  File "/Users/xunxdd/github/ai-hedge-fund/src/data/models.py", line 148, in Position
+    position_type: PositionType = PositionType.LONG
+                                  ^^^^^^^^^^^^
+NameError: name 'PositionType' is not defined
+WARNING:  WatchFiles detected changes in 'src/data/political_signals.py'. Reloading...
+Process SpawnProcess-6:
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
+    target(sockets=sockets)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 66, in run
+    return asyncio.run(self.serve(sockets=sockets))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 70, in serve
+    await self._serve(sockets)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 77, in _serve
+    config.load()
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/config.py", line 435, in load
+    self.loaded_app = import_from_string(self.app)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
+    module = importlib.import_module(module_str)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 940, in exec_module
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/main.py", line 4, in <module>
+    from app.backend.routes import api_router
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/routes/__init__.py", line 3, in <module>
+    from app.backend.routes.hedge_fund import router as hedge_fund_router
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/routes/hedge_fund.py", line 7, in <module>
+    from app.backend.services.graph import create_graph, parse_hedge_fund_response, run_graph_async
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/services/graph.py", line 7, in <module>
+    from src.agents.risk_manager import risk_management_agent
+  File "/Users/xunxdd/github/ai-hedge-fund/src/agents/risk_manager.py", line 4, in <module>
+    from src.tools.api import get_prices, prices_to_df
+  File "/Users/xunxdd/github/ai-hedge-fund/src/tools/api.py", line 8, in <module>
+    from src.data.models import (
+  File "/Users/xunxdd/github/ai-hedge-fund/src/data/models.py", line 144, in <module>
+    class Position(BaseModel):
+  File "/Users/xunxdd/github/ai-hedge-fund/src/data/models.py", line 148, in Position
+    position_type: PositionType = PositionType.LONG
+                                  ^^^^^^^^^^^^
+NameError: name 'PositionType' is not defined
+WARNING:  WatchFiles detected changes in 'src/agents/enhanced_sentiment.py'. Reloading...
+Process SpawnProcess-7:
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
+    target(sockets=sockets)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 66, in run
+    return asyncio.run(self.serve(sockets=sockets))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 70, in serve
+    await self._serve(sockets)
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/server.py", line 77, in _serve
+    config.load()
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/config.py", line 435, in load
+    self.loaded_app = import_from_string(self.app)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/xunxdd/Library/Caches/pypoetry/virtualenvs/ai-hedge-fund-ac5atbxA-py3.11/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
+    module = importlib.import_module(module_str)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 940, in exec_module
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/main.py", line 4, in <module>
+    from app.backend.routes import api_router
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/routes/__init__.py", line 3, in <module>
+    from app.backend.routes.hedge_fund import router as hedge_fund_router
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/routes/hedge_fund.py", line 7, in <module>
+    from app.backend.services.graph import create_graph, parse_hedge_fund_response, run_graph_async
+  File "/Users/xunxdd/github/ai-hedge-fund/app/backend/services/graph.py", line 7, in <module>
+    from src.agents.risk_manager import risk_management_agent
+  File "/Users/xunxdd/github/ai-hedge-fund/src/agents/risk_manager.py", line 4, in <module>
+    from src.tools.api import get_prices, prices_to_df
+  File "/Users/xunxdd/github/ai-hedge-fund/src/tools/api.py", line 8, in <module>
+    from src.data.models import (
+  File "/Users/xunxdd/github/ai-hedge-fund/src/data/models.py", line 144, in <module>
+    class Position(BaseModel):
+  File "/Users/xunxdd/github/ai-hedge-fund/src/data/models.py", line 148, in Position
+    position_type: PositionType = PositionType.LONG
+                                  ^^^^^^^^^^^^
+NameError: name 'PositionType' is not defined
+2025-06-29 01:12:19,888 - INFO - Starting AI Hedge Fund Backend Server...
+2025-06-29 01:12:19,888 - INFO - Python version: 3.13.5 (main, Jun 11 2025, 15:36:57) [Clang 17.0.0 (clang-1700.0.13.3)]
+2025-06-29 01:12:20,062 - INFO - Poetry found: Poetry (version 2.1.3)
+2025-06-29 01:12:20,459 - INFO - All required dependencies are installed
+2025-06-29 01:12:20,460 - WARNING - python-dotenv not installed. Environment variables won't be loaded automatically.
+2025-06-29 01:12:20,460 - INFO - Testing critical imports...
+2025-06-29 01:12:21,768 - INFO - All imports successful
+2025-06-29 01:12:21,768 - INFO - All checks passed. Starting server...
+2025-06-29 01:12:21,768 - INFO - Starting backend server on http://0.0.0.0:8000
+2025-06-29 01:17:30,061 - INFO - Starting AI Hedge Fund Backend Server...
+2025-06-29 01:17:30,061 - INFO - Python version: 3.13.5 (main, Jun 11 2025, 15:36:57) [Clang 17.0.0 (clang-1700.0.13.3)]
+2025-06-29 01:17:30,333 - INFO - Poetry found: Poetry (version 2.1.3)
+2025-06-29 01:17:30,795 - INFO - All required dependencies are installed
+2025-06-29 01:17:30,796 - WARNING - python-dotenv not installed. Environment variables won't be loaded automatically.
+2025-06-29 01:17:30,796 - INFO - Testing critical imports...
+2025-06-29 01:17:32,255 - INFO - All imports successful
+2025-06-29 01:17:32,255 - INFO - All checks passed. Starting server...
+2025-06-29 01:17:32,255 - INFO - Starting backend server on http://0.0.0.0:8000

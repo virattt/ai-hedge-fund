@@ -86,7 +86,7 @@ app/backend/
 ├── services/                 # Business logic
 │   ├── graph.py              # Agent graph functionality
 │   └── portfolio.py          # Portfolio management
-├── __init__.py               # Package initialization
+├── __init__.py 11              # Package initialization
 └── main.py                   # FastAPI application entry point
 ```
 
