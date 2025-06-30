@@ -77,6 +77,156 @@ class Trader:
         else:
             return "unknown"
     
+    def _close_position_and_wait(self, symbol: str, position_type: str, position_size: float) -> Order:
+        """Close existing position and wait for fill.
+        
+        Args:
+            symbol: Stock symbol
+            position_type: 'long' or 'short'
+            position_size: Number of shares to close
+            
+        Returns:
+            Order: The close order
+        """
+        if position_type == "long":
+            action_name = "close long"
+            order_side = "sell"
+        else:  # short
+            action_name = "close short"
+            order_side = "buy"
+        
+        print(f"{Fore.CYAN}Step 1: {action_name.title()} - {order_side} {position_size} shares{Style.RESET_ALL}")
+        close_order = self.broker.place_order(symbol, position_size, order_side)
+        print(f"{Fore.GREEN}Close order placed: {close_order.id}{Style.RESET_ALL}")
+        
+        # Wait for close order to fill
+        self._wait_for_order_fill(close_order.id, action_name)
+        return close_order
+    
+    def _wait_for_order_fill(self, order_id: str, action_name: str) -> None:
+        """Wait for order to fill with timeout.
+        
+        Args:
+            order_id: Order ID to monitor
+            action_name: Human-readable action name for logging
+        """
+        print(f"{Fore.CYAN}Waiting for {action_name} order to fill...{Style.RESET_ALL}")
+        max_wait_time = 30  # seconds
+        wait_time = 0
+        while wait_time < max_wait_time:
+            updated_order = self.broker.get_order(order_id)
+            if updated_order and updated_order.status == "filled":
+                print(f"{Fore.GREEN}{action_name.title()} order filled successfully{Style.RESET_ALL}")
+                return
+            time.sleep(2)
+            wait_time += 2
+        
+        print(f"{Fore.YELLOW}{action_name.title()} order still pending after {max_wait_time}s, proceeding anyway{Style.RESET_ALL}")
+    
+    def _execute_position_transition(self, symbol: str, action: str, quantity: float, 
+                                   current_long: float, current_short: float) -> Order:
+        """Execute position transition with proper sequencing.
+        
+        Args:
+            symbol: Stock symbol
+            action: Target action (buy/sell/short/cover)
+            quantity: Total quantity for the action
+            current_long: Current long position size
+            current_short: Current short position size
+            
+        Returns:
+            Order: The final order executed
+        """
+        if action == "buy" and current_short > 0:
+            # Short -> Long transition
+            print(f"{Fore.CYAN}Detected short position of {current_short} shares, splitting buy order{Style.RESET_ALL}")
+            
+            # Close short position
+            cover_quantity = min(quantity, current_short)
+            close_order = self._close_position_and_wait(symbol, "short", cover_quantity)
+            
+            # Buy remaining for long position
+            remaining_quantity = quantity - cover_quantity
+            if remaining_quantity > 0:
+                print(f"{Fore.CYAN}Step 2: Buying {remaining_quantity} additional shares for long position{Style.RESET_ALL}")
+                return self.broker.place_order(symbol, remaining_quantity, "buy")
+            else:
+                print(f"{Fore.CYAN}Short position fully covered, no additional long position needed{Style.RESET_ALL}")
+                return close_order
+                
+        elif action == "sell" and current_long > 0 and quantity > current_long:
+            # Long -> Short transition (selling more than owned)
+            print(f"{Fore.CYAN}Detected long position of {current_long} shares, splitting sell order{Style.RESET_ALL}")
+            
+            # Close long position
+            close_order = self._close_position_and_wait(symbol, "long", current_long)
+            
+            # Short sell remaining
+            remaining_quantity = quantity - current_long
+            print(f"{Fore.CYAN}Step 2: Short selling {remaining_quantity} additional shares{Style.RESET_ALL}")
+            return self.broker.place_order(symbol, remaining_quantity, "sell_short")
+            
+        elif action == "short" and current_long > 0:
+            # Long -> Short transition (close long first)
+            print(f"{Fore.CYAN}Detected long position of {current_long} shares, closing before short sale{Style.RESET_ALL}")
+            
+            # Close long position
+            self._close_position_and_wait(symbol, "long", current_long)
+            
+            # Short sell the requested quantity
+            print(f"{Fore.CYAN}Step 2: Short selling {quantity} shares{Style.RESET_ALL}")
+            return self.broker.place_order(symbol, quantity, "sell_short")
+            
+        elif action == "cover" and current_short > 0 and quantity > current_short:
+            # Short -> Long transition (covering more than short)
+            print(f"{Fore.CYAN}Detected short position of {current_short} shares, splitting cover order{Style.RESET_ALL}")
+            
+            # Cover short position
+            self._close_position_and_wait(symbol, "short", current_short)
+            
+            # Buy remaining for long position
+            remaining_quantity = quantity - current_short
+            print(f"{Fore.CYAN}Step 2: Buying {remaining_quantity} additional shares for long position{Style.RESET_ALL}")
+            return self.broker.place_order(symbol, remaining_quantity, "buy")
+            
+        else:
+            # No position transition needed - execute normal order
+            return self._execute_simple_order(symbol, action, quantity, current_long, current_short)
+    
+    def _execute_simple_order(self, symbol: str, action: str, quantity: float,
+                            current_long: float, current_short: float) -> Order | None:
+        """Execute simple order without position transitions.
+        
+        Args:
+            symbol: Stock symbol
+            action: Trading action
+            quantity: Number of shares
+            current_long: Current long position
+            current_short: Current short position
+            
+        Returns:
+            Order or None if cannot execute
+        """
+        if action == "buy":
+            return self.broker.place_order(symbol, quantity, "buy")
+        elif action == "sell":
+            if current_long > 0:
+                return self.broker.place_order(symbol, quantity, "sell")
+            else:
+                print(f"{Fore.YELLOW}Cannot sell {symbol}: no long position{Style.RESET_ALL}")
+                return None
+        elif action == "short":
+            return self.broker.place_order(symbol, quantity, "sell_short")
+        elif action == "cover":
+            if current_short > 0:
+                return self.broker.place_order(symbol, quantity, "buy")
+            else:
+                print(f"{Fore.YELLOW}Cannot cover {symbol}: no short position{Style.RESET_ALL}")
+                return None
+        else:
+            print(f"{Fore.RED}Unknown action: {action}{Style.RESET_ALL}")
+            return None
+
     def _handle_hold_decision(self, symbol: str) -> Order | None:
         """Handle AI decision to hold - cancel any pending orders."""
         if self.dry_run:
@@ -328,66 +478,11 @@ class Trader:
                 print(f"{Fore.RED}ERROR: Attempted to place real order in dry-run mode! This should not happen.{Style.RESET_ALL}")
                 return None
             
-            # Convert action to broker format
-            if action == "buy":
-                # Handle transition from short to long position
-                if current_short > 0:
-                    print(f"{Fore.CYAN}Detected short position of {current_short} shares, splitting buy order{Style.RESET_ALL}")
-                    
-                    # Step 1: Close short position first (buy to cover)
-                    cover_quantity = min(quantity, current_short)
-                    print(f"{Fore.CYAN}Step 1: Covering {cover_quantity} shares to close short position{Style.RESET_ALL}")
-                    cover_order = self.broker.place_order(symbol, cover_quantity, "buy")
-                    print(f"{Fore.GREEN}Cover order placed: {cover_order.id}{Style.RESET_ALL}")
-                    
-                    # Step 2: Wait for cover order to fill
-                    print(f"{Fore.CYAN}Waiting for cover order to fill...{Style.RESET_ALL}")
-                    max_wait_time = 30  # seconds
-                    wait_time = 0
-                    while wait_time < max_wait_time:
-                        updated_cover_order = self.broker.get_order(cover_order.id)
-                        if updated_cover_order and updated_cover_order.status == "filled":
-                            print(f"{Fore.GREEN}Cover order filled successfully{Style.RESET_ALL}")
-                            break
-                        time.sleep(2)
-                        wait_time += 2
-                    else:
-                        print(f"{Fore.YELLOW}Cover order still pending after {max_wait_time}s, proceeding anyway{Style.RESET_ALL}")
-                    
-                    # Step 3: Place remaining buy order for long position if needed
-                    remaining_quantity = quantity - cover_quantity
-                    if remaining_quantity > 0:
-                        print(f"{Fore.CYAN}Step 2: Buying {remaining_quantity} additional shares for long position{Style.RESET_ALL}")
-                        order = self.broker.place_order(symbol, remaining_quantity, "buy")
-                    else:
-                        print(f"{Fore.CYAN}Short position fully covered, no additional long position needed{Style.RESET_ALL}")
-                        order = cover_order  # Return the cover order as the main order
-                else:
-                    # Normal buy order when no short position exists
-                    order = self.broker.place_order(symbol, quantity, "buy")
-            elif action == "sell":
-                # Only sell if we have long positions
-                if current_long > 0:
-                    sell_quantity = min(quantity, current_long)
-                    order = self.broker.place_order(symbol, sell_quantity, "sell")
-                else:
-                    print(f"{Fore.YELLOW}Cannot sell {symbol}: no long position{Style.RESET_ALL}")
-                    return None
-            elif action == "short":
-                order = self.broker.place_order(symbol, quantity, "sell_short")
-            elif action == "cover":
-                # Only cover if we have short positions
-                if current_short > 0:
-                    cover_quantity = min(quantity, current_short)
-                    order = self.broker.place_order(symbol, cover_quantity, "buy")
-                else:
-                    print(f"{Fore.YELLOW}Cannot cover {symbol}: no short position{Style.RESET_ALL}")
-                    return None
-            else:
-                print(f"{Fore.RED}Unknown action: {action}{Style.RESET_ALL}")
-                return None
+            # Execute order with smart position transition handling
+            order = self._execute_position_transition(symbol, action, quantity, current_long, current_short)
             
-            print(f"{Fore.GREEN}Order placed: {order.id} - {action} {order.quantity} {symbol}{Style.RESET_ALL}")
+            if order:
+                print(f"{Fore.GREEN}Order placed: {order.id} - {action} {order.quantity} {symbol}{Style.RESET_ALL}")
             return order
             
         except Exception as e:
