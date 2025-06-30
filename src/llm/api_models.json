@@ -51,7 +51,7 @@
   },
   {
     "display_name": "GPT 4.1",
-    "model_name": "gpt-4.1-2025-04-14",
+    "model_name": "gpt-4.1",
     "provider": "OpenAI"
   },
   {

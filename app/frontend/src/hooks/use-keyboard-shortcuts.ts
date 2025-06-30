@@ -28,7 +28,11 @@ export function useKeyboardShortcuts({ shortcuts }: UseKeyboardShortcutsProps) {
         const isSaveShortcut = key.toLowerCase() === 's' && (ctrlKey || metaKey);
         const matchesSaveShortcut = isSaveShortcut && (event.ctrlKey || event.metaKey) && isKeyMatch;
 
-        if (matchesSaveShortcut || (isKeyMatch && isCtrlMatch && isMetaMatch && isShiftMatch && isAltMatch)) {
+        // For shortcuts that should work with either Ctrl or Cmd
+        const isModifierShortcut = (ctrlKey || metaKey) && (event.ctrlKey || event.metaKey);
+        const matchesModifierShortcut = isModifierShortcut && isKeyMatch && isShiftMatch && isAltMatch;
+
+        if (matchesSaveShortcut || matchesModifierShortcut || (isKeyMatch && isCtrlMatch && isMetaMatch && isShiftMatch && isAltMatch)) {
           if (preventDefault) {
             event.preventDefault();
           }
@@ -56,6 +60,84 @@ export function useFlowKeyboardShortcuts(saveFlow: (showToast?: boolean) => void
       preventDefault: true,
     },
   ];
+
+  useKeyboardShortcuts({ shortcuts });
+}
+
+// Convenience hook for layout keyboard shortcuts
+export function useLayoutKeyboardShortcuts(
+  toggleRightSidebar: () => void, 
+  toggleLeftSidebar?: () => void,
+  fitView?: () => void,
+  undo?: () => void,
+  redo?: () => void,
+  toggleBottomPanel?: () => void
+) {
+  const shortcuts: KeyboardShortcut[] = [
+    {
+      key: 'i',
+      ctrlKey: true, // This will match either Ctrl+I or Cmd+I due to our logic above  
+      metaKey: true,
+      callback: toggleRightSidebar,
+      preventDefault: true,
+    },
+  ];
+
+  // Add left sidebar toggle if provided
+  if (toggleLeftSidebar) {
+    shortcuts.push({
+      key: 'b',
+      ctrlKey: true, // This will match either Ctrl+B or Cmd+B
+      metaKey: true,
+      callback: toggleLeftSidebar,
+      preventDefault: true,
+    });
+  }
+
+  // Add fit view shortcut if provided
+  if (fitView) {
+    shortcuts.push({
+      key: '0',
+      ctrlKey: true, // This will match either Ctrl+O or Cmd+O
+      metaKey: true,
+      callback: fitView,
+      preventDefault: true,
+    });
+  }
+
+  // Add undo shortcut if provided
+  if (undo) {
+    shortcuts.push({
+      key: 'z',
+      ctrlKey: true, // This will match either Ctrl+Z or Cmd+Z
+      metaKey: true,
+      callback: undo,
+      preventDefault: true,
+    });
+  }
+
+  // Add redo shortcut if provided
+  if (redo) {
+    shortcuts.push({
+      key: 'z',
+      ctrlKey: true, // This will match either Ctrl+Shift+Z or Cmd+Shift+Z
+      metaKey: true,
+      shiftKey: true,
+      callback: redo,
+      preventDefault: true,
+    });
+  }
+
+  // Add bottom panel toggle shortcut if provided
+  if (toggleBottomPanel) {
+    shortcuts.push({
+      key: 'j',
+      ctrlKey: true, // This will match either Ctrl+J or Cmd+J (like VSCode)
+      metaKey: true,
+      callback: toggleBottomPanel,
+      preventDefault: true,
+    });
+  }
 
   useKeyboardShortcuts({ shortcuts });
 } 

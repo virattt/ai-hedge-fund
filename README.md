@@ -21,9 +21,13 @@ This system employs several agents working together:
 15. Technicals Agent - Analyzes technical indicators and generates trading signals
 16. Risk Manager - Calculates risk metrics and sets position limits
 17. Portfolio Manager - Makes final trading decisions and generates orders
-    
+
 <img width="1042" alt="Screenshot 2025-03-22 at 6 19 07 PM" src="https://github.com/user-attachments/assets/cbae3dcf-b571-490d-b0ad-3f0f035ac0d4" />
 
+As of June 2025, there are **two ways** to run the AI Hedge Fund:
+
+1. **⌨️ Command Line Interface** - Terminal-based approach
+2. **🖥️ Web Application (NEW!)** - User-friendly web interface
 
 **Note**: the system simulates trading decisions, it does not actually trade.
 
@@ -42,25 +46,60 @@ This project is for **educational and research purposes only**.
 By using this software, you agree to use it solely for learning purposes.
 
 ## Table of Contents
-- [Setup](#setup)
-  - [Using Poetry](#using-poetry)
-  - [Using Docker](#using-docker)
-- [Usage](#usage)
-  - [Running the Hedge Fund](#running-the-hedge-fund)
-  - [Running the Backtester](#running-the-backtester)
+- [How to Install](#how-to-install)
+- [How to Run](#how-to-run)
+  - [⌨️ Command Line Interface](#️-command-line-interface)
+  - [🖥️ Web Application (NEW!)](#️-web-application)
 - [Contributing](#contributing)
 - [Feature Requests](#feature-requests)
 - [License](#license)
 
-## Setup
+## How to Install
 
-### Using Poetry
+Before you can run the AI Hedge Fund, you'll need to install it and set up your API keys. These steps are common to both the full-stack web application and command line interface.
 
-Clone the repository:
+### 1. Clone the Repository
+
 ```bash
 git clone https://github.com/virattt/ai-hedge-fund.git
 cd ai-hedge-fund
 ```
+
+### 2. Set Up Your API Keys
+
+Create a `.env` file for your API keys:
+```bash
+# Create .env file for your API keys (in the root directory)
+cp .env.example .env
+```
+
+Open and edit the `.env` file to add your API keys:
+```bash
+# For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
+OPENAI_API_KEY=your-openai-api-key
+
+# For running LLMs hosted by groq (deepseek, llama3, etc.)
+GROQ_API_KEY=your-groq-api-key
+
+# For getting financial data to power the hedge fund
+FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
+```
+
+**Important**: You must set at least one LLM API key (`OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY`) for the hedge fund to work. 
+
+**Financial Data**: Data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key. For any other ticker, you will need to set the `FINANCIAL_DATASETS_API_KEY` in the .env file.
+
+## How to Run
+
+### ⌨️ Command Line Interface
+
+For users who prefer working with command line tools, you can run the AI Hedge Fund directly via terminal. This approach offers more granular control and is useful for automation, scripting, and integration purposes.
+
+<img width="992" alt="Screenshot 2025-01-06 at 5 50 17 PM" src="https://github.com/user-attachments/assets/e8ca04bf-9989-4a7d-a8b4-34e04666663b" />
+
+Choose one of the following installation methods:
+
+#### Using Poetry
 
 1. Install Poetry (if not already installed):
 ```bash
@@ -72,51 +111,16 @@ curl -sSL https://install.python-poetry.org | python3 -
 poetry install
 ```
 
-3. Set up your environment variables:
-```bash
-# Create .env file for your API keys
-cp .env.example .env
-```
-
-4. Set your API keys:
-```bash
-# For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
-# Get your OpenAI API key from https://platform.openai.com/
-OPENAI_API_KEY=your-openai-api-key
-
-# For running LLMs hosted by groq (deepseek, llama3, etc.)
-# Get your Groq API key from https://groq.com/
-GROQ_API_KEY=your-groq-api-key
-
-# For getting financial data to power the hedge fund
-# Get your Financial Datasets API key from https://financialdatasets.ai/
-FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
-```
-
-### Using Docker
+#### Using Docker
 
 1. Make sure you have Docker installed on your system. If not, you can download it from [Docker's official website](https://www.docker.com/get-started).
 
-2. Clone the repository:
-```bash
-git clone https://github.com/virattt/ai-hedge-fund.git
-cd ai-hedge-fund
-```
-
-3. Set up your environment variables:
-```bash
-# Create .env file for your API keys
-cp .env.example .env
-```
-
-4. Edit the .env file to add your API keys as described above.
-
-5. Navigate to the docker directory:
+2. Navigate to the docker directory:
 ```bash
 cd docker
 ```
 
-6. Build the Docker image:
+3. Build the Docker image:
 ```bash
 # On Linux/Mac:
 ./run.sh build
@@ -125,24 +129,12 @@ cd docker
 run.bat build
 ```
 
-**Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY` for the hedge fund to work.  If you want to use LLMs from all providers, you will need to set all API keys.
-
-Financial data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key.
-
-For any other ticker, you will need to set the `FINANCIAL_DATASETS_API_KEY` in the .env file.
-
-## Usage
-
-### Running the Hedge Fund
-
-#### With Poetry
+#### Running the AI Hedge Fund (with Poetry)
 ```bash
 poetry run python src/main.py --ticker AAPL,MSFT,NVDA
 ```
 
-#### With Docker
-**Note**: All Docker commands must be run from the `docker/` directory.
-
+#### Running the AI Hedge Fund (with Docker)
 ```bash
 # Navigate to the docker directory first
 cd docker
@@ -153,9 +145,6 @@ cd docker
 # On Windows:
 run.bat --ticker AAPL,MSFT,NVDA main
 ```
-
-**Example Output:**
-<img width="992" alt="Screenshot 2025-01-06 at 5 50 17 PM" src="https://github.com/user-attachments/assets/e8ca04bf-9989-4a7d-a8b4-34e04666663b" />
 
 You can also specify a `--ollama` flag to run the AI hedge fund using local LLMs.
 
@@ -199,16 +188,12 @@ poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --
 run.bat --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 main
 ```
 
-### Running the Backtester
-
-#### With Poetry
+#### Running the Backtester (with Poetry)
 ```bash
 poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
 ```
 
-#### With Docker
-**Note**: All Docker commands must be run from the `docker/` directory.
-
+#### Running the Backtester (with Docker)
 ```bash
 # Navigate to the docker directory first
 cd docker
@@ -250,6 +235,46 @@ poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --ollama
 # On Windows:
 run.bat --ticker AAPL,MSFT,NVDA --ollama backtest
 ```
+
+### 🖥️ Web Application
+
+The new way to run the AI Hedge Fund is through our web application that provides a user-friendly interface. **This is recommended for most users, especially those who prefer visual interfaces over command line tools.**
+
+<img width="1721" alt="Screenshot 2025-06-28 at 6 41 03 PM" src="https://github.com/user-attachments/assets/b95ab696-c9f4-416c-9ad1-51feb1f5374b" />
+
+#### For Mac/Linux:
+```bash
+cd app && ./run.sh
+```
+
+If you get a "permission denied" error, run this first:
+```bash
+cd app && chmod +x run.sh && ./run.sh
+```
+
+#### For Windows:
+```bash
+# Go to /app directory
+cd app
+
+# Run the app
+\.run.bat
+```
+
+**That's it!** These scripts will:
+1. Check for required dependencies (Node.js, Python, Poetry)
+2. Install all dependencies automatically  
+3. Start both frontend and backend services
+4. **Automatically open your web browser** to the application
+
+
+#### Detailed Setup Instructions
+
+For detailed setup instructions, troubleshooting, and advanced configuration options, see:
+- [Full-Stack App Documentation](./app/README.md)
+- [Frontend Documentation](./app/frontend/README.md)  
+- [Backend Documentation](./app/backend/README.md)
+
 
 ## Contributing
 

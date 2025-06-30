@@ -38,10 +38,5 @@
     "display_name": "[meta] llama-3.3 (70B)",
     "model_name": "llama3.3:70b-instruct-q4_0",
     "provider": "Ollama"
-  },
-  {
-    "display_name": "custom",
-    "model_name": "-",
-    "provider": "Ollama"
   }
 ] 

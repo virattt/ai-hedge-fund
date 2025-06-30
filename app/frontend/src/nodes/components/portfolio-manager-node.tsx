@@ -1,7 +1,7 @@
 import { ModelSelector } from '@/components/ui/llm-selector';
 import { getConnectedEdges, useReactFlow, type NodeProps } from '@xyflow/react';
 import { Brain, Play, Square } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useNodeContext } from '@/contexts/node-context';
 import { getDefaultModel, getModels, LanguageModel } from '@/data/models';
+import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
+import { useNodeState } from '@/hooks/use-node-state';
+import { formatKeyboardShortcut } from '@/lib/utils';
 import { api } from '@/services/api';
 import { type PortfolioManagerNode } from '../types';
 import { NodeShell } from './node-shell';
@@ -20,17 +23,17 @@ export function PortfolioManagerNode({
   id,
   isConnectable,
 }: NodeProps<PortfolioManagerNode>) {
-  const [tickers, setTickers] = useState('AAPL,NVDA,TSLA');
-  const [selectedModel, setSelectedModel] = useState<LanguageModel | null>(null);
-  const [availableModels, setAvailableModels] = useState<LanguageModel[]>([]);
-  
   // Calculate default dates
   const today = new Date();
   const threeMonthsAgo = new Date(today);
   threeMonthsAgo.setMonth(today.getMonth() - 3);
   
-  const [startDate, setStartDate] = useState(threeMonthsAgo.toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(today.toISOString().split('T')[0]);
+  // Use persistent state hooks
+  const [tickers, setTickers] = useNodeState(id, 'tickers', 'AAPL,NVDA,TSLA');
+  const [selectedModel, setSelectedModel] = useNodeState<LanguageModel | null>(id, 'selectedModel', null);
+  const [availableModels, setAvailableModels] = useNodeState<LanguageModel[]>(id, 'availableModels', []);
+  const [startDate, setStartDate] = useNodeState(id, 'startDate', threeMonthsAgo.toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useNodeState(id, 'endDate', today.toISOString().split('T')[0]);
   
   const nodeContext = useNodeContext();
   const { resetAllNodes, agentNodeData } = nodeContext;
@@ -42,6 +45,26 @@ export function PortfolioManagerNode({
     agent => agent.status === 'IN_PROGRESS'
   );
   
+  // Check if the hedge fund can be run (same logic as play button enable state)
+  const canRunHedgeFund = !isProcessing && tickers.trim() !== '';
+  
+  // Add keyboard shortcut for Cmd+Enter / Ctrl+Enter to run hedge fund
+  useKeyboardShortcuts({
+    shortcuts: [
+      {
+        key: 'Enter',
+        ctrlKey: true,
+        metaKey: true,
+        callback: () => {
+          if (canRunHedgeFund) {
+            handlePlay();
+          }
+        },
+        preventDefault: true,
+      },
+    ],
+  });
+  
   // Load models and set default on mount
   useEffect(() => {
     const loadModels = async () => {
@@ -51,7 +74,11 @@ export function PortfolioManagerNode({
           getDefaultModel()
         ]);
         setAvailableModels(models);
-        setSelectedModel(defaultModel);
+        
+        // Only set default model if no model is currently selected
+        if (!selectedModel && defaultModel) {
+          setSelectedModel(defaultModel);
+        }
       } catch (error) {
         console.error('Failed to load models:', error);
         // Keep empty array and null as fallback
@@ -59,8 +86,8 @@ export function PortfolioManagerNode({
     };
     
     loadModels();
-  }, []);
-  
+  }, []); // Remove selectedModel from dependencies to avoid infinite loop
+
   // Clean up SSE connection on unmount
   useEffect(() => {
     return () => {
@@ -191,8 +218,9 @@ export function PortfolioManagerNode({
                     size="icon" 
                     variant="secondary"
                     className="flex-shrink-0 transition-all duration-200 hover:bg-primary hover:text-primary-foreground active:scale-95"
+                    title={isProcessing ? "Stop" : `Run (${formatKeyboardShortcut('↵')})`}
                     onClick={isProcessing ? handleStop : handlePlay}
-                    disabled={!isProcessing && !tickers.trim()}
+                    disabled={!canRunHedgeFund && !isProcessing}
                   >
                     {isProcessing ? (
                       <Square className="h-3.5 w-3.5" />

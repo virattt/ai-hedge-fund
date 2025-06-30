@@ -36,7 +36,7 @@ def call_llm(
     
     # Fallback to defaults if still not provided
     if not model_name:
-        model_name = "gpt-4o"
+        model_name = "gpt-4.1"
     if not model_provider:
         model_provider = "OPENAI"
 
@@ -125,7 +125,7 @@ def get_agent_model_config(state, agent_name):
 
     if agent_name == 'portfolio_manager':
         # Get the model and provider from state metadata
-        model_name = state.get("metadata", {}).get("model_name", "gpt-4o")
+        model_name = state.get("metadata", {}).get("model_name", "gpt-4.1")
         model_provider = state.get("metadata", {}).get("model_provider", "OPENAI")
         return model_name, model_provider
     
@@ -135,7 +135,7 @@ def get_agent_model_config(state, agent_name):
         return model_name, model_provider.value if hasattr(model_provider, 'value') else str(model_provider)
     
     # Fall back to global configuration
-    model_name = state.get("metadata", {}).get("model_name", "gpt-4o")
+    model_name = state.get("metadata", {}).get("model_name", "gpt-4.1")
     model_provider = state.get("metadata", {}).get("model_provider", "OPENAI")
     
     # Convert enum to string if necessary

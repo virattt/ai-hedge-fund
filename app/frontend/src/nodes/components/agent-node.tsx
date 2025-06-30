@@ -7,6 +7,7 @@ import { CardContent } from '@/components/ui/card';
 import { ModelSelector } from '@/components/ui/llm-selector';
 import { useNodeContext } from '@/contexts/node-context';
 import { getModels, LanguageModel } from '@/data/models';
+import { useNodeState } from '@/hooks/use-node-state';
 import { cn } from '@/lib/utils';
 import { type AgentNode } from '../types';
 import { getStatusColor } from '../utils';
@@ -30,11 +31,10 @@ export function AgentNode({
   const status = nodeData.status;
   const isInProgress = status === 'IN_PROGRESS';
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [availableModels, setAvailableModels] = useState<LanguageModel[]>([]);
   
-  // Get the current model for this agent (null if using global model)
-  const currentModel = getAgentModel(id);
-  const [selectedModel, setSelectedModel] = useState<LanguageModel | null>(currentModel);
+  // Use persistent state hooks
+  const [availableModels, setAvailableModels] = useNodeState<LanguageModel[]>(id, 'availableModels', []);
+  const [selectedModel, setSelectedModel] = useNodeState<LanguageModel | null>(id, 'selectedModel', null);
 
   // Load models on mount
   useEffect(() => {
@@ -49,14 +49,15 @@ export function AgentNode({
     };
     
     loadModels();
-  }, []);
+  }, [setAvailableModels]);
 
   // Update the node context when the model changes
   useEffect(() => {
-    if (selectedModel !== currentModel) {
+    const currentContextModel = getAgentModel(id);
+    if (selectedModel !== currentContextModel) {
       setAgentModel(id, selectedModel);
     }
-  }, [selectedModel, id, setAgentModel, currentModel]);
+  }, [selectedModel, id, setAgentModel, getAgentModel]);
 
   const handleModelChange = (model: LanguageModel | null) => {
     setSelectedModel(model);

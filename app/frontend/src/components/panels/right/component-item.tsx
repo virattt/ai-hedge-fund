@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { LucideIcon, Plus } from "lucide-react";
 import { useState } from "react";
 
-interface SidebarItemProps {
+interface ComponentItemProps {
   icon: LucideIcon;
   label: string;
   onClick?: () => void;
@@ -11,13 +11,13 @@ interface SidebarItemProps {
   isActive?: boolean;
 }
 
-export function SidebarItem({ 
+export default function ComponentItem({ 
   icon: Icon, 
   label, 
   onClick, 
   className, 
   isActive = false 
-}: SidebarItemProps) {
+}: ComponentItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   
   const handlePlusClick = (e: React.MouseEvent) => {
@@ -28,7 +28,7 @@ export function SidebarItem({
   return (
     <div 
       className={cn(
-        "group flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer text-sm transition-colors duration-150",
+        "group flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer text-subtitle transition-colors duration-150",
         isActive ? "bg-ramp-grey-700 text-white" : "text-gray-300",
         isHovered ? "bg-ramp-grey-700" : "",
         className

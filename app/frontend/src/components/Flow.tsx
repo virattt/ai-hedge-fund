@@ -7,19 +7,19 @@ import {
   ReactFlow,
   addEdge,
   useEdgesState,
-  useNodesState,
-  useReactFlow
+  useNodesState
 } from '@xyflow/react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import '@xyflow/react/dist/style.css';
 
-import { useFlowPersistence } from '@/hooks/use-flow-persistence';
-import { useFlowKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
+import { useFlowContext } from '@/contexts/flow-context';
+import { useFlowHistory } from '@/hooks/use-flow-history';
+import { useFlowKeyboardShortcuts, useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
+import { useToastManager } from '@/hooks/use-toast-manager';
 import { AppNode } from '@/nodes/types';
 import { edgeTypes } from '../edges';
-import { initialEdges, initialNodes, nodeTypes } from '../nodes';
-import { CustomControls } from './custom-controls';
+import { nodeTypes } from '../nodes';
 import { TooltipProvider } from './ui/tooltip';
 
 type FlowProps = {
@@ -28,31 +28,94 @@ type FlowProps = {
 
 export function Flow({ className = '' }: FlowProps) {
   const [colorMode] = useState<ColorMode>('dark');
-  const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initialEdges);
+  const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [rfInstance, setRfInstance] = useState<any>(null);
-  const { setViewport } = useReactFlow();
   const proOptions = { hideAttribution: true };
   
-  // Custom hooks for flow persistence and keyboard shortcuts
-  const { saveFlow, clearSavedFlow } = useFlowPersistence({
-    rfInstance,
-    nodes,
-    edges,
-    setNodes,
-    setEdges,
-    setViewport,
-    isInitialized,
+  // Get flow context for saving
+  const { saveCurrentFlow } = useFlowContext();
+  
+  // Get toast manager
+  const { success, error } = useToastManager();
+
+  // Initialize flow history
+  const { takeSnapshot, undo, redo, canUndo, canRedo, clearHistory } = useFlowHistory();
+
+  // Take initial snapshot when flow is initialized
+  useEffect(() => {
+    if (isInitialized && nodes.length === 0 && edges.length === 0) {
+      takeSnapshot();
+    }
+  }, [isInitialized, takeSnapshot, nodes.length, edges.length]);
+
+  // Take snapshot when nodes or edges change (debounced)
+  useEffect(() => {
+    if (!isInitialized) return;
+    
+    const timeoutId = setTimeout(() => {
+      takeSnapshot();
+    }, 500); // Debounce snapshots by 500ms
+
+    return () => clearTimeout(timeoutId);
+  }, [nodes, edges, takeSnapshot, isInitialized]);
+
+  // Auto-save when nodes or edges change (debounced with longer delay)
+  useEffect(() => {
+    if (!isInitialized) return;
+    
+    const timeoutId = setTimeout(async () => {
+      try {
+        await saveCurrentFlow();
+        // Don't show success toast for auto-save to avoid spam
+      } catch (err) {
+        // Only show error notifications for auto-save failures
+        error('Auto-save failed', 'auto-save-error');
+      }
+    }, 1000); // Debounce auto-save by 1 second (longer than undo/redo)
+
+    return () => clearTimeout(timeoutId);
+  }, [nodes, edges, saveCurrentFlow, error, isInitialized]);
+
+  // Connect keyboard shortcuts to save flow with toast
+  useFlowKeyboardShortcuts(async () => {
+    try {
+      const savedFlow = await saveCurrentFlow();
+      if (savedFlow) {
+        success(`"${savedFlow.name}" saved!`, 'flow-save');
+      } else {
+        error('Failed to save flow', 'flow-save-error');
+      }
+    } catch (err) {
+      error('Failed to save flow', 'flow-save-error');
+    }
+  });
+
+  // Add undo/redo keyboard shortcuts
+  useKeyboardShortcuts({
+    shortcuts: [
+      {
+        key: 'z',
+        ctrlKey: true,
+        metaKey: true,
+        callback: undo,
+        preventDefault: true,
+      },
+      {
+        key: 'z',
+        ctrlKey: true,
+        metaKey: true,
+        shiftKey: true,
+        callback: redo,
+        preventDefault: true,
+      },
+    ],
   });
   
-  useFlowKeyboardShortcuts(saveFlow);
-  
   // Initialize the flow when it first renders
-  const onInit = useCallback((reactFlowInstance: any) => {
+  const onInit = useCallback(() => {
     if (!isInitialized) {
       setIsInitialized(true);
-      setRfInstance(reactFlowInstance);
     }
   }, [isInitialized]);
 
@@ -74,10 +137,10 @@ export function Flow({ className = '' }: FlowProps) {
 
   // Reset the flow to initial state
   const resetFlow = useCallback(() => {
-    setNodes(initialNodes);
-    setEdges(initialEdges);
-    clearSavedFlow();
-  }, [setNodes, setEdges, clearSavedFlow]);
+    setNodes([]);
+    setEdges([]);
+    clearHistory();
+  }, [setNodes, setEdges, clearHistory]);
 
   return (
     <div className={`w-full h-full ${className}`}>
@@ -93,10 +156,9 @@ export function Flow({ className = '' }: FlowProps) {
           onInit={onInit}
           colorMode={colorMode}
           proOptions={proOptions}
-          fitView
         >
           <Background gap={13}/>
-          <CustomControls onReset={resetFlow} />
+          {/* <CustomControls onReset={resetFlow} /> */}
         </ReactFlow>
       </TooltipProvider>
     </div>
