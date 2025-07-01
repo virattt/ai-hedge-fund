@@ -2,11 +2,11 @@ import json
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 
-from graph.state import AgentState, show_agent_reasoning
+from src.graph.state import AgentState, show_agent_reasoning
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
-from utils.progress import progress
-from utils.llm import call_llm
+from src.utils.progress import progress
+from src.utils.llm import call_llm
 
 
 class PortfolioDecision(BaseModel):
@@ -29,15 +29,13 @@ def portfolio_management_agent(state: AgentState):
     analyst_signals = state["data"]["analyst_signals"]
     tickers = state["data"]["tickers"]
 
-    progress.update_status("portfolio_management_agent", None, "Analyzing signals")
-
     # Get position limits, current prices, and signals for every ticker
     position_limits = {}
     current_prices = {}
     max_shares = {}
     signals_by_ticker = {}
     for ticker in tickers:
-        progress.update_status("portfolio_management_agent", ticker, "Processing analyst signals")
+        progress.update_status("portfolio_manager", ticker, "Processing analyst signals")
 
         # Get position limits and current prices for the ticker
         risk_data = analyst_signals.get("risk_management_agent", {}).get(ticker, {})
@@ -57,7 +55,7 @@ def portfolio_management_agent(state: AgentState):
                 ticker_signals[agent] = {"signal": signals[ticker]["signal"], "confidence": signals[ticker]["confidence"]}
         signals_by_ticker[ticker] = ticker_signals
 
-    progress.update_status("portfolio_management_agent", None, "Making trading decisions")
+    progress.update_status("portfolio_manager", None, "Generating trading decisions")
 
     # Generate the trading decision
     result = generate_trading_decision(
@@ -66,21 +64,20 @@ def portfolio_management_agent(state: AgentState):
         current_prices=current_prices,
         max_shares=max_shares,
         portfolio=portfolio,
-        model_name=state["metadata"]["model_name"],
-        model_provider=state["metadata"]["model_provider"],
+        state=state,
     )
 
     # Create the portfolio management message
     message = HumanMessage(
         content=json.dumps({ticker: decision.model_dump() for ticker, decision in result.decisions.items()}),
-        name="portfolio_management",
+        name="portfolio_manager",
     )
 
     # Print the decision if the flag is set
     if state["metadata"]["show_reasoning"]:
-        show_agent_reasoning({ticker: decision.model_dump() for ticker, decision in result.decisions.items()}, "Portfolio Management Agent")
+        show_agent_reasoning({ticker: decision.model_dump() for ticker, decision in result.decisions.items()}, "Portfolio Manager")
 
-    progress.update_status("portfolio_management_agent", None, "Done")
+    progress.update_status("portfolio_manager", None, "Done")
 
     return {
         "messages": state["messages"] + [message],
@@ -94,16 +91,15 @@ def generate_trading_decision(
     current_prices: dict[str, float],
     max_shares: dict[str, int],
     portfolio: dict[str, float],
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
 ) -> PortfolioManagerOutput:
     """Attempts to get a decision from the LLM with retry logic"""
     # Create the prompt template
     template = ChatPromptTemplate.from_messages(
         [
             (
-              "system",
-              """You are a portfolio manager making final trading decisions based on multiple tickers.
+                "system",
+                """You are a portfolio manager making final trading decisions based on multiple tickers.
 
               Trading Rules:
               - For long positions:
@@ -140,8 +136,8 @@ def generate_trading_decision(
               """,
             ),
             (
-              "human",
-              """Based on the team's analysis, make your trading decisions for each ticker.
+                "human",
+                """Based on the team's analysis, make your trading decisions for each ticker.
 
               Here are the signals by ticker:
               {signals_by_ticker}
@@ -184,7 +180,7 @@ def generate_trading_decision(
             "current_prices": json.dumps(current_prices, indent=2),
             "max_shares": json.dumps(max_shares, indent=2),
             "portfolio_cash": f"{portfolio.get('cash', 0):.2f}",
-            "portfolio_positions": json.dumps(portfolio.get('positions', {}), indent=2),
+            "portfolio_positions": json.dumps(portfolio.get("positions", {}), indent=2),
             "margin_requirement": f"{portfolio.get('margin_requirement', 0):.2f}",
             "total_margin_used": f"{portfolio.get('margin_used', 0):.2f}",
         }
@@ -194,4 +190,10 @@ def generate_trading_decision(
     def create_default_portfolio_output():
         return PortfolioManagerOutput(decisions={ticker: PortfolioDecision(action="hold", quantity=0, confidence=0.0, reasoning="Error in portfolio management, defaulting to hold") for ticker in tickers})
 
-    return call_llm(prompt=prompt, model_name=model_name, model_provider=model_provider, pydantic_model=PortfolioManagerOutput, agent_name="portfolio_management_agent", default_factory=create_default_portfolio_output)
+    return call_llm(
+        prompt=prompt,
+        pydantic_model=PortfolioManagerOutput,
+        agent_name="portfolio_manager",
+        state=state,
+        default_factory=create_default_portfolio_output,
+    )

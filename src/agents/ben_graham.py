@@ -1,13 +1,12 @@
-from langchain_openai import ChatOpenAI
-from graph.state import AgentState, show_agent_reasoning
-from tools.api import get_financial_metrics, get_market_cap, search_line_items
+from src.graph.state import AgentState, show_agent_reasoning
+from src.tools.api import get_financial_metrics, get_market_cap, search_line_items
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 import json
 from typing_extensions import Literal
-from utils.progress import progress
-from utils.llm import call_llm
+from src.utils.progress import progress
+from src.utils.llm import call_llm
 import math
 
 
@@ -47,10 +46,10 @@ def ben_graham_agent(state: AgentState):
         earnings_analysis = analyze_earnings_stability(metrics, financial_line_items)
 
         progress.update_status("ben_graham_agent", ticker, "Analyzing financial strength")
-        strength_analysis = analyze_financial_strength(metrics, financial_line_items)
+        strength_analysis = analyze_financial_strength(financial_line_items)
 
         progress.update_status("ben_graham_agent", ticker, "Analyzing Graham valuation")
-        valuation_analysis = analyze_valuation_graham(metrics, financial_line_items, market_cap)
+        valuation_analysis = analyze_valuation_graham(financial_line_items, market_cap)
 
         # Aggregate scoring
         total_score = earnings_analysis["score"] + strength_analysis["score"] + valuation_analysis["score"]
@@ -70,13 +69,12 @@ def ben_graham_agent(state: AgentState):
         graham_output = generate_graham_output(
             ticker=ticker,
             analysis_data=analysis_data,
-            model_name=state["metadata"]["model_name"],
-            model_provider=state["metadata"]["model_provider"],
+            state=state,
         )
 
         graham_analysis[ticker] = {"signal": graham_output.signal, "confidence": graham_output.confidence, "reasoning": graham_output.reasoning}
 
-        progress.update_status("ben_graham_agent", ticker, "Done")
+        progress.update_status("ben_graham_agent", ticker, "Done", analysis=graham_output.reasoning)
 
     # Wrap results in a single message for the chain
     message = HumanMessage(content=json.dumps(graham_analysis), name="ben_graham_agent")
@@ -87,6 +85,8 @@ def ben_graham_agent(state: AgentState):
 
     # Store signals in the overall state
     state["data"]["analyst_signals"]["ben_graham_agent"] = graham_analysis
+
+    progress.update_status("ben_graham_agent", None, "Done")
 
     return {"messages": [message], "data": state["data"]}
 
@@ -126,7 +126,7 @@ def analyze_earnings_stability(metrics: list, financial_line_items: list) -> dic
         details.append("EPS was negative in multiple periods.")
 
     # 2. EPS growth from earliest to latest
-    if eps_vals[-1] > eps_vals[0]:
+    if eps_vals[0] > eps_vals[-1]:
         score += 1
         details.append("EPS grew from earliest to latest period.")
     else:
@@ -135,7 +135,7 @@ def analyze_earnings_stability(metrics: list, financial_line_items: list) -> dic
     return {"score": score, "details": "; ".join(details)}
 
 
-def analyze_financial_strength(metrics: list, financial_line_items: list) -> dict:
+def analyze_financial_strength(financial_line_items: list) -> dict:
     """
     Graham checks liquidity (current ratio >= 2), manageable debt,
     and dividend record (preferably some history of dividends).
@@ -146,7 +146,7 @@ def analyze_financial_strength(metrics: list, financial_line_items: list) -> dic
     if not financial_line_items:
         return {"score": score, "details": "No data for financial strength analysis"}
 
-    latest_item = financial_line_items[-1]
+    latest_item = financial_line_items[0]
     total_assets = latest_item.total_assets or 0
     total_liabilities = latest_item.total_liabilities or 0
     current_assets = latest_item.current_assets or 0
@@ -201,7 +201,7 @@ def analyze_financial_strength(metrics: list, financial_line_items: list) -> dic
     return {"score": score, "details": "; ".join(details)}
 
 
-def analyze_valuation_graham(metrics: list, financial_line_items: list, market_cap: float) -> dict:
+def analyze_valuation_graham(financial_line_items: list, market_cap: float) -> dict:
     """
     Core Graham approach to valuation:
     1. Net-Net Check: (Current Assets - Total Liabilities) vs. Market Cap
@@ -211,7 +211,7 @@ def analyze_valuation_graham(metrics: list, financial_line_items: list, market_c
     if not financial_line_items or not market_cap or market_cap <= 0:
         return {"score": 0, "details": "Insufficient data to perform valuation"}
 
-    latest = financial_line_items[-1]
+    latest = financial_line_items[0]
     current_assets = latest.current_assets or 0
     total_liabilities = latest.total_liabilities or 0
     book_value_ps = latest.book_value_per_share or 0
@@ -279,8 +279,7 @@ def analyze_valuation_graham(metrics: list, financial_line_items: list, market_c
 def generate_graham_output(
     ticker: str,
     analysis_data: dict[str, any],
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
 ) -> BenGrahamSignal:
     """
     Generates an investment decision in the style of Benjamin Graham:
@@ -288,10 +287,11 @@ def generate_graham_output(
     - Return the result in a JSON structure: { signal, confidence, reasoning }.
     """
 
-    template = ChatPromptTemplate.from_messages([
-        (
-            "system",
-            """You are a Benjamin Graham AI agent, making investment decisions using his principles:
+    template = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """You are a Benjamin Graham AI agent, making investment decisions using his principles:
             1. Insist on a margin of safety by buying below intrinsic value (e.g., using Graham Number, net-net).
             2. Emphasize the company's financial strength (low leverage, ample current assets).
             3. Prefer stable earnings over multiple years.
@@ -310,11 +310,11 @@ def generate_graham_output(
             For example, if bearish: "Despite consistent earnings, the current price of $50 exceeds our calculated Graham Number of $35, offering no margin of safety. Additionally, the current ratio of only 1.2 falls below Graham's preferred 2.0 threshold..."
                         
             Return a rational recommendation: bullish, bearish, or neutral, with a confidence level (0-100) and thorough reasoning.
-            """
-        ),
-        (
-            "human",
-            """Based on the following analysis, create a Graham-style investment signal:
+            """,
+            ),
+            (
+                "human",
+                """Based on the following analysis, create a Graham-style investment signal:
 
             Analysis Data for {ticker}:
             {analysis_data}
@@ -325,23 +325,20 @@ def generate_graham_output(
               "confidence": float (0-100),
               "reasoning": "string"
             }}
-            """
-        )
-    ])
+            """,
+            ),
+        ]
+    )
 
-    prompt = template.invoke({
-        "analysis_data": json.dumps(analysis_data, indent=2),
-        "ticker": ticker
-    })
+    prompt = template.invoke({"analysis_data": json.dumps(analysis_data, indent=2), "ticker": ticker})
 
     def create_default_ben_graham_signal():
         return BenGrahamSignal(signal="neutral", confidence=0.0, reasoning="Error in generating analysis; defaulting to neutral.")
 
     return call_llm(
         prompt=prompt,
-        model_name=model_name,
-        model_provider=model_provider,
         pydantic_model=BenGrahamSignal,
         agent_name="ben_graham_agent",
+        state=state,
         default_factory=create_default_ben_graham_signal,
     )

@@ -5,10 +5,12 @@ description = "An AI-powered hedge fund that uses multiple agents to make tradin
 authors = ["Your Name <your.email@example.com>"]
 readme = "README.md"
 packages = [
-    { include = "src", from = "." }
+    { include = "src", from = "." },
+    { include = "app", from = "." }
 ]
+
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.11"
 langchain = "0.3.0"
 langchain-anthropic = "0.3.5"
 langchain-groq = "0.2.3"
@@ -25,6 +27,13 @@ colorama = "^0.4.6"
 questionary = "^2.1.0"
 rich = "^13.9.4"
 langchain-google-genai = "^2.0.11"
+# Backend dependencies
+fastapi = {extras = ["standard"], version = "^0.104.0"}
+fastapi-cli = "^0.0.7"
+pydantic = "^2.4.2"
+httpx = "^0.27.0"
+sqlalchemy = "^2.0.22"
+alembic = "^1.12.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
@@ -38,5 +47,9 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 420
-target-version = ['py39']
+target-version = ['py311']
 include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+force_alphabetical_sort_within_sections = true

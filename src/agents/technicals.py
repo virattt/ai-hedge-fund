@@ -2,14 +2,33 @@ import math
 
 from langchain_core.messages import HumanMessage
 
-from graph.state import AgentState, show_agent_reasoning
+from src.graph.state import AgentState, show_agent_reasoning
 
 import json
 import pandas as pd
 import numpy as np
 
-from tools.api import get_prices, prices_to_df
-from utils.progress import progress
+from src.tools.api import get_prices, prices_to_df
+from src.utils.progress import progress
+
+
+def safe_float(value, default=0.0):
+    """
+    Safely convert a value to float, handling NaN cases
+    
+    Args:
+        value: The value to convert (can be pandas scalar, numpy value, etc.)
+        default: Default value to return if the input is NaN or invalid
+    
+    Returns:
+        float: The converted value or default if NaN/invalid
+    """
+    try:
+        if pd.isna(value) or np.isnan(value):
+            return default
+        return float(value)
+    except (ValueError, TypeError, OverflowError):
+        return default
 
 
 ##### Technical Analyst #####
@@ -87,7 +106,7 @@ def technical_analyst_agent(state: AgentState):
         technical_analysis[ticker] = {
             "signal": combined_signal["signal"],
             "confidence": round(combined_signal["confidence"] * 100),
-            "strategy_signals": {
+            "reasoning": {
                 "trend_following": {
                     "signal": trend_signals["signal"],
                     "confidence": round(trend_signals["confidence"] * 100),
@@ -115,7 +134,7 @@ def technical_analyst_agent(state: AgentState):
                 },
             },
         }
-        progress.update_status("technical_analyst_agent", ticker, "Done")
+        progress.update_status("technical_analyst_agent", ticker, "Done", analysis=json.dumps(technical_analysis, indent=4))
 
     # Create the technical analyst message
     message = HumanMessage(
@@ -128,6 +147,8 @@ def technical_analyst_agent(state: AgentState):
 
     # Add the signal to the analyst_signals list
     state["data"]["analyst_signals"]["technical_analyst_agent"] = technical_analysis
+
+    progress.update_status("technical_analyst_agent", None, "Done")
 
     return {
         "messages": state["messages"] + [message],
@@ -168,8 +189,8 @@ def calculate_trend_signals(prices_df):
         "signal": signal,
         "confidence": confidence,
         "metrics": {
-            "adx": float(adx["adx"].iloc[-1]),
-            "trend_strength": float(trend_strength),
+            "adx": safe_float(adx["adx"].iloc[-1]),
+            "trend_strength": safe_float(trend_strength),
         },
     }
 
@@ -208,10 +229,10 @@ def calculate_mean_reversion_signals(prices_df):
         "signal": signal,
         "confidence": confidence,
         "metrics": {
-            "z_score": float(z_score.iloc[-1]),
-            "price_vs_bb": float(price_vs_bb),
-            "rsi_14": float(rsi_14.iloc[-1]),
-            "rsi_28": float(rsi_28.iloc[-1]),
+            "z_score": safe_float(z_score.iloc[-1]),
+            "price_vs_bb": safe_float(price_vs_bb),
+            "rsi_14": safe_float(rsi_14.iloc[-1]),
+            "rsi_28": safe_float(rsi_28.iloc[-1]),
         },
     }
 
@@ -253,10 +274,10 @@ def calculate_momentum_signals(prices_df):
         "signal": signal,
         "confidence": confidence,
         "metrics": {
-            "momentum_1m": float(mom_1m.iloc[-1]),
-            "momentum_3m": float(mom_3m.iloc[-1]),
-            "momentum_6m": float(mom_6m.iloc[-1]),
-            "volume_momentum": float(volume_momentum.iloc[-1]),
+            "momentum_1m": safe_float(mom_1m.iloc[-1]),
+            "momentum_3m": safe_float(mom_3m.iloc[-1]),
+            "momentum_6m": safe_float(mom_6m.iloc[-1]),
+            "volume_momentum": safe_float(volume_momentum.iloc[-1]),
         },
     }
 
@@ -300,10 +321,10 @@ def calculate_volatility_signals(prices_df):
         "signal": signal,
         "confidence": confidence,
         "metrics": {
-            "historical_volatility": float(hist_vol.iloc[-1]),
-            "volatility_regime": float(current_vol_regime),
-            "volatility_z_score": float(vol_z),
-            "atr_ratio": float(atr_ratio.iloc[-1]),
+            "historical_volatility": safe_float(hist_vol.iloc[-1]),
+            "volatility_regime": safe_float(current_vol_regime),
+            "volatility_z_score": safe_float(vol_z),
+            "atr_ratio": safe_float(atr_ratio.iloc[-1]),
         },
     }
 
@@ -340,9 +361,9 @@ def calculate_stat_arb_signals(prices_df):
         "signal": signal,
         "confidence": confidence,
         "metrics": {
-            "hurst_exponent": float(hurst),
-            "skewness": float(skew.iloc[-1]),
-            "kurtosis": float(kurt.iloc[-1]),
+            "hurst_exponent": safe_float(hurst),
+            "skewness": safe_float(skew.iloc[-1]),
+            "kurtosis": safe_float(kurt.iloc[-1]),
         },
     }
 

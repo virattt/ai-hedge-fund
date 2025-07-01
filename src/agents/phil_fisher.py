@@ -1,5 +1,5 @@
-from graph.state import AgentState, show_agent_reasoning
-from tools.api import (
+from src.graph.state import AgentState, show_agent_reasoning
+from src.tools.api import (
     get_financial_metrics,
     get_market_cap,
     search_line_items,
@@ -11,8 +11,8 @@ from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 import json
 from typing_extensions import Literal
-from utils.progress import progress
-from utils.llm import call_llm
+from src.utils.progress import progress
+from src.utils.llm import call_llm
 import statistics
 
 
@@ -35,7 +35,6 @@ def phil_fisher_agent(state: AgentState):
     Returns a bullish/bearish/neutral signal with confidence and reasoning.
     """
     data = state["data"]
-    start_date = data["start_date"]
     end_date = data["end_date"]
     tickers = data["tickers"]
 
@@ -143,8 +142,7 @@ def phil_fisher_agent(state: AgentState):
         fisher_output = generate_fisher_output(
             ticker=ticker,
             analysis_data=analysis_data,
-            model_name=state["metadata"]["model_name"],
-            model_provider=state["metadata"]["model_provider"],
+            state=state,
         )
 
         fisher_analysis[ticker] = {
@@ -153,7 +151,7 @@ def phil_fisher_agent(state: AgentState):
             "reasoning": fisher_output.reasoning,
         }
 
-        progress.update_status("phil_fisher_agent", ticker, "Done")
+        progress.update_status("phil_fisher_agent", ticker, "Done", analysis=fisher_output.reasoning)
 
     # Wrap results in a single message
     message = HumanMessage(content=json.dumps(fisher_analysis), name="phil_fisher_agent")
@@ -162,6 +160,9 @@ def phil_fisher_agent(state: AgentState):
         show_agent_reasoning(fisher_analysis, "Phil Fisher Agent")
 
     state["data"]["analyst_signals"]["phil_fisher_agent"] = fisher_analysis
+
+    progress.update_status("phil_fisher_agent", None, "Done")
+    
     return {"messages": [message], "data": state["data"]}
 
 
@@ -528,8 +529,7 @@ def analyze_sentiment(news_items: list) -> dict:
 def generate_fisher_output(
     ticker: str,
     analysis_data: dict[str, any],
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
 ) -> PhilFisherSignal:
     """
     Generates a JSON signal in the style of Phil Fisher.
@@ -593,9 +593,8 @@ def generate_fisher_output(
 
     return call_llm(
         prompt=prompt,
-        model_name=model_name,
-        model_provider=model_provider,
         pydantic_model=PhilFisherSignal,
+        state=state,
         agent_name="phil_fisher_agent",
         default_factory=create_default_signal,
     )
