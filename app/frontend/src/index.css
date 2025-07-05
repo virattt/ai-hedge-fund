@@ -72,10 +72,10 @@
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
+    --border: 0 0% 25%;
     --input: 0 0% 14.9%;
     --ring: 0 0% 83.1%;
-    --panel-bg: 240 3% 13%;
+    --panel-bg: 240 3% 11%;
     --sidebar-background: 240 5.9% 16%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
@@ -234,6 +234,18 @@
   );
   background-size: 200% 100%;
   animation: gradientFlow 3s linear infinite;
+}
+
+/* Gradient text animation */
+.gradient-text {
+  background: linear-gradient(90deg, 
+    #2383F4, #5e61e7, #8F00FF, #7831d4, #2383F4
+  );
+  background-size: 200% 100%;
+  animation: gradientFlow 3s linear infinite;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
 }
 
 /* Remove white lines between ReactFlow Controls buttons */

@@ -1,7 +1,6 @@
 import { FlowItemGroup } from '@/components/panels/left/flow-item-group';
 import { SearchBox } from '@/components/panels/search-box';
 import { Accordion } from '@/components/ui/accordion';
-import { useFlowContext } from '@/contexts/flow-context';
 import { useTabsContext } from '@/contexts/tabs-context';
 import { Flow } from '@/types/flow';
 import { FolderOpen } from 'lucide-react';
@@ -35,7 +34,6 @@ export function FlowList({
   onDeleteFlow,
   onRefresh,
 }: FlowListProps) {
-  const { currentFlowId } = useFlowContext();
   const { tabs, activeTabId } = useTabsContext();
 
   // Only consider a flow active if the current active tab is a flow tab with that flow's ID

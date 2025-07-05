@@ -34,6 +34,7 @@ interface InvestmentReportDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   outputNodeData: any;
+  connectedAgentIds: Set<string>;
 }
 
 type ActionType = 'long' | 'short' | 'hold';
@@ -41,7 +42,8 @@ type ActionType = 'long' | 'short' | 'hold';
 export function InvestmentReportDialog({ 
   isOpen, 
   onOpenChange, 
-  outputNodeData 
+  outputNodeData,
+  connectedAgentIds
 }: InvestmentReportDialogProps) {
   if (!outputNodeData) return null;
 
@@ -85,9 +87,12 @@ export function InvestmentReportDialog({
   // Extract unique tickers from the data
   const tickers = Object.keys(outputNodeData.decisions || {});
   
-  // Extract unique agents from analyst signals, excluding risk_management_agent
+  // Convert React Flow node IDs to backend agent keys and filter agents
+  const connectedBackendAgentKeys = Array.from(connectedAgentIds).map(nodeId => `${nodeId}_agent`);
   const agents = Object.keys(outputNodeData.analyst_signals || {})
-    .filter(agent => agent !== 'risk_management_agent');
+    .filter(agent => 
+      agent !== 'risk_management_agent' && connectedBackendAgentKeys.includes(agent)
+    );
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -115,7 +120,6 @@ export function InvestmentReportDialog({
                       <TableHead>Action</TableHead>
                       <TableHead>Quantity</TableHead>
                       <TableHead>Confidence</TableHead>
-                      <TableHead>Reasoning</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -134,29 +138,6 @@ export function InvestmentReportDialog({
                           </TableCell>
                           <TableCell>{decision.quantity}</TableCell>
                           <TableCell>{getConfidenceBadge(decision.confidence)}</TableCell>
-                          <TableCell className="max-w-sm">
-                            {typeof decision.reasoning === 'string' ? (
-                              <p className="text-xs text-muted-foreground hover:line-clamp-none">
-                                {decision.reasoning}
-                              </p>
-                            ) : (
-                              <div className="max-h-32 overflow-y-auto">
-                                <SyntaxHighlighter
-                                  language="json"
-                                  style={vscDarkPlus}
-                                  className="text-xs rounded-md"
-                                  customStyle={{
-                                    fontSize: '0.75rem',
-                                    margin: 0,
-                                    padding: '8px',
-                                    backgroundColor: 'hsl(var(--muted))',
-                                  }}
-                                >
-                                  {JSON.stringify(decision.reasoning, null, 2)}
-                                </SyntaxHighlighter>
-                              </div>
-                            )}
-                          </TableCell>
                         </TableRow>
                       );
                     })}

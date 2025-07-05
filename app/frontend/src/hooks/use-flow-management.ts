@@ -1,10 +1,10 @@
 import { useFlowContext } from '@/contexts/flow-context';
+import { useNodeContext } from '@/contexts/node-context';
 import {
-    clearAllNodeStates,
-    clearFlowNodeStates,
-    getNodeInternalState,
-    setNodeInternalState,
-    setCurrentFlowId as setNodeStateFlowId
+  clearFlowNodeStates,
+  getNodeInternalState,
+  setNodeInternalState,
+  setCurrentFlowId as setNodeStateFlowId
 } from '@/hooks/use-node-state';
 import { useToastManager } from '@/hooks/use-toast-manager';
 import { flowService } from '@/services/flow-service';
@@ -42,8 +42,9 @@ export interface UseFlowManagementReturn {
 }
 
 export function useFlowManagement(): UseFlowManagementReturn {
-  // Get flow context and toast manager
-  const { saveCurrentFlow, loadFlow, reactFlowInstance } = useFlowContext();
+  // Get flow context, node context, and toast manager
+  const { saveCurrentFlow, loadFlow, reactFlowInstance, currentFlowId } = useFlowContext();
+  const { exportNodeContextData, resetAllNodes } = useNodeContext();
   const { success, error } = useToastManager();
   
   // State for flows
@@ -53,11 +54,15 @@ export function useFlowManagement(): UseFlowManagementReturn {
   const [openGroups, setOpenGroups] = useState<string[]>(['recent-flows']);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
-  // Enhanced save function that includes internal node states
+  // Enhanced save function that includes internal node states AND node context data
   const saveCurrentFlowWithStates = useCallback(async (): Promise<Flow | null> => {
     try {
       // Get current nodes from React Flow
       const currentNodes = reactFlowInstance.getNodes();
+      
+      // Get node context data (runtime data: agent status, messages, output data)
+      const flowId = currentFlowId?.toString() || null;
+      const nodeContextData = exportNodeContextData(flowId);
       
       // Enhance nodes with internal states
       const nodesWithStates = currentNodes.map((node: any) => {
@@ -78,6 +83,20 @@ export function useFlowManagement(): UseFlowManagementReturn {
       try {
         // Use the context's save function which handles currentFlowId properly
         const savedFlow = await saveCurrentFlow();
+        
+        if (savedFlow) {
+          // After basic save, update with node context data
+          const updatedFlow = await flowService.updateFlow(savedFlow.id, {
+            ...savedFlow,
+            data: {
+              ...savedFlow.data,
+              nodeContextData, // Add runtime data from node context
+            }
+          });
+          
+          return updatedFlow;
+        }
+        
         return savedFlow;
       } finally {
         // Restore original nodes (without internal_state in React Flow)
@@ -87,21 +106,23 @@ export function useFlowManagement(): UseFlowManagementReturn {
       console.error('Failed to save flow with states:', err);
       return null;
     }
-  }, [reactFlowInstance, saveCurrentFlow]);
+  }, [reactFlowInstance, saveCurrentFlow, exportNodeContextData, currentFlowId]);
 
-  // Enhanced load function that restores internal node states
+  // Enhanced load function that restores internal node states AND node context data
   const loadFlowWithStates = useCallback(async (flow: Flow) => {
     try {
       // First, set the flow ID for node state isolation
       setNodeStateFlowId(flow.id.toString());
       
-      // Clear all existing node states
-      clearAllNodeStates();
+      // DO NOT clear configuration state when loading flows - useNodeState handles flow isolation automatically
+      // DO NOT reset runtime data when loading flows - preserve all runtime state
+      // Runtime data should only be reset when explicitly starting a new run via the Play button
+      console.log(`[FlowManagement] Loading flow ${flow.id} (${flow.name}), preserving all state (configuration + runtime)`);
 
       // Load the flow using the context (this handles currentFlowId, currentFlowName, etc.)
       await loadFlow(flow);
 
-      // Then restore internal states for each node
+      // Then restore internal states for each node (use-node-state data)
       if (flow.nodes) {
         flow.nodes.forEach((node: any) => {
           if (node.data?.internal_state) {
@@ -109,8 +130,12 @@ export function useFlowManagement(): UseFlowManagementReturn {
           }
         });
       }
+      
+      // NOTE: We intentionally do NOT restore nodeContextData here
+      // Runtime execution data (messages, analysis, agent status) should start fresh
+      // Only configuration data (tickers, model selections) is restored above
 
-      console.log('Flow loaded with internal states:', flow.name);
+      console.log('Flow loaded with complete state restoration:', flow.name);
     } catch (error) {
       console.error('Failed to load flow with states:', error);
       throw error; // Re-throw to handle in calling function

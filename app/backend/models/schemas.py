@@ -2,6 +2,14 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from src.llm.models import ModelProvider
+from enum import Enum
+
+
+class FlowRunStatus(str, Enum):
+    IDLE = "IDLE"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETE = "COMPLETE"
+    ERROR = "ERROR"
 
 
 class AgentModelConfig(BaseModel):
@@ -99,6 +107,52 @@ class FlowSummaryResponse(BaseModel):
     tags: Optional[List[str]]
     created_at: datetime
     updated_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+# Flow Run schemas
+class FlowRunCreateRequest(BaseModel):
+    """Request to create a new flow run"""
+    request_data: Optional[Dict[str, Any]] = None
+
+
+class FlowRunUpdateRequest(BaseModel):
+    """Request to update an existing flow run"""
+    status: Optional[FlowRunStatus] = None
+    results: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None
+
+
+class FlowRunResponse(BaseModel):
+    """Complete flow run response"""
+    id: int
+    flow_id: int
+    status: FlowRunStatus
+    run_number: int
+    created_at: datetime
+    updated_at: Optional[datetime]
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    request_data: Optional[Dict[str, Any]]
+    results: Optional[Dict[str, Any]]
+    error_message: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+class FlowRunSummaryResponse(BaseModel):
+    """Lightweight flow run response for listing"""
+    id: int
+    flow_id: int
+    status: FlowRunStatus
+    run_number: int
+    created_at: datetime
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    error_message: Optional[str]
 
     class Config:
         from_attributes = True

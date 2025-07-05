@@ -1,7 +1,7 @@
 export enum ModelProvider {
   OPENAI = "OpenAI",
   ANTHROPIC = "Anthropic",
-  GOOGLE = "Gemini",
+  GOOGLE = "Google",
   AZURE = "Azure",
   DEEPSEEK = "DeepSeek",
   GROQ = "Groq"

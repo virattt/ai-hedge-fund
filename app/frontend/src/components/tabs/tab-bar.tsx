@@ -66,7 +66,7 @@ export function TabBar({ className }: TabBarProps) {
 
   return (
     <div className={cn(
-      "flex items-center bg-[#1f1f1f] border-b border-[#333] overflow-x-auto",
+      "flex items-center bg-panel border-b border-ramp-grey-700 dark:border-ramp-grey-800 overflow-x-auto",
       className
     )}>
       <div className="flex items-center min-w-0">
@@ -83,8 +83,8 @@ export function TabBar({ className }: TabBarProps) {
               "group relative flex items-center gap-2 px-4 py-2.5 cursor-pointer transition-all duration-150 min-w-0 max-w-52 select-none border-r border-[#333] last:border-r-0",
               // Active tab styling - VSCode style
               activeTabId === tab.id 
-                ? "bg-[#1e1e1e] text-[#cccccc] before:absolute before:bottom-0 before:left-0 before:right-0 before:h-0.5 before:bg-[#007acc] before:content-['']" 
-                : "bg-[#2d2d30] text-[#969696] hover:bg-[#1e1e1e] hover:text-[#cccccc]",
+                ? "bg-panel text-[#cccccc] before:absolute before:bottom-0 before:left-0 before:right-0 before:h-0.5 before:bg-[#007acc] before:content-['']" 
+                : "bg-panel text-[#969696] hover:bg-[#1e1e1e] hover:text-[#cccccc]",
               // Drag states
               draggedIndex === index && "opacity-60 scale-[0.98]",
               dragOverIndex === index && "bg-[#1e1e1e] ring-1 ring-[#007acc]/30",

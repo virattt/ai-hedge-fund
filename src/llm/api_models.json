@@ -27,12 +27,12 @@
   {
     "display_name": "Gemini 2.5 Flash",
     "model_name": "gemini-2.5-flash-preview-05-20",
-    "provider": "Gemini"
+    "provider": "Google"
   },
   {
     "display_name": "Gemini 2.5 Pro",
     "model_name": "gemini-2.5-pro-preview-06-05",
-    "provider": "Gemini"
+    "provider": "Google"
   },
   {
     "display_name": "Llama 4 Scout (17b)",

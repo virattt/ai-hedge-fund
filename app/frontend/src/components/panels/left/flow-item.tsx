@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useFlowConnectionState } from '@/hooks/use-flow-connection';
 import { cn } from '@/lib/utils';
 import { flowService } from '@/services/flow-service';
 import { Flow } from '@/types/flow';
@@ -7,7 +8,8 @@ import {
   Calendar,
   FileText,
   Layout,
-  MoreHorizontal
+  MoreHorizontal,
+  Zap
 } from 'lucide-react';
 import { useState } from 'react';
 import { FlowContextMenu } from './flow-context-menu';
@@ -15,9 +17,9 @@ import { FlowEditDialog } from './flow-edit-dialog';
 
 interface FlowItemProps {
   flow: Flow;
-  onLoadFlow: (flow: Flow) => void;
+  onLoadFlow: (flow: Flow) => Promise<void>;
   onDeleteFlow: (flow: Flow) => Promise<void>;
-  onRefresh: () => void;
+  onRefresh: () => Promise<void>;
   isActive?: boolean;
 }
 
@@ -28,8 +30,13 @@ export default function FlowItem({ flow, onLoadFlow, onDeleteFlow, onRefresh, is
   });
   const [editDialog, setEditDialog] = useState(false);
 
-  const handleLoadFlow = () => {
-    onLoadFlow(flow);
+  // Check if this flow has an active connection
+  const connectionState = useFlowConnectionState(flow.id.toString());
+  const hasActiveConnection = connectionState && 
+    (connectionState.state === 'connecting' || connectionState.state === 'connected');
+
+  const handleLoadFlow = async () => {
+    await onLoadFlow(flow);
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -108,8 +115,8 @@ export default function FlowItem({ flow, onLoadFlow, onDeleteFlow, onRefresh, is
         onContextMenu={handleContextMenu}
       >
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="flex items-center gap-1">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <div className="flex items-center gap-1 min-w-0">
               {flow.is_template ? (
                 <Layout size={14} className="text-blue-400 flex-shrink-0" />
               ) : (
@@ -130,6 +137,14 @@ export default function FlowItem({ flow, onLoadFlow, onDeleteFlow, onRefresh, is
                 {flow.name}
               </span>
             </div>
+            
+            {/* Active connection indicator - right aligned */}
+            {hasActiveConnection && (
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <Zap className="h-3 w-3 text-yellow-400 animate-pulse" />
+                <span className="text-xs text-yellow-400 font-medium">Running</span>
+              </div>
+            )}
           </div>
           
           <div className="flex items-center gap-2 text-xs text-gray-500">

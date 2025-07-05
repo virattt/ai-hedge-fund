@@ -8,7 +8,6 @@ from app.backend.services.graph import create_graph, parse_hedge_fund_response, 
 from app.backend.services.portfolio import create_portfolio
 from src.utils.progress import progress
 from src.utils.analysts import get_agents_list
-from src.llm.models import get_models_list
 
 router = APIRouter(prefix="/hedge-fund")
 
@@ -120,19 +119,4 @@ async def get_agents():
         return {"agents": get_agents_list()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve agents: {str(e)}")
-
-
-@router.get(
-    path="/language-models",
-    responses={
-        200: {"description": "List of available LLMs"},
-        500: {"model": ErrorResponse, "description": "Internal server error"},
-    },
-)
-async def get_language_models():
-    """Get the list of available models."""
-    try:
-        return {"models": get_models_list()}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve models: {str(e)}")
 

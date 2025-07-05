@@ -1,19 +1,20 @@
 import { ModelSelector } from '@/components/ui/llm-selector';
 import { getConnectedEdges, useReactFlow, type NodeProps } from '@xyflow/react';
 import { Brain, Play, Square } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
 import { CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useFlowContext } from '@/contexts/flow-context';
 import { useNodeContext } from '@/contexts/node-context';
 import { getDefaultModel, getModels, LanguageModel } from '@/data/models';
+import { useFlowConnection } from '@/hooks/use-flow-connection';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useNodeState } from '@/hooks/use-node-state';
 import { formatKeyboardShortcut } from '@/lib/utils';
-import { api } from '@/services/api';
 import { type PortfolioManagerNode } from '../types';
 import { NodeShell } from './node-shell';
 
@@ -35,18 +36,25 @@ export function PortfolioManagerNode({
   const [startDate, setStartDate] = useNodeState(id, 'startDate', threeMonthsAgo.toISOString().split('T')[0]);
   const [endDate, setEndDate] = useNodeState(id, 'endDate', today.toISOString().split('T')[0]);
   
+  const { currentFlowId } = useFlowContext();
   const nodeContext = useNodeContext();
-  const { resetAllNodes, agentNodeData } = nodeContext;
+  const { getAllAgentModels } = nodeContext;
   const { getNodes, getEdges } = useReactFlow();
-  const abortControllerRef = useRef<(() => void) | null>(null);
   
-  // Check if any agent is in progress
-  const isProcessing = Object.values(agentNodeData).some(
-    agent => agent.status === 'IN_PROGRESS'
-  );
+  // Use the new flow connection hook
+  const flowId = currentFlowId?.toString() || null;
+  const {
+    isConnecting,
+    isConnected,
+    isProcessing,
+    canRun,
+    runFlow,
+    stopFlow,
+    recoverFlowState
+  } = useFlowConnection(flowId);
   
-  // Check if the hedge fund can be run (same logic as play button enable state)
-  const canRunHedgeFund = !isProcessing && tickers.trim() !== '';
+  // Check if the hedge fund can be run
+  const canRunHedgeFund = canRun && tickers.trim() !== '';
   
   // Add keyboard shortcut for Cmd+Enter / Ctrl+Enter to run hedge fund
   useKeyboardShortcuts({
@@ -88,14 +96,12 @@ export function PortfolioManagerNode({
     loadModels();
   }, []); // Remove selectedModel from dependencies to avoid infinite loop
 
-  // Clean up SSE connection on unmount
+  // Recover flow state when component mounts or flow changes
   useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current();
-      }
-    };
-  }, []);
+    if (flowId) {
+      recoverFlowState();
+    }
+  }, [flowId, recoverFlowState]);
   
   const handleTickersChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setTickers(e.target.value);
@@ -110,26 +116,10 @@ export function PortfolioManagerNode({
   };
 
   const handleStop = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current();
-      abortControllerRef.current = null;
-    }
-    // Reset all node data states
-    resetAllNodes();
+    stopFlow();
   };
 
   const handlePlay = () => {
-    // First, reset all nodes to IDLE
-    resetAllNodes();
-    
-    // Clean up any existing connection
-    if (abortControllerRef.current) {
-      abortControllerRef.current();
-    }
-    
-    // Call the backend API with SSE
-    const tickerList = tickers.split(',').map(t => t.trim());
-    
     // Get the nodes and edges
     const nodes = getNodes();
     const edges = getEdges();
@@ -155,7 +145,7 @@ export function PortfolioManagerNode({
 
     // Collect agent models from connected agent nodes
     const agentModels = [];
-    const allAgentModels = nodeContext.getAllAgentModels();
+    const allAgentModels = getAllAgentModels(flowId);
     for (const agentId of selectedAgents) {
       const model = allAgentModels[agentId];
       if (model) {
@@ -166,22 +156,25 @@ export function PortfolioManagerNode({
         });
       }
     }
+    
+    // Convert tickers to array    
+    const tickerList = tickers.split(',').map(t => t.trim());
         
-    abortControllerRef.current = api.runHedgeFund(
-      {
-        tickers: tickerList,
-        selected_agents: Array.from(selectedAgents),
-        agent_models: agentModels,
-        // Keep global model for backwards compatibility (will be removed later)
-        model_name: selectedModel?.model_name || undefined,
-        model_provider: selectedModel?.provider as any || undefined,
-        start_date: startDate,
-        end_date: endDate,
-      },
-      // Pass the node status context to the API
-      nodeContext
-    );
+    // Use the flow connection hook to run the flow
+    runFlow({
+      tickers: tickerList,
+      selected_agents: Array.from(selectedAgents),
+      agent_models: agentModels,
+      // Keep global model for backwards compatibility (will be removed later)
+      model_name: selectedModel?.model_name || undefined,
+      model_provider: selectedModel?.provider as any || undefined,
+      start_date: startDate,
+      end_date: endDate,
+    });
   };
+
+  // Determine if we're processing (connecting, connected, or any agents running)
+  const showAsProcessing = isConnecting || isConnected || isProcessing;
 
   return (
     <TooltipProvider>
@@ -198,7 +191,7 @@ export function PortfolioManagerNode({
           <div className="border-t border-border p-3">
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
-                <div className="text-subtitle text-muted-foreground flex items-center gap-1">
+                <div className="text-subtitle text-primary flex items-center gap-1">
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
                       <span>Tickers</span>
@@ -218,11 +211,11 @@ export function PortfolioManagerNode({
                     size="icon" 
                     variant="secondary"
                     className="flex-shrink-0 transition-all duration-200 hover:bg-primary hover:text-primary-foreground active:scale-95"
-                    title={isProcessing ? "Stop" : `Run (${formatKeyboardShortcut('↵')})`}
-                    onClick={isProcessing ? handleStop : handlePlay}
-                    disabled={!canRunHedgeFund && !isProcessing}
+                    title={showAsProcessing ? "Stop" : `Run (${formatKeyboardShortcut('↵')})`}
+                    onClick={showAsProcessing ? handleStop : handlePlay}
+                    disabled={!canRunHedgeFund && !showAsProcessing}
                   >
-                    {isProcessing ? (
+                    {showAsProcessing ? (
                       <Square className="h-3.5 w-3.5" />
                     ) : (
                       <Play className="h-3.5 w-3.5" />
@@ -231,7 +224,7 @@ export function PortfolioManagerNode({
                 </div>
               </div>
               <div className="flex flex-col gap-2">
-                <div className="text-subtitle text-muted-foreground flex items-center gap-1">
+                <div className="text-subtitle text-primary flex items-center gap-1">
                   Model
                 </div>
                 <ModelSelector
@@ -243,13 +236,13 @@ export function PortfolioManagerNode({
               </div>
               <Accordion type="single" collapsible>
                 <AccordionItem value="advanced" className="border-none">
-                  <AccordionTrigger className="!text-subtitle text-muted-foreground">
+                  <AccordionTrigger className="!text-subtitle text-primary">
                     Advanced
                   </AccordionTrigger>
                   <AccordionContent className="pt-2">
                     <div className="flex flex-col gap-4">
                     <div className="flex flex-col gap-2">
-                        <div className="text-subtitle text-muted-foreground flex items-center gap-1">
+                        <div className="text-subtitle text-primary flex items-center gap-1">
                           End Date
                         </div>
                         <Input
@@ -259,7 +252,7 @@ export function PortfolioManagerNode({
                         />
                       </div>
                       <div className="flex flex-col gap-2">
-                        <div className="text-subtitle text-muted-foreground flex items-center gap-1">
+                        <div className="text-subtitle text-primary flex items-center gap-1">
                           Start Date
                         </div>
                         <Input

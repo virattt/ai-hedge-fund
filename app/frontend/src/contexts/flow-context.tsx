@@ -1,5 +1,6 @@
 import { getMultiNodeDefinition, isMultiNodeComponent } from '@/data/multi-node-mappings';
 import { getNodeIdForComponent, getNodeTypeDefinition } from '@/data/node-mappings';
+import { flowConnectionManager } from '@/hooks/use-flow-connection';
 import { clearAllNodeStates, getAllNodeStates, setNodeInternalState, setCurrentFlowId as setNodeStateFlowId } from '@/hooks/use-node-state';
 import { flowService } from '@/services/flow-service';
 import { Flow } from '@/types/flow';
@@ -77,9 +78,15 @@ export function FlowProvider({ children }: FlowProviderProps) {
       const edges = reactFlowInstance.getEdges();
       const viewport = reactFlowInstance.getViewport();
       
-      // Collect all node internal states
+      // Collect all node internal states (from use-node-state)
       const nodeStates = getAllNodeStates();
-      const data = Object.fromEntries(nodeStates);
+      const nodeInternalStates = Object.fromEntries(nodeStates);
+
+      // Create structured data - nodeContextData will be added by enhanced save functions
+      const data = {
+        nodeStates: nodeInternalStates,  // use-node-state data
+        // nodeContextData will be added separately by enhanced save functions
+      };
 
       if (currentFlowId) {
         // Update existing flow
@@ -132,14 +139,19 @@ export function FlowProvider({ children }: FlowProviderProps) {
       setCurrentFlowId(flow.id);
       setCurrentFlowName(flow.name);
       
-      // Clear existing node states for this flow
-      clearAllNodeStates();
-      
-      // Restore internal states BEFORE setting nodes so they're available during render
+      // DO NOT clear configuration state when loading flows - useNodeState handles flow isolation automatically
+      // Only restore additional internal states if they exist in the flow data
       if (flow.data) {
-        Object.entries(flow.data).forEach(([nodeId, nodeState]) => {
-          setNodeInternalState(nodeId, nodeState as Record<string, any>);
-        });
+        // Handle backward compatibility - data might be direct nodeStates or structured data
+        const dataToRestore = flow.data.nodeStates || flow.data;
+        
+        if (dataToRestore) {
+          Object.entries(dataToRestore).forEach(([nodeId, nodeState]) => {
+            setNodeInternalState(nodeId, nodeState as Record<string, any>);
+          });
+        }
+        
+        // nodeContextData restoration will be handled by enhanced load functions
       }
       
       // Now render the nodes - useNodeState hooks will initialize with correct flow ID
@@ -159,6 +171,17 @@ export function FlowProvider({ children }: FlowProviderProps) {
       
       // Remember this flow as the last selected
       localStorage.setItem('lastSelectedFlowId', flow.id.toString());
+
+      // IMPORTANT: Allow components to mount first, then recover connection state
+      // This ensures useFlowConnection hooks are initialized before recovery
+      setTimeout(() => {
+        // Check if this flow has any stale processing states and recover them
+        const connection = flowConnectionManager.getConnection(flow.id.toString());
+        if (connection.state === 'idle') {
+          // No active connection, so any IN_PROGRESS states are stale and should be reset
+          console.log(`Flow ${flow.id} loaded - checking for stale connection states`);
+        }
+      }, 100);
     } catch (error) {
       console.error('Failed to load flow:', error);
     }
@@ -181,6 +204,10 @@ export function FlowProvider({ children }: FlowProviderProps) {
       reactFlowInstance.setViewport({ x: 0, y: 0, zoom: 1 });
 
       setIsUnsaved(false);
+
+      // Clear any active connections when creating a new flow
+      // Note: We don't have a current flow ID to clear, so this is mainly cleanup
+      console.log('Created new flow - any previous connections should be cleaned up');
     } catch (error) {
       console.error('Failed to create new flow:', error);
     }
@@ -195,7 +222,7 @@ export function FlowProvider({ children }: FlowProviderProps) {
         return;
       }
 
-      const position = getViewportPosition(true);
+      const position = getViewportPosition(false);
       const newNode = nodeTypeDefinition.createNode(position);
       reactFlowInstance.setNodes((nodes) => [...nodes, newNode]);
       markAsUnsaved();

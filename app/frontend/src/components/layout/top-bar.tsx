@@ -78,7 +78,7 @@ export function TopBar({
         onClick={onSettingsClick}
         className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-ramp-grey-700 transition-colors"
         aria-label="Open settings"
-        title="Open Settings (⌘,)"
+        title="Open Settings (⇧⌘J)"
       >
         <Settings size={16} />
       </Button>

@@ -37,6 +37,11 @@ function LayoutContent({ children }: { children: ReactNode }) {
   const [rightSidebarWidth, setRightSidebarWidth] = useState(280);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(300);
 
+  const handleSettingsClick = () => {
+    const tabData = TabService.createSettingsTab();
+    openTab(tabData);
+  };
+
   // Add keyboard shortcuts for toggling sidebars and fit view
   useLayoutKeyboardShortcuts(
     () => setIsRightCollapsed(!isRightCollapsed), // Cmd+I for right sidebar
@@ -46,20 +51,8 @@ function LayoutContent({ children }: { children: ReactNode }) {
     undefined, // undo
     undefined, // redo
     () => setIsBottomCollapsed(!isBottomCollapsed), // Cmd+J for bottom panel
+    handleSettingsClick, // Shift+Cmd+J for settings
   );
-
-  // Add settings keyboard shortcut (Cmd+,)
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === ',') {
-        event.preventDefault();
-        handleSettingsClick();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   // Save sidebar states whenever they change
   useEffect(() => {
@@ -111,11 +104,6 @@ function LayoutContent({ children }: { children: ReactNode }) {
       width: 'auto',
       height: 'auto',
     };
-  };
-
-  const handleSettingsClick = () => {
-    const tabData = TabService.createSettingsTab();
-    openTab(tabData);
   };
 
   return (

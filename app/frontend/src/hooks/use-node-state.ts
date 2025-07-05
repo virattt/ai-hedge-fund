@@ -1,60 +1,195 @@
 import { useCallback, useEffect, useState } from 'react';
 
-// Global state storage for all node internal states
-// Structure: { "flowId:nodeId": { stateKey: value } }
-const nodeStatesMap = new Map<string, Record<string, any>>();
+// =============================================================================
+// FLOW STATE MANAGER - Handles global state and flow isolation
+// =============================================================================
 
-// Listeners for state changes (used by flow save/load)
-const stateChangeListeners = new Set<() => void>();
+class FlowStateManager {
+  private nodeStatesMap = new Map<string, Record<string, any>>();
+  private stateChangeListeners = new Set<() => void>();
+  private flowIdChangeListeners = new Set<() => void>();
+  private currentFlowId: string | null = null;
 
-// Current flow ID for state isolation
-let currentFlowId: string | null = null;
+  // Flow ID Management
+  setCurrentFlowId(flowId: string | null): void {
+    const oldFlowId = this.currentFlowId;
+    this.currentFlowId = flowId;
+    
+    if (oldFlowId !== flowId) {
+      this.notifyFlowIdChange();
+    }
+  }
 
-// Listeners for flow ID changes
-const flowIdChangeListeners = new Set<() => void>();
+  getCurrentFlowId(): string | null {
+    return this.currentFlowId;
+  }
+
+  // Key Generation
+  private createCompositeKey(nodeId: string): string {
+    return this.currentFlowId ? `${this.currentFlowId}:${nodeId}` : nodeId;
+  }
+
+  // State Access
+  getNodeState(nodeId: string, stateKey: string): any {
+    const compositeKey = this.createCompositeKey(nodeId);
+    const nodeState = this.nodeStatesMap.get(compositeKey);
+    return nodeState?.[stateKey];
+  }
+
+  setNodeState(nodeId: string, stateKey: string, value: any): void {
+    const compositeKey = this.createCompositeKey(nodeId);
+    
+    if (!this.nodeStatesMap.has(compositeKey)) {
+      this.nodeStatesMap.set(compositeKey, {});
+    }
+    
+    this.nodeStatesMap.get(compositeKey)![stateKey] = value;
+    this.notifyStateChange();
+  }
+
+  // Node Management
+  getNodeInternalState(nodeId: string): Record<string, any> | undefined {
+    const compositeKey = this.createCompositeKey(nodeId);
+    return this.nodeStatesMap.get(compositeKey);
+  }
+
+  setNodeInternalState(nodeId: string, state: Record<string, any>): void {
+    const compositeKey = this.createCompositeKey(nodeId);
+    this.nodeStatesMap.set(compositeKey, { ...state });
+    this.notifyStateChange();
+  }
+
+  clearNodeInternalState(nodeId: string): void {
+    const compositeKey = this.createCompositeKey(nodeId);
+    this.nodeStatesMap.delete(compositeKey);
+    this.notifyStateChange();
+  }
+
+  // Flow Management
+  getAllNodeStates(): Map<string, Record<string, any>> {
+    if (!this.currentFlowId) {
+      // Backward compatibility - return all states
+      return new Map(this.nodeStatesMap);
+    }
+    
+    // Filter states for current flow and strip flow prefix
+    const currentFlowStates = new Map<string, Record<string, any>>();
+    const flowPrefix = `${this.currentFlowId}:`;
+    
+    for (const [compositeKey, state] of this.nodeStatesMap.entries()) {
+      if (compositeKey.startsWith(flowPrefix)) {
+        const nodeId = compositeKey.substring(flowPrefix.length);
+        currentFlowStates.set(nodeId, state);
+      }
+    }
+    
+    return currentFlowStates;
+  }
+
+  clearAllNodeStates(): void {
+    if (!this.currentFlowId) {
+      // Backward compatibility - clear all states
+      this.nodeStatesMap.clear();
+    } else {
+      // Clear only current flow's states
+      const flowPrefix = `${this.currentFlowId}:`;
+      const keysToDelete = Array.from(this.nodeStatesMap.keys())
+        .filter(key => key.startsWith(flowPrefix));
+      
+      keysToDelete.forEach(key => this.nodeStatesMap.delete(key));
+    }
+    
+    this.notifyStateChange();
+  }
+
+  clearFlowNodeStates(flowId: string): void {
+    const flowPrefix = `${flowId}:`;
+    const keysToDelete = Array.from(this.nodeStatesMap.keys())
+      .filter(key => key.startsWith(flowPrefix));
+    
+    keysToDelete.forEach(key => this.nodeStatesMap.delete(key));
+    this.notifyStateChange();
+  }
+
+  // Listener Management
+  addStateChangeListener(listener: () => void): () => void {
+    this.stateChangeListeners.add(listener);
+    return () => this.stateChangeListeners.delete(listener);
+  }
+
+  addFlowIdChangeListener(listener: () => void): () => void {
+    this.flowIdChangeListeners.add(listener);
+    return () => this.flowIdChangeListeners.delete(listener);
+  }
+
+  private notifyStateChange(): void {
+    this.stateChangeListeners.forEach(listener => listener());
+  }
+
+  private notifyFlowIdChange(): void {
+    this.flowIdChangeListeners.forEach(listener => listener());
+  }
+}
+
+// Global instance
+const flowStateManager = new FlowStateManager();
+
+// =============================================================================
+// PUBLIC API - Clean interface for external use
+// =============================================================================
 
 export interface UseNodeStateReturn<T> {
   0: T;
   1: (value: T | ((prev: T) => T)) => void;
 }
 
-/**
- * Set the current flow ID for state isolation
- * This should be called whenever a flow is loaded or created
- */
+// Flow Management
 export function setCurrentFlowId(flowId: string | null): void {
-  const oldFlowId = currentFlowId;
-  currentFlowId = flowId;
-  
-  // Notify all useNodeState hooks that the flow ID has changed
-  if (oldFlowId !== flowId) {
-    flowIdChangeListeners.forEach(listener => listener());
-  }
+  flowStateManager.setCurrentFlowId(flowId);
 }
 
-/**
- * Get the current flow ID
- */
-export function getCurrentFlowId(): string | null {
-  return currentFlowId;
+// Node State Management
+export function getNodeInternalState(nodeId: string): Record<string, any> | undefined {
+  return flowStateManager.getNodeInternalState(nodeId);
 }
 
-/**
- * Create a composite key for flow-aware state storage
- */
-function createCompositeKey(nodeId: string): string {
-  return currentFlowId ? `${currentFlowId}:${nodeId}` : nodeId;
+export function setNodeInternalState(nodeId: string, state: Record<string, any>): void {
+  flowStateManager.setNodeInternalState(nodeId, state);
 }
 
+export function clearNodeInternalState(nodeId: string): void {
+  flowStateManager.clearNodeInternalState(nodeId);
+}
+
+// Flow State Management
+export function getAllNodeStates(): Map<string, Record<string, any>> {
+  return flowStateManager.getAllNodeStates();
+}
+
+export function clearAllNodeStates(): void {
+  flowStateManager.clearAllNodeStates();
+}
+
+export function clearFlowNodeStates(flowId: string): void {
+  flowStateManager.clearFlowNodeStates(flowId);
+}
+
+export function addStateChangeListener(listener: () => void): () => void {
+  return flowStateManager.addStateChangeListener(listener);
+}
+
+// =============================================================================
+// REACT HOOKS - Focused on React integration
+// =============================================================================
+
 /**
- * Custom hook that provides automatic state persistence for node components.
- * Works as a drop-in replacement for useState, but automatically persists
- * the state when flows are saved and restores it when flows are loaded.
+ * Drop-in replacement for useState that automatically persists state across
+ * flow saves/loads and provides flow isolation.
  * 
- * @param nodeId - The ID of the node (typically from NodeProps)
- * @param stateKey - Unique key for this state value within the node
+ * @param nodeId - The ID of the node (from NodeProps)
+ * @param stateKey - Unique key for this state value within the node  
  * @param defaultValue - Default value for the state
- * @returns Tuple similar to useState: [value, setValue]
+ * @returns [value, setValue] tuple like useState
  */
 export function useNodeState<T>(
   nodeId: string,
@@ -62,207 +197,72 @@ export function useNodeState<T>(
   defaultValue: T
 ): [T, (value: T | ((prev: T) => T)) => void] {
   
-  // Get initial value from stored state or use default
-  const getInitialValue = useCallback((): T => {
-    const compositeKey = createCompositeKey(nodeId);
-    const nodeState = nodeStatesMap.get(compositeKey);
-    if (nodeState && stateKey in nodeState) {
-      return nodeState[stateKey];
-    }
-    return defaultValue;
+  // Initialize with stored value or default
+  const getStoredValue = useCallback((): T => {
+    const storedValue = flowStateManager.getNodeState(nodeId, stateKey);
+    return storedValue !== undefined ? storedValue : defaultValue;
   }, [nodeId, stateKey, defaultValue]);
 
-  const [value, setValue] = useState<T>(getInitialValue);
+  const [value, setValue] = useState<T>(getStoredValue);
   const [, forceUpdate] = useState({});
 
-  // Listen for flow ID changes and update state accordingly
+  // Handle flow changes - reset to stored value for new flow
   useEffect(() => {
-    const handleFlowIdChange = () => {
-      const newValue = getInitialValue();
-      setValue(newValue);
-      // Force a re-render to ensure components see the new value
-      forceUpdate({});
-    };
+    const unsubscribe = flowStateManager.addFlowIdChangeListener(() => {
+      // Use setTimeout to defer the state update to avoid updating during render
+      setTimeout(() => {
+        const newValue = getStoredValue();
+        setValue(newValue);
+        forceUpdate({}); // Force re-render
+      }, 0);
+    });
+    
+    return unsubscribe;
+  }, [getStoredValue]);
 
-    flowIdChangeListeners.add(handleFlowIdChange);
-    return () => {
-      flowIdChangeListeners.delete(handleFlowIdChange);
-    };
-  }, [getInitialValue]);
-
-  // Listen for state changes and update local state if this specific node+stateKey changed
+  // Handle external state changes - update if this specific state changed
   useEffect(() => {
-    const handleStateChange = () => {
-      const compositeKey = createCompositeKey(nodeId);
-      const nodeState = nodeStatesMap.get(compositeKey);
-      if (nodeState && stateKey in nodeState) {
-        const newValue = nodeState[stateKey];
-        // Only update if the value actually changed to avoid unnecessary re-renders
-        setValue(prevValue => {
-          if (prevValue !== newValue) {
-            console.debug(`[useNodeState] Updated ${nodeId}.${stateKey}:`, newValue);
-            return newValue;
-          }
-          return prevValue;
-        });
+    const unsubscribe = flowStateManager.addStateChangeListener(() => {
+      const storedValue = flowStateManager.getNodeState(nodeId, stateKey);
+      if (storedValue !== undefined) {
+        // Use setTimeout to defer the state update to avoid updating during render
+        setTimeout(() => {
+          setValue(prevValue => {
+            if (prevValue !== storedValue) {
+              console.debug(`[useNodeState] Updated ${nodeId}.${stateKey}:`, storedValue);
+              return storedValue;
+            }
+            return prevValue;
+          });
+        }, 0);
       }
-    };
-
-    stateChangeListeners.add(handleStateChange);
-    return () => {
-      stateChangeListeners.delete(handleStateChange);
-    };
+    });
+    
+    return unsubscribe;
   }, [nodeId, stateKey]);
 
-  // Update the global state map when value changes
+  // Persist value when it changes
   const setValueAndPersist = useCallback((newValue: T | ((prev: T) => T)) => {
     setValue(prevValue => {
-      const finalValue = typeof newValue === 'function' ? (newValue as (prev: T) => T)(prevValue) : newValue;
+      const finalValue = typeof newValue === 'function' 
+        ? (newValue as (prev: T) => T)(prevValue) 
+        : newValue;
       
-      // Update global state map with current composite key
-      const compositeKey = createCompositeKey(nodeId);
-      if (!nodeStatesMap.has(compositeKey)) {
-        nodeStatesMap.set(compositeKey, {});
-      }
-      nodeStatesMap.get(compositeKey)![stateKey] = finalValue;
-      
-      // Notify listeners of state change
-      stateChangeListeners.forEach(listener => listener());
-      
+      flowStateManager.setNodeState(nodeId, stateKey, finalValue);
       return finalValue;
     });
   }, [nodeId, stateKey]);
 
-  // Initialize the global state map entry when component mounts or flow changes
+  // Initialize stored state on mount or flow change
   useEffect(() => {
-    const compositeKey = createCompositeKey(nodeId);
-    if (!nodeStatesMap.has(compositeKey)) {
-      nodeStatesMap.set(compositeKey, {});
+    const storedValue = flowStateManager.getNodeState(nodeId, stateKey);
+    if (storedValue === undefined) {
+      // Use setTimeout to defer the state update to avoid updating during render
+      setTimeout(() => {
+        flowStateManager.setNodeState(nodeId, stateKey, value);
+      }, 0);
     }
-    
-    // Set initial value if not already set
-    const nodeState = nodeStatesMap.get(compositeKey)!;
-    if (!(stateKey in nodeState)) {
-      nodeState[stateKey] = value;
-    }
-  }, [nodeId, stateKey, value, currentFlowId]); // Include currentFlowId as dependency
+  }, [nodeId, stateKey, value]);
 
   return [value, setValueAndPersist];
 }
-
-/**
- * Get all internal state for a specific node in the current flow
- */
-export function getNodeInternalState(nodeId: string): Record<string, any> | undefined {
-  const compositeKey = createCompositeKey(nodeId);
-  return nodeStatesMap.get(compositeKey);
-}
-
-/**
- * Set internal state for a specific node in the current flow (used during flow loading)
- */
-export function setNodeInternalState(nodeId: string, state: Record<string, any>): void {
-  const compositeKey = createCompositeKey(nodeId);
-  nodeStatesMap.set(compositeKey, { ...state });
-  // Notify listeners that state has been updated
-  stateChangeListeners.forEach(listener => listener());
-}
-
-/**
- * Clear all internal state for a specific node in the current flow (used when node is deleted)
- */
-export function clearNodeInternalState(nodeId: string): void {
-  const compositeKey = createCompositeKey(nodeId);
-  nodeStatesMap.delete(compositeKey);
-  stateChangeListeners.forEach(listener => listener());
-}
-
-/**
- * Get all node states for the current flow (used for flow saving)
- */
-export function getAllNodeStates(): Map<string, Record<string, any>> {
-  const currentFlowStates = new Map<string, Record<string, any>>();
-  
-  if (!currentFlowId) {
-    // If no flow ID, return all states (backward compatibility)
-    return new Map(nodeStatesMap);
-  }
-  
-  // Filter states for current flow and strip flow prefix from keys
-  const flowPrefix = `${currentFlowId}:`;
-  for (const [compositeKey, state] of nodeStatesMap.entries()) {
-    if (compositeKey.startsWith(flowPrefix)) {
-      const nodeId = compositeKey.substring(flowPrefix.length);
-      currentFlowStates.set(nodeId, state);
-    }
-  }
-  
-  return currentFlowStates;
-}
-
-/**
- * Clear all node states for the current flow (used for flow reset)
- */
-export function clearAllNodeStates(): void {
-  if (!currentFlowId) {
-    // If no flow ID, clear all states (backward compatibility)
-    nodeStatesMap.clear();
-  } else {
-    // Clear only states for current flow
-    const flowPrefix = `${currentFlowId}:`;
-    const keysToDelete = Array.from(nodeStatesMap.keys()).filter(key => 
-      key.startsWith(flowPrefix)
-    );
-    keysToDelete.forEach(key => nodeStatesMap.delete(key));
-  }
-  
-  stateChangeListeners.forEach(listener => listener());
-}
-
-/**
- * Clear all node states for a specific flow (used when flow is deleted)
- */
-export function clearFlowNodeStates(flowId: string): void {
-  const flowPrefix = `${flowId}:`;
-  const keysToDelete = Array.from(nodeStatesMap.keys()).filter(key => 
-    key.startsWith(flowPrefix)
-  );
-  keysToDelete.forEach(key => nodeStatesMap.delete(key));
-  stateChangeListeners.forEach(listener => listener());
-}
-
-/**
- * Add a listener for state changes (used by flow management)
- */
-export function addStateChangeListener(listener: () => void): () => void {
-  stateChangeListeners.add(listener);
-  return () => stateChangeListeners.delete(listener);
-}
-
-/**
- * Hook to get the current node ID from React Flow context
- * This is a convenience hook for components that need their node ID
- */
-export function useNodeId(): string | null {
-  // This would need to be implemented based on how you pass node ID to components
-  // For now, we'll return null and expect components to pass nodeId explicitly
-  return null;
-}
-
-/**
- * Convenience hook that automatically gets the node ID and provides useNodeState
- * Usage: const [value, setValue] = useAutoNodeState('stateKey', defaultValue);
- * Note: This requires the component to be wrapped in a context that provides nodeId
- */
-export function useAutoNodeState<T>(
-  stateKey: string,
-  defaultValue: T
-): [T, (value: T | ((prev: T) => T)) => void] {
-  const nodeId = useNodeId();
-  
-  if (!nodeId) {
-    throw new Error('useAutoNodeState requires a valid node ID. Use useNodeState with explicit nodeId instead.');
-  }
-  
-  return useNodeState(nodeId, stateKey, defaultValue);
-} 

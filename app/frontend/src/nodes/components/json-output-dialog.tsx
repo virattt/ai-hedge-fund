@@ -5,29 +5,45 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
 } from '@/components/ui/dialog';
 
 interface JsonOutputDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   outputNodeData: any;
+  connectedAgentIds: Set<string>;
 }
 
 export function JsonOutputDialog({ 
   isOpen, 
   onOpenChange, 
-  outputNodeData 
+  outputNodeData,
+  connectedAgentIds
 }: JsonOutputDialogProps) {
   const [copySuccess, setCopySuccess] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
 
   if (!outputNodeData) return null;
 
-  const jsonString = JSON.stringify(outputNodeData, null, 2);
+  // Convert React Flow node IDs to backend agent keys for filtering
+  const connectedBackendAgentKeys = Array.from(connectedAgentIds).map(nodeId => `${nodeId}_agent`);
+  
+  // Filter the outputNodeData to only include connected agents
+  const filteredOutputData = {
+    ...outputNodeData,
+    analyst_signals: Object.fromEntries(
+      Object.entries(outputNodeData.analyst_signals || {})
+        .filter(([agentId]) => 
+          agentId === 'risk_management_agent' || connectedBackendAgentKeys.includes(agentId)
+        )
+    )
+  };
+
+  const jsonString = JSON.stringify(filteredOutputData, null, 2);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(jsonString)

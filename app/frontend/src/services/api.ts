@@ -1,6 +1,7 @@
 import { NodeStatus, OutputNodeData, useNodeContext } from '@/contexts/node-context';
 import { Agent } from '@/data/agents';
 import { LanguageModel } from '@/data/models';
+import { flowConnectionManager } from '@/hooks/use-flow-connection';
 import { ModelProvider } from '@/services/types';
 
 interface AgentModelConfig {
@@ -48,7 +49,7 @@ export const api = {
    */
   getLanguageModels: async (): Promise<LanguageModel[]> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/hedge-fund/language-models`);
+      const response = await fetch(`${API_BASE_URL}/language-models/`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -95,11 +96,13 @@ export const api = {
    * Runs a hedge fund simulation with the given parameters and streams the results
    * @param params The hedge fund request parameters
    * @param nodeContext Node context for updating node states
+   * @param flowId The ID of the current flow
    * @returns A function to abort the SSE connection
    */
   runHedgeFund: (
     params: HedgeFundRequest, 
-    nodeContext: ReturnType<typeof useNodeContext>
+    nodeContext: ReturnType<typeof useNodeContext>,
+    flowId: string | null = null
   ): (() => void) => {
     // Convert tickers string to array if needed
     if (typeof params.tickers === 'string') {
@@ -170,7 +173,8 @@ export const api = {
                   switch (eventType) {
                     case 'start':
                       // Reset all nodes at the start of a new run
-                      nodeContext.resetAllNodes();
+                      console.log(`[API] Flow ${flowId}: Starting new run`);
+                      nodeContext.resetAllNodes(flowId);
                       break;
                     case 'progress':
                       if (eventData.agent) {
@@ -182,8 +186,10 @@ export const api = {
                         // Use the agent name as the node ID
                         const agentId = eventData.agent.replace('_agent', '');
                         
+                        console.log(`[API] Flow ${flowId}: Progress for ${agentId} (${eventData.ticker}): ${eventData.status}`);
+                        
                         // Use the enhanced API to update both status and additional data
-                        nodeContext.updateAgentNode(agentId, {
+                        nodeContext.updateAgentNode(flowId, agentId, {
                           status: nodeStatus,
                           ticker: eventData.ticker,
                           message: eventData.status,
@@ -193,21 +199,50 @@ export const api = {
                       }
                       break;
                     case 'complete':
+                      console.log(`[API] Flow ${flowId}: Run completed`);
                       // Store the complete event data in the node context
                       if (eventData.data) {
-                        nodeContext.setOutputNodeData(eventData.data as OutputNodeData);
+                        nodeContext.setOutputNodeData(flowId, eventData.data as OutputNodeData);
                       }
                       // Mark all agents as complete when the whole process is done
-                      nodeContext.updateAgentNodes(params.selected_agents || [], 'COMPLETE');
+                      nodeContext.updateAgentNodes(flowId, params.selected_agents || [], 'COMPLETE');
                       // Also update the output node
-                      nodeContext.updateAgentNode('output', {
+                      nodeContext.updateAgentNode(flowId, 'output', {
                         status: 'COMPLETE',
                         message: 'Analysis complete'
                       });
+
+                      // Update flow connection state to completed
+                      if (flowId) {
+                        flowConnectionManager.setConnection(flowId, {
+                          state: 'completed',
+                          abortController: null,
+                        });
+
+                        // Optional: Auto-cleanup completed connections after a delay
+                        setTimeout(() => {
+                          const currentConnection = flowConnectionManager.getConnection(flowId);
+                          if (currentConnection.state === 'completed') {
+                            flowConnectionManager.setConnection(flowId, {
+                              state: 'idle',
+                            });
+                          }
+                        }, 30000); // 30 seconds
+                      }
                       break;
                     case 'error':
-                      // Mark all agents as error when there's an error
-                      nodeContext.updateAgentNodes(params.selected_agents || [], 'ERROR');
+                      console.error(`[API] Flow ${flowId}: Error occurred`, eventData);
+                      // Mark all agents as error when there's an error  
+                      nodeContext.updateAgentNodes(flowId, params.selected_agents || [], 'ERROR');
+                      
+                      // Update flow connection state to error
+                      if (flowId) {
+                        flowConnectionManager.setConnection(flowId, {
+                          state: 'error',
+                          error: eventData.message || 'Unknown error occurred',
+                          abortController: null,
+                        });
+                      }
                       break;
                     default:
                       console.warn('Unknown event type:', eventType);
@@ -218,12 +253,34 @@ export const api = {
               }
             }
           }
+          
+          // After the stream has finished, check if we are still in a connected state.
+          // This can happen if the backend closes the connection without sending a 'complete' event.
+          if (flowId) {
+            const currentConnection = flowConnectionManager.getConnection(flowId);
+            if (currentConnection.state === 'connected') {
+              console.warn(`[API] Flow ${flowId}: SSE stream ended without a 'complete' or 'error' event. Assuming completion.`);
+              flowConnectionManager.setConnection(flowId, {
+                state: 'completed',
+                abortController: null,
+              });
+            }
+          }
         } catch (error: any) { // Type assertion for error
           if (error.name !== 'AbortError') {
             console.error('Error reading SSE stream:', error);
             // Mark all agents as error when there's a connection error
             const agentIds = params.selected_agents || [];
-            nodeContext.updateAgentNodes(agentIds, 'ERROR');
+            nodeContext.updateAgentNodes(flowId, agentIds, 'ERROR');
+            
+            // Update flow connection state to error
+            if (flowId) {
+              flowConnectionManager.setConnection(flowId, {
+                state: 'error',
+                error: error.message || 'Connection error',
+                abortController: null,
+              });
+            }
           }
         }
       };
@@ -236,13 +293,29 @@ export const api = {
         console.error('SSE connection error:', error);
         // Mark all agents as error when there's a connection error
         const agentIds = params.selected_agents || [];
-        nodeContext.updateAgentNodes(agentIds, 'ERROR');
+        nodeContext.updateAgentNodes(flowId, agentIds, 'ERROR');
+        
+        // Update flow connection state to error
+        if (flowId) {
+          flowConnectionManager.setConnection(flowId, {
+            state: 'error',
+            error: error.message || 'Connection failed',
+            abortController: null,
+          });
+        }
       }
     });
 
     // Return abort function
     return () => {
       controller.abort();
+      // Update connection state when manually aborted
+      if (flowId) {
+        flowConnectionManager.setConnection(flowId, {
+          state: 'idle',
+          abortController: null,
+        });
+      }
     };
   },
 }; 

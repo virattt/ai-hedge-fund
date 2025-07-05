@@ -1,15 +1,17 @@
 import { type NodeProps } from '@xyflow/react';
-import { FileJson, Loader2 } from 'lucide-react';
+import { FileJson } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { Button } from '@/components/ui/button';
 import { CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { useFlowContext } from '@/contexts/flow-context';
 import { useNodeContext } from '@/contexts/node-context';
+import { useOutputNodeConnection } from '@/hooks/use-output-node-connection';
 import { api } from '@/services/api';
 import { type JsonOutputNode } from '../types';
 import { JsonOutputDialog } from './json-output-dialog';
 import { NodeShell } from './node-shell';
+import { OutputNodeStatus } from './output-node-status';
 
 export function JsonOutputNode({
   data,
@@ -17,16 +19,19 @@ export function JsonOutputNode({
   id,
   isConnectable,
 }: NodeProps<JsonOutputNode>) {  
-  const { outputNodeData, agentNodeData } = useNodeContext();
+  const { currentFlowId } = useFlowContext();
+  const { getOutputNodeDataForFlow } = useNodeContext();
+  
+  // Get output node data for the current flow
+  const flowId = currentFlowId?.toString() || null;
+  const outputNodeData = getOutputNodeDataForFlow(flowId);
+  
   const [showOutput, setShowOutput] = useState(false);
   const [saveToFile, setSaveToFile] = useState(false);
   
-  // Check if any agent is in progress
-  const isProcessing = Object.values(agentNodeData).some(
-    agent => agent.status === 'IN_PROGRESS'
-  );
-  
-  const isOutputAvailable = !!outputNodeData;
+  // Use the custom hook for connection logic
+  const { isProcessing, isAnyAgentRunning, isOutputAvailable, isConnected, connectedAgentIds } = useOutputNodeConnection(id);
+  const status = isProcessing || isAnyAgentRunning ? 'IN_PROGRESS' : 'IDLE';
 
   // Save to file when output is available and saveToFile is enabled
   useEffect(() => {
@@ -71,6 +76,7 @@ export function JsonOutputNode({
         name={data.name || "JSON Output"}
         description={data.description}
         hasRightHandle={false}
+        status={status}
       >
         <CardContent className="p-0">
           <div className="border-t border-border p-3">
@@ -78,27 +84,14 @@ export function JsonOutputNode({
               <div className="text-subtitle text-muted-foreground flex items-center gap-1">
                 Results
               </div>
-              <div className="flex gap-2">
-                {isProcessing ? (
-                  <Button 
-                    variant="secondary"
-                    className="w-full flex-shrink-0 transition-all duration-200 hover:bg-primary hover:text-primary-foreground active:scale-95 text-subtitle"
-                    disabled
-                  >
-                    <Loader2 className="h-2 w-2 animate-spin" />
-                    Processing...
-                  </Button>
-                ) : (
-                  <Button 
-                    variant="secondary"
-                    className="w-full flex-shrink-0 transition-all duration-200 hover:bg-primary hover:text-primary-foreground active:scale-95 text-subtitle"
-                    onClick={handleViewOutput}
-                    disabled={!isOutputAvailable}
-                  >
-                   View Output
-                  </Button>
-                )}
-              </div>
+              
+              <OutputNodeStatus
+                isProcessing={isProcessing}
+                isAnyAgentRunning={isAnyAgentRunning}
+                isOutputAvailable={isOutputAvailable}
+                isConnected={isConnected}
+                onViewOutput={handleViewOutput}
+              />
               
               <div className="flex items-center space-x-2 mt-2">
                 <Checkbox
@@ -122,6 +115,7 @@ export function JsonOutputNode({
         isOpen={showOutput} 
         onOpenChange={setShowOutput} 
         outputNodeData={outputNodeData} 
+        connectedAgentIds={connectedAgentIds}
       />
     </>
   );

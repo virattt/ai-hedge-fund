@@ -58,13 +58,12 @@ export function LeftSidebar({
     <div 
       ref={elementRef}
       className={cn(
-        "h-full bg-panel flex flex-col relative pt-5",
+        "h-full bg-panel flex flex-col relative pt-5 border-r border-ramp-grey-700 dark:border-ramp-grey-800",
         isCollapsed ? "shadow-lg" : "",
-        isDragging ? "select-none" : ""
+        isDragging ? "select-none border-r-0" : ""
       )}
       style={{ 
-        width: `${width}px`,
-        borderRight: isDragging ? 'none' : '1px solid var(--ramp-grey-900)' 
+        width: `${width}px`
       }}
     >
       <FlowActions

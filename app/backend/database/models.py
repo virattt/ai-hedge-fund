@@ -26,4 +26,27 @@ class HedgeFundFlow(Base):
     tags = Column(JSON, nullable=True)  # Store tags for categorization
 
 
+class HedgeFundFlowRun(Base):
+    """Table to track individual execution runs of a hedge fund flow"""
+    __tablename__ = "hedge_fund_flow_runs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    flow_id = Column(Integer, nullable=False, index=True)  # Foreign key to hedge_fund_flows
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Run execution tracking
+    status = Column(String(50), nullable=False, default="IDLE")  # IDLE, IN_PROGRESS, COMPLETE, ERROR
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Run data
+    request_data = Column(JSON, nullable=True)  # Store the request parameters (tickers, agents, models, etc.)
+    results = Column(JSON, nullable=True)  # Store the output/results from the run
+    error_message = Column(Text, nullable=True)  # Store error details if run failed
+    
+    # Metadata
+    run_number = Column(Integer, nullable=False, default=1)  # Sequential run number for this flow
+
+
  

@@ -71,7 +71,8 @@ export function useLayoutKeyboardShortcuts(
   fitView?: () => void,
   undo?: () => void,
   redo?: () => void,
-  toggleBottomPanel?: () => void
+  toggleBottomPanel?: () => void,
+  openSettings?: () => void
 ) {
   const shortcuts: KeyboardShortcut[] = [
     {
@@ -135,6 +136,18 @@ export function useLayoutKeyboardShortcuts(
       ctrlKey: true, // This will match either Ctrl+J or Cmd+J (like VSCode)
       metaKey: true,
       callback: toggleBottomPanel,
+      preventDefault: true,
+    });
+  }
+
+  // Add settings shortcut if provided
+  if (openSettings) {
+    shortcuts.push({
+      key: 'j',
+      ctrlKey: true, // This will match either Ctrl+Shift+J or Cmd+Shift+J
+      metaKey: true,
+      shiftKey: true,
+      callback: openSettings,
       preventDefault: true,
     });
   }
