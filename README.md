@@ -4,24 +4,30 @@ This is a proof of concept for an AI-powered hedge fund.  The goal of this proje
 
 This system employs several agents working together:
 
-1. Ben Graham Agent - The godfather of value investing, only buys hidden gems with a margin of safety
-2. Bill Ackman Agent - An activist investors, takes bold positions and pushes for change
-3. Cathie Wood Agent - The queen of growth investing, believes in the power of innovation and disruption
-4. Charlie Munger Agent - Warren Buffett's partner, only buys wonderful businesses at fair prices
-5. Michael Burry Agent - The Big Short contrarian who hunts for deep value
-6. Peter Lynch Agent - Practical investor who seeks "ten-baggers" in everyday businesses
-7. Phil Fisher Agent - Meticulous growth investor who uses deep "scuttlebutt" research 
-8. Stanley Druckenmiller Agent - Macro legend who hunts for asymmetric opportunities with growth potential
-9. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
-10. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
-11. Sentiment Agent - Analyzes market sentiment and generates trading signals
-12. Fundamentals Agent - Analyzes fundamental data and generates trading signals
-13. Technicals Agent - Analyzes technical indicators and generates trading signals
-14. Risk Manager - Calculates risk metrics and sets position limits
-15. Portfolio Manager - Makes final trading decisions and generates orders
-    
-<img width="1042" alt="Screenshot 2025-03-22 at 6 19 07 PM" src="https://github.com/user-attachments/assets/cbae3dcf-b571-490d-b0ad-3f0f035ac0d4" />
+1. Aswath Damodaran Agent - The Dean of Valuation, focuses on story, numbers, and disciplined valuation
+2. Ben Graham Agent - The godfather of value investing, only buys hidden gems with a margin of safety
+3. Bill Ackman Agent - An activist investor, takes bold positions and pushes for change
+4. Cathie Wood Agent - The queen of growth investing, believes in the power of innovation and disruption
+5. Charlie Munger Agent - Warren Buffett's partner, only buys wonderful businesses at fair prices
+6. Michael Burry Agent - The Big Short contrarian who hunts for deep value
+7. Peter Lynch Agent - Practical investor who seeks "ten-baggers" in everyday businesses
+8. Phil Fisher Agent - Meticulous growth investor who uses deep "scuttlebutt" research 
+9. Rakesh Jhunjhunwala Agent - The Big Bull of India
+10. Stanley Druckenmiller Agent - Macro legend who hunts for asymmetric opportunities with growth potential
+11. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
+12. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
+13. Sentiment Agent - Analyzes market sentiment and generates trading signals
+14. Fundamentals Agent - Analyzes fundamental data and generates trading signals
+15. Technicals Agent - Analyzes technical indicators and generates trading signals
+16. Risk Manager - Calculates risk metrics and sets position limits
+17. Portfolio Manager - Makes final trading decisions and generates orders
 
+<img width="1042" alt="Screenshot 2025-03-22 at 6 19 07 PM" src="https://github.com/user-attachments/assets/cbae3dcf-b571-490d-b0ad-3f0f035ac0d4" />
+
+As of June 2025, there are **two ways** to run the AI Hedge Fund:
+
+1. **⌨️ Command Line Interface** - Terminal-based approach
+2. **🖥️ Web Application (NEW!)** - User-friendly web interface
 
 **Note**: the system simulates trading decisions, it does not actually trade.
 
@@ -32,30 +38,68 @@ This system employs several agents working together:
 This project is for **educational and research purposes only**.
 
 - Not intended for real trading or investment
-- No warranties or guarantees provided
-- Past performance does not indicate future results
+- No investment advice or guarantees provided
 - Creator assumes no liability for financial losses
 - Consult a financial advisor for investment decisions
+- Past performance does not indicate future results
 
 By using this software, you agree to use it solely for learning purposes.
 
 ## Table of Contents
-- [Setup](#setup)
-- [Usage](#usage)
-  - [Running the Hedge Fund](#running-the-hedge-fund)
-  - [Running the Backtester](#running-the-backtester)
-- [Project Structure](#project-structure)
+- [How to Install](#how-to-install)
+- [How to Run](#how-to-run)
+  - [⌨️ Command Line Interface](#️-command-line-interface)
+  - [🖥️ Web Application (NEW!)](#️-web-application)
 - [Contributing](#contributing)
 - [Feature Requests](#feature-requests)
 - [License](#license)
 
-## Setup
+## How to Install
 
-Clone the repository:
+Before you can run the AI Hedge Fund, you'll need to install it and set up your API keys. These steps are common to both the full-stack web application and command line interface.
+
+### 1. Clone the Repository
+
 ```bash
 git clone https://github.com/virattt/ai-hedge-fund.git
 cd ai-hedge-fund
 ```
+
+### 2. Set Up Your API Keys
+
+Create a `.env` file for your API keys:
+```bash
+# Create .env file for your API keys (in the root directory)
+cp .env.example .env
+```
+
+Open and edit the `.env` file to add your API keys:
+```bash
+# For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
+OPENAI_API_KEY=your-openai-api-key
+
+# For running LLMs hosted by groq (deepseek, llama3, etc.)
+GROQ_API_KEY=your-groq-api-key
+
+# For getting financial data to power the hedge fund
+FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
+```
+
+**Important**: You must set at least one LLM API key (`OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY`) for the hedge fund to work. 
+
+**Financial Data**: Data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key. For any other ticker, you will need to set the `FINANCIAL_DATASETS_API_KEY` in the .env file.
+
+## How to Run
+
+### ⌨️ Command Line Interface
+
+For users who prefer working with command line tools, you can run the AI Hedge Fund directly via terminal. This approach offers more granular control and is useful for automation, scripting, and integration purposes.
+
+<img width="992" alt="Screenshot 2025-01-06 at 5 50 17 PM" src="https://github.com/user-attachments/assets/e8ca04bf-9989-4a7d-a8b4-34e04666663b" />
+
+Choose one of the following installation methods:
+
+#### Using Poetry
 
 1. Install Poetry (if not already installed):
 ```bash
@@ -67,102 +111,170 @@ curl -sSL https://install.python-poetry.org | python3 -
 poetry install
 ```
 
-3. Set up your environment variables:
+#### Using Docker
+
+1. Make sure you have Docker installed on your system. If not, you can download it from [Docker's official website](https://www.docker.com/get-started).
+
+2. Navigate to the docker directory:
 ```bash
-# Create .env file for your API keys
-cp .env.example .env
+cd docker
 ```
 
-4. Set your API keys:
+3. Build the Docker image:
 ```bash
-# For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
-# Get your OpenAI API key from https://platform.openai.com/
-OPENAI_API_KEY=your-openai-api-key
+# On Linux/Mac:
+./run.sh build
 
-# For running LLMs hosted by groq (deepseek, llama3, etc.)
-# Get your Groq API key from https://groq.com/
-GROQ_API_KEY=your-groq-api-key
-
-# For getting financial data to power the hedge fund
-# Get your Financial Datasets API key from https://financialdatasets.ai/
-FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
+# On Windows:
+run.bat build
 ```
 
-**Important**: You must set `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY` for the hedge fund to work.  If you want to use LLMs from all providers, you will need to set all API keys.
-
-Financial data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key.
-
-For any other ticker, you will need to set the `FINANCIAL_DATASETS_API_KEY` in the .env file.
-
-## Usage
-
-### Running the Hedge Fund
+#### Running the AI Hedge Fund (with Poetry)
 ```bash
 poetry run python src/main.py --ticker AAPL,MSFT,NVDA
 ```
 
-**Example Output:**
-<img width="992" alt="Screenshot 2025-01-06 at 5 50 17 PM" src="https://github.com/user-attachments/assets/e8ca04bf-9989-4a7d-a8b4-34e04666663b" />
+#### Running the AI Hedge Fund (with Docker)
+```bash
+# Navigate to the docker directory first
+cd docker
+
+# On Linux/Mac:
+./run.sh --ticker AAPL,MSFT,NVDA main
+
+# On Windows:
+run.bat --ticker AAPL,MSFT,NVDA main
+```
 
 You can also specify a `--ollama` flag to run the AI hedge fund using local LLMs.
 
 ```bash
+# With Poetry:
 poetry run python src/main.py --ticker AAPL,MSFT,NVDA --ollama
+
+# With Docker (from docker/ directory):
+# On Linux/Mac:
+./run.sh --ticker AAPL,MSFT,NVDA --ollama main
+
+# On Windows:
+run.bat --ticker AAPL,MSFT,NVDA --ollama main
 ```
 
 You can also specify a `--show-reasoning` flag to print the reasoning of each agent to the console.
 
 ```bash
+# With Poetry:
 poetry run python src/main.py --ticker AAPL,MSFT,NVDA --show-reasoning
+
+# With Docker (from docker/ directory):
+# On Linux/Mac:
+./run.sh --ticker AAPL,MSFT,NVDA --show-reasoning main
+
+# On Windows:
+run.bat --ticker AAPL,MSFT,NVDA --show-reasoning main
 ```
+
 You can optionally specify the start and end dates to make decisions for a specific time period.
 
 ```bash
+# With Poetry:
 poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 
+
+# With Docker (from docker/ directory):
+# On Linux/Mac:
+./run.sh --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 main
+
+# On Windows:
+run.bat --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 main
 ```
 
-### Running the Backtester
-
+#### Running the Backtester (with Poetry)
 ```bash
 poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
 ```
 
+#### Running the Backtester (with Docker)
+```bash
+# Navigate to the docker directory first
+cd docker
+
+# On Linux/Mac:
+./run.sh --ticker AAPL,MSFT,NVDA backtest
+
+# On Windows:
+run.bat --ticker AAPL,MSFT,NVDA backtest
+```
+
 **Example Output:**
-<img width="941" alt="Screenshot 2025-01-06 at 5 47 52 PM" src="https://github.com/user-attachments/assets/00e794ea-8628-44e6-9a84-8f8a31ad3b47" />
+<img width="941" alt="Screenshot 2025-01-06 at 5 47 52 PM" src="https://github.com/user-attachments/assets/00e794ea-8628-44e6-9a84-8f8a31ad3b47" />
 
 
 You can optionally specify the start and end dates to backtest over a specific time period.
 
 ```bash
+# With Poetry:
 poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
+
+# With Docker (from docker/ directory):
+# On Linux/Mac:
+./run.sh --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 backtest
+
+# On Windows:
+run.bat --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 backtest
 ```
 
 You can also specify a `--ollama` flag to run the backtester using local LLMs.
 ```bash
+# With Poetry:
 poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --ollama
+
+# With Docker (from docker/ directory):
+# On Linux/Mac:
+./run.sh --ticker AAPL,MSFT,NVDA --ollama backtest
+
+# On Windows:
+run.bat --ticker AAPL,MSFT,NVDA --ollama backtest
 ```
 
+### 🖥️ Web Application
 
-## Project Structure 
+The new way to run the AI Hedge Fund is through our web application that provides a user-friendly interface. **This is recommended for most users, especially those who prefer visual interfaces over command line tools.**
+
+<img width="1721" alt="Screenshot 2025-06-28 at 6 41 03 PM" src="https://github.com/user-attachments/assets/b95ab696-c9f4-416c-9ad1-51feb1f5374b" />
+
+#### For Mac/Linux:
+```bash
+cd app && ./run.sh
 ```
-ai-hedge-fund/
-├── src/
-│   ├── agents/                   # Agent definitions and workflow
-│   │   ├── bill_ackman.py        # Bill Ackman agent
-│   │   ├── fundamentals.py       # Fundamental analysis agent
-│   │   ├── portfolio_manager.py  # Portfolio management agent
-│   │   ├── risk_manager.py       # Risk management agent
-│   │   ├── sentiment.py          # Sentiment analysis agent
-│   │   ├── technicals.py         # Technical analysis agent
-│   │   ├── valuation.py          # Valuation analysis agent
-│   │   ├── warren_buffett.py     # Warren Buffett agent
-│   ├── tools/                    # Agent tools
-│   │   ├── api.py                # API tools
-│   ├── backtester.py             # Backtesting tools
-│   ├── main.py # Main entry point
-├── pyproject.toml
-├── ...
+
+If you get a "permission denied" error, run this first:
+```bash
+cd app && chmod +x run.sh && ./run.sh
 ```
+
+#### For Windows:
+```bash
+# Go to /app directory
+cd app
+
+# Run the app
+\.run.bat
+```
+
+**That's it!** These scripts will:
+1. Check for required dependencies (Node.js, Python, Poetry)
+2. Install all dependencies automatically  
+3. Start both frontend and backend services
+4. **Automatically open your web browser** to the application
+
+
+#### Detailed Setup Instructions
+
+For detailed setup instructions, troubleshooting, and advanced configuration options, see:
+- [Full-Stack App Documentation](./app/README.md)
+- [Frontend Documentation](./app/frontend/README.md)  
+- [Backend Documentation](./app/backend/README.md)
+
 
 ## Contributing
 
@@ -183,6 +295,7 @@ If you have a feature request, please open an [issue](https://github.com/virattt
 The `web/` folder contains a small React application that visualizes the
 blockchain timeline on an interactive globe using the [Cobe](https://cobe.vercel.app/) library.
 
+
 ### Launching the Web Interface
 
 ```bash
@@ -194,25 +307,10 @@ npm start
 After running `npm start` the app will be available on <http://localhost:5173>
 (or the port printed by Vite).
 
-### Plotly Timeline Sphere
-
-You can also visualize the same events using a Python script that displays a
-3‑D Plotly sphere. From the project root, run:
-
-```bash
-poetry run python -m src.visualization.timeline_sphere
-```
-
-The script loads events from `docs/blockchain_timeline.json` and opens an
-interactive Plotly window showing each milestone around the globe.
-
 ### Exporting Data to Obsidian
 
 The blockchain timeline is stored in `docs/blockchain_timeline.md`. Copy this
 file into your Obsidian vault (or create a symlink) to view and edit the notes
-alongside your other documents. The web app reads events from
-`web/timeline.json`, so you can customize the globe by editing that file and
-restarting the dev server.
 
 ## License
 
