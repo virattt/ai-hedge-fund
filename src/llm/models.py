@@ -4,6 +4,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_deepseek import ChatDeepSeek
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
 from enum import Enum
@@ -24,6 +25,7 @@ class ModelProvider(str, Enum):
     MISTRAL = "Mistral"
     OPENAI = "OpenAI"
     OLLAMA = "Ollama"
+    AZURE_OPENAI = "Azure OpenAI"
 
 
 class LLMModel(BaseModel):
@@ -136,6 +138,26 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
             print(f"API Key Error: Please make sure OPENAI_API_KEY is set in your .env file.")
             raise ValueError("OpenAI API key not found.  Please make sure OPENAI_API_KEY is set in your .env file.")
         return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
+    elif model_provider == ModelProvider.AZURE_OPENAI:
+        # Get and validate API key
+        api_key = os.getenv("AZURE_OPENAI_API_KEY")
+        if not api_key:
+            # Print error to console
+            print(f"API Key Error: Please make sure AZURE_OPENAI_API_KEY is set in your .env file.")
+            raise ValueError("Azure OpenAI API key not found.  Please make sure AZURE_OPENAI_API_KEY is set in your .env file.")
+        # Get and validate Azure Endpoint
+        azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+        if not azure_endpoint:
+            # Print error to console
+            print(f"Azure Endpoint Error: Please make sure AZURE_OPENAI_ENDPOINT is set in your .env file.")
+            raise ValueError("Azure OpenAI endpoint not found.  Please make sure AZURE_OPENAI_ENDPOINT is set in your .env file.")
+        # get and validate deployment name
+        azure_deployment_name = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+        if not azure_deployment_name:
+            # Print error to console
+            print(f"Azure Deployment Name Error: Please make sure AZURE_OPENAI_DEPLOYMENT_NAME is set in your .env file.")
+            raise ValueError("Azure OpenAI deployment name not found.  Please make sure AZURE_OPENAI_DEPLOYMENT_NAME is set in your .env file.")
+        return AzureChatOpenAI(azure_endpoint=azure_endpoint, azure_deployment=azure_deployment_name, api_key=api_key, api_version="2024-10-21")
     elif model_provider == ModelProvider.ANTHROPIC:
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
