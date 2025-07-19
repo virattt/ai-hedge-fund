@@ -4,7 +4,7 @@ import pandas as pd
 import requests
 import time
 
-from src.data.cache import get_cache
+from src.data.cache_factory import get_cache
 from src.data.models import (
     CompanyNews,
     CompanyNewsResponse,
