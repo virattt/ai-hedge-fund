@@ -24,6 +24,13 @@ class CacheFactory:
         """Get or create a cache instance."""
         print(f"Requesting cache instance with type: {cache_type}")
         if cls._instance is None:
+            # Get TTL from environment if not provided
+            if "ttl_seconds" not in kwargs:
+                if ttl_str := os.environ.get("CACHE_TTL_SECONDS"):
+                    try:
+                        kwargs["ttl_seconds"] = int(ttl_str)
+                    except ValueError:
+                        print(f"Invalid TTL value '{ttl_str}', ignoring")
             cls._instance = cls.create_cache(cache_type, **kwargs)
         return cls._instance
 
@@ -34,15 +41,18 @@ class CacheFactory:
             cache_type = cls._get_cache_type_from_env()
 
         if cache_type == CacheType.MEMORY:
-            return MemoryCache()
+            ttl_seconds = kwargs.get("ttl_seconds")
+            return MemoryCache(ttl_seconds=ttl_seconds)
         elif cache_type == CacheType.DUCKDB:
             try:
                 from src.data.duckdb_cache import DuckDBCache
                 db_path = kwargs.get("db_path", os.environ.get("CACHE_DB_PATH", DEFAULT_CACHE_DB_PATH))
-                return DuckDBCache(db_path=db_path)
+                ttl_seconds = kwargs.get("ttl_seconds")
+                return DuckDBCache(db_path=db_path, ttl_seconds=ttl_seconds)
             except ImportError:
                 print("DuckDB not available, falling back to memory cache")
-                return MemoryCache()
+                ttl_seconds = kwargs.get("ttl_seconds")
+                return MemoryCache(ttl_seconds=ttl_seconds)
         else:
             raise ValueError(f"Unknown cache type: {cache_type}")
 

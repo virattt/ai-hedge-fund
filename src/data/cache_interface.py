@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Optional
 
 
 class CacheInterface(ABC):
@@ -53,6 +53,26 @@ class CacheInterface(ABC):
     @abstractmethod
     def set_company_news(self, cache_key: str, data: list[dict[str, Any]]) -> None:
         """Cache company news."""
+        pass
+
+    @abstractmethod
+    def get_line_item_search(self, cache_key: str) -> list[dict[str, Any]] | None:
+        """Get cached line item search results if available."""
+        pass
+
+    @abstractmethod
+    def set_line_item_search(self, cache_key: str, data: list[dict[str, Any]]) -> None:
+        """Cache line item search results."""
+        pass
+
+    @abstractmethod
+    def is_expired(self, cache_key: str, table_name: str) -> bool:
+        """Check if a cache entry is expired."""
+        pass
+
+    @abstractmethod
+    def cleanup_expired(self) -> None:
+        """Remove expired cache entries."""
         pass
 
     @abstractmethod
