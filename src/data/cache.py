@@ -7,7 +7,7 @@ from src.data.memory_cache import MemoryCache
 
 class Cache(MemoryCache):
     """Legacy cache class - use CacheFactory instead."""
-    
+
     def __init__(self):
         super().__init__()
         import warnings
