@@ -5,6 +5,14 @@ import requests
 import time
 
 from src.data.cache_factory import get_cache
+from src.data.cache_monitor import get_cache_monitor
+from src.data.cache_keys import (
+    create_prices_cache_key,
+    create_financial_metrics_cache_key,
+    create_insider_trades_cache_key,
+    create_company_news_cache_key,
+    create_line_item_search_cache_key
+)
 from src.data.models import (
     CompanyNews,
     CompanyNewsResponse,
@@ -19,24 +27,25 @@ from src.data.models import (
     CompanyFactsResponse,
 )
 
-# Global cache instance
+# Global cache instance and monitor
 _cache = get_cache()
+_monitor = get_cache_monitor()
 
 
 def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: dict = None, max_retries: int = 3) -> requests.Response:
     """
     Make an API request with rate limiting handling and moderate backoff.
-    
+
     Args:
         url: The URL to request
         headers: Headers to include in the request
         method: HTTP method (GET or POST)
         json_data: JSON data for POST requests
         max_retries: Maximum number of retries (default: 3)
-    
+
     Returns:
         requests.Response: The response object
-    
+
     Raises:
         Exception: If the request fails with a non-429 error
     """
@@ -45,26 +54,30 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
             response = requests.post(url, headers=headers, json=json_data)
         else:
             response = requests.get(url, headers=headers)
-        
+
         if response.status_code == 429 and attempt < max_retries:
             # Linear backoff: 60s, 90s, 120s, 150s...
             delay = 60 + (30 * attempt)
             print(f"Rate limited (429). Attempt {attempt + 1}/{max_retries + 1}. Waiting {delay}s before retrying...")
             time.sleep(delay)
             continue
-        
+
         # Return the response (whether success, other errors, or final 429)
         return response
 
 
 def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
     """Fetch price data from cache or API."""
-    # Create a cache key that includes all parameters to ensure exact matches
-    cache_key = f"{ticker}_{start_date}_{end_date}"
-    
+    # Create a consistent cache key
+    cache_key = create_prices_cache_key(ticker, start_date, end_date)
+
     # Check cache first - simple exact match
     if cached_data := _cache.get_prices(cache_key):
+        _monitor.record_hit()
         return [Price(**price) for price in cached_data]
+
+    # Cache miss - fetch from API
+    _monitor.record_miss()
 
     # If not in cache, fetch from API
     headers = {}
@@ -85,6 +98,10 @@ def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
 
     # Cache the results using the comprehensive cache key
     _cache.set_prices(cache_key, [p.model_dump() for p in prices])
+
+    # Cleanup expired entries periodically
+    _monitor.cleanup_if_needed()
+
     return prices
 
 
@@ -95,14 +112,16 @@ def get_financial_metrics(
     limit: int = 10,
 ) -> list[FinancialMetrics]:
     """Fetch financial metrics from cache or API."""
-    # Create a cache key that includes all parameters to ensure exact matches
-    cache_key = f"{ticker}_{period}_{end_date}_{limit}"
-    
+    # Create a consistent cache key
+    cache_key = create_financial_metrics_cache_key(ticker, end_date, period, limit)
+
     # Check cache first - simple exact match
     if cached_data := _cache.get_financial_metrics(cache_key):
+        _monitor.record_hit()
         return [FinancialMetrics(**metric) for metric in cached_data]
 
-    # If not in cache, fetch from API
+    # Cache miss - fetch from API
+    _monitor.record_miss()
     headers = {}
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
         headers["X-API-KEY"] = api_key
@@ -131,8 +150,17 @@ def search_line_items(
     period: str = "ttm",
     limit: int = 10,
 ) -> list[LineItem]:
-    """Fetch line items from API."""
-    # If not in cache or insufficient data, fetch from API
+    """Fetch line items from API with caching support."""
+    # Create a consistent cache key
+    cache_key = create_line_item_search_cache_key(ticker, line_items, end_date, period, limit)
+
+    # Check cache first
+    if cached_data := _cache.get_line_item_search(cache_key):
+        _monitor.record_hit()
+        return [LineItem(**item) for item in cached_data]
+
+    # Cache miss - fetch from API
+    _monitor.record_miss()
     headers = {}
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
         headers["X-API-KEY"] = api_key
@@ -156,6 +184,7 @@ def search_line_items(
         return []
 
     # Cache the results
+    _cache.set_line_item_search(cache_key, [item.model_dump() for item in search_results])
     return search_results[:limit]
 
 
@@ -166,14 +195,16 @@ def get_insider_trades(
     limit: int = 1000,
 ) -> list[InsiderTrade]:
     """Fetch insider trades from cache or API."""
-    # Create a cache key that includes all parameters to ensure exact matches
-    cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
-    
+    # Create a consistent cache key
+    cache_key = create_insider_trades_cache_key(ticker, end_date, start_date, limit)
+
     # Check cache first - simple exact match
     if cached_data := _cache.get_insider_trades(cache_key):
+        _monitor.record_hit()
         return [InsiderTrade(**trade) for trade in cached_data]
 
-    # If not in cache, fetch from API
+    # Cache miss - fetch from API
+    _monitor.record_miss()
     headers = {}
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
         headers["X-API-KEY"] = api_key
@@ -226,14 +257,16 @@ def get_company_news(
     limit: int = 1000,
 ) -> list[CompanyNews]:
     """Fetch company news from cache or API."""
-    # Create a cache key that includes all parameters to ensure exact matches
-    cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
-    
+    # Create a consistent cache key
+    cache_key = create_company_news_cache_key(ticker, end_date, start_date, limit)
+
     # Check cache first - simple exact match
     if cached_data := _cache.get_company_news(cache_key):
+        _monitor.record_hit()
         return [CompanyNews(**news) for news in cached_data]
 
-    # If not in cache, fetch from API
+    # Cache miss - fetch from API
+    _monitor.record_miss()
     headers = {}
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
         headers["X-API-KEY"] = api_key

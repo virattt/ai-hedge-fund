@@ -17,6 +17,7 @@ from src.utils.analysts import ANALYST_ORDER, get_analyst_nodes
 from src.utils.progress import progress
 from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider
 from src.utils.ollama import ensure_ollama_and_model
+from src.data.cache_monitor import get_cache_monitor
 
 import argparse
 from datetime import datetime
@@ -147,6 +148,7 @@ if __name__ == "__main__":
     parser.add_argument("--end-date", type=str, help="End date (YYYY-MM-DD). Defaults to today")
     parser.add_argument("--show-reasoning", action="store_true", help="Show reasoning from each agent")
     parser.add_argument("--show-agent-graph", action="store_true", help="Show the agent graph")
+    parser.add_argument("--show-cache-stats", action="store_true", help="Show cache statistics at the end")
     parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
 
     args = parser.parse_args()
@@ -321,3 +323,30 @@ if __name__ == "__main__":
         model_provider=model_provider,
     )
     print_trading_output(result)
+
+    # Show cache statistics if requested
+    if args.show_cache_stats:
+        print(f"\n{Fore.CYAN}=== Cache Statistics ==={Style.RESET_ALL}")
+        monitor = get_cache_monitor()
+        stats = monitor.get_stats()
+
+        print(f"Cache hits: {Fore.GREEN}{stats.get('hits', 0)}{Style.RESET_ALL}")
+        print(f"Cache misses: {Fore.RED}{stats.get('misses', 0)}{Style.RESET_ALL}")
+        print(f"Hit rate: {Fore.YELLOW}{stats.get('hit_rate', 0):.2f}%{Style.RESET_ALL}")
+        print(f"Last cleanup: {stats.get('last_cleanup', 'Never')}")
+
+        # Show cache health
+        health = monitor.check_cache_health()
+        status_color = Fore.GREEN if health['status'] == 'healthy' else Fore.YELLOW if health['status'] == 'warning' else Fore.RED
+        print(f"Cache health: {status_color}{health['status'].upper()}{Style.RESET_ALL}")
+
+        if health.get('issues'):
+            print(f"{Fore.YELLOW}Issues:{Style.RESET_ALL}")
+            for issue in health['issues']:
+                print(f"  - {issue}")
+
+        if health.get('recommendations'):
+            print(f"{Fore.CYAN}Recommendations:{Style.RESET_ALL}")
+            for rec in health['recommendations']:
+                print(f"  - {rec}")
+        print()  # Extra newline for clean separation
