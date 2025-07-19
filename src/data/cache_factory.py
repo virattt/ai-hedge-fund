@@ -50,10 +50,6 @@ class CacheFactory:
         """Get cache type from environment variables."""
         cache_type_str = os.environ.get("CACHE_TYPE", "memory").lower()
         print(f"Cache type from environment: {cache_type_str}")
-        # print all env variables for debugging
-        print("Current environment variables:")
-        for key, value in os.environ.items():
-            print(f"  {key}: {value}")
 
         try:
             return CacheType(cache_type_str)
