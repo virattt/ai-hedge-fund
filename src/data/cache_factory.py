@@ -2,6 +2,8 @@ import os
 from enum import Enum
 from typing import Optional
 
+DEFAULT_CACHE_DB_PATH = "cache/data.db"
+
 from src.data.cache_interface import CacheInterface
 from src.data.memory_cache import MemoryCache
 
@@ -29,7 +31,6 @@ class CacheFactory:
     def create_cache(cls, cache_type: Optional[CacheType] = None, **kwargs) -> CacheInterface:
         """Create a new cache instance."""
         if cache_type is None:
-            print("No cache type specified, checking environment variables")
             cache_type = cls._get_cache_type_from_env()
 
         if cache_type == CacheType.MEMORY:
@@ -37,7 +38,7 @@ class CacheFactory:
         elif cache_type == CacheType.DUCKDB:
             try:
                 from src.data.duckdb_cache import DuckDBCache
-                db_path = kwargs.get("db_path", os.environ.get("CACHE_DB_PATH", "cache/financial_data.db"))
+                db_path = kwargs.get("db_path", os.environ.get("CACHE_DB_PATH", DEFAULT_CACHE_DB_PATH))
                 return DuckDBCache(db_path=db_path)
             except ImportError:
                 print("DuckDB not available, falling back to memory cache")
@@ -78,7 +79,7 @@ class CacheConfig:
     def __init__(
         self,
         cache_type: CacheType = CacheType.MEMORY,
-        db_path: str = "cache/financial_data.db",
+        db_path: str = DEFAULT_CACHE_DB_PATH,
         ttl_seconds: Optional[int] = None,
     ):
         self.cache_type = cache_type
@@ -95,7 +96,7 @@ class CacheConfig:
             print(f"Unknown cache type '{cache_type_str}', defaulting to memory")
             cache_type = CacheType.MEMORY
 
-        db_path = os.environ.get("CACHE_DB_PATH", "cache/financial_data.db")
+        db_path = os.environ.get("CACHE_DB_PATH", DEFAULT_CACHE_DB_PATH)
         ttl_seconds = None
         if ttl_str := os.environ.get("CACHE_TTL_SECONDS"):
             try:
