@@ -29,6 +29,10 @@ async def save_json_file(request: SaveJsonRequest):
         
         # Construct file path
         file_path = outputs_dir / request.filename
+        # Normalize and validate the file path
+        file_path = file_path.resolve()
+        if not str(file_path).startswith(str(outputs_dir)):
+            raise HTTPException(status_code=400, detail="Invalid filename or path traversal detected.")
         
         # Save JSON data to file
         with open(file_path, 'w', encoding='utf-8') as f:
