@@ -13,12 +13,12 @@ export * from './types';
 
 export const initialNodes: AppNode[] = [
   {
-    id: 'portfolio-manager-node',
-    type: 'portfolio-manager-node',
+    id: 'stock-analyzer-node',
+    type: 'stock-analyzer-node',
     position: { x: 0, y: 0 },
     data: {
-      name: 'Portfolio Manager',
-      description: 'Start Node',
+      name: 'Stock Analyzer',
+      description: 'Stock Analyzer',
       status: 'Idle',
     },
   },
@@ -33,12 +33,12 @@ export const initialNodes: AppNode[] = [
     },
   },
   {
-    id: 'investment-report-node',
-    type: 'investment-report-node',
+    id: 'portfolio-manager-node',
+    type: 'portfolio-manager-node',
     position: { x: 600, y: 75 },
     data: {
-      name: 'Investment Report',
-      description: 'End Node',
+      name: 'Portfolio Manager',
+      description: 'Portfolio Manager',
       status: 'Idle',
     },
   },
