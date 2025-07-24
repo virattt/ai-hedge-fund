@@ -109,6 +109,8 @@ def extract_json_from_response(content: str) -> dict | None:
             if json_end != -1:
                 json_text = json_text[:json_end].strip()
                 return json.loads(json_text)
+        # Try to extract json directly
+        return json.loads(content)
     except Exception as e:
         print(f"Error extracting JSON from response: {e}")
     return None
