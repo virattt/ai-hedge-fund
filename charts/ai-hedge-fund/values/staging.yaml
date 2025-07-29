@@ -1,0 +1,88 @@
+# Staging values for ai-hedge-fund.
+# This is a YAML-formatted file.
+
+global:
+  environment: staging
+
+backend:
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+frontend:
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+ingress:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+  hosts:
+    - host: staging.ai-hedge-fund.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: ai-hedge-fund-frontend
+              port:
+                number: 80
+        - path: /api
+          pathType: Prefix
+          backend:
+            service:
+              name: ai-hedge-fund-backend
+              port:
+                number: 8000
+  tls:
+    - secretName: ai-hedge-fund-staging-tls
+      hosts:
+        - staging.ai-hedge-fund.example.com
+
+persistence:
+  enabled: true
+  storageClass: "standard"
+  size: 20Gi
+  accessMode: ReadWriteOnce
+
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+  master:
+    persistence:
+      enabled: true
+      size: 10Gi
+
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+
+networkPolicy:
+  enabled: false

@@ -1,0 +1,17 @@
+apiVersion: v2
+name: ai-hedge-fund
+description: A Helm chart for deploying the AI Hedge Fund application to Kubernetes
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - ai
+  - hedge-fund
+  - finance
+  - machine-learning
+home: https://github.com/ABoringBusiness/ai-hedge-fund
+sources:
+  - https://github.com/ABoringBusiness/ai-hedge-fund
+maintainers:
+  - name: AI Hedge Fund Team
+    email: info@ai-hedge-fund.example.com

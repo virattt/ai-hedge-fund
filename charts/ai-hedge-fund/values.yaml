@@ -1,0 +1,156 @@
+# Default values for ai-hedge-fund.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Global settings
+global:
+  environment: production
+
+# Backend settings
+backend:
+  name: ai-hedge-fund-backend
+  replicaCount: 1
+  image:
+    repository: ai-hedge-fund/backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+  service:
+    type: ClusterIP
+    port: 8000
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+  env:
+    - name: PYTHONUNBUFFERED
+      value: "1"
+  envFrom:
+    - secretRef:
+        name: ai-hedge-fund-secrets
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+
+# Frontend settings
+frontend:
+  name: ai-hedge-fund-frontend
+  replicaCount: 1
+  image:
+    repository: ai-hedge-fund/frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  service:
+    type: ClusterIP
+    port: 80
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+  env:
+    - name: BACKEND_URL
+      value: "http://ai-hedge-fund-backend:8000"
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 80
+    initialDelaySeconds: 30
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 80
+    initialDelaySeconds: 30
+    periodSeconds: 10
+
+# Ingress settings
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: ai-hedge-fund.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: ai-hedge-fund-frontend
+              port:
+                number: 80
+        - path: /api
+          pathType: Prefix
+          backend:
+            service:
+              name: ai-hedge-fund-backend
+              port:
+                number: 8000
+  tls:
+    - secretName: ai-hedge-fund-tls
+      hosts:
+        - ai-hedge-fund.example.com
+
+# Persistence settings
+persistence:
+  enabled: true
+  storageClass: "standard"
+  size: 10Gi
+  accessMode: ReadWriteOnce
+
+# Secret settings
+secrets:
+  create: true
+  data:
+    OPENAI_API_KEY: ""
+    GROQ_API_KEY: ""
+    FINANCIAL_DATASETS_API_KEY: ""
+
+# Redis settings for caching
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+    password: ""
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+
+# Monitoring settings
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+
+# Network policies
+networkPolicy:
+  enabled: false

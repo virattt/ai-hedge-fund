@@ -1,0 +1,93 @@
+# Production values for ai-hedge-fund.
+# This is a YAML-formatted file.
+
+global:
+  environment: production
+
+backend:
+  replicaCount: 3
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+frontend:
+  replicaCount: 3
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+ingress:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: ai-hedge-fund.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: ai-hedge-fund-frontend
+              port:
+                number: 80
+        - path: /api
+          pathType: Prefix
+          backend:
+            service:
+              name: ai-hedge-fund-backend
+              port:
+                number: 8000
+  tls:
+    - secretName: ai-hedge-fund-tls
+      hosts:
+        - ai-hedge-fund.example.com
+
+persistence:
+  enabled: true
+  storageClass: "managed-premium"
+  size: 50Gi
+  accessMode: ReadWriteOnce
+
+redis:
+  enabled: true
+  architecture: replication
+  auth:
+    enabled: true
+  master:
+    persistence:
+      enabled: true
+      size: 20Gi
+  replica:
+    replicaCount: 2
+    persistence:
+      enabled: true
+      size: 20Gi
+
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 15s
+    scrapeTimeout: 10s
+
+networkPolicy:
+  enabled: true

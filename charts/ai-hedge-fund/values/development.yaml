@@ -1,0 +1,61 @@
+# Development values for ai-hedge-fund.
+# This is a YAML-formatted file.
+
+global:
+  environment: development
+
+backend:
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 512Mi
+  autoscaling:
+    enabled: false
+  livenessProbe:
+    initialDelaySeconds: 60
+  readinessProbe:
+    initialDelaySeconds: 60
+
+frontend:
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: 300m
+      memory: 384Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  autoscaling:
+    enabled: false
+  livenessProbe:
+    initialDelaySeconds: 60
+  readinessProbe:
+    initialDelaySeconds: 60
+
+ingress:
+  enabled: false
+
+persistence:
+  enabled: true
+  storageClass: "standard"
+  size: 5Gi
+  accessMode: ReadWriteOnce
+
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+  master:
+    persistence:
+      enabled: false
+
+monitoring:
+  enabled: false
+
+networkPolicy:
+  enabled: false
