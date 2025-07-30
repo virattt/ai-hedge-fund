@@ -28,7 +28,14 @@ async def save_json_file(request: SaveJsonRequest):
         outputs_dir.mkdir(exist_ok=True)
         
         # Construct file path
-        file_path = outputs_dir / request.filename
+        from werkzeug.utils import secure_filename
+        
+        # Sanitize the filename
+        sanitized_filename = secure_filename(request.filename)
+        
+        # Construct file path
+        file_path = outputs_dir / sanitized_filename
+        
         # Normalize and validate the file path
         file_path = file_path.resolve()
         if not str(file_path).startswith(str(outputs_dir)):
