@@ -93,5 +93,10 @@
     "display_name": "Qwen 3 (235B) Thinking",
     "model_name": "qwen/qwen3-235b-a22b-thinking-2507",
     "provider": "OpenRouter"
+  },
+  {
+    "display_name": "GigaChat-2-Max",
+    "model_name": "GigaChat-2-Max",
+    "provider": "GigaChat"
   }
 ]

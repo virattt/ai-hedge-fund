@@ -65,6 +65,13 @@ const LLM_API_KEYS: ApiKey[] = [
     description: 'For OpenRouter models (gpt-4o, gpt-4o-mini, etc.)',
     url: 'https://openrouter.ai/',
     placeholder: 'your-openrouter-api-key'
+  },
+  {
+    key: 'GIGACHAT_API_KEY',
+    label: 'GigaChat API',
+    description: 'For GigaChat models (GigaChat-2-Max, etc.)',
+    url: 'https://github.com/ai-forever/gigachat',
+    placeholder: 'your-gigachat-api-key'
   }
 ];
 

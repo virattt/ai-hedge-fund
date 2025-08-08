@@ -5,6 +5,7 @@ from langchain_deepseek import ChatDeepSeek
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
+from langchain_gigachat import GigaChat
 from langchain_ollama import ChatOllama
 from enum import Enum
 from pydantic import BaseModel
@@ -25,6 +26,7 @@ class ModelProvider(str, Enum):
     OPENAI = "OpenAI"
     OLLAMA = "Ollama"
     OPENROUTER = "OpenRouter"
+    GIGACHAT = "GigaChat"
 
 
 class LLMModel(BaseModel):
@@ -123,7 +125,7 @@ def get_models_list():
     ]
 
 
-def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | None:
+def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | None:
     if model_provider == ModelProvider.GROQ:
         api_key = (api_keys or {}).get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
         if not api_key:
@@ -188,3 +190,13 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
                 }
             }
         )
+    elif model_provider == ModelProvider.GIGACHAT:
+        if os.getenv("GIGACHAT_USER") or os.getenv("GIGACHAT_PASSWORD"):
+            return GigaChat(model=model_name)
+        else: 
+            api_key = (api_keys or {}).get("GIGACHAT_API_KEY") or os.getenv("GIGACHAT_API_KEY") or os.getenv("GIGACHAT_CREDENTIALS")
+            if not api_key:
+                print("API Key Error: Please make sure api_keys is set in your .env file or provided via API keys.")
+                raise ValueError("GigaChat API key not found. Please make sure GIGACHAT_API_KEY is set in your .env file or provided via API keys.")
+
+            return GigaChat(credentials=api_key, model=model_name)
