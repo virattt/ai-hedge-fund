@@ -9,6 +9,17 @@ from src.utils.progress import progress
 from src.utils.llm import call_llm
 from src.utils.api_key import get_api_key_from_state
 
+from copy import deepcopy
+
+# Default DCF parameter configuration. Can be overridden via state["data"].get("cathie_wood_config", {}).get("dcf", {}).
+DEFAULT_CATHIE_DCF_CONFIG = {
+    "growth_rate_by_gross_margin": {"high": 0.25, "medium": 0.15, "low": 0.08},
+    "discount_rate_by_roic": {"high": 0.12, "medium": 0.15, "low": 0.18},
+    "discount_rate_leverage_adjustment": {"medium": 0.01, "high": 0.03},
+    "terminal_multiple_by_margin": {"high": 30, "medium": 20, "low": 15},
+    "terminal_multiple_leverage_adjustment": {"medium": 5, "high": 10},
+}
+
 
 class CathieWoodSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
@@ -30,6 +41,7 @@ def cathie_wood_agent(state: AgentState, agent_id: str = "cathie_wood_agent"):
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
     analysis_data = {}
     cw_analysis = {}
+    dcf_config = data.get("cathie_wood_config", {}).get("dcf")
 
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
@@ -47,6 +59,8 @@ def cathie_wood_agent(state: AgentState, agent_id: str = "cathie_wood_agent"):
                 "free_cash_flow",
                 "total_assets",
                 "total_liabilities",
+                "total_debt",
+                "cash_and_equivalents",
                 "dividends_and_other_cash_distributions",
                 "outstanding_shares",
                 "research_and_development",
@@ -59,6 +73,12 @@ def cathie_wood_agent(state: AgentState, agent_id: str = "cathie_wood_agent"):
             api_key=api_key,
         )
 
+        financial_line_items = sorted(
+            financial_line_items,
+            key=lambda x: getattr(x, "period_end_date", getattr(x, "date", "")),
+            reverse=True,
+        )
+
         progress.update_status(agent_id, ticker, "Getting market cap")
         market_cap = get_market_cap(ticker, end_date, api_key=api_key)
 
@@ -69,11 +89,11 @@ def cathie_wood_agent(state: AgentState, agent_id: str = "cathie_wood_agent"):
         innovation_analysis = analyze_innovation_growth(metrics, financial_line_items)
 
         progress.update_status(agent_id, ticker, "Calculating valuation & high-growth scenario")
-        valuation_analysis = analyze_cathie_wood_valuation(financial_line_items, market_cap)
+        valuation_analysis = analyze_cathie_wood_valuation(financial_line_items, market_cap, dcf_config)
 
         # Combine partial scores or signals
         total_score = disruptive_analysis["score"] + innovation_analysis["score"] + valuation_analysis["score"]
-        max_possible_score = 15  # Adjust weighting as desired
+        max_possible_score = 15  # 5 points per pillar after normalization
 
         if total_score >= 0.7 * max_possible_score:
             signal = "bullish"
@@ -124,12 +144,18 @@ def analyze_disruptive_potential(metrics: list, financial_line_items: list) -> d
     if not metrics or not financial_line_items:
         return {"score": 0, "details": "Insufficient data to analyze disruptive potential"}
 
+    financial_line_items = sorted(
+        financial_line_items,
+        key=lambda x: getattr(x, "period_end_date", getattr(x, "date", "")),
+        reverse=True,
+    )
+
     # 1. Revenue Growth Analysis - Check for accelerating growth
-    revenues = [item.revenue for item in financial_line_items if item.revenue]
+    revenues = [item.revenue for item in financial_line_items if item.revenue is not None]
     if len(revenues) >= 3:  # Need at least 3 periods to check acceleration
         growth_rates = []
         for i in range(len(revenues) - 1):
-            if revenues[i] and revenues[i + 1]:
+            if (revenues[i] is not None) and (revenues[i + 1] is not None):
                 growth_rate = (revenues[i] - revenues[i + 1]) / abs(revenues[i + 1]) if revenues[i + 1] != 0 else 0
                 growth_rates.append(growth_rate)
 
@@ -171,8 +197,12 @@ def analyze_disruptive_potential(metrics: list, financial_line_items: list) -> d
         details.append("Insufficient gross margin data")
 
     # 3. Operating Leverage Analysis
-    revenues = [item.revenue for item in financial_line_items if item.revenue]
-    operating_expenses = [item.operating_expense for item in financial_line_items if hasattr(item, "operating_expense") and item.operating_expense]
+    revenues = [item.revenue for item in financial_line_items if item.revenue is not None]
+    operating_expenses = [
+        item.operating_expense
+        for item in financial_line_items
+        if hasattr(item, "operating_expense") and item.operating_expense is not None
+    ]
 
     if len(revenues) >= 2 and len(operating_expenses) >= 2:
         rev_growth = (revenues[0] - revenues[-1]) / abs(revenues[-1])
@@ -201,7 +231,7 @@ def analyze_disruptive_potential(metrics: list, financial_line_items: list) -> d
         details.append("No R&D data available")
 
     # Normalize score to be out of 5
-    max_possible_score = 12  # Sum of all possible points
+    max_possible_score = 14  # Sum of all possible points
     normalized_score = (score / max_possible_score) * 5
 
     return {"score": normalized_score, "details": "; ".join(details), "raw_score": score, "max_score": max_possible_score}
@@ -223,9 +253,19 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
     if not metrics or not financial_line_items:
         return {"score": 0, "details": "Insufficient data to analyze innovation-driven growth"}
 
+    financial_line_items = sorted(
+        financial_line_items,
+        key=lambda x: getattr(x, "period_end_date", getattr(x, "date", "")),
+        reverse=True,
+    )
+
     # 1. R&D Investment Trends
-    rd_expenses = [item.research_and_development for item in financial_line_items if hasattr(item, "research_and_development") and item.research_and_development]
-    revenues = [item.revenue for item in financial_line_items if item.revenue]
+    rd_expenses = [
+        item.research_and_development
+        for item in financial_line_items
+        if hasattr(item, "research_and_development") and item.research_and_development is not None
+    ]
+    revenues = [item.revenue for item in financial_line_items if item.revenue is not None]
 
     if rd_expenses and revenues and len(rd_expenses) >= 2:
         rd_growth = (rd_expenses[0] - rd_expenses[-1]) / abs(rd_expenses[-1]) if rd_expenses[-1] != 0 else 0
@@ -246,7 +286,7 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
         details.append("Insufficient R&D data for trend analysis")
 
     # 2. Free Cash Flow Analysis
-    fcf_vals = [item.free_cash_flow for item in financial_line_items if item.free_cash_flow]
+    fcf_vals = [item.free_cash_flow for item in financial_line_items if item.free_cash_flow is not None]
     if fcf_vals and len(fcf_vals) >= 2:
         fcf_growth = (fcf_vals[0] - fcf_vals[-1]) / abs(fcf_vals[-1])
         positive_fcf_count = sum(1 for f in fcf_vals if f > 0)
@@ -264,7 +304,7 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
         details.append("Insufficient FCF data for analysis")
 
     # 3. Operating Efficiency Analysis
-    op_margin_vals = [item.operating_margin for item in financial_line_items if item.operating_margin]
+    op_margin_vals = [item.operating_margin for item in financial_line_items if item.operating_margin is not None]
     if op_margin_vals and len(op_margin_vals) >= 2:
         margin_trend = op_margin_vals[0] - op_margin_vals[-1]
 
@@ -281,7 +321,11 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
         details.append("Insufficient operating margin data")
 
     # 4. Capital Allocation Analysis
-    capex = [item.capital_expenditure for item in financial_line_items if hasattr(item, "capital_expenditure") and item.capital_expenditure]
+    capex = [
+        item.capital_expenditure
+        for item in financial_line_items
+        if hasattr(item, "capital_expenditure") and item.capital_expenditure is not None
+    ]
     if capex and revenues and len(capex) >= 2:
         capex_intensity = abs(capex[0]) / revenues[0]
         capex_growth = (abs(capex[0]) - abs(capex[-1])) / abs(capex[-1]) if capex[-1] != 0 else 0
@@ -296,9 +340,14 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
         details.append("Insufficient CAPEX data")
 
     # 5. Growth Reinvestment Analysis
-    dividends = [item.dividends_and_other_cash_distributions for item in financial_line_items if hasattr(item, "dividends_and_other_cash_distributions") and item.dividends_and_other_cash_distributions]
-    if dividends and fcf_vals:
-        latest_payout_ratio = dividends[0] / fcf_vals[0] if fcf_vals[0] != 0 else 1
+    dividends = [
+        abs(item.dividends_and_other_cash_distributions)
+        for item in financial_line_items
+        if hasattr(item, "dividends_and_other_cash_distributions")
+        and item.dividends_and_other_cash_distributions is not None
+    ]
+    if dividends and fcf_vals and fcf_vals[0] is not None and fcf_vals[0] != 0:
+        latest_payout_ratio = dividends[0] / abs(fcf_vals[0])
         if latest_payout_ratio < 0.2:  # Low dividend payout ratio suggests reinvestment focus
             score += 2
             details.append("Strong focus on reinvestment over dividends")
@@ -315,26 +364,82 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
     return {"score": normalized_score, "details": "; ".join(details), "raw_score": score, "max_score": max_possible_score}
 
 
-def analyze_cathie_wood_valuation(financial_line_items: list, market_cap: float) -> dict:
+def analyze_cathie_wood_valuation(
+    financial_line_items: list, market_cap: float, dcf_config: dict | None = None
+) -> dict:
+    """DCF valuation tuned to Cathie Wood's growth assumptions.
+
+    Growth rate, discount rate and terminal multiple are derived from observed
+    gross margin, ROIC and leverage bands. Parameters can be overridden via
+    ``dcf_config`` for experimentation.
     """
-    Cathie Wood often focuses on long-term exponential growth potential. We can do
-    a simplified approach looking for a large total addressable market (TAM) and the
-    company's ability to capture a sizable portion.
-    """
+
     if not financial_line_items or market_cap is None:
         return {"score": 0, "details": "Insufficient data for valuation"}
 
+    financial_line_items = sorted(
+        financial_line_items,
+        key=lambda x: getattr(x, "period_end_date", getattr(x, "date", "")),
+        reverse=True,
+    )
+
     latest = financial_line_items[0]
-    fcf = latest.free_cash_flow if latest.free_cash_flow else 0
+    fcf = latest.free_cash_flow if latest.free_cash_flow is not None else 0
 
     if fcf <= 0:
         return {"score": 0, "details": f"No positive FCF for valuation; FCF = {fcf}", "intrinsic_value": None}
 
-    # Instead of a standard DCF, let's assume a higher growth rate for an innovative company.
-    # Example values:
-    growth_rate = 0.20  # 20% annual growth
-    discount_rate = 0.15
-    terminal_multiple = 25
+    # Merge provided configuration with defaults
+    config = deepcopy(DEFAULT_CATHIE_DCF_CONFIG)
+    if dcf_config:
+        for k, v in dcf_config.items():
+            if isinstance(v, dict) and k in config:
+                config[k].update(v)
+            else:
+                config[k] = v
+
+    gross_margin = latest.gross_margin if latest.gross_margin is not None else 0
+    margin_band = "high" if gross_margin >= 0.60 else "medium" if gross_margin >= 0.40 else "low"
+
+    leverage = latest.debt_to_equity if latest.debt_to_equity is not None else 0
+    leverage_band = "high" if leverage > 1.5 else "medium" if leverage > 0.5 else "low"
+
+    invested_capital = None
+    if (latest.total_assets is not None) and (latest.total_liabilities is not None):
+        invested_capital = latest.total_assets - latest.total_liabilities
+
+    roic = None
+    if (invested_capital is not None) and (invested_capital != 0):
+        roic = fcf / invested_capital
+    roic_band = (
+        "high"
+        if (roic is not None) and (roic >= 0.15)
+        else "medium" if (roic is not None) and (roic >= 0.08) else "low"
+    )
+
+    growth_rate = config["growth_rate_by_gross_margin"][margin_band]
+    discount_rate = config["discount_rate_by_roic"][roic_band]
+    dr_adj = config["discount_rate_leverage_adjustment"]
+    if leverage_band == "medium":
+        discount_rate += dr_adj["medium"]
+    elif leverage_band == "high":
+        discount_rate += dr_adj["high"]
+
+    terminal_multiple = config["terminal_multiple_by_margin"][margin_band]
+    tm_adj = config["terminal_multiple_leverage_adjustment"]
+    if leverage_band == "medium":
+        terminal_multiple -= tm_adj["medium"]
+    elif leverage_band == "high":
+        terminal_multiple -= tm_adj["high"]
+
+    # Guard rails to prevent extreme inputs
+    growth_rate = max(0.0, min(growth_rate, 0.50))
+    discount_rate = max(0.05, min(discount_rate, 0.30))
+    terminal_multiple = max(5, min(terminal_multiple, 50))
+
+    if discount_rate <= growth_rate:
+        discount_rate = min(max(discount_rate, growth_rate + 0.02), 0.30)
+
     projection_years = 5
 
     present_value = 0
@@ -343,21 +448,74 @@ def analyze_cathie_wood_valuation(financial_line_items: list, market_cap: float)
         pv = future_fcf / ((1 + discount_rate) ** year)
         present_value += pv
 
-    # Terminal Value
-    terminal_value = (fcf * (1 + growth_rate) ** projection_years * terminal_multiple) / ((1 + discount_rate) ** projection_years)
+    terminal_value = (
+        fcf * (1 + growth_rate) ** projection_years * terminal_multiple
+    ) / ((1 + discount_rate) ** projection_years)
     intrinsic_value = present_value + terminal_value
 
-    margin_of_safety = (intrinsic_value - market_cap) / market_cap
+    total_debt = getattr(latest, "total_debt", None)
+    cash = getattr(latest, "cash_and_equivalents", None)
+    outstanding_shares = getattr(latest, "outstanding_shares", None)
+    net_debt = None
+    if total_debt is not None and cash is not None:
+        net_debt = total_debt - cash
+    enterprise_value = market_cap + net_debt if net_debt is not None else None
+
+    margin_of_safety = None
+    intrinsic_price = None
+    market_price = None
+
+    if enterprise_value is not None and enterprise_value != 0:
+        margin_of_safety = (intrinsic_value - enterprise_value) / enterprise_value
+    elif (
+        (outstanding_shares is not None)
+        and (market_cap is not None)
+        and (outstanding_shares != 0)
+    ):
+        intrinsic_price = intrinsic_value / outstanding_shares
+        market_price = market_cap / outstanding_shares
+        if market_price != 0:
+            margin_of_safety = (intrinsic_price - market_price) / market_price
 
     score = 0
-    if margin_of_safety > 0.5:
-        score += 3
-    elif margin_of_safety > 0.2:
-        score += 1
+    if margin_of_safety is not None:
+        if margin_of_safety > 0.5:
+            score += 3
+        elif margin_of_safety > 0.2:
+            score += 1
 
-    details = [f"Calculated intrinsic value: ~{intrinsic_value:,.2f}", f"Market cap: ~{market_cap:,.2f}", f"Margin of safety: {margin_of_safety:.2%}"]
+    roic_pct = f"{roic:.0%}" if roic is not None else "n/a"
+    details = [
+        f"Using growth rate {growth_rate:.0%} (gross margin {gross_margin:.0%})",
+        f"Discount rate {discount_rate:.0%} (ROIC {roic_pct}, leverage {leverage:.2f})",
+        f"Terminal multiple {terminal_multiple} (margin band {margin_band})",
+        f"Calculated intrinsic value: ~{intrinsic_value:,.2f}",
+    ]
 
-    return {"score": score, "details": "; ".join(details), "intrinsic_value": intrinsic_value, "margin_of_safety": margin_of_safety}
+    if enterprise_value is not None:
+        details.append(f"Enterprise value: ~{enterprise_value:,.2f}")
+    elif intrinsic_price is not None and market_price is not None:
+        details.append(f"Intrinsic price per share: ~{intrinsic_price:,.2f}")
+        details.append(f"Market price: ~{market_price:,.2f}")
+    else:
+        details.append(f"Market cap: ~{market_cap:,.2f}")
+
+    if margin_of_safety is not None:
+        details.append(f"Margin of safety: {margin_of_safety:.2%}")
+    else:
+        details.append("Margin of safety: n/a")
+
+    max_possible_score = 3
+    normalized_score = (score / max_possible_score) * 5
+
+    return {
+        "score": normalized_score,
+        "details": "; ".join(details),
+        "raw_score": score,
+        "max_score": max_possible_score,
+        "intrinsic_value": intrinsic_value,
+        "margin_of_safety": margin_of_safety,
+    }
 
 
 def generate_cathie_wood_output(

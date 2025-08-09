@@ -70,6 +70,12 @@ def phil_fisher_agent(state: AgentState, agent_id: str = "phil_fisher_agent"):
             api_key=api_key,
         )
 
+        financial_line_items = sorted(
+            financial_line_items,
+            key=lambda x: getattr(x, "period_end_date", getattr(x, "date", "")),
+            reverse=True,
+        )
+
         progress.update_status(agent_id, ticker, "Getting market cap")
         market_cap = get_market_cap(ticker, end_date, api_key=api_key)
 
@@ -177,6 +183,12 @@ def analyze_fisher_growth_quality(financial_line_items: list) -> dict:
             "details": "Insufficient financial data for growth/quality analysis",
         }
 
+    financial_line_items = sorted(
+        financial_line_items,
+        key=lambda x: getattr(x, "period_end_date", getattr(x, "date", "")),
+        reverse=True,
+    )
+
     details = []
     raw_score = 0  # up to 9 raw points => scale to 0–10
 
@@ -232,7 +244,7 @@ def analyze_fisher_growth_quality(financial_line_items: list) -> dict:
     if rnd_values and revenues and len(rnd_values) == len(revenues):
         # We'll just look at the most recent for a simple measure
         recent_rnd = rnd_values[0]
-        recent_rev = revenues[0] if revenues[0] else 1e-9
+        recent_rev = revenues[0] if revenues[0] != 0 else 1e-9
         rnd_ratio = recent_rnd / recent_rev
         # Generally, Fisher admired companies that invest aggressively in R&D,
         # but it must be appropriate. We'll assume "3%-15%" is healthy, just as an example.
@@ -264,6 +276,12 @@ def analyze_margins_stability(financial_line_items: list) -> dict:
             "score": 0,
             "details": "Insufficient data for margin stability analysis",
         }
+
+    financial_line_items = sorted(
+        financial_line_items,
+        key=lambda x: getattr(x, "period_end_date", getattr(x, "date", "")),
+        reverse=True,
+    )
 
     details = []
     raw_score = 0  # up to 6 => scale to 0-10
@@ -334,6 +352,12 @@ def analyze_management_efficiency_leverage(financial_line_items: list) -> dict:
             "details": "No financial data for management efficiency analysis",
         }
 
+    financial_line_items = sorted(
+        financial_line_items,
+        key=lambda x: getattr(x, "period_end_date", getattr(x, "date", "")),
+        reverse=True,
+    )
+
     details = []
     raw_score = 0  # up to 6 => scale to 0–10
 
@@ -342,7 +366,7 @@ def analyze_management_efficiency_leverage(financial_line_items: list) -> dict:
     eq_values = [fi.shareholders_equity for fi in financial_line_items if fi.shareholders_equity is not None]
     if ni_values and eq_values and len(ni_values) == len(eq_values):
         recent_ni = ni_values[0]
-        recent_eq = eq_values[0] if eq_values[0] else 1e-9
+        recent_eq = eq_values[0] if eq_values[0] != 0 else 1e-9
         if recent_ni > 0:
             roe = recent_ni / recent_eq
             if roe > 0.2:
@@ -365,7 +389,7 @@ def analyze_management_efficiency_leverage(financial_line_items: list) -> dict:
     debt_values = [fi.total_debt for fi in financial_line_items if fi.total_debt is not None]
     if debt_values and eq_values and len(debt_values) == len(eq_values):
         recent_debt = debt_values[0]
-        recent_equity = eq_values[0] if eq_values[0] else 1e-9
+        recent_equity = eq_values[0] if eq_values[0] != 0 else 1e-9
         dte = recent_debt / recent_equity
         if dte < 0.3:
             raw_score += 2
@@ -382,7 +406,7 @@ def analyze_management_efficiency_leverage(financial_line_items: list) -> dict:
     fcf_values = [fi.free_cash_flow for fi in financial_line_items if fi.free_cash_flow is not None]
     if fcf_values and len(fcf_values) >= 2:
         # Check if FCF is positive in recent years
-        positive_fcf_count = sum(1 for x in fcf_values if x and x > 0)
+        positive_fcf_count = sum(1 for x in fcf_values if x > 0)
         # We'll be simplistic: if most are positive, reward
         ratio = positive_fcf_count / len(fcf_values)
         if ratio > 0.8:
@@ -408,6 +432,12 @@ def analyze_fisher_valuation(financial_line_items: list, market_cap: float | Non
     if not financial_line_items or market_cap is None:
         return {"score": 0, "details": "Insufficient data to perform valuation"}
 
+    financial_line_items = sorted(
+        financial_line_items,
+        key=lambda x: getattr(x, "period_end_date", getattr(x, "date", "")),
+        reverse=True,
+    )
+
     details = []
     raw_score = 0
 
@@ -417,7 +447,7 @@ def analyze_fisher_valuation(financial_line_items: list, market_cap: float | Non
 
     # 1) P/E
     recent_net_income = net_incomes[0] if net_incomes else None
-    if recent_net_income and recent_net_income > 0:
+    if (recent_net_income is not None) and (recent_net_income > 0):
         pe = market_cap / recent_net_income
         pe_points = 0
         if pe < 20:
@@ -434,7 +464,7 @@ def analyze_fisher_valuation(financial_line_items: list, market_cap: float | Non
 
     # 2) P/FCF
     recent_fcf = fcf_values[0] if fcf_values else None
-    if recent_fcf and recent_fcf > 0:
+    if (recent_fcf is not None) and (recent_fcf > 0):
         pfcf = market_cap / recent_fcf
         pfcf_points = 0
         if pfcf < 20:
