@@ -20,9 +20,6 @@ class OllamaService:
     """Service for managing Ollama integration in the backend."""
     
     def __init__(self):
-        self._status_cache = {}
-        self._last_check = 0
-        self._cache_duration = 10
         self._download_progress = {}
         self._download_processes = {}
         
@@ -36,9 +33,6 @@ class OllamaService:
     
     async def check_ollama_status(self) -> Dict[str, any]:
         """Check Ollama installation and server status."""
-        if self._should_use_cached_status():
-            return self._status_cache
-        
         try:
             is_installed = await self._check_installation()
             is_running = await self._check_server_running()
@@ -53,21 +47,17 @@ class OllamaService:
                 "error": None
             }
             
-            self._update_status_cache(status)
             logger.debug(f"Ollama status: installed={is_installed}, running={is_running}, models={len(models)}")
             return status
             
         except Exception as e:
             logger.error(f"Error checking Ollama status: {e}")
-            error_status = self._create_error_status(str(e))
-            self._update_status_cache(error_status)
-            return error_status
+            return self._create_error_status(str(e))
     
     async def start_server(self) -> Dict[str, any]:
         """Start the Ollama server."""
         try:
             success = await self._execute_server_start()
-            self._clear_status_cache()
             
             message = "Ollama server started successfully" if success else "Failed to start Ollama server"
             return {"success": success, "message": message}
@@ -80,7 +70,6 @@ class OllamaService:
         """Stop the Ollama server."""
         try:
             success = await self._execute_server_stop()
-            self._clear_status_cache()
             
             message = "Ollama server stopped successfully" if success else "Failed to stop Ollama server"
             return {"success": success, "message": message}
@@ -92,9 +81,7 @@ class OllamaService:
     async def download_model(self, model_name: str) -> Dict[str, any]:
         """Download an Ollama model."""
         try:
-            self._clear_status_cache()
             success = await self._execute_model_download(model_name)
-            self._clear_status_cache()
             
             message = f"Model {model_name} downloaded successfully" if success else f"Failed to download model {model_name}"
             return {"success": success, "message": message}
@@ -111,9 +98,7 @@ class OllamaService:
     async def delete_model(self, model_name: str) -> Dict[str, any]:
         """Delete an Ollama model."""
         try:
-            self._clear_status_cache()
             success = await self._execute_model_deletion(model_name)
-            self._clear_status_cache()
             
             message = f"Model {model_name} deleted successfully" if success else f"Failed to delete model {model_name}"
             return {"success": success, "message": message}
@@ -190,21 +175,7 @@ class OllamaService:
     # PRIVATE HELPER METHODS
     # =============================================================================
     
-    def _should_use_cached_status(self) -> bool:
-        """Check if we should use cached status."""
-        current_time = time.time()
-        return (current_time - self._last_check) < self._cache_duration and self._status_cache
-    
-    def _update_status_cache(self, status: Dict[str, any]) -> None:
-        """Update the status cache."""
-        self._status_cache = status
-        self._last_check = time.time()
-    
-    def _clear_status_cache(self) -> None:
-        """Clear the status cache to force fresh check."""
-        self._status_cache = {}
-        self._last_check = 0
-    
+
     def _create_error_status(self, error: str) -> Dict[str, any]:
         """Create error status response."""
         return {

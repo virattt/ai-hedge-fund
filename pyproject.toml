@@ -11,12 +11,12 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
-langchain = "0.3.0"
+langchain = "^0.3.7"
 langchain-anthropic = "0.3.5"
 langchain-groq = "0.2.3"
 langchain-openai = "^0.3.5"
 langchain-deepseek = "^0.1.2"
-langchain-ollama = "^0.2.0"
+langchain-ollama = "0.3.6"
 langgraph = "0.2.56"
 pandas = "^2.1.0"
 numpy = "^1.24.0"

@@ -1,5 +1,15 @@
 [
   {
+    "display_name": "gpt-oss (20B)",
+    "model_name": "gpt-oss:20b",
+    "provider": "OpenAI"
+  },
+  {
+    "display_name": "gpt-oss (120B)",
+    "model_name": "gpt-oss:120b",
+    "provider": "OpenAI"
+  },
+  {
     "display_name": "Gemma 3 (4B)",
     "model_name": "gemma3:4b",
     "provider": "Google"
