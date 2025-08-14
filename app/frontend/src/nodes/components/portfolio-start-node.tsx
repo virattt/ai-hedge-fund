@@ -122,9 +122,7 @@ export function PortfolioStartNode({
   };
 
   const handleInitialCashChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Remove non-numeric characters except decimal point
-    const numericValue = e.target.value.replace(/[^0-9.]/g, '');
-    setInitialCash(numericValue);
+    setInitialCash(e.target.value);
   };
 
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -135,30 +133,16 @@ export function PortfolioStartNode({
     setEndDate(e.target.value);
   };
 
-  // Format the display value with commas
-  const formatCurrency = (value: string) => {
-    if (!value) return '';
-    const num = parseFloat(value);
-    if (isNaN(num)) return value;
-    return num.toLocaleString('en-US');
-  };
-
-  // Format numeric input for display
-  const formatNumericValue = (value: string) => {
-    if (!value) return '';
-    const num = parseFloat(value);
-    if (isNaN(num)) return value;
-    return num.toLocaleString('en-US');
-  };
-
   const handleStop = () => {
     stopFlow();
   };
 
   const handlePlay = () => {
-    // Expand bottom panel and set to output tab
-    expandBottomPanel();
-    setBottomPanelTab('output');
+    // Expand bottom panel and set to output tab if backtest
+    if (runMode === 'backtest') {
+      expandBottomPanel();
+      setBottomPanelTab('output');
+    }
     
     // Get the current flow's nodes and edges
     const allNodes = getNodes();
@@ -298,11 +282,13 @@ export function PortfolioStartNode({
                     $
                   </div>
                   <Input
-                    type="text"
-                    placeholder="100,000"
-                    value={formatCurrency(initialCash)}
+                    type="number"
+                    placeholder="100000"
+                    value={initialCash}
                     onChange={handleInitialCashChange}
                     className="pl-8 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    step="0.01"
+                    min="0"
                   />
                 </div>
               </div>
@@ -328,20 +314,25 @@ export function PortfolioStartNode({
                         className="flex-1"
                       />
                       <Input
+                        type="number"
                         placeholder="Quantity"
-                        value={formatNumericValue(position.quantity)}
-                        onChange={(e) => handlePositionChange(index, 'quantity', e.target.value.replace(/[^0-9.]/g, ''))}
+                        value={position.quantity}
+                        onChange={(e) => handlePositionChange(index, 'quantity', e.target.value)}
                         className="w-20"
+                        step="any"
                       />
                       <div className="relative flex-1">
                         <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground pointer-events-none">
                           $
                         </div>
                         <Input
+                          type="number"
                           placeholder="Price"
-                          value={formatNumericValue(position.tradePrice)}
-                          onChange={(e) => handlePositionChange(index, 'tradePrice', e.target.value.replace(/[^0-9.]/g, ''))}
+                          value={position.tradePrice}
+                          onChange={(e) => handlePositionChange(index, 'tradePrice', e.target.value)}
                           className="pl-8"
+                          step="0.01"
+                          min="0"
                         />
                       </div>
                       {positions.length > 1 && (

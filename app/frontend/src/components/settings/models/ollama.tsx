@@ -624,11 +624,10 @@ export function OllamaSettings() {
             {getStatusText()}
           </Badge>
           <Button
-            variant="outline"
             size="sm"
             onClick={refreshStatus}
             disabled={loading}
-            className="text-primary hover:bg-primary/20 hover:text-primary border-primary/30 hover:border-primary/50"
+            className="text-primary hover:bg-primary/20 hover:text-primary bg-primary/10 border-primary/30 hover:border-primary/50"
           >
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
           </Button>
@@ -703,10 +702,9 @@ export function OllamaSettings() {
             </div>
           </div>
           <Button
-            variant="outline"
             onClick={stopOllamaServer}
             disabled={actionLoading === 'stop-server'}
-            className="flex items-center gap-2 text-primary hover:bg-primary/20 hover:text-primary border-primary/30 hover:border-primary/50"
+            className="flex items-center gap-2 text-red-400 hover:bg-red-500/20 hover:text-red-300 bg-red-500/10 border-red-500/30 hover:border-red-500/50"
           >
             <Square className="h-4 w-4" />
             {actionLoading === 'stop-server' ? 'Stopping...' : 'Disconnect'}
@@ -825,10 +823,9 @@ export function OllamaSettings() {
                     {!model.isDownloaded && !activeDownloads.has(model.model_name) && (
                       <>
                         <Button
-                          variant="outline"
                           size="sm"
                           onClick={() => downloadModelWithProgress(model.model_name)}
-                          className="flex items-center gap-2 h-7 text-primary hover:bg-primary/20 hover:text-primary border-primary/30 hover:border-primary/50"
+                          className="flex items-center gap-2 h-7 text-primary hover:bg-primary/20 hover:text-primary bg-primary/10 border-primary/30 hover:border-primary/50"
                         >
                           <Download className="h-3 w-3" />
                           Download

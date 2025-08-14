@@ -1,12 +1,15 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 import asyncio
 
+from app.backend.database import get_db
 from app.backend.models.schemas import ErrorResponse, HedgeFundRequest, BacktestRequest, BacktestDayResult, BacktestPerformanceMetrics
 from app.backend.models.events import StartEvent, ProgressUpdateEvent, ErrorEvent, CompleteEvent
 from app.backend.services.graph import create_graph, parse_hedge_fund_response, run_graph_async
 from app.backend.services.portfolio import create_portfolio
 from app.backend.services.backtest_service import BacktestService
+from app.backend.services.api_key_service import ApiKeyService
 from src.utils.progress import progress
 from src.utils.analysts import get_agents_list
 
@@ -20,8 +23,13 @@ router = APIRouter(prefix="/hedge-fund")
         500: {"model": ErrorResponse, "description": "Internal server error"},
     },
 )
-async def run(request_data: HedgeFundRequest, request: Request):
+async def run(request_data: HedgeFundRequest, request: Request, db: Session = Depends(get_db)):
     try:
+        # Hydrate API keys from database if not provided
+        if not request_data.api_keys:
+            api_key_service = ApiKeyService(db)
+            request_data.api_keys = api_key_service.get_api_keys_dict()
+
         # Create the portfolio
         portfolio = create_portfolio(request_data.initial_cash, request_data.margin_requirement, request_data.tickers, request_data.portfolio_positions)
 
@@ -159,9 +167,14 @@ async def run(request_data: HedgeFundRequest, request: Request):
         500: {"model": ErrorResponse, "description": "Internal server error"},
     },
 )
-async def backtest(request_data: BacktestRequest, request: Request):
+async def backtest(request_data: BacktestRequest, request: Request, db: Session = Depends(get_db)):
     """Run a continuous backtest over a time period with streaming updates."""
     try:
+        # Hydrate API keys from database if not provided
+        if not request_data.api_keys:
+            api_key_service = ApiKeyService(db)
+            request_data.api_keys = api_key_service.get_api_keys_dict()
+
         # Convert model_provider to string if it's an enum
         model_provider = request_data.model_provider
         if hasattr(model_provider, "value"):
@@ -176,22 +189,20 @@ async def backtest(request_data: BacktestRequest, request: Request):
         )
 
         # Construct agent graph using the React Flow graph structure (same as /run endpoint)
-        graph = create_graph(
-            graph_nodes=request_data.graph_nodes,
-            graph_edges=request_data.graph_edges
-        )
+        graph = create_graph(graph_nodes=request_data.graph_nodes, graph_edges=request_data.graph_edges)
         graph = graph.compile()
 
         # Create backtest service with the compiled graph
         backtest_service = BacktestService(
             graph=graph,
+            portfolio=portfolio,
             tickers=request_data.tickers,
             start_date=request_data.start_date,
             end_date=request_data.end_date,
             initial_capital=request_data.initial_capital,
             model_name=request_data.model_name,
             model_provider=model_provider,
-            initial_margin_requirement=request_data.margin_requirement,
+            request=request_data,  # Pass the full request for agent-specific model access
         )
 
         # Function to detect client disconnection

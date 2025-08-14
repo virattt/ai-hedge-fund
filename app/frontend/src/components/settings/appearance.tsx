@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { Monitor, Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
 
-export function AppearanceSettings() {
+export function ThemeSettings() {
   const { theme, setTheme } = useTheme();
 
   const themes = [
@@ -31,7 +31,7 @@ export function AppearanceSettings() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-primary mb-2">Appearance</h2>
+        <h2 className="text-xl font-semibold text-primary mb-2">Theme</h2>
         <p className="text-sm text-muted-foreground">
           Customize the look and feel of your application.
         </p>

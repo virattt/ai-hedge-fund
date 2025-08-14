@@ -38,8 +38,15 @@ def call_llm(
         model_name = "gpt-4.1"
         model_provider = "OPENAI"
 
+    # Extract API keys from state if available
+    api_keys = None
+    if state:
+        request = state.get("metadata", {}).get("request")
+        if request and hasattr(request, 'api_keys'):
+            api_keys = request.api_keys
+
     model_info = get_model_info(model_name, model_provider)
-    llm = get_model(model_name, model_provider)
+    llm = get_model(model_name, model_provider, api_keys)
 
     # For non-JSON support models, we can use structured output
     if not (model_info and not model_info.has_json_mode()):

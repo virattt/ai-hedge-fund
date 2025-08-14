@@ -57,7 +57,7 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
         return response
 
 
-def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
+def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> list[Price]:
     """Fetch price data from cache or API."""
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date}_{end_date}"
@@ -68,8 +68,9 @@ def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
 
     # If not in cache, fetch from API
     headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
+    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+    if financial_api_key:
+        headers["X-API-KEY"] = financial_api_key
 
     url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
     response = _make_api_request(url, headers)
@@ -93,6 +94,7 @@ def get_financial_metrics(
     end_date: str,
     period: str = "ttm",
     limit: int = 10,
+    api_key: str = None,
 ) -> list[FinancialMetrics]:
     """Fetch financial metrics from cache or API."""
     # Create a cache key that includes all parameters to ensure exact matches
@@ -104,8 +106,9 @@ def get_financial_metrics(
 
     # If not in cache, fetch from API
     headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
+    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+    if financial_api_key:
+        headers["X-API-KEY"] = financial_api_key
 
     url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
     response = _make_api_request(url, headers)
@@ -130,12 +133,14 @@ def search_line_items(
     end_date: str,
     period: str = "ttm",
     limit: int = 10,
+    api_key: str = None,
 ) -> list[LineItem]:
     """Fetch line items from API."""
     # If not in cache or insufficient data, fetch from API
     headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
+    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+    if financial_api_key:
+        headers["X-API-KEY"] = financial_api_key
 
     url = "https://api.financialdatasets.ai/financials/search/line-items"
 
@@ -164,6 +169,7 @@ def get_insider_trades(
     end_date: str,
     start_date: str | None = None,
     limit: int = 1000,
+    api_key: str = None,
 ) -> list[InsiderTrade]:
     """Fetch insider trades from cache or API."""
     # Create a cache key that includes all parameters to ensure exact matches
@@ -175,8 +181,9 @@ def get_insider_trades(
 
     # If not in cache, fetch from API
     headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
+    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+    if financial_api_key:
+        headers["X-API-KEY"] = financial_api_key
 
     all_trades = []
     current_end_date = end_date
@@ -224,6 +231,7 @@ def get_company_news(
     end_date: str,
     start_date: str | None = None,
     limit: int = 1000,
+    api_key: str = None,
 ) -> list[CompanyNews]:
     """Fetch company news from cache or API."""
     # Create a cache key that includes all parameters to ensure exact matches
@@ -235,8 +243,9 @@ def get_company_news(
 
     # If not in cache, fetch from API
     headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
+    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+    if financial_api_key:
+        headers["X-API-KEY"] = financial_api_key
 
     all_news = []
     current_end_date = end_date
@@ -282,14 +291,16 @@ def get_company_news(
 def get_market_cap(
     ticker: str,
     end_date: str,
+    api_key: str = None,
 ) -> float | None:
     """Fetch market cap from the API."""
     # Check if end_date is today
     if end_date == datetime.datetime.now().strftime("%Y-%m-%d"):
         # Get the market cap from company facts API
         headers = {}
-        if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-            headers["X-API-KEY"] = api_key
+        financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+        if financial_api_key:
+            headers["X-API-KEY"] = financial_api_key
 
         url = f"https://api.financialdatasets.ai/company/facts/?ticker={ticker}"
         response = _make_api_request(url, headers)
@@ -301,7 +312,7 @@ def get_market_cap(
         response_model = CompanyFactsResponse(**data)
         return response_model.company_facts.market_cap
 
-    financial_metrics = get_financial_metrics(ticker, end_date)
+    financial_metrics = get_financial_metrics(ticker, end_date, api_key=api_key)
     if not financial_metrics:
         return None
 
@@ -326,6 +337,6 @@ def prices_to_df(prices: list[Price]) -> pd.DataFrame:
 
 
 # Update the get_price_data function to use the new functions
-def get_price_data(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
-    prices = get_prices(ticker, start_date, end_date)
+def get_price_data(ticker: str, start_date: str, end_date: str, api_key: str = None) -> pd.DataFrame:
+    prices = get_prices(ticker, start_date, end_date, api_key=api_key)
     return prices_to_df(prices)

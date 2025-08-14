@@ -1,8 +1,9 @@
 import { cn } from '@/lib/utils';
 import { CubeIcon } from '@radix-ui/react-icons';
-import { Key, Palette, Settings2, Workflow } from 'lucide-react';
+import { Key, Palette } from 'lucide-react';
 import { useState } from 'react';
-import { ApiKeysSettings, AppearanceSettings, FlowsSettings, GeneralSettings, Models } from './';
+import { ApiKeysSettings, Models } from './';
+import { ThemeSettings } from './appearance';
 
 interface SettingsProps {
   className?: string;
@@ -16,15 +17,9 @@ interface SettingsNavItem {
 }
 
 export function Settings({ className }: SettingsProps) {
-  const [selectedSection, setSelectedSection] = useState('models');
+  const [selectedSection, setSelectedSection] = useState('api');
 
   const navigationItems: SettingsNavItem[] = [
-    {
-      id: 'general',
-      label: 'General',
-      icon: Settings2,
-      description: 'General application settings and preferences',
-    },
     {
       id: 'api',
       label: 'API Keys',
@@ -38,14 +33,8 @@ export function Settings({ className }: SettingsProps) {
       description: 'Local and cloud AI models',
     },
     {
-      id: 'flows',
-      label: 'Flows',
-      icon: Workflow,
-      description: 'Flow and node configuration',
-    },
-    {
-      id: 'appearance',
-      label: 'Appearance',
+      id: 'theme',
+      label: 'Theme',
       icon: Palette,
       description: 'Theme and display preferences',
     },
@@ -53,14 +42,10 @@ export function Settings({ className }: SettingsProps) {
 
   const renderContent = () => {
     switch (selectedSection) {
-      case 'general':
-        return <GeneralSettings />;
       case 'models':
         return <Models />;
-      case 'flows':
-        return <FlowsSettings />;
-      case 'appearance':
-        return <AppearanceSettings />;
+      case 'theme':
+        return <ThemeSettings />;
       case 'api':
         return <ApiKeysSettings />;
       default:

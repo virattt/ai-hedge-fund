@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Dict, Any
 from src.llm.models import ModelProvider
 from enum import Enum
@@ -23,6 +23,13 @@ class PortfolioPosition(BaseModel):
     ticker: str
     quantity: float
     trade_price: float
+
+    @field_validator('trade_price')
+    @classmethod
+    def price_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Trade price must be positive!')
+        return v
 
 
 class GraphNode(BaseModel):
@@ -60,6 +67,7 @@ class BaseHedgeFundRequest(BaseModel):
     model_provider: Optional[ModelProvider] = ModelProvider.OPENAI
     margin_requirement: float = 0.0
     portfolio_positions: Optional[List[PortfolioPosition]] = None
+    api_keys: Optional[Dict[str, str]] = None
 
     def get_agent_ids(self) -> List[str]:
         """Extract agent IDs from graph structure"""
@@ -230,3 +238,54 @@ class FlowRunSummaryResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# API Key schemas
+class ApiKeyCreateRequest(BaseModel):
+    """Request to create or update an API key"""
+    provider: str = Field(..., min_length=1, max_length=100)
+    key_value: str = Field(..., min_length=1)
+    description: Optional[str] = None
+    is_active: bool = True
+
+
+class ApiKeyUpdateRequest(BaseModel):
+    """Request to update an existing API key"""
+    key_value: Optional[str] = Field(None, min_length=1)
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class ApiKeyResponse(BaseModel):
+    """Complete API key response"""
+    id: int
+    provider: str
+    key_value: str
+    is_active: bool
+    description: Optional[str]
+    created_at: datetime
+    updated_at: Optional[datetime]
+    last_used: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+class ApiKeySummaryResponse(BaseModel):
+    """API key response without the actual key value"""
+    id: int
+    provider: str
+    is_active: bool
+    description: Optional[str]
+    created_at: datetime
+    updated_at: Optional[datetime]
+    last_used: Optional[datetime]
+    has_key: bool = True  # Indicates if a key is set
+
+    class Config:
+        from_attributes = True
+
+
+class ApiKeyBulkUpdateRequest(BaseModel):
+    """Request to update multiple API keys at once"""
+    api_keys: List[ApiKeyCreateRequest]

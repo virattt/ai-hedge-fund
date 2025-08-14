@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import pandas as pd
 import numpy as np
-import itertools
 from typing import Callable, Dict, List, Optional, Any
 import asyncio
 
@@ -13,10 +12,8 @@ from src.tools.api import (
     get_financial_metrics,
     get_insider_trades,
 )
-from src.utils.progress import progress
 from app.backend.services.graph import run_graph_async, parse_hedge_fund_response
 from app.backend.services.portfolio import create_portfolio
-
 
 class BacktestService:
     """
@@ -27,58 +24,38 @@ class BacktestService:
     def __init__(
         self,
         graph,
+        portfolio: dict,
         tickers: List[str],
         start_date: str,
         end_date: str,
         initial_capital: float,
         model_name: str = "gpt-4.1",
         model_provider: str = "OpenAI",
-        initial_margin_requirement: float = 0.0,
+        request: dict = {},
     ):
         """
         Initialize the backtest service.
         
         :param graph: Pre-compiled LangGraph graph for trading decisions.
+        :param portfolio: Initial portfolio state.
         :param tickers: List of tickers to backtest.
         :param start_date: Start date string (YYYY-MM-DD).
         :param end_date: End date string (YYYY-MM-DD).
         :param initial_capital: Starting portfolio cash.
         :param model_name: Which LLM model name to use.
         :param model_provider: Which LLM provider.
-        :param initial_margin_requirement: The margin ratio (e.g. 0.5 = 50%).
+        :param request: Request object containing API keys and other metadata.
         """
         self.graph = graph
+        self.portfolio = portfolio
         self.tickers = tickers
         self.start_date = start_date
         self.end_date = end_date
         self.initial_capital = initial_capital
         self.model_name = model_name
         self.model_provider = model_provider
-
-        # Initialize portfolio with support for long/short positions
+        self.request = request
         self.portfolio_values = []
-        self.portfolio = {
-            "cash": initial_capital,
-            "margin_used": 0.0,
-            "margin_requirement": initial_margin_requirement,
-            "positions": {
-                ticker: {
-                    "long": 0,
-                    "short": 0,
-                    "long_cost_basis": 0.0,
-                    "short_cost_basis": 0.0,
-                    "short_margin_used": 0.0,
-                }
-                for ticker in tickers
-            },
-            "realized_gains": {
-                ticker: {
-                    "long": 0.0,
-                    "short": 0.0,
-                }
-                for ticker in tickers
-            },
-        }
 
     def execute_trade(self, ticker: str, action: str, quantity: float, current_price: float) -> int:
         """
@@ -247,12 +224,13 @@ class BacktestService:
         end_date_dt = datetime.strptime(self.end_date, "%Y-%m-%d")
         start_date_dt = end_date_dt - relativedelta(years=1)
         start_date_str = start_date_dt.strftime("%Y-%m-%d")
+        api_key = self.request.api_keys.get("FINANCIAL_DATASETS_API_KEY")
 
         for ticker in self.tickers:
-            get_prices(ticker, start_date_str, self.end_date)
-            get_financial_metrics(ticker, self.end_date, limit=10)
-            get_insider_trades(ticker, self.end_date, start_date=self.start_date, limit=1000)
-            get_company_news(ticker, self.end_date, start_date=self.start_date, limit=1000)
+            get_prices(ticker, start_date_str, self.end_date, api_key=api_key)
+            get_financial_metrics(ticker, self.end_date, limit=10, api_key=api_key)
+            get_insider_trades(ticker, self.end_date, start_date=self.start_date, limit=1000, api_key=api_key)
+            get_company_news(ticker, self.end_date, start_date=self.start_date, limit=1000, api_key=api_key)
 
     def _update_performance_metrics(self, performance_metrics: Dict[str, Any]):
         """Update performance metrics using daily returns."""
@@ -391,7 +369,7 @@ class BacktestService:
                     end_date=current_date_str,
                     model_name=self.model_name,
                     model_provider=self.model_provider,
-                    request=None,
+                    request=self.request,
                 )
                 
                 # Parse the decisions from the graph result

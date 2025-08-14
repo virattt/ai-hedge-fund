@@ -73,6 +73,9 @@ Open and edit the `.env` file to add your API keys:
 # For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
 OPENAI_API_KEY=your-openai-api-key
 
+# For running GigaChat (use gigachat credentials)
+GIGACHAT_API_KEY=your-gigachat-api-key
+
 # For running LLMs hosted by groq (deepseek, llama3, etc.)
 GROQ_API_KEY=your-groq-api-key
 

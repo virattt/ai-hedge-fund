@@ -43,7 +43,7 @@ def portfolio_management_agent(state: AgentState, agent_id: str = "portfolio_man
             suffix = agent_id.split('_')[-1]
             risk_manager_id = f"risk_management_agent_{suffix}"
         else:
-            risk_manager_id = "risk_management_agent"  # Fallback for legacy
+            risk_manager_id = "risk_management_agent"  # Fallback for CLI
         
         risk_data = analyst_signals.get(risk_manager_id, {}).get(ticker, {})
         position_limits[ticker] = risk_data.get("remaining_position_limit", 0)
@@ -223,7 +223,7 @@ def generate_trading_decision(
 
     # Create default factory for PortfolioManagerOutput
     def create_default_portfolio_output():
-        return PortfolioManagerOutput(decisions={ticker: PortfolioDecision(action="hold", quantity=0, confidence=0.0, reasoning="Error in portfolio management, defaulting to hold") for ticker in tickers})
+        return PortfolioManagerOutput(decisions={ticker: PortfolioDecision(action="hold", quantity=0, confidence=0.0, reasoning="Default decision: hold") for ticker in tickers})
 
     return call_llm(
         prompt=prompt,

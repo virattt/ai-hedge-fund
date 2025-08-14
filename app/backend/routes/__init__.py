@@ -7,6 +7,7 @@ from app.backend.routes.flows import router as flows_router
 from app.backend.routes.flow_runs import router as flow_runs_router
 from app.backend.routes.ollama import router as ollama_router
 from app.backend.routes.language_models import router as language_models_router
+from app.backend.routes.api_keys import router as api_keys_router
 
 # Main API router
 api_router = APIRouter()
@@ -19,3 +20,4 @@ api_router.include_router(flows_router, tags=["flows"])
 api_router.include_router(flow_runs_router, tags=["flow-runs"])
 api_router.include_router(ollama_router, tags=["ollama"])
 api_router.include_router(language_models_router, tags=["language-models"])
+api_router.include_router(api_keys_router, tags=["api-keys"])

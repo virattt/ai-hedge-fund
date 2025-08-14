@@ -94,4 +94,22 @@ class HedgeFundFlowRunCycle(Base):
     market_conditions = Column(JSON, nullable=True)  # Market data snapshot at cycle start
 
 
+class ApiKey(Base):
+    """Table to store API keys for various services"""
+    __tablename__ = "api_keys"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # API key details
+    provider = Column(String(100), nullable=False, unique=True, index=True)  # e.g., "ANTHROPIC_API_KEY"
+    key_value = Column(Text, nullable=False)  # The actual API key (encrypted in production)
+    is_active = Column(Boolean, default=True)  # Enable/disable without deletion
+    
+    # Optional metadata
+    description = Column(Text, nullable=True)  # Human-readable description
+    last_used = Column(DateTime(timezone=True), nullable=True)  # Track usage
+
+
  

@@ -1,5 +1,40 @@
 [
   {
+    "display_name": "GPT-5",
+    "model_name": "gpt-5",
+    "provider": "OpenAI"
+  },
+  {
+    "display_name": "GPT-5 mini",
+    "model_name": "gpt-5-mini",
+    "provider": "OpenAI"
+  },
+  {
+    "display_name": "GPT-5 nano",
+    "model_name": "gpt-5-nano",
+    "provider": "OpenAI"
+  },
+  {
+    "display_name": "GPT-4o",
+    "model_name": "gpt-4o",
+    "provider": "OpenAI"
+  },
+  {
+    "display_name": "GPT-4.5",
+    "model_name": "gpt-4.5-preview",
+    "provider": "OpenAI"
+  },
+  {
+    "display_name": "o3",
+    "model_name": "o3",
+    "provider": "OpenAI"
+  },
+  {
+    "display_name": "o4 Mini",
+    "model_name": "o4-mini",
+    "provider": "OpenAI"
+  },
+  {
     "display_name": "Claude Haiku 3.5",
     "model_name": "claude-3-5-haiku-latest",
     "provider": "Anthropic"
@@ -10,8 +45,8 @@
     "provider": "Anthropic"
   },
   {
-    "display_name": "Claude Opus 4",
-    "model_name": "claude-opus-4-20250514",
+    "display_name": "Claude Opus 4.1",
+    "model_name": "claude-opus-4-1-20250805",
     "provider": "Anthropic"
   },
   {
@@ -45,28 +80,23 @@
     "provider": "Groq"
   },
   {
-    "display_name": "GPT 4o",
-    "model_name": "gpt-4o",
-    "provider": "OpenAI"
+    "display_name": "GLM-4.5 Air",
+    "model_name": "z-ai/glm-4.5-air",
+    "provider": "OpenRouter"
   },
   {
-    "display_name": "GPT 4.1",
-    "model_name": "gpt-4.1",
-    "provider": "OpenAI"
+    "display_name": "GLM-4.5",
+    "model_name": "z-ai/glm-4.5",
+    "provider": "OpenRouter"
   },
   {
-    "display_name": "GPT 4.5",
-    "model_name": "gpt-4.5-preview",
-    "provider": "OpenAI"
+    "display_name": "Qwen 3 (235B) Thinking",
+    "model_name": "qwen/qwen3-235b-a22b-thinking-2507",
+    "provider": "OpenRouter"
   },
   {
-    "display_name": "o3",
-    "model_name": "o3",
-    "provider": "OpenAI"
-  },
-  {
-    "display_name": "o4 Mini",
-    "model_name": "o4-mini",
-    "provider": "OpenAI"
+    "display_name": "GigaChat-2-Max",
+    "model_name": "GigaChat-2-Max",
+    "provider": "GigaChat"
   }
 ]
