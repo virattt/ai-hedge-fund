@@ -27,6 +27,7 @@ class ModelProvider(str, Enum):
     OLLAMA = "Ollama"
     OPENROUTER = "OpenRouter"
     GIGACHAT = "GigaChat"
+    TENCENT = "Tencent"
 
 
 class LLMModel(BaseModel):
@@ -200,3 +201,13 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
                 raise ValueError("GigaChat API key not found. Please make sure GIGACHAT_API_KEY is set in your .env file or provided via API keys.")
 
             return GigaChat(credentials=api_key, model=model_name)
+    elif model_provider == ModelProvider.TENCENT:
+        # Tencent Hunyuan provides OpenAI compatible URL, please get an OpenAI compatible API KEY from Tencent Cloud.
+        api_key = (api_keys or {}).get("HUNYUAN_API_KEY") or os.getenv("HUNYUAN_API_KEY")
+        # If HUNYUAN_API_BASE is not provided, use the default Tencent Cloud API base URL.
+        base_url = os.getenv("HUNYUAN_API_BASE", "https://api.hunyuan.cloud.tencent.com/v1")
+        if not api_key:
+            # Print error to console
+            print(f"API Key Error: Please make sure HUNYUAN_API_KEY is set in your .env file or provided via API keys.")
+            raise ValueError("Tencent Hunyuan API key not found.  Please make sure HUNYUAN_API_KEY is set in your .env file or provided via API keys.")
+        return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
