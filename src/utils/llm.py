@@ -48,8 +48,8 @@ def call_llm(
     model_info = get_model_info(model_name, model_provider)
     llm = get_model(model_name, model_provider, api_keys)
 
-    # For non-JSON support models, we can use structured output
-    if not (model_info and not model_info.has_json_mode()):
+    # For models that support JSON mode, use structured output
+    if model_info and model_info.has_json_mode():
         llm = llm.with_structured_output(
             pydantic_model,
             method="json_mode",
@@ -61,13 +61,28 @@ def call_llm(
             # Call the LLM
             result = llm.invoke(prompt)
 
-            # For non-JSON support models, we need to extract and parse the JSON manually
+            # For models without JSON support, we need to extract and parse the JSON manually
             if model_info and not model_info.has_json_mode():
                 parsed_result = extract_json_from_response(result.content)
                 if parsed_result:
                     return pydantic_model(**parsed_result)
+                else:
+                    # If we couldn't parse JSON, raise an exception to trigger retry
+                    raise Exception("Could not extract valid JSON from response")
             else:
-                return result
+                # For models with JSON support, check if result is already a Pydantic model
+                if isinstance(result, pydantic_model):
+                    return result
+                elif hasattr(result, 'content'):
+                    # If it's an AIMessage or similar, extract the content and parse it
+                    parsed_result = extract_json_from_response(result.content)
+                    if parsed_result:
+                        return pydantic_model(**parsed_result)
+                    else:
+                        raise Exception("Could not extract valid JSON from structured output response")
+                else:
+                    # If it's neither, try to use it directly as a Pydantic model
+                    return result
 
         except Exception as e:
             if agent_name:
@@ -107,17 +122,82 @@ def create_default_response(model_class: type[BaseModel]) -> BaseModel:
 
 
 def extract_json_from_response(content: str) -> dict | None:
-    """Extracts JSON from markdown-formatted response."""
+    """Extracts JSON from markdown-formatted response with improved error handling."""
+    if not content:
+        return None
+        
     try:
-        json_start = content.find("```json")
+        # Try to parse the entire content as JSON first (in case it's pure JSON)
+        try:
+            return json.loads(content.strip())
+        except json.JSONDecodeError:
+            pass
+        
+        # Try to find JSON block with multiple patterns
+        patterns = ["```json", "```JSON", "json```", "```"]
+        json_start = -1
+        pattern_used = ""
+        
+        for pattern in patterns:
+            idx = content.find(pattern)
+            if idx != -1:
+                json_start = idx
+                pattern_used = pattern
+                break
+        
         if json_start != -1:
-            json_text = content[json_start + 7 :]  # Skip past ```json
+            # Skip past the pattern
+            json_text = content[json_start + len(pattern_used):]
+            
+            # Find the end marker
             json_end = json_text.find("```")
             if json_end != -1:
-                json_text = json_text[:json_end].strip()
+                json_text = json_text[:json_end]
+            
+            # Clean up the text
+            json_text = json_text.strip()
+            
+            # Remove any leading/trailing text that isn't JSON
+            # Find the first { or [
+            first_brace = json_text.find("{")
+            first_bracket = json_text.find("[")
+            
+            start_pos = -1
+            if first_brace != -1 and (first_bracket == -1 or first_brace < first_bracket):
+                start_pos = first_brace
+            elif first_bracket != -1:
+                start_pos = first_bracket
+                
+            if start_pos != -1:
+                json_text = json_text[start_pos:]
+                
+                # Find the last } or ]
+                last_brace = json_text.rfind("}")
+                last_bracket = json_text.rfind("]")
+                
+                end_pos = -1
+                if last_brace != -1 and (last_bracket == -1 or last_brace > last_bracket):
+                    end_pos = last_brace + 1
+                elif last_bracket != -1:
+                    end_pos = last_bracket + 1
+                    
+                if end_pos != -1:
+                    json_text = json_text[:end_pos]
+            
+            if json_text:
                 return json.loads(json_text)
+                
+        # If no markdown blocks found, try to extract JSON directly
+        first_brace = content.find("{")
+        if first_brace != -1:
+            last_brace = content.rfind("}")
+            if last_brace != -1 and last_brace > first_brace:
+                json_text = content[first_brace:last_brace + 1]
+                return json.loads(json_text)
+                
     except Exception as e:
         print(f"Error extracting JSON from response: {e}")
+        print(f"Response content: {repr(content[:500])}")  # Show first 500 chars for debugging
     return None
 
 

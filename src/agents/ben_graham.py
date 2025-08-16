@@ -1,5 +1,6 @@
 from src.graph.state import AgentState, show_agent_reasoning
 from src.tools.api import get_financial_metrics, get_market_cap, search_line_items
+from src.data.providers import get_data_provider_for_agent
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
@@ -29,19 +30,21 @@ def ben_graham_agent(state: AgentState, agent_id: str = "ben_graham_agent"):
     end_date = data["end_date"]
     tickers = data["tickers"]
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    # Use centralized data provider configuration
+    data_provider = get_data_provider_for_agent(state, agent_id)
     
     analysis_data = {}
     graham_analysis = {}
 
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=10, api_key=api_key)
+        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=10, api_key=api_key, data_provider=data_provider)
 
         progress.update_status(agent_id, ticker, "Gathering financial line items")
-        financial_line_items = search_line_items(ticker, ["earnings_per_share", "revenue", "net_income", "book_value_per_share", "total_assets", "total_liabilities", "current_assets", "current_liabilities", "dividends_and_other_cash_distributions", "outstanding_shares"], end_date, period="annual", limit=10, api_key=api_key)
+        financial_line_items = search_line_items(ticker, ["earnings_per_share", "revenue", "net_income", "book_value_per_share", "total_assets", "total_liabilities", "current_assets", "current_liabilities", "dividends_and_other_cash_distributions", "outstanding_shares"], end_date, period="annual", limit=10, api_key=api_key, data_provider=data_provider)
 
         progress.update_status(agent_id, ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+        market_cap = get_market_cap(ticker, end_date, api_key=api_key, data_provider=data_provider)
 
         # Perform sub-analyses
         progress.update_status(agent_id, ticker, "Analyzing earnings stability")
@@ -109,7 +112,7 @@ def analyze_earnings_stability(metrics: list, financial_line_items: list) -> dic
 
     eps_vals = []
     for item in financial_line_items:
-        if item.earnings_per_share is not None:
+        if hasattr(item, "earnings_per_share") and item.earnings_per_share is not None:
             eps_vals.append(item.earnings_per_share)
 
     if len(eps_vals) < 2:
@@ -149,11 +152,10 @@ def analyze_financial_strength(financial_line_items: list) -> dict:
     if not financial_line_items:
         return {"score": score, "details": "No data for financial strength analysis"}
 
-    latest_item = financial_line_items[0]
-    total_assets = latest_item.total_assets or 0
-    total_liabilities = latest_item.total_liabilities or 0
-    current_assets = latest_item.current_assets or 0
-    current_liabilities = latest_item.current_liabilities or 0
+    total_assets = get_line_item_value(financial_line_items, "total_assets")
+    total_liabilities = get_line_item_value(financial_line_items, "total_liabilities")
+    current_assets = get_line_item_value(financial_line_items, "current_assets")
+    current_liabilities = get_line_item_value(financial_line_items, "current_liabilities")
 
     # 1. Current ratio
     if current_liabilities > 0:
@@ -184,7 +186,7 @@ def analyze_financial_strength(financial_line_items: list) -> dict:
         details.append("Cannot compute debt ratio (missing total_assets).")
 
     # 3. Dividend track record
-    div_periods = [item.dividends_and_other_cash_distributions for item in financial_line_items if item.dividends_and_other_cash_distributions is not None]
+    div_periods = [item.dividends_and_other_cash_distributions for item in financial_line_items if hasattr(item, "dividends_and_other_cash_distributions") and item.dividends_and_other_cash_distributions is not None]
     if div_periods:
         # In many data feeds, dividend outflow is shown as a negative number
         # (money going out to shareholders). We'll consider any negative as 'paid a dividend'.
@@ -204,6 +206,15 @@ def analyze_financial_strength(financial_line_items: list) -> dict:
     return {"score": score, "details": "; ".join(details)}
 
 
+def get_line_item_value(financial_line_items: list, line_item_name: str) -> float:
+    """Helper function to extract value for a specific line item."""
+    for item in financial_line_items:
+        if hasattr(item, line_item_name):
+            value = getattr(item, line_item_name)
+            if value is not None:
+                return value
+    return 0
+
 def analyze_valuation_graham(financial_line_items: list, market_cap: float) -> dict:
     """
     Core Graham approach to valuation:
@@ -214,12 +225,11 @@ def analyze_valuation_graham(financial_line_items: list, market_cap: float) -> d
     if not financial_line_items or not market_cap or market_cap <= 0:
         return {"score": 0, "details": "Insufficient data to perform valuation"}
 
-    latest = financial_line_items[0]
-    current_assets = latest.current_assets or 0
-    total_liabilities = latest.total_liabilities or 0
-    book_value_ps = latest.book_value_per_share or 0
-    eps = latest.earnings_per_share or 0
-    shares_outstanding = latest.outstanding_shares or 0
+    current_assets = get_line_item_value(financial_line_items, "current_assets")
+    total_liabilities = get_line_item_value(financial_line_items, "total_liabilities")
+    book_value_ps = get_line_item_value(financial_line_items, "book_value_per_share")
+    eps = get_line_item_value(financial_line_items, "earnings_per_share")
+    shares_outstanding = get_line_item_value(financial_line_items, "outstanding_shares")
 
     details = []
     score = 0

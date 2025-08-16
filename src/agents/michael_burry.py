@@ -16,6 +16,7 @@ from src.tools.api import (
     get_market_cap,
     search_line_items,
 )
+from src.data.providers import get_data_provider_for_agent
 from src.utils.llm import call_llm
 from src.utils.progress import progress
 from src.utils.api_key import get_api_key_from_state
@@ -32,6 +33,8 @@ class MichaelBurrySignal(BaseModel):
 def michael_burry_agent(state: AgentState, agent_id: str = "michael_burry_agent"):
     """Analyse stocks using Michael Burry's deep‑value, contrarian framework."""
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    # Use centralized data provider configuration
+    data_provider = get_data_provider_for_agent(state, agent_id)
     data = state["data"]
     end_date: str = data["end_date"]  # YYYY‑MM‑DD
     tickers: list[str] = data["tickers"]
@@ -47,7 +50,7 @@ def michael_burry_agent(state: AgentState, agent_id: str = "michael_burry_agent"
         # Fetch raw data
         # ------------------------------------------------------------------
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=5, api_key=api_key)
+        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=5, api_key=api_key, data_provider=data_provider)
 
         progress.update_status(agent_id, ticker, "Fetching line items")
         line_items = search_line_items(
@@ -64,16 +67,17 @@ def michael_burry_agent(state: AgentState, agent_id: str = "michael_burry_agent"
             ],
             end_date,
             api_key=api_key,
+            data_provider=data_provider,
         )
 
         progress.update_status(agent_id, ticker, "Fetching insider trades")
-        insider_trades = get_insider_trades(ticker, end_date=end_date, start_date=start_date)
+        insider_trades = get_insider_trades(ticker, end_date=end_date, start_date=start_date, api_key=api_key, data_provider=data_provider)
 
         progress.update_status(agent_id, ticker, "Fetching company news")
-        news = get_company_news(ticker, end_date=end_date, start_date=start_date, limit=250)
+        news = get_company_news(ticker, end_date=end_date, start_date=start_date, limit=250, api_key=api_key, data_provider=data_provider)
 
         progress.update_status(agent_id, ticker, "Fetching market cap")
-        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+        market_cap = get_market_cap(ticker, end_date, api_key=api_key, data_provider=data_provider)
 
         # ------------------------------------------------------------------
         # Run sub‑analyses

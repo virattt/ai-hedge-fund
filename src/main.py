@@ -13,6 +13,7 @@ from src.utils.analysts import ANALYST_ORDER, get_analyst_nodes
 from src.utils.progress import progress
 from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider
 from src.utils.ollama import ensure_ollama_and_model
+from src.data.providers import DATA_SOURCE_ORDER, get_data_source_info
 
 import argparse
 from datetime import datetime
@@ -51,6 +52,7 @@ def run_hedge_fund(
     selected_analysts: list[str] = [],
     model_name: str = "gpt-4.1",
     model_provider: str = "OpenAI",
+    data_provider: str = "yfinance",
 ):
     # Start progress tracking
     progress.start()
@@ -81,6 +83,7 @@ def run_hedge_fund(
                     "show_reasoning": show_reasoning,
                     "model_name": model_name,
                     "model_provider": model_provider,
+                    "data_provider": data_provider,
                 },
             },
         )
@@ -175,6 +178,28 @@ if __name__ == "__main__":
     else:
         selected_analysts = choices
         print(f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n")
+
+    # Select data provider
+    data_provider_choice = questionary.select(
+        "Select your data provider:",
+        choices=[questionary.Choice(display, value=key) for display, key, provider in DATA_SOURCE_ORDER],
+        style=questionary.Style(
+            [
+                ("selected", "fg:cyan bold"),
+                ("pointer", "fg:cyan bold"),
+                ("highlighted", "fg:cyan"),
+                ("answer", "fg:cyan bold"),
+            ]
+        ),
+    ).ask()
+
+    if not data_provider_choice:
+        print("\n\nInterrupt received. Exiting...")
+        sys.exit(0)
+
+    data_source_info = get_data_source_info(data_provider_choice)
+    print(f"\nSelected data provider: {Fore.CYAN + Style.BRIGHT}{data_source_info.display_name}{Style.RESET_ALL}")
+    print(f"Description: {data_source_info.description}\n")
 
     # Select LLM model based on whether Ollama is being used
     model_name = ""
@@ -317,5 +342,6 @@ if __name__ == "__main__":
         selected_analysts=selected_analysts,
         model_name=model_name,
         model_provider=model_provider,
+        data_provider=data_provider_choice,
     )
     print_trading_output(result)

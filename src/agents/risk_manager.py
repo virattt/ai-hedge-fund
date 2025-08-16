@@ -2,6 +2,7 @@ from langchain_core.messages import HumanMessage
 from src.graph.state import AgentState, show_agent_reasoning
 from src.utils.progress import progress
 from src.tools.api import get_prices, prices_to_df
+from src.data.providers import get_data_provider_for_agent
 import json
 import numpy as np
 import pandas as pd
@@ -14,6 +15,8 @@ def risk_management_agent(state: AgentState, agent_id: str = "risk_management_ag
     data = state["data"]
     tickers = data["tickers"]
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    # Use centralized data provider configuration
+    data_provider = get_data_provider_for_agent(state, agent_id)
     
     # Initialize risk analysis for each ticker
     risk_analysis = {}
@@ -31,6 +34,7 @@ def risk_management_agent(state: AgentState, agent_id: str = "risk_management_ag
             start_date=data["start_date"],
             end_date=data["end_date"],
             api_key=api_key,
+            data_provider=data_provider,
         )
 
         if not prices:

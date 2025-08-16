@@ -5,6 +5,7 @@ from src.utils.progress import progress
 import json
 
 from src.tools.api import get_financial_metrics
+from src.data.providers import get_data_provider_for_agent
 
 
 ##### Fundamental Agent #####
@@ -14,6 +15,8 @@ def fundamentals_analyst_agent(state: AgentState, agent_id: str = "fundamentals_
     end_date = data["end_date"]
     tickers = data["tickers"]
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    # Use centralized data provider configuration
+    data_provider = get_data_provider_for_agent(state, agent_id)
     # Initialize fundamental analysis for each ticker
     fundamental_analysis = {}
 
@@ -27,6 +30,7 @@ def fundamentals_analyst_agent(state: AgentState, agent_id: str = "fundamentals_
             period="ttm",
             limit=10,
             api_key=api_key,
+            data_provider=data_provider,
         )
 
         if not financial_metrics:

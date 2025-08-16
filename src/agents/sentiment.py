@@ -6,6 +6,7 @@ import numpy as np
 import json
 from src.utils.api_key import get_api_key_from_state
 from src.tools.api import get_insider_trades, get_company_news
+from src.data.providers import get_data_provider_for_agent
 
 
 ##### Sentiment Agent #####
@@ -15,6 +16,8 @@ def sentiment_analyst_agent(state: AgentState, agent_id: str = "sentiment_analys
     end_date = data.get("end_date")
     tickers = data.get("tickers")
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    # Use centralized data provider configuration
+    data_provider = get_data_provider_for_agent(state, agent_id)
     # Initialize sentiment analysis for each ticker
     sentiment_analysis = {}
 
@@ -27,6 +30,7 @@ def sentiment_analyst_agent(state: AgentState, agent_id: str = "sentiment_analys
             end_date=end_date,
             limit=1000,
             api_key=api_key,
+            data_provider=data_provider,
         )
 
         progress.update_status(agent_id, ticker, "Analyzing trading patterns")
@@ -38,7 +42,7 @@ def sentiment_analyst_agent(state: AgentState, agent_id: str = "sentiment_analys
         progress.update_status(agent_id, ticker, "Fetching company news")
 
         # Get the company news
-        company_news = get_company_news(ticker, end_date, limit=100, api_key=api_key)
+        company_news = get_company_news(ticker, end_date, limit=100, api_key=api_key, data_provider=data_provider)
 
         # Get the sentiment from the company news
         sentiment = pd.Series([n.sentiment for n in company_news]).dropna()

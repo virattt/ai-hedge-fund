@@ -1,5 +1,6 @@
 from src.graph.state import AgentState, show_agent_reasoning
 from src.tools.api import get_financial_metrics, get_market_cap, search_line_items
+from src.data.providers import get_data_provider_for_agent
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
@@ -26,12 +27,14 @@ def bill_ackman_agent(state: AgentState, agent_id: str = "bill_ackman_agent"):
     end_date = data["end_date"]
     tickers = data["tickers"]
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    # Use centralized data provider configuration
+    data_provider = get_data_provider_for_agent(state, agent_id)
     analysis_data = {}
     ackman_analysis = {}
     
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=5, api_key=api_key)
+        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=5, api_key=api_key, data_provider=data_provider)
         
         progress.update_status(agent_id, ticker, "Gathering financial line items")
         # Request multiple periods of data (annual or TTM) for a more robust long-term view.
@@ -53,10 +56,11 @@ def bill_ackman_agent(state: AgentState, agent_id: str = "bill_ackman_agent"):
             period="annual",
             limit=5,
             api_key=api_key,
+            data_provider=data_provider,
         )
         
         progress.update_status(agent_id, ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+        market_cap = get_market_cap(ticker, end_date, api_key=api_key, data_provider=data_provider)
         
         progress.update_status(agent_id, ticker, "Analyzing business quality")
         quality_analysis = analyze_business_quality(metrics, financial_line_items)
@@ -150,7 +154,7 @@ def analyze_business_quality(metrics: list, financial_line_items: list) -> dict:
         }
     
     # 1. Multi-period revenue growth analysis
-    revenues = [item.revenue for item in financial_line_items if item.revenue is not None]
+    revenues = [getattr(item, 'revenue', None) for item in financial_line_items if getattr(item, 'revenue', None) is not None]
     if len(revenues) >= 2:
         initial, final = revenues[-1], revenues[0]
         if initial and final and final > initial:
@@ -167,8 +171,8 @@ def analyze_business_quality(metrics: list, financial_line_items: list) -> dict:
         details.append("Not enough revenue data for multi-period trend.")
     
     # 2. Operating margin and free cash flow consistency
-    fcf_vals = [item.free_cash_flow for item in financial_line_items if item.free_cash_flow is not None]
-    op_margin_vals = [item.operating_margin for item in financial_line_items if item.operating_margin is not None]
+    fcf_vals = [getattr(item, 'free_cash_flow', None) for item in financial_line_items if getattr(item, 'free_cash_flow', None) is not None]
+    op_margin_vals = [getattr(item, 'operating_margin', None) for item in financial_line_items if getattr(item, 'operating_margin', None) is not None]
     
     if op_margin_vals:
         above_15 = sum(1 for m in op_margin_vals if m > 0.15)
@@ -228,7 +232,7 @@ def analyze_financial_discipline(metrics: list, financial_line_items: list) -> d
         }
     
     # 1. Multi-period debt ratio or debt_to_equity
-    debt_to_equity_vals = [item.debt_to_equity for item in financial_line_items if item.debt_to_equity is not None]
+    debt_to_equity_vals = [getattr(item, 'debt_to_equity', None) for item in financial_line_items if getattr(item, 'debt_to_equity', None) is not None]
     if debt_to_equity_vals:
         below_one_count = sum(1 for d in debt_to_equity_vals if d < 1.0)
         if below_one_count >= (len(debt_to_equity_vals) // 2 + 1):
@@ -270,7 +274,7 @@ def analyze_financial_discipline(metrics: list, financial_line_items: list) -> d
         details.append("No dividend data found across periods.")
     
     # Check for decreasing share count (simple approach)
-    shares = [item.outstanding_shares for item in financial_line_items if item.outstanding_shares is not None]
+    shares = [getattr(item, 'outstanding_shares', None) for item in financial_line_items if getattr(item, 'outstanding_shares', None) is not None]
     if len(shares) >= 2:
         # For buybacks, the newest count should be less than the oldest count
         if shares[0] < shares[-1]:
@@ -303,8 +307,8 @@ def analyze_activism_potential(financial_line_items: list) -> dict:
         }
     
     # Check revenue growth vs. operating margin
-    revenues = [item.revenue for item in financial_line_items if item.revenue is not None]
-    op_margins = [item.operating_margin for item in financial_line_items if item.operating_margin is not None]
+    revenues = [getattr(item, 'revenue', None) for item in financial_line_items if getattr(item, 'revenue', None) is not None]
+    op_margins = [getattr(item, 'operating_margin', None) for item in financial_line_items if getattr(item, 'operating_margin', None) is not None]
     
     if len(revenues) < 2 or not op_margins:
         return {
