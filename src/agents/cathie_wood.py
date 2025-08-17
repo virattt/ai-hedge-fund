@@ -1,5 +1,6 @@
 from src.graph.state import AgentState, show_agent_reasoning
 from src.tools.api import get_financial_metrics, get_market_cap, search_line_items
+from src.data.providers import get_data_provider_for_agent
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
@@ -28,12 +29,14 @@ def cathie_wood_agent(state: AgentState, agent_id: str = "cathie_wood_agent"):
     end_date = data["end_date"]
     tickers = data["tickers"]
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    # Use centralized data provider configuration
+    data_provider = get_data_provider_for_agent(state, agent_id)
     analysis_data = {}
     cw_analysis = {}
 
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=5, api_key=api_key)
+        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=5, api_key=api_key, data_provider=data_provider)
 
         progress.update_status(agent_id, ticker, "Gathering financial line items")
         # Request multiple periods of data (annual or TTM) for a more robust view.
@@ -57,10 +60,11 @@ def cathie_wood_agent(state: AgentState, agent_id: str = "cathie_wood_agent"):
             period="annual",
             limit=5,
             api_key=api_key,
+            data_provider=data_provider,
         )
 
         progress.update_status(agent_id, ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+        market_cap = get_market_cap(ticker, end_date, api_key=api_key, data_provider=data_provider)
 
         progress.update_status(agent_id, ticker, "Analyzing disruptive potential")
         disruptive_analysis = analyze_disruptive_potential(metrics, financial_line_items)
@@ -125,7 +129,7 @@ def analyze_disruptive_potential(metrics: list, financial_line_items: list) -> d
         return {"score": 0, "details": "Insufficient data to analyze disruptive potential"}
 
     # 1. Revenue Growth Analysis - Check for accelerating growth
-    revenues = [item.revenue for item in financial_line_items if item.revenue]
+    revenues = [getattr(item, 'revenue', None) for item in financial_line_items if getattr(item, 'revenue', None)]
     if len(revenues) >= 3:  # Need at least 3 periods to check acceleration
         growth_rates = []
         for i in range(len(revenues) - 1):
@@ -171,7 +175,7 @@ def analyze_disruptive_potential(metrics: list, financial_line_items: list) -> d
         details.append("Insufficient gross margin data")
 
     # 3. Operating Leverage Analysis
-    revenues = [item.revenue for item in financial_line_items if item.revenue]
+    revenues = [getattr(item, 'revenue', None) for item in financial_line_items if getattr(item, 'revenue', None)]
     operating_expenses = [item.operating_expense for item in financial_line_items if hasattr(item, "operating_expense") and item.operating_expense]
 
     if len(revenues) >= 2 and len(operating_expenses) >= 2:
@@ -185,7 +189,7 @@ def analyze_disruptive_potential(metrics: list, financial_line_items: list) -> d
         details.append("Insufficient data for operating leverage analysis")
 
     # 4. R&D Investment Analysis
-    rd_expenses = [item.research_and_development for item in financial_line_items if hasattr(item, "research_and_development") and item.research_and_development is not None]
+    rd_expenses = [getattr(item, 'research_and_development', None) for item in financial_line_items if getattr(item, 'research_and_development', None) is not None]
     if rd_expenses and revenues:
         rd_intensity = rd_expenses[0] / revenues[0]
         if rd_intensity > 0.15:  # High R&D intensity
@@ -224,8 +228,8 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
         return {"score": 0, "details": "Insufficient data to analyze innovation-driven growth"}
 
     # 1. R&D Investment Trends
-    rd_expenses = [item.research_and_development for item in financial_line_items if hasattr(item, "research_and_development") and item.research_and_development]
-    revenues = [item.revenue for item in financial_line_items if item.revenue]
+    rd_expenses = [getattr(item, 'research_and_development', None) for item in financial_line_items if getattr(item, 'research_and_development', None)]
+    revenues = [getattr(item, 'revenue', None) for item in financial_line_items if getattr(item, 'revenue', None)]
 
     if rd_expenses and revenues and len(rd_expenses) >= 2:
         rd_growth = (rd_expenses[0] - rd_expenses[-1]) / abs(rd_expenses[-1]) if rd_expenses[-1] != 0 else 0
@@ -246,7 +250,7 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
         details.append("Insufficient R&D data for trend analysis")
 
     # 2. Free Cash Flow Analysis
-    fcf_vals = [item.free_cash_flow for item in financial_line_items if item.free_cash_flow]
+    fcf_vals = [getattr(item, 'free_cash_flow', None) for item in financial_line_items if getattr(item, 'free_cash_flow', None)]
     if fcf_vals and len(fcf_vals) >= 2:
         fcf_growth = (fcf_vals[0] - fcf_vals[-1]) / abs(fcf_vals[-1])
         positive_fcf_count = sum(1 for f in fcf_vals if f > 0)
@@ -264,7 +268,7 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
         details.append("Insufficient FCF data for analysis")
 
     # 3. Operating Efficiency Analysis
-    op_margin_vals = [item.operating_margin for item in financial_line_items if item.operating_margin]
+    op_margin_vals = [getattr(item, 'operating_margin', None) for item in financial_line_items if getattr(item, 'operating_margin', None)]
     if op_margin_vals and len(op_margin_vals) >= 2:
         margin_trend = op_margin_vals[0] - op_margin_vals[-1]
 

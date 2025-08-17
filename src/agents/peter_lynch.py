@@ -5,6 +5,7 @@ from src.tools.api import (
     get_insider_trades,
     get_company_news,
 )
+from src.data.providers import get_data_provider_for_agent
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
@@ -43,6 +44,8 @@ def peter_lynch_agent(state: AgentState, agent_id: str = "peter_lynch_agent"):
     end_date = data["end_date"]
     tickers = data["tickers"]
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    # Use centralized data provider configuration
+    data_provider = get_data_provider_for_agent(state, agent_id)
     analysis_data = {}
     lynch_analysis = {}
 
@@ -69,16 +72,17 @@ def peter_lynch_agent(state: AgentState, agent_id: str = "peter_lynch_agent"):
             period="annual",
             limit=5,
             api_key=api_key,
+            data_provider=data_provider,
         )
 
         progress.update_status(agent_id, ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+        market_cap = get_market_cap(ticker, end_date, api_key=api_key, data_provider=data_provider)
 
         progress.update_status(agent_id, ticker, "Fetching insider trades")
-        insider_trades = get_insider_trades(ticker, end_date, limit=50, api_key=api_key)
+        insider_trades = get_insider_trades(ticker, end_date, limit=50, api_key=api_key, data_provider=data_provider)
 
         progress.update_status(agent_id, ticker, "Fetching company news")
-        company_news = get_company_news(ticker, end_date, limit=50, api_key=api_key)
+        company_news = get_company_news(ticker, end_date, limit=50, api_key=api_key, data_provider=data_provider)
 
         # Perform sub-analyses:
         progress.update_status(agent_id, ticker, "Analyzing growth")

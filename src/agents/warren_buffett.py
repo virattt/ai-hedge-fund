@@ -5,9 +5,15 @@ from pydantic import BaseModel
 import json
 from typing_extensions import Literal
 from src.tools.api import get_financial_metrics, get_market_cap, search_line_items
+from src.data.providers import get_data_provider_for_agent
 from src.utils.llm import call_llm
 from src.utils.progress import progress
 from src.utils.api_key import get_api_key_from_state
+from src.utils.financial_data import (
+    safe_get_numeric_field, 
+    calculate_working_capital_change,
+    validate_required_fields
+)
 
 class WarrenBuffettSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
@@ -21,6 +27,8 @@ def warren_buffett_agent(state: AgentState, agent_id: str = "warren_buffett_agen
     end_date = data["end_date"]
     tickers = data["tickers"]
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    # Use centralized data provider configuration
+    data_provider = get_data_provider_for_agent(state, agent_id)
     # Collect all analysis for LLM reasoning
     analysis_data = {}
     buffett_analysis = {}
@@ -28,7 +36,7 @@ def warren_buffett_agent(state: AgentState, agent_id: str = "warren_buffett_agen
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
         # Fetch required data - request more periods for better trend analysis
-        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=10, api_key=api_key)
+        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=10, api_key=api_key, data_provider=data_provider)
 
         progress.update_status(agent_id, ticker, "Gathering financial line items")
         financial_line_items = search_line_items(
@@ -51,11 +59,12 @@ def warren_buffett_agent(state: AgentState, agent_id: str = "warren_buffett_agen
             period="ttm",
             limit=10,
             api_key=api_key,
+            data_provider=data_provider,
         )
 
         progress.update_status(agent_id, ticker, "Getting market cap")
         # Get current market cap
-        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+        market_cap = get_market_cap(ticker, end_date, api_key=api_key, data_provider=data_provider)
 
         progress.update_status(agent_id, ticker, "Analyzing fundamentals")
         # Analyze fundamentals
@@ -210,7 +219,7 @@ def analyze_consistency(financial_line_items: list) -> dict[str, any]:
     reasoning = []
 
     # Check earnings growth trend
-    earnings_values = [item.net_income for item in financial_line_items if item.net_income]
+    earnings_values = [getattr(item, 'net_income', None) for item in financial_line_items if getattr(item, 'net_income', None)]
     if len(earnings_values) >= 4:
         # Simple check: is each period's earnings bigger than the next?
         earnings_growth = all(earnings_values[i] > earnings_values[i + 1] for i in range(len(earnings_values) - 1))
@@ -383,36 +392,27 @@ def calculate_owner_earnings(financial_line_items: list) -> dict[str, any]:
     latest = financial_line_items[0]
     details = []
 
-    # Core components
-    net_income = latest.net_income
-    depreciation = latest.depreciation_and_amortization
-    capex = latest.capital_expenditure
-
-    if not all([net_income is not None, depreciation is not None, capex is not None]):
-        missing = []
-        if net_income is None: missing.append("net income")
-        if depreciation is None: missing.append("depreciation")
-        if capex is None: missing.append("capital expenditure")
-        return {"owner_earnings": None, "details": [f"Missing components: {', '.join(missing)}"]}
+    # Core components - use safe field access
+    required_fields = ["net_income", "depreciation_and_amortization", "capital_expenditure"]
+    is_valid, missing_fields = validate_required_fields(latest, required_fields)
+    
+    if not is_valid:
+        return {"owner_earnings": None, "details": [f"Missing components: {', '.join(missing_fields)}"]}
+    
+    net_income = safe_get_numeric_field(latest, "net_income")
+    depreciation = safe_get_numeric_field(latest, "depreciation_and_amortization") 
+    capex = safe_get_numeric_field(latest, "capital_expenditure")
 
     # Enhanced maintenance capex estimation using historical analysis
     maintenance_capex = estimate_maintenance_capex(financial_line_items)
     
-    # Working capital change analysis (if data available)
+    # Working capital change analysis - use utility function
     working_capital_change = 0
     if len(financial_line_items) >= 2:
         try:
-            current_assets_current = getattr(latest, 'current_assets', None)
-            current_liab_current = getattr(latest, 'current_liabilities', None)
-            
             previous = financial_line_items[1]
-            current_assets_previous = getattr(previous, 'current_assets', None)
-            current_liab_previous = getattr(previous, 'current_liabilities', None)
-            
-            if all([current_assets_current, current_liab_current, current_assets_previous, current_liab_previous]):
-                wc_current = current_assets_current - current_liab_current
-                wc_previous = current_assets_previous - current_liab_previous
-                working_capital_change = wc_current - wc_previous
+            working_capital_change = calculate_working_capital_change(latest, previous)
+            if working_capital_change != 0:
                 details.append(f"Working capital change: ${working_capital_change:,.0f}")
         except:
             pass  # Skip working capital adjustment if data unavailable
@@ -465,14 +465,15 @@ def estimate_maintenance_capex(financial_line_items: list) -> float:
                 capex_ratio = abs(item.capital_expenditure) / item.revenue
                 capex_ratios.append(capex_ratio)
         
-        if hasattr(item, 'depreciation_and_amortization') and item.depreciation_and_amortization:
-            depreciation_values.append(item.depreciation_and_amortization)
+        depreciation_value = safe_get_numeric_field(item, 'depreciation_and_amortization')
+        if depreciation_value > 0:
+            depreciation_values.append(depreciation_value)
     
     # Approach 2: Percentage of depreciation (typically 80-120% for maintenance)
-    latest_depreciation = financial_line_items[0].depreciation_and_amortization if financial_line_items[0].depreciation_and_amortization else 0
+    latest_depreciation = safe_get_numeric_field(financial_line_items[0], "depreciation_and_amortization")
     
     # Approach 3: Industry-specific heuristics
-    latest_capex = abs(financial_line_items[0].capital_expenditure) if financial_line_items[0].capital_expenditure else 0
+    latest_capex = abs(safe_get_numeric_field(financial_line_items[0], "capital_expenditure"))
     
     # Conservative estimate: Use the higher of:
     # 1. 85% of total capex (assuming 15% is growth capex)

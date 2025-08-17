@@ -5,6 +5,7 @@ from src.tools.api import (
     get_insider_trades,
     get_company_news,
 )
+from src.data.providers import get_data_provider_for_agent
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
@@ -37,6 +38,8 @@ def phil_fisher_agent(state: AgentState, agent_id: str = "phil_fisher_agent"):
     end_date = data["end_date"]
     tickers = data["tickers"]
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    # Use centralized data provider configuration
+    data_provider = get_data_provider_for_agent(state, agent_id)
     analysis_data = {}
     fisher_analysis = {}
 
@@ -68,16 +71,17 @@ def phil_fisher_agent(state: AgentState, agent_id: str = "phil_fisher_agent"):
             period="annual",
             limit=5,
             api_key=api_key,
+            data_provider=data_provider,
         )
 
         progress.update_status(agent_id, ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+        market_cap = get_market_cap(ticker, end_date, api_key=api_key, data_provider=data_provider)
 
         progress.update_status(agent_id, ticker, "Fetching insider trades")
-        insider_trades = get_insider_trades(ticker, end_date, limit=50, api_key=api_key)
+        insider_trades = get_insider_trades(ticker, end_date, limit=50, api_key=api_key, data_provider=data_provider)
 
         progress.update_status(agent_id, ticker, "Fetching company news")
-        company_news = get_company_news(ticker, end_date, limit=50, api_key=api_key)
+        company_news = get_company_news(ticker, end_date, limit=50, api_key=api_key, data_provider=data_provider)
 
         progress.update_status(agent_id, ticker, "Analyzing growth & quality")
         growth_quality = analyze_fisher_growth_quality(financial_line_items)
@@ -228,7 +232,7 @@ def analyze_fisher_growth_quality(financial_line_items: list) -> dict:
         details.append("Not enough EPS data points for growth calculation.")
 
     # 3. R&D as % of Revenue (if we have R&D data)
-    rnd_values = [fi.research_and_development for fi in financial_line_items if fi.research_and_development is not None]
+    rnd_values = [getattr(fi, 'research_and_development', None) for fi in financial_line_items if getattr(fi, 'research_and_development', None) is not None]
     if rnd_values and revenues and len(rnd_values) == len(revenues):
         # We'll just look at the most recent for a simple measure
         recent_rnd = rnd_values[0]

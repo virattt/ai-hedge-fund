@@ -168,6 +168,8 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
         return ChatOllama(
             model=model_name,
             base_url=base_url,
+            timeout=120,  # 2 minute timeout to prevent hanging
+            temperature=0.1,  # Lower temperature for more consistent JSON output
         )
     elif model_provider == ModelProvider.OPENROUTER:
         api_key = (api_keys or {}).get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")

@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 
 from src.tools.api import get_prices, prices_to_df
+from src.data.providers import get_data_provider_for_agent
 from src.utils.progress import progress
 
 
@@ -46,6 +47,8 @@ def technical_analyst_agent(state: AgentState, agent_id: str = "technical_analys
     end_date = data["end_date"]
     tickers = data["tickers"]
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    # Use centralized data provider configuration
+    data_provider = get_data_provider_for_agent(state, agent_id)
     # Initialize analysis for each ticker
     technical_analysis = {}
 
@@ -58,6 +61,7 @@ def technical_analyst_agent(state: AgentState, agent_id: str = "technical_analys
             start_date=start_date,
             end_date=end_date,
             api_key=api_key,
+            data_provider=data_provider,
         )
 
         if not prices:

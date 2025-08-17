@@ -17,6 +17,7 @@ from src.tools.api import (
     get_market_cap,
     search_line_items,
 )
+from src.data.providers import get_data_provider_for_agent
 
 def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analyst_agent"):
     """Run valuation across tickers and write signals back to `state`."""
@@ -25,6 +26,8 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
     end_date = data["end_date"]
     tickers = data["tickers"]
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    # Use centralized data provider configuration
+    data_provider = get_data_provider_for_agent(state, agent_id)
     valuation_analysis: dict[str, dict] = {}
 
     for ticker in tickers:
@@ -37,6 +40,7 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
             period="ttm",
             limit=8,
             api_key=api_key,
+            data_provider=data_provider,
         )
         if not financial_metrics:
             progress.update_status(agent_id, ticker, "Failed: No financial metrics found")
@@ -58,6 +62,7 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
             period="ttm",
             limit=2,
             api_key=api_key,
+            data_provider=data_provider,
         )
         if len(line_items) < 2:
             progress.update_status(agent_id, ticker, "Failed: Insufficient financial line items")
@@ -67,13 +72,16 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
         # ------------------------------------------------------------------
         # Valuation models
         # ------------------------------------------------------------------
-        wc_change = li_curr.working_capital - li_prev.working_capital
+        # Calculate working capital change (current_assets - current_liabilities)
+        wc_curr = (getattr(li_curr, 'current_assets', 0) or 0) - (getattr(li_curr, 'current_liabilities', 0) or 0)
+        wc_prev = (getattr(li_prev, 'current_assets', 0) or 0) - (getattr(li_prev, 'current_liabilities', 0) or 0)
+        wc_change = wc_curr - wc_prev
 
         # Owner Earnings
         owner_val = calculate_owner_earnings_value(
-            net_income=li_curr.net_income,
-            depreciation=li_curr.depreciation_and_amortization,
-            capex=li_curr.capital_expenditure,
+            net_income=getattr(li_curr, 'net_income', 0) or 0,
+            depreciation=getattr(li_curr, 'depreciation_and_amortization', 0) or 0,
+            capex=getattr(li_curr, 'capital_expenditure', 0) or 0,
             working_capital_change=wc_change,
             growth_rate=most_recent_metrics.earnings_growth or 0.05,
         )
@@ -101,7 +109,7 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
         # ------------------------------------------------------------------
         # Aggregate & signal
         # ------------------------------------------------------------------
-        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+        market_cap = get_market_cap(ticker, end_date, api_key=api_key, data_provider=data_provider)
         if not market_cap:
             progress.update_status(agent_id, ticker, "Failed: Market cap unavailable")
             continue
