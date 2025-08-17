@@ -259,9 +259,9 @@ def analyze_financial_discipline(metrics: list, financial_line_items: list) -> d
     
     # 2. Capital allocation approach (dividends + share counts)
     dividends_list = [
-        item.dividends_and_other_cash_distributions
+        getattr(item, 'dividends_and_other_cash_distributions', None)
         for item in financial_line_items
-        if item.dividends_and_other_cash_distributions is not None
+        if getattr(item, 'dividends_and_other_cash_distributions', None) is not None
     ]
     if dividends_list:
         paying_dividends_count = sum(1 for d in dividends_list if d < 0)
