@@ -98,5 +98,20 @@
     "display_name": "GigaChat-2-Max",
     "model_name": "GigaChat-2-Max",
     "provider": "GigaChat"
+  },
+  {
+    "display_name": "Hunyuan Large",
+    "model_name": "hunyuan-large",
+    "provider": "Tencent"
+  },
+  {
+    "display_name": "Hunyuan TurboS",
+    "model_name": "hunyuan-turbos-latest",
+    "provider": "Tencent"
+  },
+  {
+    "display_name": "Hunyuan T1",
+    "model_name": "hunyuan-t1-latest",
+    "provider": "Tencent"
   }
 ]
