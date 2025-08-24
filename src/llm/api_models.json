@@ -98,5 +98,10 @@
     "display_name": "GigaChat-2-Max",
     "model_name": "GigaChat-2-Max",
     "provider": "GigaChat"
+  },
+  {
+    "display_name": "Azure Open AI Deployment",
+    "model_name": "",
+    "provider": "Azure OpenAI"
   }
 ]
