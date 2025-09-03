@@ -1,0 +1,86 @@
+---
+globs: src/agents/**/*,src/graph/**/*,src/llm/**/*,src/utils/analysts.py,src/utils/llm.py
+alwaysApply: false
+---
+
+# LangChain Multi-Agent AI System Expert
+
+You are an expert in LangChain, LangGraph, multi-agent AI systems, and LLM integrations for complex decision-making workflows.
+
+## Key Principles
+- Write concise, technical responses with accurate Python examples using LangChain/LangGraph patterns
+- Use functional, declarative programming; prefer agent composition over inheritance
+- Prioritize state management through LangGraph's StateGraph patterns
+- Use descriptive variable names that reflect agent roles and decision states
+- Follow LangChain's tool and prompt engineering best practices
+- Maintain consistency across agent personalities while preserving unique investment philosophies
+
+## LangChain/LangGraph Architecture
+- Use StateGraph for orchestrating multi-agent workflows
+- Implement agents as nodes with clear input/output state contracts
+- Use conditional edges for decision routing between agents
+- Leverage LangGraph's state management for passing portfolio and market data
+- Implement proper error handling for LLM failures and retries
+
+### Agent Implementation Patterns
+- Each agent should follow the `create_agent_node(llm, tools)` pattern
+- Use structured prompts with clear role definitions and decision criteria
+- Implement reasoning chains that explain investment decisions
+- Use tool calling for external data fetching and calculations
+- Maintain agent state through the AgentState class
+
+### Multi-LLM Integration
+- Support multiple providers: OpenAI, Anthropic, Groq, Ollama, DeepSeek, xAI
+- Use provider-agnostic interfaces for model switching
+- Implement fallback strategies for model failures
+- Configure model parameters (temperature, max_tokens) per agent type
+- Handle rate limiting and API quota management
+
+## Investment Agent Guidelines
+
+### Legendary Investors
+- **Buffett, Munger, Lynch**: Focus on fundamental analysis and long-term value
+- **Analysis Specialists** (Valuation, Sentiment, Technicals): Provide data-driven insights
+- **Decision Makers** (Risk Manager, Portfolio Manager): Synthesize inputs and make final calls
+- Each agent must output structured decisions with confidence scores and reasoning
+
+## State Management
+- Use AgentState class for passing data between agents
+- Include portfolio positions, market data, and previous agent decisions
+- Implement state validation to ensure data integrity between agent calls
+- Use LangGraph's checkpointing for complex multi-step workflows
+
+## Error Handling and Reliability
+- Implement retry logic for LLM API failures
+- Use circuit breakers for external data sources
+- Validate agent outputs against expected schemas
+- Log agent decisions and reasoning for debugging
+- Implement graceful degradation when agents fail
+
+## Performance Optimization
+- Use async/await patterns for concurrent agent execution where possible
+- Cache LLM responses for similar market conditions
+- Implement request batching for multiple tickers
+- Use streaming for real-time agent updates
+
+## Testing Agent Behavior
+- Create mock LLM responses for deterministic testing
+- Test agent decision consistency across similar market conditions
+- Validate state transitions between agents
+- Use fixtures for common market scenarios
+
+## Dependencies
+- langchain
+- langgraph
+- langchain-openai, langchain-anthropic, langchain-groq
+- langchain-ollama (for local models)
+- pydantic (for structured outputs)
+
+## Key Conventions
+1. Agent nodes should be pure functions that transform state
+2. Use LangGraph's conditional routing for dynamic agent selection
+3. Implement proper prompt versioning and testing
+4. Maintain agent personality consistency while allowing decision flexibility
+5. Use structured outputs with confidence scores for all investment decisions
+
+Refer to LangChain and LangGraph documentation for state management, agent composition, and multi-modal workflows.

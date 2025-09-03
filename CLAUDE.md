@@ -1,0 +1,136 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+This is an AI-powered hedge fund system that uses multiple agent personalities (famous investors like Warren Buffett, Charlie Munger, etc.) to make trading decisions. The system is educational only and doesn't execute real trades.
+
+## Architecture
+
+### Core Components
+
+1. **CLI Tool (`src/`)**: Python-based command line interface for running the hedge fund
+   - `main.py`: Entry point for hedge fund execution and backtesting
+   - `backtester.py`: Backtesting functionality
+   - `agents/`: 18 different investment agent personalities (Buffett, Munger, Damodaran, etc.)
+   - `graph/`: LangGraph state management and workflow orchestration
+   - `tools/`: Financial data fetching and analysis utilities
+   - `llm/`: Language model integrations (OpenAI, Groq, Anthropic, Ollama, etc.)
+
+2. **Web Application (`app/`)**: Full-stack web interface
+   - `backend/`: FastAPI server with REST endpoints
+   - `frontend/`: React/Vite application with modern UI components
+
+### Agent System Architecture
+
+The system uses a multi-agent approach with:
+- **Investment Personalities**: 12 famous investor agents (Buffett, Munger, Lynch, etc.)
+- **Analysis Agents**: Valuation, Sentiment, Fundamentals, Technicals
+- **Decision Agents**: Risk Manager, Portfolio Manager
+- **State Management**: LangGraph orchestrates agent workflow and state
+
+## Development Commands
+
+### CLI Development
+```bash
+# Install dependencies
+poetry install
+
+# Run hedge fund analysis
+poetry run python src/main.py --ticker AAPL,MSFT,NVDA
+
+# Run with local Ollama models
+poetry run python src/main.py --ticker AAPL,MSFT,NVDA --ollama
+
+# Run backtester
+poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
+
+# Run with date range
+poetry run python src/main.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
+
+# Code formatting and linting
+poetry run black src/ tests/ --line-length 420
+poetry run isort src/ tests/ --profile black
+poetry run flake8 src/ tests/
+
+# Run tests
+poetry run pytest tests/
+```
+
+### Web Application Development
+```bash
+# Quick start (recommended for non-technical users)
+./run.sh        # Mac/Linux
+run.bat         # Windows
+
+# Manual backend setup
+cd app/backend
+poetry run uvicorn main:app --reload
+
+# Manual frontend setup  
+cd app/frontend
+npm install
+npm run dev
+
+# Frontend linting and build
+npm run lint
+npm run build
+```
+
+### Docker Development
+```bash
+# Run entire stack with Docker
+docker-compose up --build
+
+# Individual services
+docker-compose up backend
+docker-compose up frontend
+```
+
+## Code Style and Standards
+
+- **Python**: Black formatting with 420 character line length, isort for imports
+- **TypeScript/React**: ESLint with standard React rules, Tailwind CSS for styling
+- **File Organization**: Snake_case for Python files, kebab-case for directories
+- **Agent Implementation**: Each agent follows the same interface pattern in `agents/`
+
+## Environment Configuration
+
+Required environment variables in `.env`:
+- `OPENAI_API_KEY`: For GPT models (required)
+- `GROQ_API_KEY`: For Groq-hosted models (optional)
+- `ANTHROPIC_API_KEY`: For Claude models (optional)
+- `FINANCIAL_DATASETS_API_KEY`: For extended financial data (optional, AAPL/GOOGL/MSFT/NVDA/TSLA are free)
+
+## Key Implementation Details
+
+### Agent Workflow
+1. Multiple investment personality agents analyze stocks simultaneously
+2. Analysis agents (valuation, sentiment, fundamentals, technicals) provide data
+3. Risk manager calculates position limits and risk metrics
+4. Portfolio manager makes final trading decisions
+5. All decisions flow through LangGraph state management
+
+### LLM Integration
+- Multi-provider support: OpenAI, Groq, Anthropic, Ollama, DeepSeek, xAI
+- Model selection configurable via command line or web interface
+- Ollama support for local model execution
+
+### Data Pipeline
+- Financial data from multiple sources (Financial Datasets API, free tier for major stocks)
+- Real-time and historical data processing
+- Caching and rate limiting for API efficiency
+
+## Testing Strategy
+
+- Limited test coverage currently (only API rate limiting tests)
+- Manual testing via CLI and web interface
+- Backtesting framework for strategy validation
+
+## Deployment Notes
+
+- Web app designed for local development/usage
+- Docker containerization available
+- No production deployment infrastructure (educational project)
+- Shell scripts provided for easy setup across platforms

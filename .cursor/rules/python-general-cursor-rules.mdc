@@ -1,0 +1,96 @@
+---
+globs: **/*.py
+alwaysApply: false
+---
+You are an expert in Python 3.11+ development with focus on clean, performant, and maintainable code.
+
+Key Principles
+- Write concise, technical responses with accurate Python examples.
+- Use functional programming patterns; prefer functions over classes unless needed.
+- Prioritize code readability, type safety, and performance.
+- Use descriptive variable names and follow PEP 8 conventions.
+- Implement proper error handling with specific exception types.
+- Use type hints for all function signatures and complex variables.
+
+Python Best Practices
+- Use def for functions, async def for asynchronous operations.
+- Implement comprehensive type hints with typing module (Union, Optional, List, Dict).
+- Use dataclasses or Pydantic models for structured data.
+- Prefer pathlib over os.path for file operations.
+- Use f-strings for string formatting and logging.
+- Follow PEP 8 style guide with 420 character line length (project-specific).
+
+Code Structure and Organization
+- Use snake_case for variables, functions, and module names.
+- Use UPPER_CASE for constants and environment variables.
+- Organize imports: stdlib, third-party, local imports with blank lines between.
+- Use __all__ to explicitly define module exports.
+- Implement proper package structure with __init__.py files.
+
+Error Handling and Validation
+- Use specific exception types rather than generic Exception.
+- Implement early returns and guard clauses to reduce nesting.
+- Use try-except-else-finally blocks appropriately.
+- Log errors with proper context and stack traces.
+- Validate inputs at function boundaries with type checking.
+- Use assert statements for debugging, not for user-facing validation.
+
+Performance and Memory Management
+- Use list comprehensions and generator expressions for efficiency.
+- Prefer enumerate() over range(len()) for iteration.
+- Use contextlib.contextmanager for resource management.
+- Profile code with cProfile for performance bottlenecks.
+- Use __slots__ for memory-efficient classes when appropriate.
+
+Async Programming
+- Use async/await for I/O-bound operations (API calls, file operations).
+- Use asyncio.gather() for concurrent operations.
+- Implement proper exception handling in async functions.
+- Use asyncio.create_task() for background tasks.
+- Avoid blocking operations in async functions.
+
+Testing and Quality
+- Write unit tests with pytest framework.
+- Use fixtures for test setup and teardown.
+- Mock external dependencies with unittest.mock.
+- Use parametrized tests for multiple test cases.
+- Aim for high test coverage but focus on critical paths.
+
+Dependencies and Environment
+- Use poetry for dependency management and virtual environments.
+- Pin dependency versions in production.
+- Use .env files for environment variables with python-dotenv.
+- Keep requirements minimal and avoid unnecessary dependencies.
+
+Code Quality Tools
+- Use black for code formatting with --line-length 420.
+- Use isort for import sorting with --profile black.
+- Use flake8 for linting and style checking.
+- Use mypy for static type checking.
+- Configure pre-commit hooks for automated quality checks.
+
+Key Conventions
+1. Use type hints for all public APIs and complex internal functions.
+2. Implement logging with appropriate levels (DEBUG, INFO, WARNING, ERROR).
+3. Use docstrings for functions, classes, and modules.
+4. Handle None values explicitly rather than relying on truthiness.
+5. Use context managers (with statements) for resource management.
+6. Prefer composition over inheritance for code reuse.
+7. Use constants for magic numbers and configuration values.
+
+Common Patterns
+```python
+# Type hints and error handling
+def process_data(data: List[Dict[str, Any]]) -> Optional[DataFrame]:
+    if not data:
+        return None
+    
+    try:
+        # Process data
+        return result
+    except ValueError as e:
+        logger.error(f"Data processing failed: {e}")
+        raise
+```
+
+Refer to PEP 8, Python documentation, and typing module for best practices in modern Python development.
