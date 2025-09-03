@@ -652,6 +652,12 @@ if __name__ == "__main__":
         help="Use all available analysts (overrides --analysts)",
     )
     parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
+    parser.add_argument(
+        "--model",
+        type=str,
+        required=False,
+        help="Model to use (e.g., 'gpt-4o-mini', 'claude-3-sonnet'). If not specified, interactive selection will be shown.",
+    )
 
     args = parser.parse_args()
 
@@ -687,11 +693,25 @@ if __name__ == "__main__":
             selected_analysts = choices
             print(f"\nSelected analysts: " f"{', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}")
 
-    # Select LLM model based on whether Ollama is being used
+    # Select LLM model based on whether Ollama is being used or CLI argument provided
     model_name = ""
     model_provider = None
 
-    if args.ollama:
+    # If --model argument is provided, use it directly
+    if args.model:
+        model_name = args.model
+        # Set default provider based on model name
+        if "gpt" in model_name.lower() or "o1" in model_name.lower():
+            model_provider = "OpenAI"
+        elif "claude" in model_name.lower():
+            model_provider = "Anthropic"
+        elif "llama" in model_name.lower() or "qwen" in model_name.lower() or "mistral" in model_name.lower():
+            model_provider = "Groq"
+        else:
+            model_provider = "OpenAI"  # Default fallback
+        
+        print(f"\nUsing model from CLI: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL} ({model_provider})\n")
+    elif args.ollama:
         print(f"{Fore.CYAN}Using Ollama for local LLM inference.{Style.RESET_ALL}")
 
         # Select from Ollama-specific models

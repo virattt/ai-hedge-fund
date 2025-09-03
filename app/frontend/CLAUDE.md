@@ -1,0 +1,99 @@
+# CLAUDE.md - Frontend React Application
+
+React/Vite frontend providing a web interface for the AI hedge fund system.
+
+## Tech Stack
+
+- **Framework**: React 18 with TypeScript
+- **Build Tool**: Vite for fast development and building  
+- **UI Library**: Radix UI primitives with Tailwind CSS
+- **Flow Visualization**: ReactFlow (@xyflow/react) for agent workflow diagrams
+- **Styling**: Tailwind CSS with shadcn/ui components
+
+## Architecture
+
+### `src/App.tsx`
+Main application entry point with theme provider setup
+
+### `src/components/`
+- `Flow.tsx`: Main ReactFlow component for visualizing agent workflows
+- `Layout.tsx`: Application shell with navigation and panels
+- `custom-controls.tsx`: Custom flow controls and interactions
+- `panels/`: Collapsible side panels for settings and information
+- `settings/`: Configuration components for LLM models, API keys
+- `tabs/`: Tabbed interfaces for different views
+- `ui/`: shadcn/ui component library (Button, Dialog, etc.)
+
+### `src/services/`
+API integration layer for backend communication
+
+### `src/contexts/` & `src/providers/`
+React context providers for state management
+
+### `src/types/`
+TypeScript type definitions
+
+### `src/hooks/`
+Custom React hooks for reusable logic
+
+### `src/nodes/` & `src/edges/`
+ReactFlow custom node and edge components for agent visualization
+
+## Development Commands
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
+
+# Lint code
+npm run lint
+```
+
+## UI Component Patterns
+
+### shadcn/ui Integration
+- Pre-built accessible components in `components/ui/`
+- Consistent design system with Tailwind variants
+- Dark/light theme support via `next-themes`
+
+### ReactFlow Implementation
+- Custom nodes represent different agent types
+- Edges show data flow between agents
+- Interactive controls for workflow manipulation
+- Real-time updates during hedge fund execution
+
+### Panel System
+- Resizable panels via `react-resizable-panels`
+- Collapsible sidebars for settings and results
+- Responsive layout for different screen sizes
+
+## API Integration
+
+Frontend communicates with FastAPI backend at `localhost:8000`:
+- POST `/hedge-fund/run` for hedge fund execution
+- GET `/language-models` for available LLM models
+- WebSocket connections for real-time updates (if implemented)
+
+## Adding New Features
+
+1. **New Components**: Place in appropriate `components/` subfolder
+2. **API Calls**: Add service functions in `src/services/`
+3. **State Management**: Use React context or add to existing providers  
+4. **UI Components**: Leverage shadcn/ui or create custom components
+5. **Flow Visualization**: Add custom nodes/edges for new agent types
+
+## Styling Guidelines
+
+- Use Tailwind CSS utility classes
+- Follow shadcn/ui component patterns
+- Maintain consistent spacing and typography
+- Support both light and dark themes
