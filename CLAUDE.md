@@ -75,9 +75,12 @@ The system uses a multi-agent approach with:
 run.bat         # Windows
 
 # Manual backend setup (✅ Dependencies already installed via requirements.txt)
-cd app/backend
-# Start backend server directly (FastAPI, SQLAlchemy etc already available)
-../../.venv/Scripts/python.exe -c "import uvicorn; uvicorn.run('main:app', reload=True, port=8000)"
+# IMPORTANT: Run from project root, not app/backend directory
+.venv/Scripts/python.exe -m uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
+
+# If FastAPI/uvicorn missing, install individually:
+.venv/Scripts/python.exe -m pip install fastapi==0.104.1
+.venv/Scripts/python.exe -m pip install uvicorn[standard]==0.35.0
 
 # Manual frontend setup  
 cd app/frontend
@@ -155,7 +158,7 @@ Required environment variables in `.env` (✅ WORKING):
 
 ## Windows-Specific Setup Notes
 
-**Current Status: ✅ READY FOR PRODUCTION TESTING**
+**Current Status: ✅ PRODUCTION READY - WEB APP FULLY FUNCTIONAL**
 
 ### Key Learnings from Setup:
 1. **Poetry**: Use custom directory installation (`/c/Users/cas3526/dev/tools/poetry/`) to avoid permission issues
@@ -190,6 +193,18 @@ gcc --version     # Should show: gcc.exe (MinGW-W64... 14.2.0)
 # --margin-requirement 0.5
 # --model gpt-4o-mini (avoids interactive prompt)
 # --ollama (for local models)
+
+# Web Application (WORKING ✅)
+# Backend (run from project root):
+.venv/Scripts/python.exe -m uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
+
+# Frontend (run from app/frontend/):
+cd app/frontend && npm run dev
+
+# Access points:
+# - Frontend: http://localhost:5173
+# - Backend API: http://localhost:8000  
+# - API Docs: http://localhost:8000/docs
 ```
 
 ### Troubleshooting:
@@ -199,3 +214,8 @@ gcc --version     # Should show: gcc.exe (MinGW-W64... 14.2.0)
 - If PATH issues: `source ~/.bashrc`
 - If backtester interactive prompts fail: Use `--model gpt-4o-mini` and `--analysts-all` arguments
 - If financial data API issues: Check `.env` file has valid `FINANCIAL_DATASETS_API_KEY`
+- **Web App Specific Issues**:
+  - If "No module named 'fastapi'" error: `.venv/Scripts/python.exe -m pip install fastapi==0.104.1 uvicorn[standard]==0.35.0`
+  - If backend fails to start: Ensure you're running from project root, not `app/backend/`
+  - If "Permission denied" on npm packages: Try `npm audit fix` or delete `node_modules/` and reinstall
+  - If ports in use: Kill processes with `taskkill /f /im python.exe` and `taskkill /f /im node.exe` on Windows

@@ -40,18 +40,46 @@ Data access layer abstractions:
 
 ## Development Commands
 
-```bash
-# Start development server
-cd app/backend
-poetry run uvicorn main:app --reload
+**IMPORTANT**: All commands should be run from the project root directory, not from `app/backend/`.
 
-# Database migrations
+### Start Development Server
+
+**Using Poetry:**
+```bash
+# From project root
+poetry run uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+**Using pip (Windows):**
+```bash
+# From project root
+.venv/Scripts/python.exe -m uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+**Using pip (Mac/Linux):**
+```bash
+# From project root  
+python -m uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+### Database Migrations
+
+**Using Poetry:**
+```bash
 poetry run alembic upgrade head
 poetry run alembic revision --autogenerate -m "description"
-
-# API documentation
-# Available at http://localhost:8000/docs when running
 ```
+
+**Using pip (Windows):**
+```bash
+.venv/Scripts/python.exe -m alembic upgrade head
+.venv/Scripts/python.exe -m alembic revision --autogenerate -m "description"
+```
+
+### API Documentation
+- Available at http://localhost:8000/docs when server is running
+- Interactive Swagger UI for testing endpoints
+- OpenAPI schema available at http://localhost:8000/openapi.json
 
 ## API Patterns
 
