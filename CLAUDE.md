@@ -34,28 +34,30 @@ The system uses a multi-agent approach with:
 
 ### CLI Development
 ```bash
-# Install dependencies
-poetry install
+# Install dependencies (Windows: using direct pip --user instead of Poetry virtual env)
+python -m pip install --user numpy pandas matplotlib langchain langchain-openai
+python -m pip install --user python-dotenv tabulate rich questionary langgraph langchain-anthropic langchain-groq
+python -m pip install --user langchain-deepseek langchain-xai langchain-google-genai langchain-ollama langchain-gigachat
 
-# Run hedge fund analysis
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA
+# Run hedge fund analysis (working command)
+python -m src.main --ticker AAPL,MSFT,NVDA
 
-# Run with local Ollama models
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --ollama
+# Run with local Ollama models  
+python -m src.main --ticker AAPL,MSFT,NVDA --ollama
 
 # Run backtester
-poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
+python -m src.backtester --ticker AAPL,MSFT,NVDA
 
 # Run with date range
-poetry run python src/main.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
+python -m src.main --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
 
 # Code formatting and linting
-poetry run black src/ tests/ --line-length 420
-poetry run isort src/ tests/ --profile black
-poetry run flake8 src/ tests/
+python -m black src/ tests/ --line-length 420
+python -m isort src/ tests/ --profile black
+python -m flake8 src/ tests/
 
 # Run tests
-poetry run pytest tests/
+python -m pytest tests/
 ```
 
 ### Web Application Development
@@ -97,11 +99,17 @@ docker-compose up frontend
 
 ## Environment Configuration
 
-Required environment variables in `.env`:
-- `OPENAI_API_KEY`: For GPT models (required)
-- `GROQ_API_KEY`: For Groq-hosted models (optional)
+**Current Working Setup (Windows 11, Git Bash, Non-Admin):**
+- **Python**: 3.13.5 (global installation)
+- **Poetry**: 2.1.4 (custom directory: `/c/Users/cas3526/dev/tools/poetry/`)
+- **MinGW-w64 GCC**: 14.2.0 (portable: `/c/Users/cas3526/dev/tools/mingw64/mingw64/`)
+- **Dependencies**: Installed via `pip --user` (global user installation)
+
+Required environment variables in `.env` (✅ WORKING):
+- `OPENAI_API_KEY`: For GPT models (✅ configured)
+- `GROQ_API_KEY`: For Groq-hosted models (✅ configured) 
 - `ANTHROPIC_API_KEY`: For Claude models (optional)
-- `FINANCIAL_DATASETS_API_KEY`: For extended financial data (optional, AAPL/GOOGL/MSFT/NVDA/TSLA are free)
+- `FINANCIAL_DATASETS_API_KEY`: For extended financial data (✅ configured)
 
 ## Key Implementation Details
 
@@ -134,3 +142,31 @@ Required environment variables in `.env`:
 - Docker containerization available
 - No production deployment infrastructure (educational project)
 - Shell scripts provided for easy setup across platforms
+
+## Windows-Specific Setup Notes
+
+**Current Status: ✅ READY FOR PRODUCTION TESTING**
+
+### Key Learnings from Setup:
+1. **Poetry**: Use custom directory installation (`/c/Users/cas3526/dev/tools/poetry/`) to avoid permission issues
+2. **Dependencies**: Use `pip --user` installation instead of Poetry virtual environment due to permission constraints
+3. **Compiler**: Portable MinGW-w64 GCC installation for package compilation without admin privileges
+4. **PATH**: Custom PATH configuration in `~/.bashrc` for persistent tool access
+
+### Known Working Commands:
+```bash
+# Verify environment
+python --version  # Should show: Python 3.13.5
+poetry --version  # Should show: Poetry (version 2.1.4)
+gcc --version     # Should show: gcc.exe (MinGW-W64... 14.2.0)
+
+# Test basic functionality (WORKING ✅)
+python -m src.main --ticker AAPL
+
+# Successful execution shows agent analysis and trading decisions
+```
+
+### Troubleshooting:
+- If Poetry permission denied: `chmod +x "/c/Users/cas3526/dev/tools/poetry/bin/poetry"`
+- If import errors: `python -m pip install --user --upgrade [package-name]`  
+- If PATH issues: `source ~/.bashrc`
