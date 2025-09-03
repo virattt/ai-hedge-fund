@@ -11,7 +11,7 @@ The AI Hedge Fund web application is a **production-ready full-stack system** co
 - **Frontend**: Modern React/TypeScript application with visual workflow builder
 - **Database**: SQLite with automatic schema management via SQLAlchemy/Alembic
 
-**Current Status:** ⚠️ **REQUIRES INITIAL SETUP** - All components analyzed and ready for installation
+**Current Status:** 🎉 **READY TO START APPLICATION** - All dependencies installed, ready for launch
 
 ---
 
@@ -78,16 +78,10 @@ Visual Workflows    Agent Orchestration + API Management
 - **Risk**: Potential compatibility issues with some dependencies
 - **Recommendation**: Consider using Python 3.11 if issues arise
 
-#### 2. Poetry Dependency Manager
-- **Status**: Installed in custom location (`C:\Users\cas3526\dev\tools\poetry\bin\poetry.exe`)
-- **Issue**: May not be in PowerShell PATH
-- **Impact**: Backend dependency installation may fail
-- **Workaround**: Use full path to Poetry executable
-
-#### 3. Backend Dependencies
-- **Status**: NOT INSTALLED
-- **Location**: Defined in root `pyproject.toml`
-- **Command**: `poetry install` (from project root)
+#### 2. Backend Dependencies
+- **Status**: ALREADY INSTALLED (via requirements.txt)
+- **Location**: `requirements.txt` in project root
+- **Method Used**: `pip install -r requirements.txt`
 - **Key Dependencies**:
   - FastAPI, Uvicorn (web server)
   - SQLAlchemy, Alembic (database)
@@ -95,9 +89,9 @@ Visual Workflows    Agent Orchestration + API Management
   - Financial data libraries
 
 #### 4. Frontend Dependencies
-- **Status**: NOT INSTALLED
+- **Status**: ✅ INSTALLED (469 packages)
 - **Location**: `app/frontend/package.json`
-- **Command**: `npm install` (from `app/frontend/`)
+- **Command Used**: `npm install` (from `app/frontend/`)
 - **Key Dependencies**:
   - React, TypeScript
   - Vite, Tailwind CSS
@@ -124,24 +118,16 @@ Visual Workflows    Agent Orchestration + API Management
 
 #### Phase 1: Backend Setup
 
-**1.1 Install Backend Dependencies**
+**1.1 Backend Dependencies Status**
 ```bash
-# Navigate to project root
-cd /path/to/ai-hedge-fund
-
-# Install Python dependencies using Poetry
-C:\Users\cas3526\dev\tools\poetry\bin\poetry.exe install
+# Backend dependencies already installed via requirements.txt
+# No additional installation needed for backend
 ```
-
-**Expected Output:**
-- Poetry will download and install ~50+ Python packages
-- Process may take 2-5 minutes
-- Creates virtual environment (if using Poetry's default)
 
 **1.2 Verify Backend Dependencies**
 ```bash
 # Test critical imports
-C:\Users\cas3526\dev\tools\poetry\bin\poetry.exe run python -c "import fastapi, uvicorn, sqlalchemy, langchain"
+python -c "import fastapi, uvicorn, sqlalchemy, langchain"
 ```
 
 #### Phase 2: Frontend Setup
@@ -171,7 +157,7 @@ npm run build
 **3.1 Automatic Database Creation**
 ```bash
 # Start backend server (database creates automatically)
-C:\Users\cas3526\dev\tools\poetry\bin\poetry.exe run uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
+python -m uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 **Expected Output:**
@@ -189,8 +175,11 @@ cd app
 # For Windows PowerShell
 .\run.bat
 
-# Alternative: Use Poetry directly
-C:\Users\cas3526\dev\tools\poetry\bin\poetry.exe run uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000 &
+# Alternative: Use direct commands
+# Terminal 1: Start backend
+python -m uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
+
+# Terminal 2: Start frontend (from app/frontend directory)
 cd frontend
 npm run dev
 ```
@@ -207,21 +196,19 @@ npm run dev
 
 ### Common Issues & Solutions
 
-#### Issue 1: Poetry Not Found
-**Symptoms:** `poetry: command not found`
-**Solution:**
-```bash
-# Use full path to Poetry
-C:\Users\cas3526\dev\tools\poetry\bin\poetry.exe install
-```
-
-#### Issue 2: Backend Dependencies Fail
+#### Issue 1: Backend Dependencies Fail
 **Symptoms:** Import errors for FastAPI, SQLAlchemy, etc.
 **Solutions:**
 ```bash
-# Clean Poetry cache and reinstall
-C:\Users\cas3526\dev\tools\poetry\bin\poetry.exe cache clear --all .
-C:\Users\cas3526\dev\tools\poetry\bin\poetry.exe install --sync
+# Reinstall from requirements.txt
+pip install -r requirements.txt --force-reinstall
+```
+
+**Alternative Solution:**
+```bash
+# Clear pip cache and reinstall
+pip cache purge
+pip install -r requirements.txt
 ```
 
 #### Issue 3: Frontend Build Fails
@@ -241,10 +228,10 @@ npm install
 **Solutions:**
 ```bash
 # Delete existing database (CAUTION: loses data)
-rm hedge_fund.db
+del hedge_fund.db
 
 # Restart backend (recreates database)
-C:\Users\cas3526\dev\tools\poetry\bin\poetry.exe run uvicorn app.backend.main:app --reload
+python -m uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 #### Issue 5: Port Conflicts
@@ -313,11 +300,8 @@ After setup, verify success by:
 
 **Backend Development**:
 ```bash
-# Activate Poetry shell
-C:\Users\cas3526\dev\tools\poetry\bin\poetry.exe shell
-
 # Run with auto-reload
-C:\Users\cas3526\dev\tools\poetry\bin\poetry.exe run uvicorn app.backend.main:app --reload
+python -m uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 **Frontend Development**:
@@ -329,8 +313,8 @@ npm run dev  # Auto-reloads on file changes
 **Database Migrations** (if needed):
 ```bash
 cd app/backend
-C:\Users\cas3526\dev\tools\poetry\bin\poetry.exe run alembic revision --autogenerate -m "Description"
-C:\Users\cas3526\dev\tools\poetry\bin\poetry.exe run alembic upgrade head
+alembic revision --autogenerate -m "Description"
+alembic upgrade head
 ```
 
 ---
@@ -339,15 +323,18 @@ C:\Users\cas3526\dev\tools\poetry\bin\poetry.exe run alembic upgrade head
 
 ### Current Readiness Status
 - **Code Quality**: ✅ Production-ready architecture
-- **Dependencies**: ⚠️ Need installation
+- **Backend Dependencies**: ✅ Already installed via requirements.txt
+- **Frontend Dependencies**: ✅ Installed (469 packages)
 - **Configuration**: ✅ Environment configured
+- **Database**: ⚠️ Not initialized yet
 - **Documentation**: ✅ Comprehensive setup guides exist
 
 ### Recommended Action Plan
 
 1. **Immediate (Today)**:
-   - Install backend dependencies with Poetry
-   - Install frontend dependencies with npm
+   - ✅ Backend dependencies already installed via requirements.txt
+   - ✅ Frontend dependencies already installed via npm
+   - 🚀 **START THE WEB APPLICATION** (see Phase 4 below)
    - Test backend startup and database creation
 
 2. **Short-term (This Week)**:
