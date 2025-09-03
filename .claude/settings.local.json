@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(poetry check:*)",
+      "Bash(pip --version)",
+      "Bash(node:*)",
+      "Bash(npm:*)",
+      "Bash(pnpm:*)",
+      "Bash(python:*)",
+      "Bash(echo:*)",
+      "Read(C:\\Users\\cas3526\\.local\\bin/**)",
+      "WebSearch",
+      "Bash(chmod:*)",
+      "Bash(\"/c/Users/cas3526/AppData/Roaming/pypoetry/venv/Scripts/poetry.exe\" --version)",
+      "Bash(export POETRY_HOME=\"/c/Users/cas3526/dev/tools/poetry\")",
+      "Bash(\"/c/Users/cas3526/dev/tools/poetry/bin/poetry\" --version)",
+      "Bash(export:*)",
+      "Bash(poetry --version)",
+      "Bash(poetry config:*)",
+      "Bash(poetry install:*)",
+      "Bash(unzip:*)",
+      "Bash(\"/c/Users/cas3526/dev/tools/mingw64/mingw64/bin/gcc.exe\" --version)",
+      "Bash(gcc:*)",
+      "Bash(poetry run pip install:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
