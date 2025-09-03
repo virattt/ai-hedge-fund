@@ -18,7 +18,8 @@ Python Best Practices
 - Use dataclasses or Pydantic models for structured data.
 - Prefer pathlib over os.path for file operations.
 - Use f-strings for string formatting and logging.
-- Follow PEP 8 style guide with 420 character line length (project-specific).
+- Follow PEP 8 style guide with **420 character line length** (AI hedge fund project-specific).
+- Use `.venv/Scripts/python.exe` paths for Windows development when Poetry unavailable.
 
 Code Structure and Organization
 - Use snake_case for variables, functions, and module names.
@@ -57,10 +58,12 @@ Testing and Quality
 - Aim for high test coverage but focus on critical paths.
 
 Dependencies and Environment
-- Use poetry for dependency management and virtual environments.
+- Prefer poetry for dependency management and virtual environments.
+- **Windows fallback**: Use pip with `requirements.txt` when Poetry unavailable.
 - Pin dependency versions in production.
 - Use .env files for environment variables with python-dotenv.
 - Keep requirements minimal and avoid unnecessary dependencies.
+- **AI Hedge Fund specific**: Support both Poetry and pip workflows for cross-platform compatibility.
 
 Code Quality Tools
 - Use black for code formatting with --line-length 420.

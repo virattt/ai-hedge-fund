@@ -20,6 +20,7 @@ Tests for API rate limiting functionality to ensure proper throttling of externa
 
 ## Running Tests
 
+**Using Poetry:**
 ```bash
 # Run all tests
 poetry run pytest tests/
@@ -34,6 +35,21 @@ poetry run pytest tests/ -v
 poetry run pytest tests/ --cov=src
 ```
 
+**Using pip (Windows):**
+```bash
+# Run all tests
+.venv/Scripts/python.exe -m pytest tests/
+
+# Run specific test file
+.venv/Scripts/python.exe -m pytest tests/test_api_rate_limiting.py
+
+# Run with verbose output
+.venv/Scripts/python.exe -m pytest tests/ -v
+
+# Run with coverage
+.venv/Scripts/python.exe -m pytest tests/ --cov=src
+```
+
 ## Test Development Guidelines
 
 ### Adding New Tests
@@ -43,11 +59,24 @@ poetry run pytest tests/ --cov=src
 4. Test both success and failure scenarios
 
 ### Test Categories Needed
-- **Agent Testing**: Individual agent decision-making logic
-- **Integration Testing**: End-to-end hedge fund execution
-- **Data Pipeline Testing**: Financial data fetching and processing
-- **LLM Integration Testing**: Model response parsing and error handling
-- **Web API Testing**: FastAPI backend endpoint validation
+
+**Priority 1 - Core Functionality:**
+- **Agent Testing**: Individual agent decision-making logic and consistency
+- **Integration Testing**: End-to-end hedge fund execution workflows
+- **Data Pipeline Testing**: Financial data fetching, validation, and processing
+- **LLM Integration Testing**: Model response parsing, error handling, and retries
+
+**Priority 2 - Web Application:**
+- **Web API Testing**: FastAPI backend endpoint validation and error handling
+- **Frontend Testing**: React component behavior and user interactions
+- **Database Testing**: SQLAlchemy models, migrations, and data persistence
+- **Authentication Testing**: API key management and security
+
+**Priority 3 - System Integration:**
+- **Ollama Testing**: Local model integration and fallback behavior  
+- **Backtesting Testing**: Historical performance calculation accuracy
+- **Portfolio Testing**: Risk management and position sizing logic
+- **Error Recovery Testing**: System behavior during API failures and outages
 
 ### Mocking Strategy
 - Mock external APIs (OpenAI, financial data providers)
@@ -55,11 +84,30 @@ poetry run pytest tests/ --cov=src
 - Mock LLM responses for deterministic testing
 - Mock database operations for unit tests
 
-## Future Test Improvements
+## Current Status & Future Test Improvements
 
-The test suite needs expansion in these areas:
-- Agent personality testing
-- Portfolio management logic
-- Risk calculation validation
-- Backtesting accuracy
-- Error handling and edge cases
+**Current Status**: ⚠️ **MINIMAL TEST COVERAGE** - Only API rate limiting tests exist
+
+**Immediate Needs (High Priority):**
+- Agent decision consistency testing across market conditions
+- FastAPI endpoint validation for web app integration
+- Financial data pipeline validation and error handling
+- LLM response parsing and structured output validation
+
+**Medium-term Goals:**
+- End-to-end workflow testing for CLI and web app
+- Database migration and model relationship testing
+- Frontend component testing with React Testing Library
+- Performance testing for large portfolio simulations
+
+**Long-term Vision:**
+- Property-based testing for financial calculations
+- Chaos engineering for external API failure scenarios
+- Load testing for web application under concurrent users
+- Regression testing for agent personality consistency over time
+
+**Testing Infrastructure Needs:**
+- Mock data fixtures for financial APIs and LLM responses
+- Test database setup with realistic market data
+- CI/CD integration for automated testing
+- Coverage reporting and quality gates

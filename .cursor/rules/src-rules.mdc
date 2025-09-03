@@ -51,7 +51,9 @@ Financial data fetching and market analysis utilities
 1. Create new file in `agents/` following existing patterns
 2. Implement required methods: analysis, decision-making, reasoning
 3. Register in `utils/analysts.py` `ANALYST_ORDER`
-4. Test with: `poetry run python src/main.py --ticker TEST`
+4. Test with:
+   - Poetry: `poetry run python src/main.py --ticker AAPL`
+   - pip (Windows): `.venv/Scripts/python.exe -m src.main --ticker AAPL`
 
 ### Agent Interface Pattern
 ```python
@@ -63,6 +65,8 @@ def create_agent_node(llm, tools):
 ```
 
 ### Running and Testing
+
+**Using Poetry (Mac/Linux):**
 ```bash
 # Run single ticker analysis
 poetry run python src/main.py --ticker AAPL
@@ -75,6 +79,24 @@ poetry run python src/backtester.py --ticker AAPL --start-date 2024-01-01
 
 # Use local models
 poetry run python src/main.py --ticker AAPL --ollama
+```
+
+**Using pip (Windows recommended):**
+```bash
+# Run single ticker analysis
+.venv/Scripts/python.exe -m src.main --ticker AAPL
+
+# Test with multiple agents  
+.venv/Scripts/python.exe -m src.main --ticker AAPL,MSFT,NVDA
+
+# Backtesting with CLI arguments (avoids interactive prompts)
+.venv/Scripts/python.exe -m src.backtester --tickers AAPL --start-date 2024-01-01 --end-date 2024-01-15 --analysts-all --model gpt-4o-mini
+
+# Use local models (Ollama detected: qwen3-coder:30b, deepseek-r1:14b, deepseek-r1:latest)
+.venv/Scripts/python.exe -m src.main --ticker AAPL --ollama
+
+# With date range
+.venv/Scripts/python.exe -m src.main --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
 ```
 
 ### Code Style

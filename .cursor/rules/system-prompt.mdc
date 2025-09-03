@@ -5,9 +5,9 @@ alwaysApply: true
 ---
 
 
-# CLAUDE.md
+# AI Hedge Fund - System Prompt
 
-This file provides guidance to Cursor AI Agente (cursor.ai) when working with code in this repository.
+This file provides guidance to AI coding assistants when working with code in this repository.
 
 ## Project Overview
 
@@ -40,6 +40,8 @@ The system uses a multi-agent approach with:
 ## Development Commands
 
 ### CLI Development
+
+**Using Poetry (Mac/Linux preferred):**
 ```bash
 # Install dependencies
 poetry install
@@ -52,37 +54,70 @@ poetry run python src/main.py --ticker AAPL,MSFT,NVDA --ollama
 
 # Run backtester
 poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
-
-# Run with date range
-poetry run python src/main.py --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
-
-# Code formatting and linting
-poetry run black src/ tests/ --line-length 420
-poetry run isort src/ tests/ --profile black
-poetry run flake8 src/ tests/
-
-# Run tests
-poetry run pytest tests/
 ```
 
-### Web Application Development
+**Using pip (Windows recommended):**
 ```bash
-# Quick start (recommended for non-technical users)
+# Install dependencies
+.venv/Scripts/python.exe -m pip install -r requirements.txt
+
+# Run hedge fund analysis
+.venv/Scripts/python.exe -m src.main --ticker AAPL,MSFT,NVDA
+
+# Run with local Ollama models
+.venv/Scripts/python.exe -m src.main --ticker AAPL,MSFT,NVDA --ollama
+
+# Run backtester with CLI arguments (avoid interactive prompts)
+.venv/Scripts/python.exe -m src.backtester --tickers AAPL,MSFT,NVDA --model gpt-4o-mini --analysts-all
+
+# Run with date range
+.venv/Scripts/python.exe -m src.main --ticker AAPL --start-date 2024-01-01 --end-date 2024-03-01
+
+# Code formatting and linting
+.venv/Scripts/python.exe -m black src/ tests/ --line-length 420
+.venv/Scripts/python.exe -m isort src/ tests/ --profile black
+.venv/Scripts/python.exe -m flake8 src/ tests/
+
+# Run tests
+.venv/Scripts/python.exe -m pytest tests/
+```
+
+### Web Application Development (✅ FULLY OPERATIONAL)
+
+**Quick start:**
+```bash
 ./run.sh        # Mac/Linux
 run.bat         # Windows
+```
 
-# Manual backend setup
-cd app/backend
-poetry run uvicorn main:app --reload
+**Manual setup:**
+```bash
+# Backend setup (IMPORTANT: run from project root, not app/backend/)
+# Using Poetry:
+poetry run uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
 
-# Manual frontend setup  
+# Using pip (Windows):
+.venv/Scripts/python.exe -m uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
+
+# Frontend setup
 cd app/frontend
 npm install
 npm run dev
 
-# Frontend linting and build
-npm run lint
-npm run build
+# Access points:
+# - Frontend: http://localhost:5173
+# - Backend API: http://localhost:8000
+# - API Docs: http://localhost:8000/docs
+```
+
+**Troubleshooting:**
+```bash
+# If missing FastAPI/uvicorn:
+.venv/Scripts/python.exe -m pip install fastapi==0.104.1 uvicorn[standard]==0.35.0
+
+# If ports in use (Windows):
+taskkill /f /im python.exe
+taskkill /f /im node.exe
 ```
 
 ### Docker Development
@@ -104,11 +139,19 @@ docker-compose up frontend
 
 ## Environment Configuration
 
+**Current Status**: ✅ Environment configured and operational
+
 Required environment variables in `.env`:
-- `OPENAI_API_KEY`: For GPT models (required)
-- `GROQ_API_KEY`: For Groq-hosted models (optional)
+- `OPENAI_API_KEY`: For GPT models (✅ configured)
+- `GROQ_API_KEY`: For Groq-hosted models (✅ configured)
 - `ANTHROPIC_API_KEY`: For Claude models (optional)
-- `FINANCIAL_DATASETS_API_KEY`: For extended financial data (optional, AAPL/GOOGL/MSFT/NVDA/TSLA are free)
+- `FINANCIAL_DATASETS_API_KEY`: For extended financial data (✅ configured)
+- **Ollama**: ✅ Detected 3 local models: qwen3-coder:30b, deepseek-r1:14b, deepseek-r1:latest
+
+**Windows Setup Notes**:
+- Poetry installed in custom location: `/c/Users/cas3526/dev/tools/poetry/`
+- Use pip fallback: `.venv/Scripts/python.exe -m pip install -r requirements.txt`
+- MinGW-w64 GCC available for package compilation
 
 ## Key Implementation Details
 

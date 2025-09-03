@@ -17,6 +17,9 @@ Multi-service setup with:
 - **hedge-fund-ollama**: Hedge fund using local Ollama models
 - **backtester**: Backtesting system
 - **backtester-ollama**: Backtesting with local models
+- **web-app**: Full-stack web application (backend + frontend)
+- **backend**: FastAPI server (standalone)
+- **frontend**: React/Vite development server (standalone)
 
 ### `Dockerfile`
 Python 3.11 slim container with:
@@ -47,16 +50,23 @@ All services share:
 # Build all services
 docker-compose build
 
-# Run specific service
+# Run CLI services
 docker-compose up hedge-fund
 docker-compose up backtester
 docker-compose up hedge-fund-ollama
+
+# Run web application
+docker-compose up web-app          # Full-stack (backend + frontend)
+docker-compose up backend         # FastAPI server only  
+docker-compose up frontend        # React dev server only
 
 # Run with custom parameters (modify docker-compose.yml)
 # Default: --ticker AAPL,MSFT,NVDA
 
 # View logs
 docker-compose logs hedge-fund
+docker-compose logs backend
+docker-compose logs frontend
 docker-compose logs -f ollama
 
 # Clean up
@@ -78,9 +88,19 @@ Windows equivalent of run.sh with same functionality
 ## Development Workflow
 
 ### Local Development
+
+**CLI Development:**
 1. Build base image: `docker-compose build`
 2. Start Ollama: `docker-compose up ollama -d`
 3. Run hedge fund: `docker-compose up hedge-fund`
+
+**Web App Development:**
+1. Build services: `docker-compose build web-app`
+2. Start web app: `docker-compose up web-app`
+3. Access at:
+   - Frontend: http://localhost:5173
+   - Backend API: http://localhost:8000
+   - API Docs: http://localhost:8000/docs
 
 ### Adding New Services
 1. Define service in `docker-compose.yml`
