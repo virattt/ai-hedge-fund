@@ -92,6 +92,7 @@ You can run the AI Hedge Fund directly via terminal. This approach offers more g
 
 #### Quick Start
 
+**Option 1: Using Poetry (Recommended for Mac/Linux)**
 1. Install Poetry (if not already installed):
 ```bash
 curl -sSL https://install.python-poetry.org | python3 -
@@ -102,26 +103,80 @@ curl -sSL https://install.python-poetry.org | python3 -
 poetry install
 ```
 
+**Option 2: Using pip (Recommended for Windows)**
+1. Create and activate virtual environment:
+```bash
+python -m venv .venv
+# Windows:
+.venv\Scripts\activate
+# Mac/Linux:
+source .venv/bin/activate
+```
+
+2. Install dependencies:
+```bash
+# Windows:
+.venv/Scripts/python.exe -m pip install -r requirements.txt
+# Mac/Linux:
+pip install -r requirements.txt
+```
+
 #### Run the AI Hedge Fund
+
+**Using Poetry:**
 ```bash
 poetry run python src/main.py --ticker AAPL,MSFT,NVDA
 ```
 
+**Using pip (Windows):**
+```bash
+.venv/Scripts/python.exe -m src.main --ticker AAPL,MSFT,NVDA
+```
+
+**Using pip (Mac/Linux):**
+```bash
+python -m src.main --ticker AAPL,MSFT,NVDA
+```
+
 You can also specify a `--ollama` flag to run the AI hedge fund using local LLMs.
 
+**Using Poetry:**
 ```bash
 poetry run python src/main.py --ticker AAPL,MSFT,NVDA --ollama
 ```
 
+**Using pip (Windows):**
+```bash
+.venv/Scripts/python.exe -m src.main --ticker AAPL,MSFT,NVDA --ollama
+```
+
 You can optionally specify the start and end dates to make decisions over a specific time period.
 
+**Using Poetry:**
 ```bash
 poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
 ```
 
+**Using pip (Windows):**
+```bash
+.venv/Scripts/python.exe -m src.main --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
+```
+
 #### Run the Backtester
+
+**Using Poetry:**
 ```bash
 poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
+```
+
+**Using pip (Windows):**
+```bash
+.venv/Scripts/python.exe -m src.backtester --tickers AAPL,MSFT,NVDA --model gpt-4o-mini
+```
+
+**Using pip (Mac/Linux):**
+```bash
+python -m src.backtester --tickers AAPL,MSFT,NVDA --model gpt-4o-mini
 ```
 
 **Example Output:**

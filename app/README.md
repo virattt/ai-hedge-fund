@@ -113,19 +113,21 @@ FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 curl -sSL https://install.python-poetry.org | python3 -
 ```
 
-5. Install root project dependencies:
+5. Install project dependencies:
+
+**Option A: Using pip (Recommended for Windows):**
+```bash
+# From the root directory - install all dependencies via requirements.txt
+.venv/Scripts/python.exe -m pip install -r requirements.txt
+
+# If some packages are missing, install individually:
+.venv/Scripts/python.exe -m pip install fastapi==0.104.1 uvicorn[standard]==0.35.0
+```
+
+**Option B: Using Poetry (if available):**
 ```bash
 # From the root directory
 poetry install
-```
-
-6. Install backend app dependencies:
-```bash
-# Navigate to the backend directory
-cd app/backend
-pip install -r requirements.txt  # If there's a requirements.txt file
-# OR
-poetry install  # If there's a pyproject.toml in the backend directory
 ```
 
 7. Install frontend app dependencies:
@@ -138,9 +140,12 @@ npm install  # or pnpm install or yarn install
 
 1. Start the backend server:
 ```bash
-# In one terminal, from the backend directory
-cd app/backend
-poetry run uvicorn main:app --reload
+# IMPORTANT: Run from project root directory (not app/backend)
+# Option 1: Using virtual environment directly
+.venv/Scripts/python.exe -m uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
+
+# Option 2: Using Poetry (if available)
+poetry run uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 2. Start the frontend application:
@@ -176,33 +181,29 @@ By using this software, you agree to use it solely for learning purposes.
 
 ### Common Issues
 
-#### "Command not found: uvicorn" Error
-If you see this error when running the setup script:
+#### "No module named 'fastapi'" or "No module named 'uvicorn'" Error
+If you see these import errors when starting the backend:
 
+**Solution (Windows):**
 ```bash
-[ERROR] Backend failed to start. Check the logs:
-Command not found: uvicorn
+# Install missing dependencies directly
+.venv/Scripts/python.exe -m pip install fastapi==0.104.1
+.venv/Scripts/python.exe -m pip install uvicorn[standard]==0.35.0
+.venv/Scripts/python.exe -m pip install sqlalchemy==2.0.36
 ```
 
-**Solution:**
-1. **Clean Poetry environment:**
-   ```bash
-   cd app/backend
-   poetry env remove --all
-   poetry install
-   ```
+**Alternative - Reinstall all dependencies:**
+```bash
+# From project root
+.venv/Scripts/python.exe -m pip install -r requirements.txt
+```
 
-2. **Or force reinstall:**
-   ```bash
-   cd app/backend
-   poetry install --sync
-   ```
-
-3. **Verify installation:**
-   ```bash
-   cd app/backend
-   poetry run python -c "import uvicorn; import fastapi"
-   ```
+#### Backend Startup Issues
+**Symptoms:** Backend fails to start or import errors
+**Solutions:**
+1. **Ensure you're in the correct directory:** Run backend command from project root, not `app/backend/`
+2. **Check Python path:** Use `.venv/Scripts/python.exe` on Windows
+3. **Verify dependencies:** Test with `.venv/Scripts/python.exe -c "import fastapi, uvicorn, sqlalchemy"`
 
 #### Python Version Issues
 - **Use Python 3.11**: Python 3.13+ may have compatibility issues
@@ -223,8 +224,37 @@ chmod +x run.sh
 
 #### Port Already in Use
 If ports 8000 or 5173 are in use:
-- **Kill existing processes:** `pkill -f "uvicorn\|vite"`
-- **Or use different ports** by modifying the scripts
+
+**Windows:**
+```bash
+# Kill processes using ports
+taskkill /f /im python.exe
+taskkill /f /im node.exe
+
+# Or find and kill specific port processes
+netstat -ano | findstr :8000
+netstat -ano | findstr :5173
+# Then use: taskkill /f /pid [PID_NUMBER]
+```
+
+**Mac/Linux:**
+```bash
+# Kill existing processes
+pkill -f "uvicorn\|vite"
+# Or use different ports by modifying the scripts
+```
+
+#### Frontend npm Issues (Windows)
+If you get permission errors during `npm install`:
+```bash
+# Clean npm cache
+npm cache clean --force
+
+# Delete node_modules and reinstall
+cd app/frontend
+rm -rf node_modules package-lock.json
+npm install
+```
 
 ### Getting Help
 - Check the [GitHub Issues](https://github.com/virattt/ai-hedge-fund/issues)

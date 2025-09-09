@@ -11,7 +11,7 @@ This backend is designed to work with a future frontend application that will al
 
 ## Installation
 
-### Using Poetry
+### Using Poetry (Mac/Linux)
 
 1. Clone the repository:
 ```bash
@@ -28,6 +28,35 @@ curl -sSL https://install.python-poetry.org | python3 -
 ```bash
 # From the root directory
 poetry install
+```
+
+### Using pip (Windows/Alternative)
+
+1. Clone the repository:
+```bash
+git clone https://github.com/virattt/ai-hedge-fund.git
+cd ai-hedge-fund
+```
+
+2. Create and activate virtual environment:
+```bash
+python -m venv .venv
+# Windows:
+.venv\Scripts\activate
+# Mac/Linux:  
+source .venv/bin/activate
+```
+
+3. Install dependencies:
+```bash
+# Windows:
+.venv/Scripts/python.exe -m pip install -r requirements.txt
+
+# If some backend dependencies are missing, install individually:
+.venv/Scripts/python.exe -m pip install fastapi==0.104.1 uvicorn[standard]==0.35.0 sqlalchemy==2.0.36
+
+# Mac/Linux:
+pip install -r requirements.txt
 ```
 
 4. Set up your environment variables:
@@ -50,14 +79,24 @@ FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 
 ## Running the Server
 
-To run the development server:
+**IMPORTANT**: Run the backend server from the project root directory, not from `app/backend/`.
 
+**Using Poetry:**
 ```bash
-# Navigate to the backend directory
-cd app/backend
+# From project root directory
+poetry run uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
+```
 
-# Start the FastAPI server with uvicorn
-poetry run uvicorn main:app --reload
+**Using pip (Windows):**
+```bash
+# From project root directory  
+.venv/Scripts/python.exe -m uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+**Using pip (Mac/Linux):**
+```bash
+# From project root directory
+python -m uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 This will start the FastAPI server with hot-reloading enabled.

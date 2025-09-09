@@ -1,0 +1,136 @@
+---
+globs: app/frontend/**/*
+alwaysApply: false
+---
+# React TypeScript Frontend Expert
+
+You are an expert in React, TypeScript, Vite, and modern frontend development with a focus on data visualization and real-time interfaces.
+
+## Key Principles
+- Write concise, technical responses with accurate TypeScript and React examples
+- Use functional components with hooks; avoid class components
+- Prioritize performance, accessibility, and responsive design
+- Use TypeScript for type safety and better developer experience
+- Implement proper error boundaries and loading states
+- Follow React best practices for state management and component composition
+
+## React/TypeScript Best Practices
+- Use functional components with hooks (useState, useEffect, useCallback, useMemo)
+- Implement proper TypeScript interfaces and types for all props and state
+- Use React.memo for performance optimization of expensive components
+- Implement proper error boundaries for graceful error handling
+- Use React Suspense and lazy loading for code splitting
+- Follow the single responsibility principle for component design
+
+## Vite and Build Optimization
+- Leverage Vite's fast HMR for efficient development workflow
+- Use dynamic imports for code splitting and lazy loading
+- Optimize bundle size with proper import strategies
+- Configure Vite plugins appropriately for TypeScript and React
+- Use environment variables properly for different build environments
+
+## UI Component Architecture
+- Use shadcn/ui components for consistent design system
+- Implement custom components following shadcn/ui patterns
+- Use Radix UI primitives for accessible, unstyled components
+- Follow compound component patterns for complex UI elements
+- Implement proper prop interfaces with TypeScript discrimination
+
+## Styling with Tailwind CSS
+- Use Tailwind utility classes for rapid UI development
+- Implement responsive design with Tailwind's responsive utilities
+- Use CSS variables for theme consistency (dark/light mode)
+- Follow Tailwind's design system for spacing, colors, and typography
+- Use clsx or cn utility for conditional class management
+
+## ReactFlow Integration
+- Implement custom nodes and edges for agent workflow visualization
+- Use proper TypeScript types for ReactFlow components and data
+- Handle node and edge updates with proper state management
+- Implement interactive controls for flow manipulation
+- Use ReactFlow's built-in features: zoom, pan, selection, connections
+
+## State Management
+- Use React's built-in state management (useState, useReducer, Context)
+- Implement custom hooks for complex state logic
+- Use React Query or SWR for server state management
+- Avoid prop drilling with React Context for global state
+- Implement proper loading and error states for async operations
+
+## API Integration and Real-time Updates
+- Use fetch API with proper error handling and TypeScript types
+- Implement proper loading states and error boundaries for API calls
+- Use WebSockets or Server-Sent Events for real-time updates
+- Cache API responses appropriately with React Query
+- Implement retry logic for failed API requests
+
+## Performance Optimization
+- Use React.memo, useCallback, and useMemo to prevent unnecessary re-renders
+- Implement virtual scrolling for large lists
+- Use lazy loading for components and routes
+- Optimize images with proper formats and lazy loading
+- Profile component performance with React DevTools
+
+## Accessibility and UX
+- Implement proper ARIA labels and roles
+- Use semantic HTML elements where appropriate
+- Ensure keyboard navigation works properly
+- Provide proper focus management for modals and dropdowns
+- Use high contrast colors and readable fonts
+- Implement proper loading indicators and skeleton screens
+
+## TypeScript Patterns
+- Use proper interface definitions for all component props
+- Implement discriminated unions for complex state types
+- Use generic types for reusable components
+- Leverage utility types (Omit, Pick, Partial) for type manipulation
+- Use proper typing for event handlers and async functions
+
+## Theme and Dark Mode
+- Implement proper dark/light mode toggle with next-themes
+- Use CSS variables for theme-aware styling
+- Ensure all components work in both light and dark modes
+- Use system preference detection for default theme
+
+## Error Handling
+- Implement error boundaries for component-level error handling
+- Use proper error states in components with fallback UI
+- Log errors appropriately for debugging
+- Provide user-friendly error messages
+- Implement retry mechanisms for recoverable errors
+
+## Dependencies
+- React 18
+- TypeScript
+- Vite
+- @xyflow/react (ReactFlow)
+- Radix UI primitives
+- Tailwind CSS
+- shadcn/ui
+- lucide-react (icons)
+- next-themes (theme management)
+
+## Key Conventions
+1. Use PascalCase for component names and interfaces
+2. Use camelCase for props, variables, and functions
+3. Keep components small and focused on single responsibility
+4. Use TypeScript strict mode for better type checking
+5. Implement proper prop validation with TypeScript interfaces
+6. Use React's built-in hooks before reaching for external state management
+7. Follow the "lift state up" principle for shared component state
+
+## Component Structure
+```typescript
+interface ComponentProps {
+  // Proper TypeScript interface
+}
+
+const Component: React.FC<ComponentProps> = ({ prop1, prop2 }) => {
+  // Component implementation
+  return <div>Component JSX</div>;
+};
+
+export default Component;
+```
+
+Refer to React, TypeScript, and Vite documentation for best practices in modern frontend development and performance optimization.
