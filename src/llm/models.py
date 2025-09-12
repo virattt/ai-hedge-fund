@@ -1,5 +1,6 @@
 import os
 import json
+import httpx
 from langchain_anthropic import ChatAnthropic
 from langchain_deepseek import ChatDeepSeek
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -130,6 +131,15 @@ def get_models_list():
 
 
 def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | None:
+    # Handle custom OpenRouter models
+    if model_provider == ModelProvider.OPENROUTER and model_name == "custom/openrouter":
+        # Check for custom model override in environment or API keys
+        custom_model = (api_keys or {}).get("CUSTOM_OPENROUTER_MODEL") or os.getenv("CUSTOM_OPENROUTER_MODEL")
+        if custom_model:
+            model_name = custom_model
+        else:
+            # Default fallback if no custom model specified
+            model_name = "google/gemini-2.5-flash"
     if model_provider == ModelProvider.GROQ:
         api_key = (api_keys or {}).get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
         if not api_key:
@@ -163,7 +173,14 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
         if not api_key:
             print(f"API Key Error: Please make sure GOOGLE_API_KEY is set in your .env file or provided via API keys.")
             raise ValueError("Google API key not found.  Please make sure GOOGLE_API_KEY is set in your .env file or provided via API keys.")
-        return ChatGoogleGenerativeAI(model=model_name, api_key=api_key)
+        
+        # Configure HTTP client with SSL verification disabled for Google API
+        return ChatGoogleGenerativeAI(
+            model=model_name, 
+            api_key=api_key,
+            transport="rest",
+            client_options={"api_endpoint": "https://generativelanguage.googleapis.com"}
+        )
     elif model_provider == ModelProvider.OLLAMA:
         # For Ollama, we use a base URL instead of an API key
         # Check if OLLAMA_HOST is set (for Docker on macOS)
@@ -183,6 +200,8 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
         site_url = os.getenv("YOUR_SITE_URL", "https://github.com/virattt/ai-hedge-fund")
         site_name = os.getenv("YOUR_SITE_NAME", "AI Hedge Fund")
         
+        # Configure HTTP client with SSL verification disabled for OpenRouter
+        
         return ChatOpenAI(
             model=model_name,
             openai_api_key=api_key,
@@ -192,7 +211,8 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
                     "HTTP-Referer": site_url,
                     "X-Title": site_name,
                 }
-            }
+            },
+            http_client=httpx.Client(verify=False)
         )
     elif model_provider == ModelProvider.XAI:
         api_key = (api_keys or {}).get("XAI_API_KEY") or os.getenv("XAI_API_KEY")

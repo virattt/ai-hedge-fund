@@ -18,6 +18,7 @@ import argparse
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from src.utils.visualize import save_graph_as_png
+from src.utils.config import get_config
 import json
 
 # Load environment variables from .env file
@@ -54,6 +55,47 @@ def run_hedge_fund(
 ):
     # Start progress tracking
     progress.start()
+    
+    # Display price data information
+    from src.tools.api import get_prices
+    from datetime import datetime, timedelta
+    
+    print(f"\n{Fore.WHITE}{Style.BRIGHT}PRICE DATA INFORMATION:{Style.RESET_ALL}")
+    print(f"Analysis Period: {Fore.CYAN}{start_date}{Style.RESET_ALL} to {Fore.CYAN}{end_date}{Style.RESET_ALL}")
+    
+    # Check the most recent price data available for each ticker
+    for ticker in tickers:
+        try:
+            # Get the most recent price data (last 7 days to ensure we get the latest)
+            recent_end = datetime.now().strftime("%Y-%m-%d")
+            recent_start = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+            
+            recent_prices = get_prices(ticker, recent_start, recent_end)
+            if recent_prices:
+                latest_price = recent_prices[-1]  # Most recent price
+                latest_time = latest_price.time
+                latest_close = latest_price.close
+                
+                # Parse the timestamp to show a more readable format
+                try:
+                    if 'T' in latest_time:
+                        # ISO format with time
+                        dt = datetime.fromisoformat(latest_time.replace('Z', '+00:00'))
+                        time_str = dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+                    else:
+                        # Date only format
+                        time_str = latest_time
+                except:
+                    time_str = latest_time
+                
+                print(f"  {Fore.CYAN}{ticker}{Style.RESET_ALL}: Latest price ${Fore.GREEN}{latest_close:.2f}{Style.RESET_ALL} "
+                      f"(as of {Fore.YELLOW}{time_str}{Style.RESET_ALL})")
+            else:
+                print(f"  {Fore.CYAN}{ticker}{Style.RESET_ALL}: {Fore.RED}No recent price data available{Style.RESET_ALL}")
+        except Exception as e:
+            print(f"  {Fore.CYAN}{ticker}{Style.RESET_ALL}: {Fore.RED}Error fetching price data: {str(e)[:50]}...{Style.RESET_ALL}")
+    
+    print()  # Add spacing
 
     try:
         # Create a new workflow if analysts are customized
@@ -85,9 +127,39 @@ def run_hedge_fund(
             },
         )
 
+        # Extract current prices and timestamps from the final state
+        current_prices = final_state["data"].get("current_prices", {})
+        price_timestamps = {}
+        
+        # Get the most recent timestamps for each ticker
+        for ticker in tickers:
+            try:
+                recent_end = datetime.now().strftime("%Y-%m-%d")
+                recent_start = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+                recent_prices = get_prices(ticker, recent_start, recent_end)
+                if recent_prices:
+                    latest_price = recent_prices[-1]
+                    latest_time = latest_price.time
+                    
+                    # Format timestamp for display
+                    try:
+                        if 'T' in latest_time:
+                            dt = datetime.fromisoformat(latest_time.replace('Z', '+00:00'))
+                            time_str = dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+                        else:
+                            time_str = latest_time
+                    except:
+                        time_str = latest_time
+                    
+                    price_timestamps[ticker] = time_str
+            except:
+                price_timestamps[ticker] = "Unknown"
+
         return {
             "decisions": parse_hedge_fund_response(final_state["messages"][-1].content),
             "analyst_signals": final_state["data"]["analyst_signals"],
+            "current_prices": current_prices,
+            "price_timestamps": price_timestamps,
         }
     finally:
         # Stop progress tracking
@@ -152,11 +224,26 @@ if __name__ == "__main__":
     # Parse tickers from comma-separated string
     tickers = [ticker.strip() for ticker in args.tickers.split(",")]
 
+    # Load configuration
+    config = get_config()
+    
     # Select analysts
     selected_analysts = None
+    analyst_choices = [questionary.Choice(display, value=value) for display, value in ANALYST_ORDER]
+    
+    if config.has_previous_selection():
+        # Add "Same as previous" option
+        previous_summary = config.get_config_summary()
+        analyst_choices.insert(0, questionary.Choice(
+            f"Same as previous ({len(config.get_previous_analysts())} analysts)", 
+            value="__previous__"
+        ))
+        print(f"\n{Fore.CYAN}Previous configuration:{Style.RESET_ALL}")
+        print(f"{previous_summary}\n")
+    
     choices = questionary.checkbox(
         "Select your AI analysts.",
-        choices=[questionary.Choice(display, value=value) for display, value in ANALYST_ORDER],
+        choices=analyst_choices,
         instruction="\n\nInstructions: \n1. Press Space to select/unselect analysts.\n2. Press 'a' to select/unselect all.\n3. Press Enter when done to run the hedge fund.\n",
         validate=lambda x: len(x) > 0 or "You must select at least one analyst.",
         style=questionary.Style(
@@ -173,39 +260,61 @@ if __name__ == "__main__":
         print("\n\nInterrupt received. Exiting...")
         sys.exit(0)
     else:
-        selected_analysts = choices
-        print(f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n")
+        if "__previous__" in choices:
+            selected_analysts = config.get_previous_analysts()
+            print(f"\nUsing previous analysts: " f"{', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in selected_analysts)}")
+        else:
+            selected_analysts = choices
+            print(f"\nSelected analysts: " f"{', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}")
 
     # Select LLM model based on whether Ollama is being used
     model_name = ""
     model_provider = ""
 
+    use_previous_model = False
+
     if args.ollama:
         print(f"{Fore.CYAN}Using Ollama for local LLM inference.{Style.RESET_ALL}")
 
-        # Select from Ollama-specific models
-        model_name: str = questionary.select(
-            "Select your Ollama model:",
-            choices=[questionary.Choice(display, value=value) for display, value, _ in OLLAMA_LLM_ORDER],
-            style=questionary.Style(
-                [
-                    ("selected", "fg:green bold"),
-                    ("pointer", "fg:green bold"),
-                    ("highlighted", "fg:green"),
-                    ("answer", "fg:green bold"),
-                ]
-            ),
-        ).ask()
+        # Check if we should use previous Ollama model
+        if config.has_previous_selection() and config.get_previous_ollama_flag():
+            previous_model = config.get_previous_model()
+            use_previous = questionary.confirm(
+                f"Use previous Ollama model: {previous_model['name']}?",
+                default=True
+            ).ask()
+            
+            if use_previous is None:
+                print("\n\nInterrupt received. Exiting...")
+                sys.exit(0)
+            elif use_previous:
+                model_name = previous_model['name']
+                use_previous_model = True
 
-        if not model_name:
-            print("\n\nInterrupt received. Exiting...")
-            sys.exit(0)
+        if not use_previous_model:
+            # Select from Ollama-specific models
+            model_name: str = questionary.select(
+                "Select your Ollama model:",
+                choices=[questionary.Choice(display, value=value) for display, value, _ in OLLAMA_LLM_ORDER],
+                style=questionary.Style(
+                    [
+                        ("selected", "fg:green bold"),
+                        ("pointer", "fg:green bold"),
+                        ("highlighted", "fg:green"),
+                        ("answer", "fg:green bold"),
+                    ]
+                ),
+            ).ask()
 
-        if model_name == "-":
-            model_name = questionary.text("Enter the custom model name:").ask()
             if not model_name:
                 print("\n\nInterrupt received. Exiting...")
                 sys.exit(0)
+
+            if model_name == "-":
+                model_name = questionary.text("Enter the custom model name:").ask()
+                if not model_name:
+                    print("\n\nInterrupt received. Exiting...")
+                    sys.exit(0)
 
         # Ensure Ollama is installed, running, and the model is available
         if not ensure_ollama_and_model(model_name):
@@ -215,27 +324,45 @@ if __name__ == "__main__":
         model_provider = ModelProvider.OLLAMA.value
         print(f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
     else:
-        # Use the standard cloud-based LLM selection
-        model_choice = questionary.select(
-            "Select your LLM model:",
-            choices=[questionary.Choice(display, value=(name, provider)) for display, name, provider in LLM_ORDER],
-            style=questionary.Style(
-                [
-                    ("selected", "fg:green bold"),
-                    ("pointer", "fg:green bold"),
-                    ("highlighted", "fg:green"),
-                    ("answer", "fg:green bold"),
-                ]
-            ),
-        ).ask()
+        # Check if we should use previous cloud model
+        if config.has_previous_selection() and not config.get_previous_ollama_flag():
+            previous_model = config.get_previous_model()
+            use_previous = questionary.confirm(
+                f"Use previous model: {previous_model['name']} ({previous_model['provider']})?",
+                default=True
+            ).ask()
+            
+            if use_previous is None:
+                print("\n\nInterrupt received. Exiting...")
+                sys.exit(0)
+            elif use_previous:
+                model_name = previous_model['name']
+                model_provider = previous_model['provider']
+                use_previous_model = True
 
-        if not model_choice:
-            print("\n\nInterrupt received. Exiting...")
-            sys.exit(0)
+        if not use_previous_model:
+            # Use the standard cloud-based LLM selection
+            model_choice = questionary.select(
+                "Select your LLM model:",
+                choices=[questionary.Choice(display, value=(name, provider)) for display, name, provider in LLM_ORDER],
+                style=questionary.Style(
+                    [
+                        ("selected", "fg:green bold"),
+                        ("pointer", "fg:green bold"),
+                        ("highlighted", "fg:green"),
+                        ("answer", "fg:green bold"),
+                    ]
+                ),
+            ).ask()
 
-        model_name, model_provider = model_choice
+            if not model_choice:
+                print("\n\nInterrupt received. Exiting...")
+                sys.exit(0)
+            
+            model_name, model_provider = model_choice
 
-        # Get model info using the helper function
+        print(f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
+
         model_info = get_model_info(model_name, model_provider)
         if model_info:
             if model_info.is_custom():
@@ -248,6 +375,14 @@ if __name__ == "__main__":
         else:
             model_provider = "Unknown"
             print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
+
+    # Save current configuration for next time
+    config.save_selection(
+        analysts=selected_analysts,
+        model_name=model_name,
+        model_provider=model_provider,
+        use_ollama=args.ollama
+    )
 
     # Create the workflow with selected analysts
     workflow = create_workflow(selected_analysts)
@@ -274,14 +409,31 @@ if __name__ == "__main__":
         except ValueError:
             raise ValueError("End date must be in YYYY-MM-DD format")
 
-    # Set the start and end dates
-    end_date = args.end_date or datetime.now().strftime("%Y-%m-%d")
+    # Set the start and end dates - ensure we use the most recent data available
+    if args.end_date:
+        end_date = args.end_date
+    else:
+        # Use today's date to get the most recent data
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        
     if not args.start_date:
         # Calculate 3 months before end_date
         end_date_obj = datetime.strptime(end_date, "%Y-%m-%d")
         start_date = (end_date_obj - relativedelta(months=3)).strftime("%Y-%m-%d")
     else:
         start_date = args.start_date
+        
+    # Display information about data freshness
+    print(f"\n{Fore.WHITE}{Style.BRIGHT}DATA ANALYSIS CONFIGURATION:{Style.RESET_ALL}")
+    print(f"Using data from {Fore.CYAN}{start_date}{Style.RESET_ALL} to {Fore.CYAN}{end_date}{Style.RESET_ALL}")
+    
+    # Check if we're using today's date (most recent)
+    today = datetime.now().strftime("%Y-%m-%d")
+    if end_date == today:
+        print(f"{Fore.GREEN}✓ Using most recent available data (today: {today}){Style.RESET_ALL}")
+    else:
+        days_behind = (datetime.now() - datetime.strptime(end_date, "%Y-%m-%d")).days
+        print(f"{Fore.YELLOW}⚠ Using data from {days_behind} day(s) ago - consider using --end-date {today} for latest data{Style.RESET_ALL}")
 
     # Initialize portfolio with cash amount and stock positions
     portfolio = {
