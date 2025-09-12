@@ -3,6 +3,10 @@ import os
 import pandas as pd
 import requests
 import time
+import urllib3
+
+# Suppress SSL warnings since we're intentionally bypassing SSL verification
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from src.data.cache import get_cache
 from src.data.models import (
@@ -41,20 +45,32 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
         Exception: If the request fails with a non-429 error
     """
     for attempt in range(max_retries + 1):  # +1 for initial attempt
-        if method.upper() == "POST":
-            response = requests.post(url, headers=headers, json=json_data)
-        else:
-            response = requests.get(url, headers=headers)
-        
-        if response.status_code == 429 and attempt < max_retries:
-            # Linear backoff: 60s, 90s, 120s, 150s...
-            delay = 60 + (30 * attempt)
-            print(f"Rate limited (429). Attempt {attempt + 1}/{max_retries + 1}. Waiting {delay}s before retrying...")
-            time.sleep(delay)
-            continue
-        
-        # Return the response (whether success, other errors, or final 429)
-        return response
+        try:
+            if method.upper() == "POST":
+                response = requests.post(url, headers=headers, json=json_data, verify=False, timeout=30)
+            else:
+                response = requests.get(url, headers=headers, verify=False, timeout=30)
+            
+            if response.status_code == 429 and attempt < max_retries:
+                # Linear backoff: 60s, 90s, 120s, 150s...
+                delay = 60 + (30 * attempt)
+                print(f"Rate limited (429). Attempt {attempt + 1}/{max_retries + 1}. Waiting {delay}s before retrying...")
+                time.sleep(delay)
+                continue
+            
+            # Return the response (whether success, other errors, or final 429)
+            return response
+            
+        except (requests.exceptions.SSLError, requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            if attempt < max_retries:
+                delay = 5 + (2 * attempt)  # Shorter delay for connection issues: 5s, 7s, 9s
+                print(f"Connection error on attempt {attempt + 1}/{max_retries + 1}: {str(e)[:100]}...")
+                print(f"Retrying in {delay}s...")
+                time.sleep(delay)
+                continue
+            else:
+                # Re-raise the exception on final attempt
+                raise e
 
 
 def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> list[Price]:

@@ -33,7 +33,7 @@ def ensure_ollama_and_model(model_name: str, ollama_url: str) -> bool:
 def is_ollama_available(ollama_url: str) -> bool:
     """Check if Ollama service is available in Docker environment."""
     try:
-        response = requests.get(f"{ollama_url}/api/version", timeout=5)
+        response = requests.get(f"{ollama_url}/api/version", timeout=5, verify=False)
         if response.status_code == 200:
             return True
             
@@ -48,7 +48,7 @@ def is_ollama_available(ollama_url: str) -> bool:
 def get_available_models(ollama_url: str) -> list:
     """Get list of available models in Docker environment."""
     try:
-        response = requests.get(f"{ollama_url}/api/tags", timeout=5)
+        response = requests.get(f"{ollama_url}/api/tags", timeout=5, verify=False)
         if response.status_code == 200:
             models = response.json().get("models", [])
             return [m["name"] for m in models]
@@ -67,7 +67,7 @@ def download_model(model_name: str, ollama_url: str) -> bool:
     
     # Step 1: Initiate the download
     try:
-        response = requests.post(f"{ollama_url}/api/pull", json={"name": model_name}, timeout=10)
+        response = requests.post(f"{ollama_url}/api/pull", json={"name": model_name}, timeout=10, verify=False)
         if response.status_code != 200:
             print(f"{Fore.RED}Failed to initiate model download. Status code: {response.status_code}{Style.RESET_ALL}")
             if response.text:
@@ -110,7 +110,7 @@ def delete_model(model_name: str, ollama_url: str) -> bool:
     print(f"{Fore.YELLOW}Deleting model {model_name} from Docker container...{Style.RESET_ALL}")
     
     try:
-        response = requests.delete(f"{ollama_url}/api/delete", json={"name": model_name}, timeout=10)
+        response = requests.delete(f"{ollama_url}/api/delete", json={"name": model_name}, timeout=10, verify=False)
         if response.status_code == 200:
             print(f"{Fore.GREEN}Model {model_name} deleted successfully.{Style.RESET_ALL}")
             return True

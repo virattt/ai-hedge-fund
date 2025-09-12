@@ -151,6 +151,18 @@ def print_trading_output(result: dict) -> None:
         print(f"\n{Fore.WHITE}{Style.BRIGHT}TRADING DECISION:{Style.RESET_ALL} [{Fore.CYAN}{ticker}{Style.RESET_ALL}]")
         print(tabulate(decision_data, tablefmt="grid", colalign=("left", "left")))
 
+    # Print current price information if available
+    current_prices = result.get("current_prices", {})
+    price_timestamps = result.get("price_timestamps", {})
+    
+    if current_prices:
+        print(f"\n{Fore.WHITE}{Style.BRIGHT}CURRENT MARKET PRICES:{Style.RESET_ALL}")
+        for ticker in current_prices:
+            price = current_prices[ticker]
+            timestamp = price_timestamps.get(ticker, "Unknown time")
+            print(f"  {Fore.CYAN}{ticker}{Style.RESET_ALL}: ${Fore.GREEN}{price:.2f}{Style.RESET_ALL} "
+                  f"(as of {Fore.YELLOW}{timestamp}{Style.RESET_ALL})")
+
     # Print Portfolio Summary
     print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
     portfolio_data = []

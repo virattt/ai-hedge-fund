@@ -50,14 +50,29 @@
     "provider": "DeepSeek"
   },
   {
-    "display_name": "Gemini 2.5 Flash",
+    "display_name": "Gemini 2.5 Flash (Direct)",
     "model_name": "gemini-2.5-flash-preview-05-20",
     "provider": "Google"
   },
   {
-    "display_name": "Gemini 2.5 Pro",
+    "display_name": "Gemini 2.5 Flash (OpenRouter)",
+    "model_name": "google/gemini-2.5-flash",
+    "provider": "OpenRouter"
+  },
+  {
+    "display_name": "Gemini 2.5 Pro (Direct)",
     "model_name": "gemini-2.5-pro-preview-06-05",
     "provider": "Google"
+  },
+  {
+    "display_name": "Gemini 2.5 Pro (OpenRouter)",
+    "model_name": "google/gemini-2.5-pro",
+    "provider": "OpenRouter"
+  },
+  {
+    "display_name": "Custom OpenRouter Model",
+    "model_name": "custom/openrouter",
+    "provider": "OpenRouter"
   },
   {
     "display_name": "GLM-4.5 Air",
