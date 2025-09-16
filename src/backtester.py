@@ -143,63 +143,72 @@ class Backtester:
 
         elif action == "short":
             """
-            Typical short sale flow:
-              1) Receive proceeds = current_price * quantity
-              2) Post margin_required = proceeds * margin_ratio
-              3) Net effect on cash = +proceeds - margin_required
+            FIXED: Typical short sale flow with proper available cash calculation
+            1) Receive proceeds = current_price * quantity
+            2) Post margin_required = proceeds * margin_ratio
+            3) Net effect on cash = +proceeds - margin_required
             """
             proceeds = current_price * quantity
             margin_required = proceeds * self.portfolio["margin_requirement"]
-            if margin_required <= self.portfolio["cash"]:
+            
+            # FIX: Calculate available cash excluding margin already in use
+            available_cash = self.portfolio["cash"] - self.portfolio["margin_used"]
+            
+            if margin_required <= available_cash:  # ✅ FIXED: Use available_cash instead of total cash
                 # Weighted average short cost basis
                 old_short_shares = position["short"]
                 old_cost_basis = position["short_cost_basis"]
                 new_shares = quantity
                 total_shares = old_short_shares + new_shares
-
+                
                 if total_shares > 0:
                     total_old_cost = old_cost_basis * old_short_shares
                     total_new_cost = current_price * new_shares
                     position["short_cost_basis"] = (total_old_cost + total_new_cost) / total_shares
-
+                
                 position["short"] += quantity
-
+                
                 # Update margin usage
                 position["short_margin_used"] += margin_required
                 self.portfolio["margin_used"] += margin_required
-
+                
                 # Increase cash by proceeds, then subtract the required margin
                 self.portfolio["cash"] += proceeds
                 self.portfolio["cash"] -= margin_required
+                
                 return quantity
+            
             else:
-                # Calculate maximum shortable quantity
+                # FIX: Calculate maximum shortable quantity using available cash
                 margin_ratio = self.portfolio["margin_requirement"]
                 if margin_ratio > 0:
-                    max_quantity = int(self.portfolio["cash"] / (current_price * margin_ratio))
+                    # ✅ FIXED: Use available_cash instead of total cash
+                    max_quantity = int(available_cash / (current_price * margin_ratio))
                 else:
                     max_quantity = 0
-
+                
                 if max_quantity > 0:
                     proceeds = current_price * max_quantity
                     margin_required = proceeds * margin_ratio
-
+                    
                     old_short_shares = position["short"]
                     old_cost_basis = position["short_cost_basis"]
                     total_shares = old_short_shares + max_quantity
-
+                    
                     if total_shares > 0:
                         total_old_cost = old_cost_basis * old_short_shares
                         total_new_cost = current_price * max_quantity
                         position["short_cost_basis"] = (total_old_cost + total_new_cost) / total_shares
-
+                    
                     position["short"] += max_quantity
                     position["short_margin_used"] += margin_required
                     self.portfolio["margin_used"] += margin_required
-
+                    
                     self.portfolio["cash"] += proceeds
                     self.portfolio["cash"] -= margin_required
+                    
                     return max_quantity
+                
                 return 0
 
         elif action == "cover":
