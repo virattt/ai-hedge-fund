@@ -1,4 +1,5 @@
 import sys
+import time
 
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
@@ -272,7 +273,9 @@ class Backtester:
         start_date_dt = end_date_dt - relativedelta(years=1)
         start_date_str = start_date_dt.strftime("%Y-%m-%d")
 
-        for ticker in self.tickers:
+        for i, ticker in enumerate(self.tickers):
+            print(f"Fetching data for {ticker} ({i+1}/{len(self.tickers)})...")
+            
             # Fetch price data for the entire period, plus 1 year
             get_prices(ticker, start_date_str, self.end_date)
 
@@ -284,6 +287,11 @@ class Backtester:
 
             # Fetch company news
             get_company_news(ticker, self.end_date, start_date=self.start_date, limit=1000)
+            
+            # Add a longer delay between tickers to prevent rate limiting
+            if i < len(self.tickers) - 1:  # Don't delay after the last ticker
+                print(f"Waiting 2 seconds before fetching next ticker...")
+                time.sleep(2)
 
         print("Data pre-fetch complete.")
 

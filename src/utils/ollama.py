@@ -40,7 +40,7 @@ def is_ollama_installed() -> bool:
 def is_ollama_server_running() -> bool:
     """Check if the Ollama server is running."""
     try:
-        response = requests.get(OLLAMA_API_MODELS_ENDPOINT, timeout=2)
+        response = requests.get(OLLAMA_API_MODELS_ENDPOINT, timeout=2, verify=False)
         return response.status_code == 200
     except requests.RequestException:
         return False
@@ -52,7 +52,7 @@ def get_locally_available_models() -> List[str]:
         return []
 
     try:
-        response = requests.get(OLLAMA_API_MODELS_ENDPOINT, timeout=5)
+        response = requests.get(OLLAMA_API_MODELS_ENDPOINT, timeout=5, verify=False)
         if response.status_code == 200:
             data = response.json()
             return [model["name"] for model in data["models"]] if "models" in data else []

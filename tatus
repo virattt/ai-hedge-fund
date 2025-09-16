@@ -1,0 +1,63 @@
+warning: in the working copy of 'src/llm/models.py', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/src/llm/models.py b/src/llm/models.py[m
+[1mindex 5f391a4..099fec4 100644[m
+[1m--- a/src/llm/models.py[m
+[1m+++ b/src/llm/models.py[m
+[36m@@ -1,5 +1,6 @@[m
+ import os[m
+ import json[m
+[32m+[m[32mimport httpx[m
+ from langchain_anthropic import ChatAnthropic[m
+ from langchain_deepseek import ChatDeepSeek[m
+ from langchain_google_genai import ChatGoogleGenerativeAI[m
+[36m@@ -130,6 +131,15 @@[m [mdef get_models_list():[m
+ [m
+ [m
+ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | None:[m
+[32m+[m[32m    # Handle custom OpenRouter models[m
+[32m+[m[32m    if model_provider == ModelProvider.OPENROUTER and model_name == "custom/openrouter":[m
+[32m+[m[32m        # Check for custom model override in environment or API keys[m
+[32m+[m[32m        custom_model = (api_keys or {}).get("CUSTOM_OPENROUTER_MODEL") or os.getenv("CUSTOM_OPENROUTER_MODEL")[m
+[32m+[m[32m        if custom_model:[m
+[32m+[m[32m            model_name = custom_model[m
+[32m+[m[32m        else:[m
+[32m+[m[32m            # Default fallback if no custom model specified[m
+[32m+[m[32m            model_name = "google/gemini-2.5-flash"[m
+     if model_provider == ModelProvider.GROQ:[m
+         api_key = (api_keys or {}).get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")[m
+         if not api_key:[m
+[36m@@ -163,7 +173,14 @@[m [mdef get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N[m
+         if not api_key:[m
+             print(f"API Key Error: Please make sure GOOGLE_API_KEY is set in your .env file or provided via API keys.")[m
+             raise ValueError("Google API key not found.  Please make sure GOOGLE_API_KEY is set in your .env file or provided via API keys.")[m
+[31m-        return ChatGoogleGenerativeAI(model=model_name, api_key=api_key)[m
+[32m+[m[41m        [m
+[32m+[m[32m        # Configure HTTP client with SSL verification disabled for Google API[m
+[32m+[m[32m        return ChatGoogleGenerativeAI([m
+[32m+[m[32m            model=model_name,[m[41m [m
+[32m+[m[32m            api_key=api_key,[m
+[32m+[m[32m            transport="rest",[m
+[32m+[m[32m            client_options={"api_endpoint": "https://generativelanguage.googleapis.com"}[m
+[32m+[m[32m        )[m
+     elif model_provider == ModelProvider.OLLAMA:[m
+         # For Ollama, we use a base URL instead of an API key[m
+         # Check if OLLAMA_HOST is set (for Docker on macOS)[m
+[36m@@ -183,6 +200,8 @@[m [mdef get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N[m
+         site_url = os.getenv("YOUR_SITE_URL", "https://github.com/virattt/ai-hedge-fund")[m
+         site_name = os.getenv("YOUR_SITE_NAME", "AI Hedge Fund")[m
+         [m
+[32m+[m[32m        # Configure HTTP client with SSL verification disabled for OpenRouter[m
+[32m+[m[41m        [m
+         return ChatOpenAI([m
+             model=model_name,[m
+             openai_api_key=api_key,[m
+[36m@@ -192,7 +211,8 @@[m [mdef get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N[m
+                     "HTTP-Referer": site_url,[m
+                     "X-Title": site_name,[m
+                 }[m
+[31m-            }[m
+[32m+[m[32m            },[m
+[32m+[m[32m            http_client=httpx.Client(verify=False)[m
+         )[m
+     elif model_provider == ModelProvider.XAI:[m
+         api_key = (api_keys or {}).get("XAI_API_KEY") or os.getenv("XAI_API_KEY")[m
