@@ -29,29 +29,25 @@ def warren_buffett_agent(state: AgentState, agent_id: str = "warren_buffett_agen
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
         # Fetch required data - request more periods for better trend analysis
         metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=10, api_key=api_key)
-
         progress.update_status(agent_id, ticker, "Gathering financial line items")
-        financial_line_items = search_line_items(
-            ticker,
-            [
-                "capital_expenditure",
-                "depreciation_and_amortization",
-                "net_income",
-                "outstanding_shares",
-                "total_assets",
-                "total_liabilities",
-                "shareholders_equity",
-                "dividends_and_other_cash_distributions",
-                "issuance_or_purchase_of_equity_shares",
-                "gross_profit",
-                "revenue",
-                "free_cash_flow",
-            ],
-            end_date,
-            period="ttm",
-            limit=10,
-            api_key=api_key,
-        )
+        keywords = [
+            "capital_expenditure",
+            "depreciation_and_amortization",
+            "net_income",
+            "outstanding_shares",
+            "total_assets",
+            "total_liabilities",
+            "shareholders_equity",
+            "dividends_and_other_cash_distributions",
+            "issuance_or_purchase_of_equity_shares",
+            "gross_profit",
+            "revenue",
+            "free_cash_flow",
+        ]
+        financial_line_items = {}
+        for kw in keywords:
+            # metrics is the output from get_financial_metrics
+            financial_line_items.update(search_line_items(metrics, kw))
 
         progress.update_status(agent_id, ticker, "Getting market cap")
         # Get current market cap
@@ -137,7 +133,9 @@ def warren_buffett_agent(state: AgentState, agent_id: str = "warren_buffett_agen
 
         progress.update_status(agent_id, ticker, "Done", analysis=buffett_output.reasoning)
 
-    # Create the message
+    # End of for-loop
+
+    # The following lines must be indented to be inside the function
     message = HumanMessage(content=json.dumps(buffett_analysis), name=agent_id)
 
     # Show reasoning if requested
@@ -152,15 +150,45 @@ def warren_buffett_agent(state: AgentState, agent_id: str = "warren_buffett_agen
     return {"messages": [message], "data": state["data"]}
 
 
-def analyze_fundamentals(metrics: list) -> dict[str, any]:
+def analyze_fundamentals(metrics: dict | list) -> dict[str, any]:
     """Analyze company fundamentals based on Buffett's criteria."""
     if not metrics:
         return {"score": 0, "details": "Insufficient fundamental data"}
 
-    latest_metrics = metrics[0]
+    latest_metrics = None
+
+    # Handle dict (date → metrics)
+    if isinstance(metrics, dict):
+        try:
+            # pick most recent date with a non-empty value
+            for date in sorted(metrics.keys(), reverse=True):
+                if metrics[date]:
+                    latest_metrics = metrics[date]
+                    break
+        except Exception:
+            return {"score": 0, "details": "Invalid metrics format"}
+
+    # Handle list (legacy format)
+    elif isinstance(metrics, list):
+        latest_metrics = _safe_first_metric(metrics) if metrics and _safe_first_metric(metrics) else None
+
+    if not latest_metrics or not isinstance(latest_metrics, dict):
+        return {"score": 0, "details": "No usable fundamental data"}
 
     score = 0
     reasoning = []
+
+    # ✅ Buffett-style checks
+    if latest_metrics.get("revenue") and latest_metrics.get("net_income"):
+        score += 1
+        reasoning.append("Profitable with growing revenue.")
+
+    if latest_metrics.get("free_cash_flow"):
+        score += 1
+        reasoning.append("Positive free cash flow.")
+
+    return {"score": score, "details": "; ".join(reasoning) if reasoning else "No strong Buffett signals"}
+
 
     # Check ROE (Return on Equity)
     if latest_metrics.return_on_equity and latest_metrics.return_on_equity > 0.15:  # 15% ROE threshold
@@ -234,7 +262,7 @@ def analyze_consistency(financial_line_items: list) -> dict[str, any]:
     }
 
 
-def analyze_moat(metrics: list) -> dict[str, any]:
+def analyze_moat(metrics: list | dict) -> dict[str, any]:
     """
     Evaluate whether the company likely has a durable competitive advantage (moat).
     Enhanced to include multiple moat indicators that Buffett actually looks for:
@@ -244,26 +272,43 @@ def analyze_moat(metrics: list) -> dict[str, any]:
     4. Brand strength (inferred from margins and consistency)
     5. Switching costs (inferred from customer retention)
     """
-    if not metrics or len(metrics) < 5:  # Need more data for proper moat analysis
+
+    if not metrics:
+        return {"score": 0, "max_score": 5, "details": "Insufficient data for comprehensive moat analysis"}
+
+    # --- Normalize metrics into list of dicts ---
+    normalized = []
+    if isinstance(metrics, dict):
+        for v in metrics.values():
+            if isinstance(v, dict):
+                normalized.append(v)
+    elif isinstance(metrics, list):
+        for v in metrics:
+            if isinstance(v, dict):
+                normalized.append(v)
+
+    if len(normalized) < 5:  # Need more data for proper moat analysis
         return {"score": 0, "max_score": 5, "details": "Insufficient data for comprehensive moat analysis"}
 
     reasoning = []
     moat_score = 0
     max_score = 5
 
-    # 1. Return on Capital Consistency (Buffett's favorite moat indicator)
-    historical_roes = [m.return_on_equity for m in metrics if m.return_on_equity is not None]
-    historical_roics = [m.return_on_invested_capital for m in metrics if hasattr(m, 'return_on_invested_capital') and m.return_on_invested_capital is not None]
-    
+    # 1. Return on Capital Consistency
+    historical_roes = [m.get("return_on_equity") for m in normalized if m.get("return_on_equity") is not None]
+    historical_roics = [m.get("return_on_invested_capital") for m in normalized if m.get("return_on_invested_capital") is not None]
+
     if len(historical_roes) >= 5:
-        # Check for consistently high ROE (>15% for most periods)
         high_roe_periods = sum(1 for roe in historical_roes if roe > 0.15)
         roe_consistency = high_roe_periods / len(historical_roes)
-        
-        if roe_consistency >= 0.8:  # 80%+ of periods with ROE > 15%
+
+        if roe_consistency >= 0.8:
             moat_score += 2
             avg_roe = sum(historical_roes) / len(historical_roes)
-            reasoning.append(f"Excellent ROE consistency: {high_roe_periods}/{len(historical_roes)} periods >15% (avg: {avg_roe:.1%}) - indicates durable competitive advantage")
+            reasoning.append(
+                f"Excellent ROE consistency: {high_roe_periods}/{len(historical_roes)} periods >15% "
+                f"(avg: {avg_roe:.1%}) - indicates durable competitive advantage"
+            )
         elif roe_consistency >= 0.6:
             moat_score += 1
             reasoning.append(f"Good ROE performance: {high_roe_periods}/{len(historical_roes)} periods >15%")
@@ -273,55 +318,45 @@ def analyze_moat(metrics: list) -> dict[str, any]:
         reasoning.append("Insufficient ROE history for moat analysis")
 
     # 2. Operating Margin Stability (Pricing Power Indicator)
-    historical_margins = [m.operating_margin for m in metrics if m.operating_margin is not None]
+    historical_margins = [m.get("operating_margin") for m in normalized if m.get("operating_margin") is not None]
     if len(historical_margins) >= 5:
-        # Check for stable or improving margins (sign of pricing power)
         avg_margin = sum(historical_margins) / len(historical_margins)
-        recent_margins = historical_margins[:3]  # Last 3 periods
-        older_margins = historical_margins[-3:]  # First 3 periods
-        
+        recent_margins = historical_margins[:3]
+        older_margins = historical_margins[-3:]
+
         recent_avg = sum(recent_margins) / len(recent_margins)
         older_avg = sum(older_margins) / len(older_margins)
-        
-        if avg_margin > 0.2 and recent_avg >= older_avg:  # 20%+ margins and stable/improving
+
+        if avg_margin > 0.2 and recent_avg >= older_avg:
             moat_score += 1
             reasoning.append(f"Strong and stable operating margins (avg: {avg_margin:.1%}) indicate pricing power moat")
-        elif avg_margin > 0.15:  # At least decent margins
+        elif avg_margin > 0.15:
             reasoning.append(f"Decent operating margins (avg: {avg_margin:.1%}) suggest some competitive advantage")
         else:
             reasoning.append(f"Low operating margins (avg: {avg_margin:.1%}) suggest limited pricing power")
-    
+
     # 3. Asset Efficiency and Scale Advantages
-    if len(metrics) >= 5:
-        # Check asset turnover trends (revenue efficiency)
-        asset_turnovers = []
-        for m in metrics:
-            if hasattr(m, 'asset_turnover') and m.asset_turnover is not None:
-                asset_turnovers.append(m.asset_turnover)
-        
-        if len(asset_turnovers) >= 3:
-            if any(turnover > 1.0 for turnover in asset_turnovers):  # Efficient asset use
-                moat_score += 1
-                reasoning.append("Efficient asset utilization suggests operational moat")
-    
-    # 4. Competitive Position Strength (inferred from trend stability)
+    asset_turnovers = [m.get("asset_turnover") for m in normalized if m.get("asset_turnover") is not None]
+    if len(asset_turnovers) >= 3:
+        if any(turnover > 1.0 for turnover in asset_turnovers):
+            moat_score += 1
+            reasoning.append("Efficient asset utilization suggests operational moat")
+
+    # 4. Competitive Position Strength (stability of performance)
     if len(historical_roes) >= 5 and len(historical_margins) >= 5:
-        # Calculate coefficient of variation (stability measure)
         roe_avg = sum(historical_roes) / len(historical_roes)
         roe_variance = sum((roe - roe_avg) ** 2 for roe in historical_roes) / len(historical_roes)
         roe_stability = 1 - (roe_variance ** 0.5) / roe_avg if roe_avg > 0 else 0
-        
+
         margin_avg = sum(historical_margins) / len(historical_margins)
         margin_variance = sum((margin - margin_avg) ** 2 for margin in historical_margins) / len(historical_margins)
         margin_stability = 1 - (margin_variance ** 0.5) / margin_avg if margin_avg > 0 else 0
-        
+
         overall_stability = (roe_stability + margin_stability) / 2
-        
-        if overall_stability > 0.7:  # High stability indicates strong competitive position
+        if overall_stability > 0.7:
             moat_score += 1
             reasoning.append(f"High performance stability ({overall_stability:.1%}) suggests strong competitive moat")
-    
-    # Cap the score at max_score
+
     moat_score = min(moat_score, max_score)
 
     return {

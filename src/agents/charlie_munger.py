@@ -1,5 +1,5 @@
 from src.graph.state import AgentState, show_agent_reasoning
-from src.tools.api import get_financial_metrics, get_market_cap, search_line_items, get_insider_trades, get_company_news
+from src.tools.api import get_financial_metrics, get_market_cap, get_insider_trades, get_company_news
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
@@ -9,10 +9,33 @@ from src.utils.progress import progress
 from src.utils.llm import call_llm
 from src.utils.api_key import get_api_key_from_state
 
+
 class CharlieMungerSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
     confidence: float
     reasoning: str
+
+
+def _safe_first_metric(metrics_list):
+    """Return the first metrics dict safely, else None."""
+    if isinstance(metrics_list, list) and metrics_list:
+        return metrics_list[0]
+    if isinstance(metrics_list, dict):
+        return metrics_list
+    return None
+
+
+def _safe_search_line_items(ticker, fields, metrics):
+    """Return dict of requested fields if they exist in metrics.__dict__."""
+    if not metrics:
+        return {}
+    financials = getattr(metrics, "__dict__", metrics)
+    return {
+        field: financials.get(field)
+        for field in fields
+        if field in financials
+    }
+
 
 
 def charlie_munger_agent(state: AgentState, agent_id: str = "charlie_munger_agent"):
@@ -29,10 +52,28 @@ def charlie_munger_agent(state: AgentState, agent_id: str = "charlie_munger_agen
     
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=10, api_key=api_key)  # Munger looks at longer periods
-        
+        financial_metrics = get_financial_metrics(
+            ticker,
+            end_date,
+            period="annual",
+            limit=10,
+            api_key=api_key,
+        )
+        metrics = _safe_first_metric(financial_metrics)
+
+        if not metrics:
+            progress.update_status(agent_id, ticker, "Failed: No financial metrics")
+            munger_analysis[ticker] = {
+                "signal": "neutral",
+                "confidence": 0,
+                "reasoning": "No financial metrics available"
+            }
+            continue
+
+        metrics = _safe_first_metric(financial_metrics)
+
         progress.update_status(agent_id, ticker, "Gathering financial line items")
-        financial_line_items = search_line_items(
+        financial_line_items = _safe_search_line_items(
             ticker,
             [
                 "revenue",
@@ -50,68 +91,52 @@ def charlie_munger_agent(state: AgentState, agent_id: str = "charlie_munger_agen
                 "research_and_development",
                 "goodwill_and_intangible_assets",
             ],
-            end_date,
-            period="annual",
-            limit=10,  # Munger examines long-term trends
-            api_key=api_key,
+            metrics,
         )
-        
+
+        # --- Market cap, insider trades, and news ---
         progress.update_status(agent_id, ticker, "Getting market cap")
         market_cap = get_market_cap(ticker, end_date, api_key=api_key)
-        
+
         progress.update_status(agent_id, ticker, "Fetching insider trades")
-        # Munger values management with skin in the game
         insider_trades = get_insider_trades(
-            ticker,
-            end_date,
-            # Look back 2 years for insider trading patterns
-            start_date=None,
-            limit=100,
-            api_key=api_key,
+            ticker, end_date, start_date=None, limit=100, api_key=api_key
         )
-        
+
         progress.update_status(agent_id, ticker, "Fetching company news")
-        # Munger avoids businesses with frequent negative press
         company_news = get_company_news(
-            ticker,
-            end_date,
-            # Look back 1 year for news
-            start_date=None,
-            limit=100,
-            api_key=api_key,
+            ticker, end_date, start_date=None, limit=100, api_key=api_key
         )
-        
+
+        # --- Analyses ---
         progress.update_status(agent_id, ticker, "Analyzing moat strength")
         moat_analysis = analyze_moat_strength(metrics, financial_line_items)
-        
+
         progress.update_status(agent_id, ticker, "Analyzing management quality")
         management_analysis = analyze_management_quality(financial_line_items, insider_trades)
-        
+
         progress.update_status(agent_id, ticker, "Analyzing business predictability")
         predictability_analysis = analyze_predictability(financial_line_items)
-        
+
         progress.update_status(agent_id, ticker, "Calculating Munger-style valuation")
         valuation_analysis = calculate_munger_valuation(financial_line_items, market_cap)
-        
-        # Combine partial scores with Munger's weighting preferences
-        # Munger weights quality and predictability higher than current valuation
+
+        # --- Combine partial scores ---
         total_score = (
             moat_analysis["score"] * 0.35 +
             management_analysis["score"] * 0.25 +
             predictability_analysis["score"] * 0.25 +
             valuation_analysis["score"] * 0.15
         )
-        
-        max_possible_score = 10  # Scale to 0-10
-        
-        # Generate a simple buy/hold/sell signal
-        if total_score >= 7.5:  # Munger has very high standards
+        max_possible_score = 10  
+
+        if total_score >= 7.5:
             signal = "bullish"
         elif total_score <= 4.5:
             signal = "bearish"
         else:
             signal = "neutral"
-        
+
         analysis_data[ticker] = {
             "signal": signal,
             "score": total_score,
@@ -120,46 +145,41 @@ def charlie_munger_agent(state: AgentState, agent_id: str = "charlie_munger_agen
             "management_analysis": management_analysis,
             "predictability_analysis": predictability_analysis,
             "valuation_analysis": valuation_analysis,
-            # Include some qualitative assessment from news
-            "news_sentiment": analyze_news_sentiment(company_news) if company_news else "No news data available"
+            "news_sentiment": analyze_news_sentiment(company_news) if company_news else "No news data"
         }
-        
+
         progress.update_status(agent_id, ticker, "Generating Charlie Munger analysis")
         munger_output = generate_munger_output(
-            ticker=ticker, 
+            ticker=ticker,
             analysis_data=analysis_data,
             state=state,
             agent_id=agent_id,
         )
-        
+
         munger_analysis[ticker] = {
             "signal": munger_output.signal,
             "confidence": munger_output.confidence,
-            "reasoning": munger_output.reasoning
+            "reasoning": munger_output.reasoning,
         }
-        
+
         progress.update_status(agent_id, ticker, "Done", analysis=munger_output.reasoning)
-    
-    # Wrap results in a single message for the chain
+
+    # --- Wrap up ---
     message = HumanMessage(
         content=json.dumps(munger_analysis),
-        name=agent_id
+        name=agent_id,
     )
-    
-    # Show reasoning if requested
-    if state["metadata"]["show_reasoning"]:
+
+    if state["metadata"].get("show_reasoning"):
         show_agent_reasoning(munger_analysis, "Charlie Munger Agent")
 
-    progress.update_status(agent_id, None, "Done")
-    
-    # Add signals to the overall state
     state["data"]["analyst_signals"][agent_id] = munger_analysis
+    progress.update_status(agent_id, None, "Done")
 
     return {
         "messages": [message],
-        "data": state["data"]
+        "data": state["data"],
     }
-
 
 def analyze_moat_strength(metrics: list, financial_line_items: list) -> dict:
     """

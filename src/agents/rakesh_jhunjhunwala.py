@@ -29,28 +29,30 @@ def rakesh_jhunjhunwala_agent(state: AgentState, agent_id: str = "rakesh_jhunjhu
         # Core Data
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
         metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=5, api_key=api_key)
-
-        progress.update_status(agent_id, ticker, "Fetching financial line items")
-        financial_line_items = search_line_items(
-            ticker,
-            [
-                "net_income",
-                "earnings_per_share",
-                "ebit",
-                "operating_income",
-                "revenue",
-                "operating_margin",
-                "total_assets",
-                "total_liabilities",
-                "current_assets",
-                "current_liabilities",
-                "free_cash_flow",
-                "dividends_and_other_cash_distributions",
-                "issuance_or_purchase_of_equity_shares"
-            ],
-            end_date,
-            api_key=api_key,
+        line_items = search_line_items(
+            metrics,
+            "earnings",
         )
+        progress.update_status(agent_id, ticker, "Fetching financial line items")
+        keywords = [
+            "net_income",
+            "earnings_per_share",
+            "ebit",
+            "operating_income",
+            "revenue",
+            "operating_margin",
+            "total_assets",
+            "total_liabilities",
+            "current_assets",
+            "current_liabilities",
+            "free_cash_flow",
+            "dividends_and_other_cash_distributions",
+            "issuance_or_purchase_of_equity_shares"
+        ]
+        financial_line_items = {}
+        for kw in keywords:
+            # metrics is the output from get_financial_metrics
+            financial_line_items.update(search_line_items(metrics, kw))
 
         progress.update_status(agent_id, ticker, "Getting market cap")
         market_cap = get_market_cap(ticker, end_date, api_key=api_key)
@@ -147,14 +149,14 @@ def rakesh_jhunjhunwala_agent(state: AgentState, agent_id: str = "rakesh_jhunjhu
 
         progress.update_status(agent_id, ticker, "Done", analysis=jhunjhunwala_output.reasoning)
 
-    # ─── Push message back to graph state ──────────────────────────────────────
-    message = HumanMessage(content=json.dumps(jhunjhunwala_analysis), name=agent_id)
+        # ─── Push message back to graph state ──────────────────────────────────────
+        message = HumanMessage(content=json.dumps(jhunjhunwala_analysis), name=agent_id)
 
-    if state["metadata"]["show_reasoning"]:
-        show_agent_reasoning(jhunjhunwala_analysis, "Rakesh Jhunjhunwala Agent")
+        if state["metadata"]["show_reasoning"]:
+            show_agent_reasoning(jhunjhunwala_analysis, "Rakesh Jhunjhunwala Agent")
 
-    state["data"]["analyst_signals"][agent_id] = jhunjhunwala_analysis
-    progress.update_status(agent_id, None, "Done")
+        state["data"]["analyst_signals"][agent_id] = jhunjhunwala_analysis
+        progress.update_status(agent_id, None, "Done")
 
     return {"messages": [message], "data": state["data"]}
 

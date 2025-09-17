@@ -28,12 +28,12 @@ def risk_management_agent(state: AgentState, agent_id: str = "risk_management_ag
         progress.update_status(agent_id, ticker, "Fetching price data and calculating volatility")
         
         prices = get_prices(
-            ticker=ticker,
+            symbol=ticker,   # <-- change this
             start_date=data["start_date"],
             end_date=data["end_date"],
             api_key=api_key,
         )
-
+    
         if not prices:
             progress.update_status(agent_id, ticker, "Warning: No price data found")
             volatility_data[ticker] = {
@@ -43,7 +43,7 @@ def risk_management_agent(state: AgentState, agent_id: str = "risk_management_ag
                 "data_points": 0
             }
             continue
-
+    
         prices_df = prices_to_df(prices)
         
         if not prices_df.empty and len(prices_df) > 1:
@@ -53,7 +53,7 @@ def risk_management_agent(state: AgentState, agent_id: str = "risk_management_ag
             # Calculate volatility metrics
             volatility_metrics = calculate_volatility_metrics(prices_df)
             volatility_data[ticker] = volatility_metrics
-
+    
             # Store returns for correlation analysis (use close-to-close returns)
             daily_returns = prices_df["close"].pct_change().dropna()
             if len(daily_returns) > 0:

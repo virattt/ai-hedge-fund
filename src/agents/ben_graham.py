@@ -38,7 +38,22 @@ def ben_graham_agent(state: AgentState, agent_id: str = "ben_graham_agent"):
         metrics = get_financial_metrics(ticker, end_date, period="annual", limit=10, api_key=api_key)
 
         progress.update_status(agent_id, ticker, "Gathering financial line items")
-        financial_line_items = search_line_items(ticker, ["earnings_per_share", "revenue", "net_income", "book_value_per_share", "total_assets", "total_liabilities", "current_assets", "current_liabilities", "dividends_and_other_cash_distributions", "outstanding_shares"], end_date, period="annual", limit=10, api_key=api_key)
+        keywords = [
+            "earnings_per_share",
+            "revenue",
+            "net_income",
+            "book_value_per_share",
+            "total_assets",
+            "total_liabilities",
+            "current_assets",
+            "current_liabilities",
+            "dividends_and_other_cash_distributions",
+            "outstanding_shares"
+        ]
+        financial_line_items = {}
+        for kw in keywords:
+            # metrics is the output from get_financial_metrics
+            financial_line_items.update(search_line_items(metrics, kw))
 
         progress.update_status(agent_id, ticker, "Getting market cap")
         market_cap = get_market_cap(ticker, end_date, api_key=api_key)

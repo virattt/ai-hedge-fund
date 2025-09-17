@@ -33,32 +33,33 @@ def cathie_wood_agent(state: AgentState, agent_id: str = "cathie_wood_agent"):
 
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=5, api_key=api_key)
+        metrics = get_financial_metrics(
+            ticker, end_date, period="annual", limit=5, api_key=api_key
+        )
 
         progress.update_status(agent_id, ticker, "Gathering financial line items")
         # Request multiple periods of data (annual or TTM) for a more robust view.
-        financial_line_items = search_line_items(
-            ticker,
-            [
-                "revenue",
-                "gross_margin",
-                "operating_margin",
-                "debt_to_equity",
-                "free_cash_flow",
-                "total_assets",
-                "total_liabilities",
-                "dividends_and_other_cash_distributions",
-                "outstanding_shares",
-                "research_and_development",
-                "capital_expenditure",
-                "operating_expense",
-            ],
-            end_date,
-            period="annual",
-            limit=5,
-            api_key=api_key,
-        )
+        keywords = [
+            "revenue",
+            "gross_margin",
+            "operating_margin",
+            "debt_to_equity",
+            "free_cash_flow",
+            "total_assets",
+            "total_liabilities",
+            "dividends_and_other_cash_distributions",
+            "outstanding_shares",
+            "research_and_development",
+            "capital_expenditure",
+            "operating_expense",
+        ]
 
+        financial_line_items = {}
+        for kw in keywords:
+            financial_line_items.update(search_line_items(metrics, kw))
+
+        # you probably want to store `financial_line_items` into `cw_analysis[ticker]` here
+        # Begin full analysis block
         progress.update_status(agent_id, ticker, "Getting market cap")
         market_cap = get_market_cap(ticker, end_date, api_key=api_key)
 

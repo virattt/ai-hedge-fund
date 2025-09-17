@@ -14,6 +14,8 @@ from src.utils.progress import progress
 from src.utils.llm import call_llm
 import statistics
 from src.utils.api_key import get_api_key_from_state
+from src.tools.api import get_financial_metrics
+from src.tools.api import search_line_items
 
 class PhilFisherSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
@@ -47,29 +49,26 @@ def phil_fisher_agent(state: AgentState, agent_id: str = "phil_fisher_agent"):
         #   - Margins & Stability: operating_income, operating_margin, gross_margin
         #   - Management Efficiency & Leverage: total_debt, shareholders_equity, free_cash_flow
         #   - Valuation: net_income, free_cash_flow (for P/E, P/FCF), ebit, ebitda
-        financial_line_items = search_line_items(
-            ticker,
-            [
-                "revenue",
-                "net_income",
-                "earnings_per_share",
-                "free_cash_flow",
-                "research_and_development",
-                "operating_income",
-                "operating_margin",
-                "gross_margin",
-                "total_debt",
-                "shareholders_equity",
-                "cash_and_equivalents",
-                "ebit",
-                "ebitda",
-            ],
-            end_date,
-            period="annual",
-            limit=5,
-            api_key=api_key,
-        )
+        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=5, api_key=api_key)
 
+        keywords = [
+            "revenue",
+            "net_income",
+            "earnings_per_share",
+            "free_cash_flow",
+            "research_and_development",
+            "operating_income",
+            "operating_margin",
+            "gross_margin",
+            "total_debt",
+            "shareholders_equity",
+            "cash_and_equivalents",
+            "ebit",
+            "ebitda",
+        ]
+        financial_line_items = []
+        for kw in keywords:
+            financial_line_items.extend(search_line_items(metrics, kw))
         progress.update_status(agent_id, ticker, "Getting market cap")
         market_cap = get_market_cap(ticker, end_date, api_key=api_key)
 
@@ -160,7 +159,7 @@ def phil_fisher_agent(state: AgentState, agent_id: str = "phil_fisher_agent"):
     state["data"]["analyst_signals"][agent_id] = fisher_analysis
 
     progress.update_status(agent_id, None, "Done")
-    
+
     return {"messages": [message], "data": state["data"]}
 
 

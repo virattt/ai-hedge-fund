@@ -50,15 +50,15 @@ def technical_analyst_agent(state: AgentState, agent_id: str = "technical_analys
     technical_analysis = {}
 
     for ticker in tickers:
-        progress.update_status(agent_id, ticker, "Analyzing price data")
-
-        # Get the historical price data
+        progress.update_status(agent_id, ticker, "Fetching price data and calculating volatility")
+    
         prices = get_prices(
-            ticker=ticker,
-            start_date=start_date,
-            end_date=end_date,
+            symbol=ticker,   # <-- change this
+            start_date=data["start_date"],
+            end_date=data["end_date"],
             api_key=api_key,
         )
+
 
         if not prices:
             progress.update_status(agent_id, ticker, "Failed: No price data found")

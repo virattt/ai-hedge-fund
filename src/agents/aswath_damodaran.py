@@ -33,40 +33,58 @@ def aswath_damodaran_agent(state: AgentState, agent_id: str = "aswath_damodaran_
       • Cross-check with relative valuation (PE vs. Fwd PE sector median proxy)
     Produces a trading signal and explanation in Damodaran's analytical voice.
     """
-    data      = state["data"]
-    end_date  = data["end_date"]
-    tickers   = data["tickers"]
-    api_key  = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    data = state["data"]
+    end_date = data["end_date"]
+    tickers = data["tickers"]
+    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
 
     analysis_data: dict[str, dict] = {}
     damodaran_signals: dict[str, dict] = {}
 
+    # ------------------- Safe helpers -------------------
+    def _safe_first_metric(metrics_list):
+        try:
+            return metrics_list[0] if metrics_list else None
+        except Exception:
+            return None
+
+    def _safe_search_line_items(ticker: str, fields: list[str]) -> list:
+        results = []
+        for field in fields:
+            try:
+                items = search_line_items(ticker, field)  # must be a string
+                if items:
+                    results.extend(items)
+            except Exception as e:
+                progress.log(f"Warning: failed to fetch {field} for {ticker}: {e}")
+        return results
+
+    # ------------------- Agent loop -------------------
     for ticker in tickers:
-        # ─── Fetch core data ────────────────────────────────────────────────────
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=5, api_key=api_key)
+        financial_metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=5, api_key=api_key)
+        metrics = _safe_first_metric(financial_metrics)
+        if not metrics:
+            progress.update_status(agent_id, ticker, "Failed: No financial metrics found")
+            continue
 
         progress.update_status(agent_id, ticker, "Fetching financial line items")
-        line_items = search_line_items(
-            ticker,
-            [
-                "free_cash_flow",
-                "ebit",
-                "interest_expense",
-                "capital_expenditure",
-                "depreciation_and_amortization",
-                "outstanding_shares",
-                "net_income",
-                "total_debt",
-            ],
-            end_date,
-            api_key=api_key,
-        )
+        financials = get_financial_metrics(ticker, end_date, period="ttm", limit=5, api_key=api_key)
+        line_items = _safe_search_line_items(ticker, [
+            "free_cash_flow",
+            "ebit",
+            "interest_expense",
+            "capital_expenditure",
+            "depreciation_and_amortization",
+            "outstanding_shares",
+            "net_income",
+            "total_debt",
+        ], financials)
 
         progress.update_status(agent_id, ticker, "Getting market cap")
         market_cap = get_market_cap(ticker, end_date, api_key=api_key)
 
-        # ─── Analyses ───────────────────────────────────────────────────────────
+        # ------------------- Analyses -------------------
         progress.update_status(agent_id, ticker, "Analyzing growth and reinvestment")
         growth_analysis = analyze_growth_and_reinvestment(metrics, line_items)
 
@@ -79,20 +97,23 @@ def aswath_damodaran_agent(state: AgentState, agent_id: str = "aswath_damodaran_
         progress.update_status(agent_id, ticker, "Assessing relative valuation")
         relative_val_analysis = analyze_relative_valuation(metrics)
 
-        # ─── Score & margin of safety ──────────────────────────────────────────
+        # ------------------- Score & margin of safety -------------------
         total_score = (
             growth_analysis["score"]
             + risk_analysis["score"]
             + relative_val_analysis["score"]
         )
-        max_score = growth_analysis["max_score"] + risk_analysis["max_score"] + relative_val_analysis["max_score"]
+        max_score = (
+            growth_analysis["max_score"]
+            + risk_analysis["max_score"]
+            + relative_val_analysis["max_score"]
+        )
 
-        intrinsic_value = intrinsic_val_analysis["intrinsic_value"]
+        intrinsic_value = intrinsic_val_analysis.get("intrinsic_value")
         margin_of_safety = (
             (intrinsic_value - market_cap) / market_cap if intrinsic_value and market_cap else None
         )
 
-        # Decision rules (Damodaran tends to act with ~20-25 % MOS)
         if margin_of_safety is not None and margin_of_safety >= 0.25:
             signal = "bullish"
         elif margin_of_safety is not None and margin_of_safety <= -0.25:
@@ -112,7 +133,7 @@ def aswath_damodaran_agent(state: AgentState, agent_id: str = "aswath_damodaran_
             "market_cap": market_cap,
         }
 
-        # ─── LLM: craft Damodaran-style narrative ──────────────────────────────
+        # ------------------- LLM narrative -------------------
         progress.update_status(agent_id, ticker, "Generating Damodaran analysis")
         damodaran_output = generate_damodaran_output(
             ticker=ticker,
@@ -120,22 +141,19 @@ def aswath_damodaran_agent(state: AgentState, agent_id: str = "aswath_damodaran_
             state=state,
             agent_id=agent_id,
         )
-
         damodaran_signals[ticker] = damodaran_output.model_dump()
-
         progress.update_status(agent_id, ticker, "Done", analysis=damodaran_output.reasoning)
 
-    # ─── Push message back to graph state ──────────────────────────────────────
+    # ------------------- Push results -------------------
     message = HumanMessage(content=json.dumps(damodaran_signals), name=agent_id)
 
-    if state["metadata"]["show_reasoning"]:
+    if state["metadata"].get("show_reasoning"):
         show_agent_reasoning(damodaran_signals, "Aswath Damodaran Agent")
 
     state["data"]["analyst_signals"][agent_id] = damodaran_signals
     progress.update_status(agent_id, None, "Done")
 
     return {"messages": [message], "data": state["data"]}
-
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Helper analyses
@@ -182,7 +200,7 @@ def analyze_growth_and_reinvestment(metrics: list, line_items: list) -> dict[str
         details.append("Flat or declining FCFF")
 
     # Reinvestment efficiency (ROIC vs. 10 % hurdle)
-    latest = metrics[0]
+    latest = _safe_first_metric(metrics)
     if latest.return_on_invested_capital and latest.return_on_invested_capital > 0.10:
         score += 1
         details.append(f"ROIC {latest.return_on_invested_capital:.1%} (> 10 %)")
@@ -201,7 +219,7 @@ def analyze_risk_profile(metrics: list, line_items: list) -> dict[str, any]:
     if not metrics:
         return {"score": 0, "max_score": max_score, "details": "No metrics"}
 
-    latest = metrics[0]
+    latest = _safe_first_metric(metrics)
     score, details = 0, []
 
     # Beta
@@ -293,7 +311,7 @@ def calculate_intrinsic_value_dcf(metrics: list, line_items: list, risk_analysis
     if not metrics or len(metrics) < 2 or not line_items:
         return {"intrinsic_value": None, "details": ["Insufficient data"]}
 
-    latest_m = metrics[0]
+    latest_m = _safe_first_metric(metrics)
     fcff0 = getattr(latest_m, "free_cash_flow", None)
     shares = getattr(line_items[0], "outstanding_shares", None)
     if not fcff0 or not shares:

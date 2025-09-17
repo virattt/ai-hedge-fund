@@ -51,29 +51,28 @@ def stanley_druckenmiller_agent(state: AgentState, agent_id: str = "stanley_druc
         #   - Valuation: net_income, free_cash_flow, ebit, ebitda
         #   - Leverage: total_debt, shareholders_equity
         #   - Liquidity: cash_and_equivalents
-        financial_line_items = search_line_items(
-            ticker,
-            [
-                "revenue",
-                "earnings_per_share",
-                "net_income",
-                "operating_income",
-                "gross_margin",
-                "operating_margin",
-                "free_cash_flow",
-                "capital_expenditure",
-                "cash_and_equivalents",
-                "total_debt",
-                "shareholders_equity",
-                "outstanding_shares",
-                "ebit",
-                "ebitda",
-            ],
-            end_date,
-            period="annual",
-            limit=5,
-            api_key=api_key,
-        )
+        keywords = [
+            "revenue",
+            "earnings_per_share",
+            "net_income",
+            "operating_income",
+            "gross_margin",
+            "operating_margin",
+            "free_cash_flow",
+            "capital_expenditure",
+            "cash_and_equivalents",
+            "total_debt",
+            "shareholders_equity",
+            "outstanding_shares",
+            "ebit",
+            "ebitda",
+        ]
+
+        financial_line_items = {}
+        for kw in keywords:
+            # metrics is the output from get_financial_metrics
+            financial_line_items.update(search_line_items(metrics, kw))
+
 
         progress.update_status(agent_id, ticker, "Getting market cap")
         market_cap = get_market_cap(ticker, end_date, api_key=api_key)
@@ -85,7 +84,7 @@ def stanley_druckenmiller_agent(state: AgentState, agent_id: str = "stanley_druc
         company_news = get_company_news(ticker, end_date, limit=50, api_key=api_key)
 
         progress.update_status(agent_id, ticker, "Fetching recent price data for momentum")
-        prices = get_prices(ticker, start_date=start_date, end_date=end_date, api_key=api_key)
+        prices = get_prices(symbol=ticker, start_date=start_date, end_date=end_date, api_key=api_key)
 
         progress.update_status(agent_id, ticker, "Analyzing growth & momentum")
         growth_momentum_analysis = analyze_growth_and_momentum(financial_line_items, prices)
@@ -159,7 +158,7 @@ def stanley_druckenmiller_agent(state: AgentState, agent_id: str = "stanley_druc
     state["data"]["analyst_signals"][agent_id] = druck_analysis
 
     progress.update_status(agent_id, None, "Done")
-    
+
     return {"messages": [message], "data": state["data"]}
 
 

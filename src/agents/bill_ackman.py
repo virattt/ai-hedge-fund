@@ -35,26 +35,23 @@ def bill_ackman_agent(state: AgentState, agent_id: str = "bill_ackman_agent"):
         
         progress.update_status(agent_id, ticker, "Gathering financial line items")
         # Request multiple periods of data (annual or TTM) for a more robust long-term view.
-        financial_line_items = search_line_items(
-            ticker,
-            [
-                "revenue",
-                "operating_margin",
-                "debt_to_equity",
-                "free_cash_flow",
-                "total_assets",
-                "total_liabilities",
-                "dividends_and_other_cash_distributions",
-                "outstanding_shares",
-                # Optional: intangible_assets if available
-                # "intangible_assets"
-            ],
-            end_date,
-            period="annual",
-            limit=5,
-            api_key=api_key,
-        )
-        
+        keywords = [
+            "revenue",
+            "operating_margin",
+            "debt_to_equity",
+            "free_cash_flow",
+            "total_assets",
+            "total_liabilities",
+            "dividends_and_other_cash_distributions",
+            "outstanding_shares",
+            # Optional: intangible_assets if available
+            # "intangible_assets"
+        ]
+        financial_line_items = {}
+        for kw in keywords:
+            # metrics is the output from get_financial_metrics
+            financial_line_items.update(search_line_items(metrics, kw))
+
         progress.update_status(agent_id, ticker, "Getting market cap")
         market_cap = get_market_cap(ticker, end_date, api_key=api_key)
         
@@ -112,17 +109,17 @@ def bill_ackman_agent(state: AgentState, agent_id: str = "bill_ackman_agent"):
         }
         
         progress.update_status(agent_id, ticker, "Done", analysis=ackman_output.reasoning)
-    
+
     # Wrap results in a single message for the chain
     message = HumanMessage(
         content=json.dumps(ackman_analysis),
         name=agent_id
     )
-    
+
     # Show reasoning if requested
     if state["metadata"]["show_reasoning"]:
         show_agent_reasoning(ackman_analysis, "Bill Ackman Agent")
-    
+
     # Add signals to the overall state
     state["data"]["analyst_signals"][agent_id] = ackman_analysis
 
@@ -191,7 +188,7 @@ def analyze_business_quality(metrics: list, financial_line_items: list) -> dict:
         details.append("No free cash flow data across periods.")
     
     # 3. Return on Equity (ROE) check from the latest metrics
-    latest_metrics = metrics[0]
+    latest_metrics = _safe_first_metric(metrics)
     if latest_metrics.return_on_equity and latest_metrics.return_on_equity > 0.15:
         score += 2
         details.append(f"High ROE of {latest_metrics.return_on_equity:.1%}, indicating a competitive advantage.")

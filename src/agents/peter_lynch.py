@@ -3,7 +3,7 @@ from src.tools.api import (
     get_market_cap,
     search_line_items,
     get_insider_trades,
-    get_company_news,
+    get_financial_metrics
 )
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
@@ -23,6 +23,35 @@ class PeterLynchSignal(BaseModel):
     confidence: float
     reasoning: str
 
+def call_llm_json(prompt: str, model: str = "gpt-4o") -> dict:
+    """
+    Wrapper around call_llm that enforces JSON response format.
+    """
+    return call_llm(prompt, model=model, response_format="json")
+
+def simulate_company_news(
+    ticker: str,
+    end_date: str,
+    limit: int = 50,
+) -> list[dict]:
+    """
+    Simulates company news using OpenAI.
+    """
+    prompt = f"""
+    Generate up to {limit} short news-style bullet points about {ticker} as of {end_date}.
+    Include sentiment (positive/negative/neutral) and reasoning.
+    """
+
+    try:
+        response = call_llm_json(
+            model="gpt-4o",
+            system_prompt="You are a financial news generator.",
+            user_prompt=prompt,
+        )
+        return response.get("news", [])
+    except Exception as e:
+        print(f"Error simulating news for {ticker}: {e}")
+        return []
 
 def peter_lynch_agent(state: AgentState, agent_id: str = "peter_lynch_agent"):
     """
@@ -48,28 +77,32 @@ def peter_lynch_agent(state: AgentState, agent_id: str = "peter_lynch_agent"):
 
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Gathering financial line items")
-        # Relevant line items for Peter Lynch's approach
-        financial_line_items = search_line_items(
-            ticker,
-            [
-                "revenue",
-                "earnings_per_share",
-                "net_income",
-                "operating_income",
-                "gross_margin",
-                "operating_margin",
-                "free_cash_flow",
-                "capital_expenditure",
-                "cash_and_equivalents",
-                "total_debt",
-                "shareholders_equity",
-                "outstanding_shares",
-            ],
-            end_date,
-            period="annual",
-            limit=5,
-            api_key=api_key,
+        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=5, api_key=api_key)
+        line_items = search_line_items(
+            metrics,
+            "earnings",
         )
+        # Relevant line items for Peter Lynch's approach
+
+        keywords = [
+            "revenue",
+            "earnings_per_share",
+            "net_income",
+            "operating_income",
+            "gross_margin",
+            "operating_margin",
+            "free_cash_flow",
+            "capital_expenditure",
+            "cash_and_equivalents",
+            "total_debt",
+            "shareholders_equity",
+            "outstanding_shares",
+        ]
+        financial_line_items = {}
+        for kw in keywords:
+            # metrics is the output from get_financial_metrics
+            financial_line_items.update(search_line_items(metrics, kw))
+        financial_line_items.update(search_line_items(metrics, "growth"))
 
         progress.update_status(agent_id, ticker, "Getting market cap")
         market_cap = get_market_cap(ticker, end_date, api_key=api_key)
@@ -77,8 +110,11 @@ def peter_lynch_agent(state: AgentState, agent_id: str = "peter_lynch_agent"):
         progress.update_status(agent_id, ticker, "Fetching insider trades")
         insider_trades = get_insider_trades(ticker, end_date, limit=50, api_key=api_key)
 
-        progress.update_status(agent_id, ticker, "Fetching company news")
-        company_news = get_company_news(ticker, end_date, limit=50, api_key=api_key)
+        #progress.update_status(agent_id, ticker, "Fetching company news")
+        #company_news = simulate_company_news(ticker, end_date, limit=50)
+
+        # Simulate company news sentiment instead of fetching from API
+        news_data = simulate_company_news(ticker, end_date, limit=50)
 
         # Perform sub-analyses:
         progress.update_status(agent_id, ticker, "Analyzing growth")
@@ -91,10 +127,23 @@ def peter_lynch_agent(state: AgentState, agent_id: str = "peter_lynch_agent"):
         valuation_analysis = analyze_lynch_valuation(financial_line_items, market_cap)
 
         progress.update_status(agent_id, ticker, "Analyzing sentiment")
-        sentiment_analysis = analyze_sentiment(company_news)
+        #sentiment_analysis = analyze_sentiment(company_news)
 
         progress.update_status(agent_id, ticker, "Analyzing insider activity")
         insider_activity = analyze_insider_activity(insider_trades)
+
+        # Simulate company news to generate sentiment analysis
+        news_data = simulate_company_news(ticker, end_date)
+        positive = sum(1 for n in news_data if n.get("sentiment") == "positive")
+        negative = sum(1 for n in news_data if n.get("sentiment") == "negative")
+        neutral  = sum(1 for n in news_data if n.get("sentiment") == "neutral")
+        total = max(positive + negative + neutral, 1)
+        sentiment_score = (positive - negative) / total * 100
+
+        sentiment_analysis = {
+        "score": max(min(sentiment_score, 10), 0),  # normalize to match max_possible_score scale
+        "details": f"{positive} positive, {negative} negative, {neutral} neutral news items"
+}
 
         # Combine partial scores with weights typical for Peter Lynch:
         #   30% Growth, 25% Valuation, 20% Fundamentals,

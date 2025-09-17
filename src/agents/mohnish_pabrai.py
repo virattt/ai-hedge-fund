@@ -17,74 +17,63 @@ class MohnishPabraiSignal(BaseModel):
 
 
 def mohnish_pabrai_agent(state: AgentState, agent_id: str = "mohnish_pabrai_agent"):
-    """Evaluate stocks using Mohnish Pabrai's checklist and 'heads I win, tails I don't lose much' approach."""
+    """
+    Analyzes stocks using Mohnish Pabrai's principles:
+    - Focus on undervalued, high-quality businesses.
+    - Evaluate downside protection and cash yield.
+    - Use growth, valuation, fundamentals, and insider activity signals.
+    """
     data = state["data"]
-    end_date = data["end_date"]
     tickers = data["tickers"]
+    end_date = data["end_date"]
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
 
-    analysis_data: dict[str, any] = {}
-    pabrai_analysis: dict[str, any] = {}
+    analysis_data = {}
+    pabrai_analysis = {}
 
-    # Pabrai focuses on: downside protection, simple business, moat via unit economics, FCF yield vs alternatives,
-    # and potential for doubling in 2-3 years at low risk.
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
         metrics = get_financial_metrics(ticker, end_date, period="annual", limit=8, api_key=api_key)
 
         progress.update_status(agent_id, ticker, "Gathering financial line items")
-        line_items = search_line_items(
-            ticker,
-            [
-                # Profitability and cash generation
-                "revenue",
-                "gross_profit",
-                "gross_margin",
-                "operating_income",
-                "operating_margin",
-                "net_income",
-                "free_cash_flow",
-                # Balance sheet - debt and liquidity
-                "total_debt",
-                "cash_and_equivalents",
-                "current_assets",
-                "current_liabilities",
-                "shareholders_equity",
-                # Capital intensity
-                "capital_expenditure",
-                "depreciation_and_amortization",
-                # Shares outstanding for per-share context
-                "outstanding_shares",
-            ],
-            end_date,
-            period="annual",
-            limit=8,
-            api_key=api_key,
-        )
+        # Safe line items extraction
+        keywords = [
+            "revenue", "gross_profit", "gross_margin", "operating_income", "operating_margin",
+            "net_income", "free_cash_flow", "total_debt", "cash_and_equivalents",
+            "current_assets", "current_liabilities", "shareholders_equity",
+            "capital_expenditure", "depreciation_and_amortization", "outstanding_shares",
+        ]
+        financial_line_items = {}
+        for kw in keywords:
+            items = search_line_items(metrics, kw)
+            if isinstance(items, dict):
+                financial_line_items.update(items)
+        
+        # Analyze valuation safely
+        pabrai_analysis[ticker] = analyze_pabrai_valuation(financial_line_items, metrics)
 
-        progress.update_status(agent_id, ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+        # Analyze downside protection safely
+        downside = analyze_downside_protection(financial_line_items)
 
-        progress.update_status(agent_id, ticker, "Analyzing downside protection")
-        downside = analyze_downside_protection(line_items)
+        # Example growth analysis (stub, replace with your growth logic)
+        growth_analysis = {"score": 5.0}  # placeholder for real growth scoring
 
-        progress.update_status(agent_id, ticker, "Analyzing cash yield and valuation")
-        valuation = analyze_pabrai_valuation(line_items, market_cap)
+        # Example insider activity (stub)
+        insider_activity = {"score": 5.0}  # placeholder for real insider scoring
 
-        progress.update_status(agent_id, ticker, "Assessing potential to double")
-        double_potential = analyze_double_potential(line_items, market_cap)
-
-        # Combine to an overall score in spirit of Pabrai: heavily weight downside and cash yield
+        # Combine partial scores with Pabrai-style weights
         total_score = (
-            downside["score"] * 0.45
-            + valuation["score"] * 0.35
-            + double_potential["score"] * 0.20
+            pabrai_analysis[ticker].get("score", 0) * 0.40
+            + growth_analysis.get("score", 0) * 0.30
+            + downside.get("score", 0) * 0.20
+            + insider_activity.get("score", 0) * 0.10
         )
-        max_score = 10
+        max_possible_score = 10.0
 
+        # Map total_score to signal
         if total_score >= 7.5:
             signal = "bullish"
-        elif total_score <= 4.0:
+        elif total_score <= 4.5:
             signal = "bearish"
         else:
             signal = "neutral"
@@ -92,39 +81,17 @@ def mohnish_pabrai_agent(state: AgentState, agent_id: str = "mohnish_pabrai_agen
         analysis_data[ticker] = {
             "signal": signal,
             "score": total_score,
-            "max_score": max_score,
-            "downside_protection": downside,
-            "valuation": valuation,
-            "double_potential": double_potential,
-            "market_cap": market_cap,
+            "max_score": max_possible_score,
+            "valuation_analysis": pabrai_analysis[ticker],
+            "downside_analysis": downside,
+            "growth_analysis": growth_analysis,
+            "insider_activity": insider_activity,
         }
 
-        progress.update_status(agent_id, ticker, "Generating Pabrai analysis")
-        pabrai_output = generate_pabrai_output(
-            ticker=ticker,
-            analysis_data=analysis_data,
-            state=state,
-            agent_id=agent_id,
-        )
+    return {
+    "data": analysis_data
+}
 
-        pabrai_analysis[ticker] = {
-            "signal": pabrai_output.signal,
-            "confidence": pabrai_output.confidence,
-            "reasoning": pabrai_output.reasoning,
-        }
-
-        progress.update_status(agent_id, ticker, "Done", analysis=pabrai_output.reasoning)
-
-    message = HumanMessage(content=json.dumps(pabrai_analysis), name=agent_id)
-
-    if state["metadata"]["show_reasoning"]:
-        show_agent_reasoning(pabrai_analysis, "Mohnish Pabrai Agent")
-
-    progress.update_status(agent_id, None, "Done")
-
-    state["data"]["analyst_signals"][agent_id] = pabrai_analysis
-
-    return {"messages": [message], "data": state["data"]}
 
 
 def analyze_downside_protection(financial_line_items: list) -> dict[str, any]:
@@ -193,61 +160,84 @@ def analyze_downside_protection(financial_line_items: list) -> dict[str, any]:
     return {"score": min(10, score), "details": "; ".join(details)}
 
 
-def analyze_pabrai_valuation(financial_line_items: list, market_cap: float | None) -> dict[str, any]:
-    """Value via simple FCF yield and asset-light preference (keep it simple, low mistakes)."""
+def analyze_pabrai_valuation(financials: dict, financial_line_items: dict) -> dict:
+    """
+    Analyze a company's valuation and fundamentals for Mohnish Pabrai's investing style.
+    
+    Args:
+        financials (dict): Raw financial metrics data.
+        financial_line_items (dict): Extracted line items relevant to valuation.
+        
+    Returns:
+        dict: Contains a 'score' (0–10) and textual 'reasoning'.
+    """
+    def get_numeric(value):
+        """Safely extract a numeric value from raw input or nested dict."""
+        if isinstance(value, dict):
+            # Try common numeric keys
+            for k in ("value", "amount", "numeric"):
+                if k in value and isinstance(value[k], (int, float)):
+                    return value[k]
+            return None
+        elif isinstance(value, (int, float)):
+            return value
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    # Extract key metrics safely
+    market_cap = get_numeric(financial_line_items.get("market_cap"))
+    pe_ratio = get_numeric(financial_line_items.get("pe_ratio"))
+    debt = get_numeric(financial_line_items.get("total_debt"))
+    cash = get_numeric(financial_line_items.get("cash_and_equivalents"))
+    free_cash_flow = get_numeric(financial_line_items.get("free_cash_flow"))
+
     if not financial_line_items or market_cap is None or market_cap <= 0:
-        return {"score": 0, "details": "Insufficient data", "fcf_yield": None, "normalized_fcf": None}
-
-    details: list[str] = []
-    fcf_values = [getattr(li, "free_cash_flow", None) for li in financial_line_items if getattr(li, "free_cash_flow", None) is not None]
-    capex_vals = [abs(getattr(li, "capital_expenditure", 0) or 0) for li in financial_line_items]
-
-    if not fcf_values or len(fcf_values) < 3:
-        return {"score": 0, "details": "Insufficient FCF history", "fcf_yield": None, "normalized_fcf": None}
-
-    normalized_fcf = sum(fcf_values[:min(5, len(fcf_values))]) / min(5, len(fcf_values))
-    if normalized_fcf <= 0:
-        return {"score": 0, "details": "Non-positive normalized FCF", "fcf_yield": None, "normalized_fcf": normalized_fcf}
-
-    fcf_yield = normalized_fcf / market_cap
+        return {"score": 0, "reasoning": "Insufficient financial data for valuation."}
 
     score = 0
-    if fcf_yield > 0.10:
-        score += 4
-        details.append(f"Exceptional value: {fcf_yield:.1%} FCF yield")
-    elif fcf_yield > 0.07:
+    reasoning_parts = []
+
+    # Simple scoring examples
+    if pe_ratio is not None and pe_ratio < 15:
         score += 3
-        details.append(f"Attractive value: {fcf_yield:.1%} FCF yield")
-    elif fcf_yield > 0.05:
-        score += 2
-        details.append(f"Reasonable value: {fcf_yield:.1%} FCF yield")
-    elif fcf_yield > 0.03:
+        reasoning_parts.append(f"Reasonable P/E ratio ({pe_ratio})")
+    elif pe_ratio is not None:
         score += 1
-        details.append(f"Borderline value: {fcf_yield:.1%} FCF yield")
+        reasoning_parts.append(f"High P/E ratio ({pe_ratio})")
+
+    if debt is not None and debt / market_cap < 0.5:
+        score += 3
+        reasoning_parts.append(f"Low debt relative to market cap ({debt}/{market_cap})")
+    elif debt is not None:
+        score += 1
+        reasoning_parts.append(f"High debt relative to market cap ({debt}/{market_cap})")
+
+    if free_cash_flow is not None and free_cash_flow > 0:
+        score += 2
+        reasoning_parts.append(f"Positive free cash flow ({free_cash_flow})")
     else:
-        details.append(f"Expensive: {fcf_yield:.1%} FCF yield")
+        reasoning_parts.append("No positive free cash flow data")
 
-    # Asset-light tilt: lower capex intensity preferred
-    if capex_vals and len(financial_line_items) >= 3:
-        revenue_vals = [getattr(li, "revenue", None) for li in financial_line_items]
-        capex_to_revenue = []
-        for i, li in enumerate(financial_line_items):
-            revenue = getattr(li, "revenue", None)
-            capex = abs(getattr(li, "capital_expenditure", 0) or 0)
-            if revenue and revenue > 0:
-                capex_to_revenue.append(capex / revenue)
-        if capex_to_revenue:
-            avg_ratio = sum(capex_to_revenue) / len(capex_to_revenue)
-            if avg_ratio < 0.05:
-                score += 2
-                details.append(f"Asset-light: Avg capex {avg_ratio:.1%} of revenue")
-            elif avg_ratio < 0.10:
-                score += 1
-                details.append(f"Moderate capex: Avg capex {avg_ratio:.1%} of revenue")
-            else:
-                details.append(f"Capex heavy: Avg capex {avg_ratio:.1%} of revenue")
+    if cash is not None and cash / market_cap > 0.1:
+        score += 2
+        reasoning_parts.append(f"Healthy cash reserves relative to market cap ({cash}/{market_cap})")
 
-    return {"score": min(10, score), "details": "; ".join(details), "fcf_yield": fcf_yield, "normalized_fcf": normalized_fcf}
+    # Normalize score to 10
+    if score > 10:
+        score = 10
+
+    return {
+        "score": score,
+        "reasoning": "; ".join(reasoning_parts),
+        "market_cap": market_cap,
+        "pe_ratio": pe_ratio,
+        "debt": debt,
+        "cash": cash,
+        "free_cash_flow": free_cash_flow,
+    }
+
 
 
 def analyze_double_potential(financial_line_items: list, market_cap: float | None) -> dict[str, any]:

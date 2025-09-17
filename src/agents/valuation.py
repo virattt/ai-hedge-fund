@@ -32,16 +32,17 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
 
         # --- Historical financial metrics ---
         financial_metrics = get_financial_metrics(
-            ticker=ticker,
+            symbol=ticker,
             end_date=end_date,
             period="ttm",
             limit=8,
             api_key=api_key,
         )
-        if not financial_metrics:
+        if not financial_metrics or not isinstance(financial_metrics, list):
             progress.update_status(agent_id, ticker, "Failed: No financial metrics found")
             continue
-        most_recent_metrics = financial_metrics[0]
+
+        most_recent_metrics = financial__safe_first_metric(metrics) if financial_metrics else {}
 
         # --- Enhanced line‑items ---
         progress.update_status(agent_id, ticker, "Gathering comprehensive line items")
@@ -212,7 +213,7 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
     state["data"]["analyst_signals"][agent_id] = valuation_analysis
 
     progress.update_status(agent_id, None, "Done")
-    
+
     return {"messages": [msg], "data": data}
 
 #############################
@@ -280,7 +281,7 @@ def calculate_ev_ebitda_value(financial_metrics: list):
     """Implied equity value via median EV/EBITDA multiple."""
     if not financial_metrics:
         return 0
-    m0 = financial_metrics[0]
+    m0 = financial__safe_first_metric(metrics)
     if not (m0.enterprise_value and m0.enterprise_value_to_ebitda_ratio):
         return 0
     if m0.enterprise_value_to_ebitda_ratio == 0:

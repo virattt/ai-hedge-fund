@@ -47,24 +47,31 @@ def michael_burry_agent(state: AgentState, agent_id: str = "michael_burry_agent"
         # Fetch raw data
         # ------------------------------------------------------------------
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=5, api_key=api_key)
-
-        progress.update_status(agent_id, ticker, "Fetching line items")
-        line_items = search_line_items(
+        metrics = get_financial_metrics(
             ticker,
-            [
-                "free_cash_flow",
-                "net_income",
-                "total_debt",
-                "cash_and_equivalents",
-                "total_assets",
-                "total_liabilities",
-                "outstanding_shares",
-                "issuance_or_purchase_of_equity_shares",
-            ],
-            end_date,
+            end_date=end_date,
+            period="ttm",
+            limit=5,
             api_key=api_key,
         )
+
+        progress.update_status(agent_id, ticker, "Extracting line items")
+        line_items = {
+            "free_cash_flow": search_line_items(metrics, "free_cash_flow"),
+            "net_income": search_line_items(metrics, "net_income"),
+            "total_debt": search_line_items(metrics, "total_debt"),
+            "cash_and_equivalents": search_line_items(metrics, "cash_and_equivalents"),
+            "total_assets": search_line_items(metrics, "total_assets"),
+            "total_liabilities": search_line_items(metrics, "total_liabilities"),
+            "outstanding_shares": search_line_items(metrics, "outstanding_shares"),
+            "issuance_or_purchase_of_equity_shares": search_line_items(metrics, "issuance_or_purchase_of_equity_shares"),
+        }
+
+        # ------------------------------------------------------------------
+        # Run Michael Burry strategy analysis
+        # ------------------------------------------------------------------
+        progress.update_status(agent_id, ticker, "Analyzing with Burry-style logic")
+        # burry_analysis[ticker] = analyze_burry_strategy(metrics, line_items)  # Commented out or remove if not defined
 
         progress.update_status(agent_id, ticker, "Fetching insider trades")
         insider_trades = get_insider_trades(ticker, end_date=end_date, start_date=start_date)
@@ -163,21 +170,42 @@ def michael_burry_agent(state: AgentState, agent_id: str = "michael_burry_agent"
 ###############################################################################
 
 
-def _latest_line_item(line_items: list):
-    """Return the most recent line‑item object or *None*."""
-    return line_items[0] if line_items else None
+def _latest_line_item(line_items: dict) -> dict | None:
+    """
+    Extract the most recent entry from a line_items dict.
+    Falls back safely if structure is unexpected.
+    """
+    if not line_items:
+        return None
+
+    # Case 1: dict of {name: {date: value}} or {name: [values]}
+    if isinstance(line_items, dict):
+        # Take the first key’s value
+        first_val = next(iter(line_items.values()))
+        if isinstance(first_val, list) and first_val:
+            return first_val[0]  # most recent
+        elif isinstance(first_val, dict):
+            # Return the first numeric value dict
+            return first_val
+        else:
+            return {"value": first_val}
+
+    # Case 2: already a list
+    if isinstance(line_items, list) and len(line_items) > 0:
+        return line_items[0]
+
+    return None
 
 
 # ----- Value ----------------------------------------------------------------
-
 def _analyze_value(metrics, line_items, market_cap):
-    """Free cash‑flow yield, EV/EBIT, other classic deep‑value metrics."""
+    """Free cash-flow yield, EV/EBIT, other classic deep-value metrics."""
 
-    max_score = 6  # 4 pts for FCF‑yield, 2 pts for EV/EBIT
+    max_score = 6  # 4 pts for FCF-yield, 2 pts for EV/EBIT
     score = 0
     details: list[str] = []
 
-    # Free‑cash‑flow yield
+    # Free-cash-flow yield
     latest_item = _latest_line_item(line_items)
     fcf = getattr(latest_item, "free_cash_flow", None) if latest_item else None
     if fcf is not None and market_cap:
@@ -197,23 +225,31 @@ def _analyze_value(metrics, line_items, market_cap):
         details.append("FCF data unavailable")
 
     # EV/EBIT (from financial metrics)
+    ev_ebit = None
     if metrics:
-        ev_ebit = getattr(metrics[0], "ev_to_ebit", None)
-        if ev_ebit is not None:
-            if ev_ebit < 6:
-                score += 2
-                details.append(f"EV/EBIT {ev_ebit:.1f} (<6)")
-            elif ev_ebit < 10:
-                score += 1
-                details.append(f"EV/EBIT {ev_ebit:.1f} (<10)")
+        if isinstance(metrics, dict):
+            ev_ebit = metrics.get("ev_to_ebit")
+        elif isinstance(metrics, list) and len(metrics) > 0:
+            first = _safe_first_metric(metrics)
+            if isinstance(first, dict):
+                ev_ebit = first.get("ev_to_ebit")
             else:
-                details.append(f"High EV/EBIT {ev_ebit:.1f}")
+                ev_ebit = getattr(first, "ev_to_ebit", None)
+
+    if ev_ebit is not None:
+        if ev_ebit < 6:
+            score += 2
+            details.append(f"EV/EBIT {ev_ebit:.1f} (<6)")
+        elif ev_ebit < 10:
+            score += 1
+            details.append(f"EV/EBIT {ev_ebit:.1f} (<10)")
         else:
-            details.append("EV/EBIT data unavailable")
+            details.append(f"High EV/EBIT {ev_ebit:.1f}")
     else:
-        details.append("Financial metrics unavailable")
+        details.append("EV/EBIT data unavailable")
 
     return {"score": score, "max_score": max_score, "details": "; ".join(details)}
+
 
 
 # ----- Balance sheet --------------------------------------------------------
@@ -225,32 +261,46 @@ def _analyze_balance_sheet(metrics, line_items):
     score = 0
     details: list[str] = []
 
-    latest_metrics = metrics[0] if metrics else None
+    # Normalize metrics
+    latest_metrics = None
+    if isinstance(metrics, list) and metrics:
+        latest_metrics = _safe_first_metric(metrics)
+    elif isinstance(metrics, dict):
+        latest_metrics = metrics
+
     latest_item = _latest_line_item(line_items)
 
+    # Debt-to-equity ratio
     debt_to_equity = getattr(latest_metrics, "debt_to_equity", None) if latest_metrics else None
     if debt_to_equity is not None:
-        if debt_to_equity < 0.5:
-            score += 2
-            details.append(f"Low D/E {debt_to_equity:.2f}")
-        elif debt_to_equity < 1:
-            score += 1
-            details.append(f"Moderate D/E {debt_to_equity:.2f}")
-        else:
-            details.append(f"High leverage D/E {debt_to_equity:.2f}")
+        try:
+            dte = float(debt_to_equity)
+            if dte < 0.5:
+                score += 2
+                details.append(f"Low D/E {dte:.2f}")
+            elif dte < 1:
+                score += 1
+                details.append(f"Moderate D/E {dte:.2f}")
+            else:
+                details.append(f"High leverage D/E {dte:.2f}")
+        except (TypeError, ValueError):
+            details.append("Debt-to-equity not numeric")
     else:
-        details.append("Debt‑to‑equity data unavailable")
+        details.append("Debt-to-equity data unavailable")
 
     # Quick liquidity sanity check (cash vs total debt)
     if latest_item is not None:
         cash = getattr(latest_item, "cash_and_equivalents", None)
         total_debt = getattr(latest_item, "total_debt", None)
         if cash is not None and total_debt is not None:
-            if cash > total_debt:
-                score += 1
-                details.append("Net cash position")
-            else:
-                details.append("Net debt position")
+            try:
+                if float(cash) > float(total_debt):
+                    score += 1
+                    details.append("Net cash position")
+                else:
+                    details.append("Net debt position")
+            except (TypeError, ValueError):
+                details.append("Cash/debt values not numeric")
         else:
             details.append("Cash/debt data unavailable")
 

@@ -23,7 +23,7 @@ def sentiment_analyst_agent(state: AgentState, agent_id: str = "sentiment_analys
 
         # Get the insider trades
         insider_trades = get_insider_trades(
-            ticker=ticker,
+            symbol=ticker,
             end_date=end_date,
             limit=1000,
             api_key=api_key,
