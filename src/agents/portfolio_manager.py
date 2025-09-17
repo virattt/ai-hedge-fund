@@ -67,7 +67,6 @@ def portfolio_management_agent(state: AgentState, agent_id: str = "portfolio_man
 
     progress.update_status(agent_id, None, "Generating trading decisions")
 
-    start = time.time()
     result = generate_trading_decision(
         tickers=tickers,
         signals_by_ticker=signals_by_ticker,
@@ -77,8 +76,6 @@ def portfolio_management_agent(state: AgentState, agent_id: str = "portfolio_man
         agent_id=agent_id,
         state=state,
     )
-    end = time.time()
-    print(f"Time taken: {end - start} seconds")
     message = HumanMessage(
         content=json.dumps({ticker: decision.model_dump() for ticker, decision in result.decisions.items()}),
         name=agent_id,
