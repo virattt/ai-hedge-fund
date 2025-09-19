@@ -95,7 +95,7 @@ if __name__ == "__main__":
         "--margin-requirement",
         type=float,
         default=0.0,
-        help="Margin ratio for short positions, e.g. 0.5 for 50% (default: 0.0)",
+        help="Margin ratio for short positions, e.g. 0.5 for 50%% (default: 0.0)",
     )
     parser.add_argument(
         "--analysts",
