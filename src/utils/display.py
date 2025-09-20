@@ -255,7 +255,9 @@ def print_backtest_results(table_rows: list) -> None:
         print(f"Cash Balance: {Fore.CYAN}${float(cash_str):,.2f}{Style.RESET_ALL}")
         print(f"Total Position Value: {Fore.YELLOW}${float(position_str):,.2f}{Style.RESET_ALL}")
         print(f"Total Value: {Fore.WHITE}${float(total_str):,.2f}{Style.RESET_ALL}")
-        print(f"Return: {latest_summary[10]}")
+        print(f"Portfolio Return: {latest_summary[10]}")
+        if len(latest_summary) > 14 and latest_summary[14]:
+            print(f"Benchmark Return: {latest_summary[14]}")
 
         # Display performance metrics if available
         if latest_summary[11]:  # Sharpe ratio
@@ -317,6 +319,7 @@ def format_backtest_row(
     sharpe_ratio: float = None,
     sortino_ratio: float = None,
     max_drawdown: float = None,
+    benchmark_return_pct: float | None = None,
 ) -> list[any]:
     """Format a row for the backtest results table"""
     # Color the action
@@ -330,6 +333,10 @@ def format_backtest_row(
 
     if is_summary:
         return_color = Fore.GREEN if return_pct >= 0 else Fore.RED
+        benchmark_str = ""
+        if benchmark_return_pct is not None:
+            bench_color = Fore.GREEN if benchmark_return_pct >= 0 else Fore.RED
+            benchmark_str = f"{bench_color}{benchmark_return_pct:+.2f}%{Style.RESET_ALL}"
         return [
             date,
             f"{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY{Style.RESET_ALL}",
@@ -345,6 +352,7 @@ def format_backtest_row(
             f"{Fore.YELLOW}{sharpe_ratio:.2f}{Style.RESET_ALL}" if sharpe_ratio is not None else "",  # Sharpe Ratio
             f"{Fore.YELLOW}{sortino_ratio:.2f}{Style.RESET_ALL}" if sortino_ratio is not None else "",  # Sortino Ratio
             f"{Fore.RED}{max_drawdown:.2f}%{Style.RESET_ALL}" if max_drawdown is not None else "",  # Max Drawdown (signed)
+            benchmark_str,  # Benchmark (S&P 500)
         ]
     else:
         return [

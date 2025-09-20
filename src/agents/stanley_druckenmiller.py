@@ -177,23 +177,25 @@ def analyze_growth_and_momentum(financial_line_items: list, prices: list) -> dic
     raw_score = 0  # We'll sum up a maximum of 9 raw points, then scale to 0–10
 
     #
-    # 1. Revenue Growth
+    # 1. Revenue Growth (annualized CAGR)
     #
     revenues = [fi.revenue for fi in financial_line_items if fi.revenue is not None]
     if len(revenues) >= 2:
         latest_rev = revenues[0]
         older_rev = revenues[-1]
-        if older_rev > 0:
-            rev_growth = (latest_rev - older_rev) / abs(older_rev)
-            if rev_growth > 0.30:
+        num_years = len(revenues) - 1
+        if older_rev > 0 and latest_rev > 0:
+            # CAGR formula: (ending_value/beginning_value)^(1/years) - 1
+            rev_growth = (latest_rev / older_rev) ** (1 / num_years) - 1
+            if rev_growth > 0.08:  # 8% annualized (adjusted for CAGR)
                 raw_score += 3
-                details.append(f"Strong revenue growth: {rev_growth:.1%}")
-            elif rev_growth > 0.15:
+                details.append(f"Strong annualized revenue growth: {rev_growth:.1%}")
+            elif rev_growth > 0.04:  # 4% annualized
                 raw_score += 2
-                details.append(f"Moderate revenue growth: {rev_growth:.1%}")
-            elif rev_growth > 0.05:
+                details.append(f"Moderate annualized revenue growth: {rev_growth:.1%}")
+            elif rev_growth > 0.01:  # 1% annualized
                 raw_score += 1
-                details.append(f"Slight revenue growth: {rev_growth:.1%}")
+                details.append(f"Slight annualized revenue growth: {rev_growth:.1%}")
             else:
                 details.append(f"Minimal/negative revenue growth: {rev_growth:.1%}")
         else:
@@ -202,26 +204,28 @@ def analyze_growth_and_momentum(financial_line_items: list, prices: list) -> dic
         details.append("Not enough revenue data points for growth calculation.")
 
     #
-    # 2. EPS Growth
+    # 2. EPS Growth (annualized CAGR)
     #
     eps_values = [fi.earnings_per_share for fi in financial_line_items if fi.earnings_per_share is not None]
     if len(eps_values) >= 2:
         latest_eps = eps_values[0]
         older_eps = eps_values[-1]
-        # Avoid division by zero
-        if abs(older_eps) > 1e-9:
-            eps_growth = (latest_eps - older_eps) / abs(older_eps)
-            if eps_growth > 0.30:
+        num_years = len(eps_values) - 1
+        # Calculate CAGR for positive EPS values
+        if older_eps > 0 and latest_eps > 0:
+            # CAGR formula for EPS
+            eps_growth = (latest_eps / older_eps) ** (1 / num_years) - 1
+            if eps_growth > 0.08:  # 8% annualized (adjusted for CAGR)
                 raw_score += 3
-                details.append(f"Strong EPS growth: {eps_growth:.1%}")
-            elif eps_growth > 0.15:
+                details.append(f"Strong annualized EPS growth: {eps_growth:.1%}")
+            elif eps_growth > 0.04:  # 4% annualized
                 raw_score += 2
-                details.append(f"Moderate EPS growth: {eps_growth:.1%}")
-            elif eps_growth > 0.05:
+                details.append(f"Moderate annualized EPS growth: {eps_growth:.1%}")
+            elif eps_growth > 0.01:  # 1% annualized
                 raw_score += 1
-                details.append(f"Slight EPS growth: {eps_growth:.1%}")
+                details.append(f"Slight annualized EPS growth: {eps_growth:.1%}")
             else:
-                details.append(f"Minimal/negative EPS growth: {eps_growth:.1%}")
+                details.append(f"Minimal/negative annualized EPS growth: {eps_growth:.1%}")
         else:
             details.append("Older EPS is near zero; skipping EPS growth calculation.")
     else:

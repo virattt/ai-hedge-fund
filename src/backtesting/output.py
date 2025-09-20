@@ -28,6 +28,7 @@ class OutputBuilder:
         portfolio: Portfolio,
         performance_metrics: Mapping[str, float | None],
         total_value: float,
+        benchmark_return_pct: float | None = None,
     ) -> List[list]:
         date_rows: List[list] = []
 
@@ -85,6 +86,7 @@ class OutputBuilder:
                 sharpe_ratio=summary["sharpe_ratio"],
                 sortino_ratio=summary["sortino_ratio"],
                 max_drawdown=summary["max_drawdown"],
+                benchmark_return_pct=benchmark_return_pct,
             )
         )
 
