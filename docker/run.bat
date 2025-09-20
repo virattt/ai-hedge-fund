@@ -4,6 +4,8 @@ setlocal enabledelayedexpansion
 :: Default values
 set TICKER=AAPL,MSFT,NVDA
 set USE_OLLAMA=
+set "OLLAMA_BASE_URL_VALUE=%OLLAMA_BASE_URL%"
+set USE_EXTERNAL_OLLAMA=
 set START_DATE=
 set END_DATE=
 set INITIAL_AMOUNT=100000.0
@@ -25,6 +27,7 @@ echo   --end-date DATE     End date in YYYY-MM-DD format
 echo   --initial-cash AMT  Initial cash position (default: 100000.0)
 echo   --margin-requirement RATIO  Margin requirement ratio (default: 0.0)
 echo   --ollama            Use Ollama for local LLM inference
+echo   --ollama-base-url URL  Use an existing Ollama endpoint (implies --ollama)
 echo   --show-reasoning    Show reasoning from each agent
 echo.
 echo Commands:
@@ -84,6 +87,16 @@ if "%~1"=="--ollama" (
     shift
     goto :parse_args
 )
+if "%~1"=="--ollama-base-url" (
+    set "OLLAMA_BASE_URL_VALUE=%~2"
+    set USE_EXTERNAL_OLLAMA=1
+    if "!USE_OLLAMA!"=="" (
+        set USE_OLLAMA=--ollama
+    )
+    shift
+    shift
+    goto :parse_args
+)
 if "%~1"=="--show-reasoning" (
     set SHOW_REASONING=--show-reasoning
     shift
@@ -134,6 +147,23 @@ call :show_help
 exit /b 1
 
 :check_command
+if defined USE_OLLAMA (
+    if not defined USE_EXTERNAL_OLLAMA if not "!OLLAMA_BASE_URL_VALUE!"=="" (
+        set "__OLLAMA_CHECK=!OLLAMA_BASE_URL_VALUE!"
+        if /I not "!__OLLAMA_CHECK!"=="http://ollama:11434" if /I not "!__OLLAMA_CHECK!"=="http://ollama:11434/" (
+            set USE_EXTERNAL_OLLAMA=1
+        )
+        set "__OLLAMA_CHECK="
+    )
+)
+
+if defined USE_EXTERNAL_OLLAMA (
+    if "!OLLAMA_BASE_URL_VALUE!"=="" (
+        echo Error: --ollama-base-url requires a value.
+        exit /b 1
+    )
+)
+
 if "!COMMAND!"=="" (
     echo Error: No command specified.
     call :show_help
@@ -169,7 +199,7 @@ if "!COMMAND!"=="build" (
 :: Start Ollama container if 'ollama' command is provided
 if "!COMMAND!"=="ollama" (
     echo Starting Ollama container...
-    !COMPOSE_CMD! up -d ollama
+    !COMPOSE_CMD! --profile embedded-ollama up -d ollama
     
     :: Check if Ollama is running
     echo Waiting for Ollama to start...
@@ -205,7 +235,7 @@ if "!COMMAND!"=="pull" (
     )
     
     :: Start Ollama if it's not already running
-    !COMPOSE_CMD! up -d ollama
+    !COMPOSE_CMD! --profile embedded-ollama up -d ollama
     
     :: Wait for Ollama to start
     echo Ensuring Ollama is running...
@@ -242,7 +272,7 @@ if "!COMMAND!"=="pull" (
 :: Run with Docker Compose if 'compose' command is provided
 if "!COMMAND!"=="compose" (
     echo Running with Docker Compose (includes Ollama)...
-    !COMPOSE_CMD! up --build
+    !COMPOSE_CMD! --profile embedded-ollama up --build
     exit /b 0
 )
 
@@ -271,59 +301,86 @@ if "!COMMAND!"=="main" (
     )
 )
 
-:: If using Ollama, make sure the service is started
+:: If using Ollama, prepare embedded service or external connection
 if not "!USE_OLLAMA!"=="" (
-    echo Setting up Ollama container for local LLM inference...
-    
-    :: Start Ollama container if not already running
-    !COMPOSE_CMD! up -d ollama
-    
-    :: Wait for Ollama to start
-    echo Waiting for Ollama to start...
-    for /l %%i in (1, 1, 30) do (
-        !COMPOSE_CMD! exec ollama curl -s http://localhost:11434/api/version >nul 2>&1
-        if !ERRORLEVEL! EQU 0 (
-            echo Ollama is running.
-            :: Show available models
-            echo Available models:
-            !COMPOSE_CMD! exec ollama ollama list
-            goto :continue_ollama
-        )
-        timeout /t 1 /nobreak >nul
-        echo.
+    if not "!OLLAMA_BASE_URL_VALUE!"=="" (
+        set "OLLAMA_BASE_URL=!OLLAMA_BASE_URL_VALUE!"
     )
-    
-    :continue_ollama
-    :: Build the AI Hedge Fund image if needed
-    docker images -q ai-hedge-fund 2>nul | findstr /r /c:"^..*$" >nul
-    if !ERRORLEVEL! NEQ 0 (
-        echo Building AI Hedge Fund image...
-        docker build -t ai-hedge-fund .
-    )
-    
-    :: Create command override for Docker Compose
+
     set COMMAND_OVERRIDE=
-    
+
     if not "!START_DATE!"=="" (
         set COMMAND_OVERRIDE=!COMMAND_OVERRIDE! !START_DATE!
     )
-    
+
     if not "!END_DATE!"=="" (
         set COMMAND_OVERRIDE=!COMMAND_OVERRIDE! !END_DATE!
     )
-    
+
     if not "!INITIAL_PARAM!"=="" (
         set COMMAND_OVERRIDE=!COMMAND_OVERRIDE! !INITIAL_PARAM!
     )
-    
+
     if not "!MARGIN_REQUIREMENT!"=="" (
         set COMMAND_OVERRIDE=!COMMAND_OVERRIDE! --margin-requirement !MARGIN_REQUIREMENT!
     )
-    
-    :: Run the command with Docker Compose
+
+    if defined USE_EXTERNAL_OLLAMA (
+        set "TRIMMED_BASE=!OLLAMA_BASE_URL_VALUE!"
+        if "!TRIMMED_BASE!"=="" set "TRIMMED_BASE=!OLLAMA_BASE_URL!"
+        if "!TRIMMED_BASE!"=="" (
+            echo Error: No external Ollama base URL provided.
+            exit /b 1
+        )
+        if "!TRIMMED_BASE:~-1!"=="/" set "TRIMMED_BASE=!TRIMMED_BASE:~0,-1!"
+        set "HEALTHCHECK_URL=!TRIMMED_BASE!/api/version"
+        echo Using external Ollama endpoint at !TRIMMED_BASE!
+        echo Checking connectivity to Ollama...
+        set REACHABLE=
+        for /l %%i in (1, 1, 30) do (
+            powershell -NoLogo -Command "try {Invoke-WebRequest -Uri '!HEALTHCHECK_URL!' -UseBasicParsing -TimeoutSec 2 ^| Out-Null; exit 0} catch { exit 1 }" >nul 2>&1
+            if !ERRORLEVEL! EQU 0 (
+                set REACHABLE=1
+                goto :external_check_done
+            )
+            timeout /t 1 /nobreak >nul
+            echo.
+        )
+:external_check_done
+        if defined REACHABLE (
+            echo External Ollama endpoint is reachable.
+        ) else (
+            echo Warning: Unable to reach Ollama at !HEALTHCHECK_URL! within 30 seconds.
+            echo Continuing anyway; ensure the endpoint is reachable from within the containers.
+        )
+    ) else (
+        echo Setting up embedded Ollama container for local LLM inference...
+        !COMPOSE_CMD! --profile embedded-ollama up -d ollama
+
+        echo Waiting for Ollama to start...
+        for /l %%i in (1, 1, 30) do (
+            !COMPOSE_CMD! exec ollama curl -s http://localhost:11434/api/version >nul 2>&1
+            if !ERRORLEVEL! EQU 0 (
+                echo Ollama is running.
+                echo Available models:
+                !COMPOSE_CMD! exec ollama ollama list
+                goto :continue_ollama
+            )
+            timeout /t 1 /nobreak >nul
+            echo.
+        )
+        echo Warning: Unable to confirm Ollama startup within 30 seconds.
+:continue_ollama
+    )
+
+    docker images -q ai-hedge-fund 2>nul | findstr /r /c:"^..*$" >nul
+    if !ERRORLEVEL! NEQ 0 (
+        echo Building AI Hedge Fund image...
+        docker build -t ai-hedge-fund -f Dockerfile ..
+    )
+
     echo Running AI Hedge Fund with Ollama using Docker Compose...
-    
-    :: Use the appropriate service based on command and reasoning flag
+
     if "!COMMAND!"=="main" (
         if not "!SHOW_REASONING!"=="" (
             !COMPOSE_CMD! run --rm hedge-fund-reasoning python src/main.py --ticker !TICKER! !COMMAND_OVERRIDE! !SHOW_REASONING! --ollama
@@ -333,7 +390,7 @@ if not "!USE_OLLAMA!"=="" (
     ) else if "!COMMAND!"=="backtest" (
         !COMPOSE_CMD! run --rm backtester-ollama python src/backtester.py --ticker !TICKER! !COMMAND_OVERRIDE! !SHOW_REASONING! --ollama
     )
-    
+
     exit /b 0
 )
 
@@ -353,3 +410,4 @@ exit /b 0
 
 :: Start script execution
 call :parse_args %* 
+

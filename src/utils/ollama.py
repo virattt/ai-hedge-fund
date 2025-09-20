@@ -11,8 +11,25 @@ import os
 from . import docker
 
 # Constants
-OLLAMA_SERVER_URL = "http://localhost:11434"
-OLLAMA_API_MODELS_ENDPOINT = f"{OLLAMA_SERVER_URL}/api/tags"
+DEFAULT_OLLAMA_SERVER_URL = "http://localhost:11434"
+
+
+def _get_ollama_base_url() -> str:
+    """Return the configured Ollama base URL, trimming any trailing slash."""
+    url = os.environ.get("OLLAMA_BASE_URL", DEFAULT_OLLAMA_SERVER_URL)
+    if not url:
+        url = DEFAULT_OLLAMA_SERVER_URL
+    return url.rstrip("/")
+
+
+def _get_ollama_endpoint(path: str) -> str:
+    """Build a full Ollama API endpoint from the configured base URL."""
+    base = _get_ollama_base_url()
+    if not path.startswith("/"):
+        path = f"/{path}"
+    return f"{base}{path}"
+
+
 OLLAMA_DOWNLOAD_URL = {"darwin": "https://ollama.com/download/darwin", "windows": "https://ollama.com/download/windows", "linux": "https://ollama.com/download/linux"}  # macOS  # Windows  # Linux
 INSTALLATION_INSTRUCTIONS = {"darwin": "curl -fsSL https://ollama.com/install.sh | sh", "windows": "# Download from https://ollama.com/download/windows and run the installer", "linux": "curl -fsSL https://ollama.com/install.sh | sh"}
 
@@ -39,8 +56,9 @@ def is_ollama_installed() -> bool:
 
 def is_ollama_server_running() -> bool:
     """Check if the Ollama server is running."""
+    endpoint = _get_ollama_endpoint("/api/tags")
     try:
-        response = requests.get(OLLAMA_API_MODELS_ENDPOINT, timeout=2)
+        response = requests.get(endpoint, timeout=2)
         return response.status_code == 200
     except requests.RequestException:
         return False
@@ -52,7 +70,8 @@ def get_locally_available_models() -> List[str]:
         return []
 
     try:
-        response = requests.get(OLLAMA_API_MODELS_ENDPOINT, timeout=5)
+        endpoint = _get_ollama_endpoint("/api/tags")
+        response = requests.get(endpoint, timeout=5)
         if response.status_code == 200:
             data = response.json()
             return [model["name"] for model in data["models"]] if "models" in data else []
@@ -291,15 +310,14 @@ def download_model(model_name: str) -> bool:
 
 def ensure_ollama_and_model(model_name: str) -> bool:
     """Ensure Ollama is installed, running, and the requested model is available."""
-    # Check if we're running in Docker
-    in_docker = os.environ.get("OLLAMA_BASE_URL", "").startswith("http://ollama:") or os.environ.get("OLLAMA_BASE_URL", "").startswith("http://host.docker.internal:")
-    
-    # In Docker environment, we need a different approach
-    if in_docker:
-        ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://ollama:11434")
+    ollama_url = _get_ollama_base_url()
+    env_override = os.environ.get("OLLAMA_BASE_URL")
+
+    # If an explicit base URL is provided (including Docker defaults), use the remote workflow
+    if env_override or ollama_url.startswith("http://ollama:") or ollama_url.startswith("http://host.docker.internal:"):
         return docker.ensure_ollama_and_model(model_name, ollama_url)
-    
-    # Regular flow for non-Docker environments
+
+    # Regular flow for environments that rely on the local Ollama install
     # Check if Ollama is installed
     if not is_ollama_installed():
         print(f"{Fore.YELLOW}Ollama is not installed on your system.{Style.RESET_ALL}")

@@ -281,9 +281,6 @@ def print_backtest_results(table_rows: list) -> None:
                 "Long Shares",
                 "Short Shares",
                 "Position Value",
-                "Bullish",
-                "Bearish",
-                "Neutral",
             ],
             tablefmt="grid",
             colalign=(
@@ -295,9 +292,6 @@ def print_backtest_results(table_rows: list) -> None:
                 "right",   # Long Shares
                 "right",   # Short Shares
                 "right",   # Position Value
-                "right",   # Bullish
-                "right",   # Bearish
-                "right",   # Neutral
             ),
         )
     )
@@ -315,9 +309,6 @@ def format_backtest_row(
     long_shares: float = 0,
     short_shares: float = 0,
     position_value: float = 0,
-    bullish_count: int = 0,
-    bearish_count: int = 0,
-    neutral_count: int = 0,
     is_summary: bool = False,
     total_value: float = None,
     return_pct: float = None,
@@ -353,7 +344,7 @@ def format_backtest_row(
             f"{return_color}{return_pct:+.2f}%{Style.RESET_ALL}",  # Return
             f"{Fore.YELLOW}{sharpe_ratio:.2f}{Style.RESET_ALL}" if sharpe_ratio is not None else "",  # Sharpe Ratio
             f"{Fore.YELLOW}{sortino_ratio:.2f}{Style.RESET_ALL}" if sortino_ratio is not None else "",  # Sortino Ratio
-            f"{Fore.RED}{abs(max_drawdown):.2f}%{Style.RESET_ALL}" if max_drawdown is not None else "",  # Max Drawdown
+            f"{Fore.RED}{max_drawdown:.2f}%{Style.RESET_ALL}" if max_drawdown is not None else "",  # Max Drawdown (signed)
         ]
     else:
         return [
@@ -365,7 +356,4 @@ def format_backtest_row(
             f"{Fore.GREEN}{long_shares:,.0f}{Style.RESET_ALL}",   # Long Shares
             f"{Fore.RED}{short_shares:,.0f}{Style.RESET_ALL}",    # Short Shares
             f"{Fore.YELLOW}{position_value:,.2f}{Style.RESET_ALL}",
-            f"{Fore.GREEN}{bullish_count}{Style.RESET_ALL}",
-            f"{Fore.RED}{bearish_count}{Style.RESET_ALL}",
-            f"{Fore.BLUE}{neutral_count}{Style.RESET_ALL}",
         ]

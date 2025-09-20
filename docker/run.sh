@@ -13,6 +13,7 @@ show_help() {
   echo "  --initial-cash AMT  Initial cash position (default: 100000.0)"
   echo "  --margin-requirement RATIO  Margin requirement ratio (default: 0.0)"
   echo "  --ollama            Use Ollama for local LLM inference"
+  echo "  --ollama-base-url URL  Use an existing Ollama endpoint (implies --ollama)"
   echo "  --show-reasoning    Show reasoning from each agent"
   echo ""
   echo "Commands:"
@@ -37,6 +38,8 @@ show_help() {
 # Default values
 TICKER="AAPL,MSFT,NVDA"
 USE_OLLAMA=""
+OLLAMA_BASE_URL_VALUE="${OLLAMA_BASE_URL:-}"
+USE_EXTERNAL_OLLAMA=""
 START_DATE=""
 END_DATE=""
 INITIAL_AMOUNT="100000.0"
@@ -72,6 +75,14 @@ while [[ $# -gt 0 ]]; do
       USE_OLLAMA="--ollama"
       shift
       ;;
+    --ollama-base-url)
+      OLLAMA_BASE_URL_VALUE="$2"
+      USE_EXTERNAL_OLLAMA="1"
+      if [ -z "$USE_OLLAMA" ]; then
+        USE_OLLAMA="--ollama"
+      fi
+      shift 2
+      ;;
     --show-reasoning)
       SHOW_REASONING="--show-reasoning"
       shift
@@ -96,6 +107,18 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Determine if we should use an external Ollama instance
+if [ -n "$USE_OLLAMA" ] && [ -z "$USE_EXTERNAL_OLLAMA" ] && [ -n "$OLLAMA_BASE_URL_VALUE" ]; then
+  if [ "$OLLAMA_BASE_URL_VALUE" != "http://ollama:11434" ] && [ "$OLLAMA_BASE_URL_VALUE" != "http://ollama:11434/" ]; then
+    USE_EXTERNAL_OLLAMA="1"
+  fi
+fi
+
+if [ "$USE_EXTERNAL_OLLAMA" = "1" ] && [ -z "$OLLAMA_BASE_URL_VALUE" ]; then
+  echo "Error: --ollama-base-url requires a value."
+  exit 1
+fi
 
 # Check if command is provided
 if [ -z "$COMMAND" ]; then
@@ -146,7 +169,7 @@ fi
 # Start Ollama container if 'ollama' command is provided
 if [ "$COMMAND" = "ollama" ]; then
   echo "Starting Ollama container..."
-  $COMPOSE_CMD $GPU_CONFIG up -d ollama
+  $COMPOSE_CMD $GPU_CONFIG --profile embedded-ollama up -d ollama
   
   # Check if Ollama is running
   echo "Waiting for Ollama to start..."
@@ -180,7 +203,7 @@ if [ "$COMMAND" = "pull" ]; then
   fi
   
   # Start Ollama if it's not already running
-  $COMPOSE_CMD $GPU_CONFIG up -d ollama
+  $COMPOSE_CMD $GPU_CONFIG --profile embedded-ollama up -d ollama
   
   # Wait for Ollama to start
   echo "Ensuring Ollama is running..."
@@ -214,7 +237,7 @@ fi
 # Run with Docker Compose
 if [ "$COMMAND" = "compose" ]; then
   echo "Running with Docker Compose (includes Ollama)..."
-  $COMPOSE_CMD $GPU_CONFIG up --build
+  $COMPOSE_CMD $GPU_CONFIG --profile embedded-ollama up --build
   exit 0
 fi
 
@@ -243,56 +266,88 @@ elif [ "$COMMAND" = "backtest" ]; then
   fi
 fi
 
-# If using Ollama, make sure the service is started
+# If using Ollama, prepare embedded service or external connection
 if [ -n "$USE_OLLAMA" ]; then
-  echo "Setting up Ollama container for local LLM inference..."
-  
-  # Start Ollama container if not already running
-  $COMPOSE_CMD $GPU_CONFIG up -d ollama
-  
-  # Wait for Ollama to start
-  echo "Waiting for Ollama to start..."
-  for i in {1..30}; do
-    if docker run --rm --network=host curlimages/curl:latest curl -s http://localhost:11434/api/version &> /dev/null; then
-      echo "Ollama is running."
-      # Show available models
-      echo "Available models:"
-      docker exec -t ollama ollama list
-      break
-    fi
-    echo -n "."
-    sleep 1
-  done
-  
-  # Build the AI Hedge Fund image if needed
-  if [[ "$(docker images -q ai-hedge-fund 2> /dev/null)" == "" ]]; then
-    echo "Building AI Hedge Fund image..."
-    docker build -t ai-hedge-fund .
+  if [ -n "$OLLAMA_BASE_URL_VALUE" ]; then
+    export OLLAMA_BASE_URL="$OLLAMA_BASE_URL_VALUE"
   fi
-  
-  # Create command override for Docker Compose
+
   COMMAND_OVERRIDE=""
-  
+
   if [ -n "$START_DATE" ]; then
     COMMAND_OVERRIDE="$COMMAND_OVERRIDE $START_DATE"
   fi
-  
+
   if [ -n "$END_DATE" ]; then
     COMMAND_OVERRIDE="$COMMAND_OVERRIDE $END_DATE"
   fi
-  
+
   if [ -n "$INITIAL_PARAM" ]; then
     COMMAND_OVERRIDE="$COMMAND_OVERRIDE $INITIAL_PARAM"
   fi
-  
+
   if [ -n "$MARGIN_REQUIREMENT" ]; then
     COMMAND_OVERRIDE="$COMMAND_OVERRIDE --margin-requirement $MARGIN_REQUIREMENT"
   fi
-  
-  # Run the command with Docker Compose
+
+  if [ "$USE_EXTERNAL_OLLAMA" = "1" ]; then
+    TRIMMED_BASE="${OLLAMA_BASE_URL_VALUE%/}"
+    if [ -z "$TRIMMED_BASE" ]; then
+      TRIMMED_BASE="${OLLAMA_BASE_URL%/}"
+    fi
+    if [ -z "$TRIMMED_BASE" ]; then
+      echo "Error: No external Ollama base URL provided."
+      exit 1
+    fi
+    HEALTHCHECK_URL="$TRIMMED_BASE/api/version"
+    echo "Using external Ollama endpoint at $TRIMMED_BASE"
+    echo "Checking connectivity to Ollama..."
+    REACHABLE=false
+    for i in {1..30}; do
+      if docker run --rm --network=host curlimages/curl:latest curl -s "$HEALTHCHECK_URL" &> /dev/null; then
+        REACHABLE=true
+        break
+      fi
+      echo -n "."
+      sleep 1
+    done
+    echo ""
+    if [ "$REACHABLE" = false ]; then
+      echo "Warning: Unable to reach Ollama at $HEALTHCHECK_URL within 30 seconds."
+      echo "Continuing anyway; ensure the endpoint is reachable from within the containers."
+    else
+      echo "External Ollama endpoint is reachable."
+    fi
+  else
+    echo "Setting up embedded Ollama container for local LLM inference..."
+    $COMPOSE_CMD $GPU_CONFIG --profile embedded-ollama up -d ollama
+
+    echo "Waiting for Ollama to start..."
+    EMBEDDED_REACHABLE=false
+    for i in {1..30}; do
+      if docker run --rm --network=host curlimages/curl:latest curl -s http://localhost:11434/api/version &> /dev/null; then
+        EMBEDDED_REACHABLE=true
+        echo "Ollama is running."
+        echo "Available models:"
+        docker exec -t ollama ollama list
+        break
+      fi
+      echo -n "."
+      sleep 1
+    done
+    echo ""
+    if [ "$EMBEDDED_REACHABLE" = false ]; then
+      echo "Warning: Unable to confirm embedded Ollama startup within 30 seconds."
+    fi
+  fi
+
+  if [[ "$(docker images -q ai-hedge-fund 2> /dev/null)" == "" ]]; then
+    echo "Building AI Hedge Fund image..."
+    docker build -t ai-hedge-fund -f Dockerfile ..
+  fi
+
   echo "Running AI Hedge Fund with Ollama using Docker Compose..."
-  
-  # Use the appropriate service based on command and reasoning flag
+
   if [ "$COMMAND" = "main" ]; then
     if [ -n "$SHOW_REASONING" ]; then
       $COMPOSE_CMD $GPU_CONFIG run --rm hedge-fund-reasoning python src/main.py --ticker $TICKER $COMMAND_OVERRIDE $SHOW_REASONING --ollama
@@ -302,10 +357,9 @@ if [ -n "$USE_OLLAMA" ]; then
   elif [ "$COMMAND" = "backtest" ]; then
     $COMPOSE_CMD $GPU_CONFIG run --rm backtester-ollama python src/backtester.py --ticker $TICKER $COMMAND_OVERRIDE $SHOW_REASONING --ollama
   fi
-  
+
   exit 0
 fi
-
 # Standard Docker run (without Ollama)
 # Build the command
 CMD="docker run -it --rm -v $(pwd)/.env:/app/.env"

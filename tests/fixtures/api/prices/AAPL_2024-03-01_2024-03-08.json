@@ -1,0 +1,65 @@
+{
+  "ticker": "AAPL",
+  "prices": [
+      {
+          "ticker": "AAPL",
+          "open": 179.55,
+          "close": 179.66,
+          "high": 180.53,
+          "low": 177.38,
+          "volume": 73450582,
+          "time": "2024-03-01T05:00:00Z",
+          "time_milliseconds": 1709269200000
+      },
+      {
+          "ticker": "AAPL",
+          "open": 176.15,
+          "close": 175.1,
+          "high": 176.9,
+          "low": 173.79,
+          "volume": 81505451,
+          "time": "2024-03-04T05:00:00Z",
+          "time_milliseconds": 1709528400000
+      },
+      {
+          "ticker": "AAPL",
+          "open": 170.76,
+          "close": 170.12,
+          "high": 172.04,
+          "low": 169.62,
+          "volume": 94702355,
+          "time": "2024-03-05T05:00:00Z",
+          "time_milliseconds": 1709614800000
+      },
+      {
+          "ticker": "AAPL",
+          "open": 171.06,
+          "close": 169.12,
+          "high": 171.24,
+          "low": 168.68,
+          "volume": 68568907,
+          "time": "2024-03-06T05:00:00Z",
+          "time_milliseconds": 1709701200000
+      },
+      {
+          "ticker": "AAPL",
+          "open": 169.15,
+          "close": 169,
+          "high": 170.73,
+          "low": 168.49,
+          "volume": 71763761,
+          "time": "2024-03-07T05:00:00Z",
+          "time_milliseconds": 1709787600000
+      },
+      {
+          "ticker": "AAPL",
+          "open": 169,
+          "close": 170.73,
+          "high": 173.7,
+          "low": 168.94,
+          "volume": 76267041,
+          "time": "2024-03-08T05:00:00Z",
+          "time_milliseconds": 1709874000000
+      }
+  ]
+}
