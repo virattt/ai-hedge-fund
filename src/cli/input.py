@@ -6,7 +6,7 @@ import questionary
 from colorama import Fore, Style
 
 from src.utils.analysts import ANALYST_ORDER
-from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider
+from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider, AVAILABLE_MODELS, OLLAMA_MODELS
 from src.utils.ollama import ensure_ollama_and_model
 
 from dataclasses import dataclass
@@ -19,6 +19,7 @@ def add_common_args(
     require_tickers: bool = False,
     include_analyst_flags: bool = True,
     include_ollama: bool = True,
+    include_model_flags: bool = True,
 ) -> argparse.ArgumentParser:
     parser.add_argument(
         "--tickers",
@@ -37,6 +38,13 @@ def add_common_args(
             "--analysts-all",
             action="store_true",
             help="Use all available analysts (overrides --analysts)",
+        )
+    if include_model_flags:
+        parser.add_argument(
+            "--model",
+            type=str,
+            required=False,
+            help="Specific model to use (e.g., gpt-4o, claude-3-5-haiku-latest, llama3.1:latest)",
         )
     if include_ollama:
         parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
@@ -67,6 +75,24 @@ def parse_tickers(tickers_arg: str | None) -> list[str]:
     if not tickers_arg:
         return []
     return [ticker.strip() for ticker in tickers_arg.split(",") if ticker.strip()]
+
+
+def find_model_by_name(model_name: str) -> tuple[str, str, bool] | None:
+    """
+    Find a model by name and return (model_name, provider, is_ollama).
+    Returns None if model not found.
+    """
+    # Check API models first
+    for model in AVAILABLE_MODELS:
+        if model.model_name == model_name:
+            return model_name, model.provider.value, False
+    
+    # Check Ollama models
+    for model in OLLAMA_MODELS:
+        if model.model_name == model_name:
+            return model_name, model.provider.value, True
+    
+    return None
 
 
 def select_analysts(flags: dict | None = None) -> list[str]:
@@ -101,9 +127,39 @@ def select_analysts(flags: dict | None = None) -> list[str]:
     return choices
 
 
-def select_model(use_ollama: bool) -> tuple[str, str]:
+def select_model(use_ollama: bool, model_name_arg: str | None = None) -> tuple[str, str]:
     model_name: str = ""
     model_provider: str | None = None
+
+    # Handle CLI-provided model name
+    if model_name_arg:
+        model_info = find_model_by_name(model_name_arg)
+        if not model_info:
+            print(f"{Fore.RED}Error: Model '{model_name_arg}' not found in available models.{Style.RESET_ALL}")
+            print(f"{Fore.YELLOW}Use interactive selection instead.{Style.RESET_ALL}")
+        else:
+            found_model_name, found_provider, is_ollama = model_info
+            
+            # Check for consistency with --ollama flag
+            if use_ollama and not is_ollama:
+                print(f"{Fore.RED}Error: Model '{model_name_arg}' is not an Ollama model, but --ollama flag was specified.{Style.RESET_ALL}")
+                print(f"{Fore.YELLOW}Use interactive selection instead.{Style.RESET_ALL}")
+            elif not use_ollama and is_ollama:
+                print(f"{Fore.YELLOW}Note: Model '{model_name_arg}' is an Ollama model. Switching to Ollama mode.{Style.RESET_ALL}")
+                use_ollama = True
+            
+            if (use_ollama and is_ollama) or (not use_ollama and not is_ollama):
+                # Validate the model (same validation as interactive selection)
+                if is_ollama:
+                    if ensure_ollama_and_model(found_model_name):
+                        print(f"\nUsing {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{found_model_name}{Style.RESET_ALL}\n")
+                        return found_model_name, ModelProvider.OLLAMA.value
+                    else:
+                        print(f"{Fore.RED}Cannot proceed without Ollama and the selected model.{Style.RESET_ALL}")
+                        sys.exit(1)
+                else:
+                    print(f"\nUsing {Fore.CYAN}{found_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{found_model_name}{Style.RESET_ALL}\n")
+                    return found_model_name, found_provider
 
     if use_ollama:
         print(f"{Fore.CYAN}Using Ollama for local LLM inference.{Style.RESET_ALL}")
@@ -257,7 +313,7 @@ def parse_cli_inputs(
         "analysts_all": getattr(args, "analysts_all", False),
         "analysts": getattr(args, "analysts", None),
     })
-    model_name, model_provider = select_model(getattr(args, "ollama", False))
+    model_name, model_provider = select_model(getattr(args, "ollama", False), getattr(args, "model", None))
     start_date, end_date = resolve_dates(getattr(args, "start_date", None), getattr(args, "end_date", None), default_months_back=default_months_back)
 
     return CLIInputs(
