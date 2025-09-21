@@ -17,7 +17,7 @@ from src.agents.valuation import valuation_analyst_agent
 from src.agents.warren_buffett import warren_buffett_agent
 from src.agents.rakesh_jhunjhunwala import rakesh_jhunjhunwala_agent
 from src.agents.mohnish_pabrai import mohnish_pabrai_agent
-
+from src.agents.jim_simons import jim_simons_agent
 # Define analyst configuration - single source of truth
 ANALYST_CONFIG = {
     "aswath_damodaran": {
@@ -60,13 +60,21 @@ ANALYST_CONFIG = {
         "type": "analyst",
         "order": 4,
     },
+    "jim_simons": {
+        "display_name": "Jim Simons",
+        "description": "The Quant King",
+        "investing_style": "Pioneer of quantitative investing, leveraging complex mathematical models and algorithmic trading to exploit market inefficiencies.",
+        "agent_func": jim_simons_agent,
+        "type": "quant",
+        "order": 5
+    },
     "michael_burry": {
         "display_name": "Michael Burry",
         "description": "The Big Short Contrarian",
         "investing_style": "Makes contrarian bets, often shorting overvalued markets and investing in undervalued assets through deep fundamental analysis.",
         "agent_func": michael_burry_agent,
         "type": "analyst",
-        "order": 5,
+        "order": 6,
     },
     "mohnish_pabrai": {
         "display_name": "Mohnish Pabrai",
@@ -74,7 +82,7 @@ ANALYST_CONFIG = {
         "investing_style": "Focuses on value investing and long-term growth through fundamental analysis and a margin of safety.",
         "agent_func": mohnish_pabrai_agent,
         "type": "analyst",
-        "order": 6,
+        "order": 7,
     },
     "peter_lynch": {
         "display_name": "Peter Lynch",
@@ -82,7 +90,7 @@ ANALYST_CONFIG = {
         "investing_style": "Invests in companies with understandable business models and strong growth potential using the 'buy what you know' strategy.",
         "agent_func": peter_lynch_agent,
         "type": "analyst",
-        "order": 6,
+        "order": 8,
     },
     "phil_fisher": {
         "display_name": "Phil Fisher",
@@ -90,7 +98,7 @@ ANALYST_CONFIG = {
         "investing_style": "Emphasizes investing in companies with strong management and innovative products, focusing on long-term growth through scuttlebutt research.",
         "agent_func": phil_fisher_agent,
         "type": "analyst",
-        "order": 7,
+        "order": 9,
     },
     "rakesh_jhunjhunwala": {
         "display_name": "Rakesh Jhunjhunwala",
@@ -98,7 +106,7 @@ ANALYST_CONFIG = {
         "investing_style": "Leverages macroeconomic insights to invest in high-growth sectors, particularly within emerging markets and domestic opportunities.",
         "agent_func": rakesh_jhunjhunwala_agent,
         "type": "analyst",
-        "order": 8,
+        "order": 10,
     },
     "stanley_druckenmiller": {
         "display_name": "Stanley Druckenmiller",
@@ -106,7 +114,7 @@ ANALYST_CONFIG = {
         "investing_style": "Focuses on macroeconomic trends, making large bets on currencies, commodities, and interest rates through top-down analysis.",
         "agent_func": stanley_druckenmiller_agent,
         "type": "analyst",
-        "order": 9,
+        "order": 11,
     },
     "warren_buffett": {
         "display_name": "Warren Buffett",
@@ -114,7 +122,7 @@ ANALYST_CONFIG = {
         "investing_style": "Seeks companies with strong fundamentals and competitive advantages through value investing and long-term ownership.",
         "agent_func": warren_buffett_agent,
         "type": "analyst",
-        "order": 10,
+        "order": 12,
     },
     "technical_analyst": {
         "display_name": "Technical Analyst",
@@ -122,7 +130,7 @@ ANALYST_CONFIG = {
         "investing_style": "Focuses on chart patterns and market trends to make investment decisions, often using technical indicators and price action analysis.",
         "agent_func": technical_analyst_agent,
         "type": "analyst",
-        "order": 11,
+        "order": 13,
     },
     "fundamentals_analyst": {
         "display_name": "Fundamentals Analyst",
@@ -130,7 +138,7 @@ ANALYST_CONFIG = {
         "investing_style": "Delves into financial statements and economic indicators to assess the intrinsic value of companies through fundamental analysis.",
         "agent_func": fundamentals_analyst_agent,
         "type": "analyst",
-        "order": 12,
+        "order": 14,
     },
     "sentiment_analyst": {
         "display_name": "Sentiment Analyst",
@@ -138,7 +146,7 @@ ANALYST_CONFIG = {
         "investing_style": "Gauges market sentiment and investor behavior to predict market movements and identify opportunities through behavioral analysis.",
         "agent_func": sentiment_analyst_agent,
         "type": "analyst",
-        "order": 13,
+        "order": 15,
     },
     "valuation_analyst": {
         "display_name": "Valuation Analyst",
@@ -146,7 +154,7 @@ ANALYST_CONFIG = {
         "investing_style": "Specializes in determining the fair value of companies, using various valuation models and financial metrics for investment decisions.",
         "agent_func": valuation_analyst_agent,
         "type": "analyst",
-        "order": 14,
+        "order": 16,
     },
 }
 
