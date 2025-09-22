@@ -1,0 +1,12 @@
+# Azure Functions specific ignores
+local.settings.json
+*.pyc
+__pycache__/
+.env
+.venv/
+bin/
+obj/
+.git/
+.gitignore
+.vscode/
+python_packages/
