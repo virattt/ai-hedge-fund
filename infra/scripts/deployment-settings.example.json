@@ -1,0 +1,58 @@
+{
+  "containerApp": {
+    "secrets": {
+      "OPENAI_API_KEY": "replace-with-openai-key",
+      "FINANCIAL_DATASETS_API_KEY": "replace-with-financial-datasets-key",
+      "ANTHROPIC_API_KEY": "optional-anthropic-key",
+      "GROQ_API_KEY": "optional-groq-key",
+      "DEEPSEEK_API_KEY": "optional-deepseek-key",
+      "GOOGLE_API_KEY": "optional-google-key",
+      "XAI_API_KEY": "optional-xai-key",
+      "GIGACHAT_API_KEY": "optional-gigachat-key",
+      "OPENROUTER_API_KEY": "optional-openrouter-key",
+      "AZURE_OPENAI_API_KEY": "optional-azure-openai-key",
+      "AZURE_OPENAI_ENDPOINT": "https://your-azure-openai-endpoint",
+      "AZURE_OPENAI_DEPLOYMENT_NAME": "your-azure-openai-deployment",
+      "ALPACA_API_KEY_ID": "alpaca-paper-key",
+      "ALPACA_API_SECRET_KEY": "alpaca-paper-secret",
+      "ALPACA_API_BASE_URL": "https://paper-api.alpaca.markets"
+    },
+    "environmentVariables": {
+      "TRADE_MODE": "paper",
+      "ALPACA_CONFIDENCE_THRESHOLD": "65"
+    }
+  },
+  "queueWorker": {
+    "secrets": {
+      "OPENAI_API_KEY": "replace-with-openai-key",
+      "FINANCIAL_DATASETS_API_KEY": "replace-with-financial-datasets-key",
+      "ANTHROPIC_API_KEY": "optional-anthropic-key",
+      "GROQ_API_KEY": "optional-groq-key",
+      "DEEPSEEK_API_KEY": "optional-deepseek-key",
+      "GOOGLE_API_KEY": "optional-google-key",
+      "XAI_API_KEY": "optional-xai-key",
+      "GIGACHAT_API_KEY": "optional-gigachat-key",
+      "OPENROUTER_API_KEY": "optional-openrouter-key",
+      "AZURE_OPENAI_API_KEY": "optional-azure-openai-key",
+      "AZURE_OPENAI_ENDPOINT": "https://your-azure-openai-endpoint",
+      "AZURE_OPENAI_DEPLOYMENT_NAME": "your-azure-openai-deployment",
+      "ALPACA_API_KEY_ID": "alpaca-paper-key",
+      "ALPACA_API_SECRET_KEY": "alpaca-paper-secret",
+      "ALPACA_API_BASE_URL": "https://paper-api.alpaca.markets"
+    },
+    "environmentVariables": {
+      "MODEL_PROVIDER": "OpenAI",
+      "MODEL_NAME": "gpt-4.1",
+      "CONFIDENCE_THRESHOLD": "60"
+    }
+  },
+  "functionApp": {
+    "appSettings": {
+      "FINANCIAL_DATASETS_API_KEY": "replace-with-financial-datasets-key",
+      "MARKET_MONITOR_WATCHLIST": "AAPL,MSFT,NVDA",
+      "MARKET_MONITOR_PERCENT_CHANGE_THRESHOLD": "0.02",
+      "MARKET_MONITOR_VOLUME_SPIKE_MULTIPLIER": "1.5",
+      "MARKET_MONITOR_ANALYSIS_WINDOW_MINUTES": "120"
+    }
+  }
+}
