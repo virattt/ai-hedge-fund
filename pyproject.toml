@@ -29,6 +29,8 @@ rich = "^13.9.4"
 langchain-google-genai = "^2.0.11"
 # Broker integrations
 alpaca-trade-api = {path = "third_party/alpaca-trade-api", develop = false}
+azure-storage-queue = "^12.12.0"
+azure-cosmos = "^4.7.0"
 # Backend dependencies
 fastapi = {extras = ["standard"], version = "^0.104.0"}
 fastapi-cli = "^0.0.7"
@@ -57,3 +59,4 @@ include = '\.pyi?$'
 [tool.isort]
 profile = "black"
 force_alphabetical_sort_within_sections = true
+

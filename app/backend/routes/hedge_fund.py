@@ -90,6 +90,8 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
                         trade_mode=request_data.trade_mode,
                         dry_run=request_data.dry_run,
                         confidence_threshold=request_data.confidence_threshold,
+                        user_id=getattr(request_data, "user_id", None),
+                        strategy_id=getattr(request_data, "strategy_id", None),
                     )
                 )
                 
@@ -147,12 +149,18 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
                         dry_run=request_data.dry_run,
                     )
 
+                metadata = result.get("metadata", {}) if result else {}
                 final_data = CompleteEvent(
                     data={
                         "decisions": decisions,
                         "analyst_signals": analyst_signals,
                         "current_prices": result.get("data", {}).get("current_prices", {}),
                         "broker_orders": broker_orders,
+                        "run_id": metadata.get("run_id"),
+                        "run_at": metadata.get("run_at"),
+                        "user_id": metadata.get("user_id"),
+                        "strategy_id": metadata.get("strategy_id"),
+                        "portfolio_snapshot": result.get("data", {}).get("portfolio_snapshot"),
                     }
                 )
                 yield final_data.to_sse()

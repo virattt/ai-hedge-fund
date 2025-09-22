@@ -50,6 +50,11 @@ class GraphEdge(BaseModel):
 class HedgeFundResponse(BaseModel):
     decisions: dict
     analyst_signals: dict
+    run_id: Optional[str] = None
+    run_at: Optional[datetime] = None
+    user_id: Optional[str] = None
+    strategy_id: Optional[str] = None
+    portfolio_snapshot: Optional[Dict[str, Any]] = None
 
 
 class ErrorResponse(BaseModel):
@@ -68,6 +73,8 @@ class BaseHedgeFundRequest(BaseModel):
     margin_requirement: float = 0.0
     portfolio_positions: Optional[List[PortfolioPosition]] = None
     api_keys: Optional[Dict[str, str]] = None
+    user_id: Optional[str] = None
+    strategy_id: Optional[str] = None
 
     def get_agent_ids(self) -> List[str]:
         """Extract agent IDs from graph structure"""
@@ -110,6 +117,8 @@ class BacktestDayResult(BaseModel):
     gross_exposure: float
     net_exposure: float
     long_short_ratio: Optional[float] = None
+    run_id: Optional[str] = None
+    run_at: Optional[datetime] = None
 
 
 class BacktestPerformanceMetrics(BaseModel):

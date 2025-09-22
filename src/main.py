@@ -15,12 +15,16 @@ from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelPro
 from src.brokers import dispatch_paper_orders
 from typing import Any, Dict, Optional
 from src.utils.ollama import ensure_ollama_and_model
+from src.services.persistence.cosmos import get_cosmos_persistence
+from src.utils.portfolio import merge_portfolio_structures
 
 import argparse
-from datetime import datetime
+from copy import deepcopy
+from datetime import datetime, timezone
 from dateutil.relativedelta import relativedelta
 from src.utils.visualize import save_graph_as_png
 import json
+from uuid import uuid4
 
 # Load environment variables from .env file
 load_dotenv()
@@ -56,7 +60,24 @@ def run_hedge_fund(
     trade_mode: Optional[str] = None,
     dry_run: bool = False,
     confidence_threshold: Optional[int] = None,
+    user_id: str | None = None,
+    strategy_id: str | None = None,
+    run_id: str | None = None,
 ):
+    persistence = get_cosmos_persistence()
+    persistence_enabled = persistence.is_configured
+
+    # Use a deterministic partition identifier even when no user is provided.
+    resolved_user_id = user_id or "cli"
+    run_identifier = run_id or str(uuid4())
+    run_timestamp = datetime.now(timezone.utc).isoformat()
+
+    working_portfolio = deepcopy(portfolio)
+    if persistence_enabled:
+        persisted_portfolio = persistence.portfolios.load_portfolio(resolved_user_id, strategy_id)
+        if persisted_portfolio:
+            working_portfolio = merge_portfolio_structures(working_portfolio, persisted_portfolio)
+
     # Start progress tracking
     progress.start()
 
@@ -68,6 +89,17 @@ def run_hedge_fund(
         else:
             agent = app
 
+        metadata_payload = {
+            "show_reasoning": show_reasoning,
+            "model_name": model_name,
+            "model_provider": model_provider,
+            "run_id": run_identifier,
+            "run_at": run_timestamp,
+            "user_id": resolved_user_id,
+        }
+        if strategy_id:
+            metadata_payload["strategy_id"] = strategy_id
+
         final_state = agent.invoke(
             {
                 "messages": [
@@ -77,18 +109,55 @@ def run_hedge_fund(
                 ],
                 "data": {
                     "tickers": tickers,
-                    "portfolio": portfolio,
+                    "portfolio": working_portfolio,
                     "start_date": start_date,
                     "end_date": end_date,
                     "analyst_signals": {},
                 },
-                "metadata": {
-                    "show_reasoning": show_reasoning,
-                    "model_name": model_name,
-                    "model_provider": model_provider,
-                },
+                "metadata": metadata_payload,
             },
         )
+        final_state.setdefault("metadata", {}).update(metadata_payload)
+
+        decisions = parse_hedge_fund_response(final_state["messages"][-1].content)
+        analyst_signals = final_state["data"].get("analyst_signals", {})
+        portfolio_from_state = final_state.get("data", {}).get("portfolio")
+        if isinstance(portfolio_from_state, dict):
+            working_portfolio = merge_portfolio_structures(working_portfolio, portfolio_from_state)
+
+        decisions_payload = decisions or {}
+        analyst_payload = analyst_signals or {}
+
+        if persistence_enabled:
+            metadata_document = {
+                "tickers": tickers,
+                "start_date": start_date,
+                "end_date": end_date,
+                "model_name": model_name,
+                "model_provider": model_provider,
+            }
+
+            persistence.analyst_documents.upsert_document(
+                run_identifier,
+                resolved_user_id,
+                analyst_payload,
+                strategy_id=strategy_id,
+                metadata=metadata_document,
+                timestamp=run_timestamp,
+            )
+            persistence.decision_documents.upsert_document(
+                run_identifier,
+                resolved_user_id,
+                decisions_payload,
+                strategy_id=strategy_id,
+                metadata=metadata_document,
+                timestamp=run_timestamp,
+            )
+            persistence.portfolios.save_portfolio(
+                resolved_user_id,
+                working_portfolio,
+                strategy_id=strategy_id,
+            )
 
         decisions = parse_hedge_fund_response(final_state["messages"][-1].content)
         analyst_signals = final_state["data"]["analyst_signals"]
@@ -107,6 +176,11 @@ def run_hedge_fund(
             "decisions": decisions,
             "analyst_signals": analyst_signals,
             "broker_orders": broker_orders,
+            "run_id": run_identifier,
+            "run_at": run_timestamp,
+            "user_id": resolved_user_id,
+            "strategy_id": strategy_id,
+            "portfolio_snapshot": deepcopy(working_portfolio),
         }
     finally:
         # Stop progress tracking

@@ -1,6 +1,6 @@
 import sys
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dateutil.relativedelta import relativedelta
 import questionary
 
@@ -23,6 +23,9 @@ from src.tools.api import (
 from src.utils.display import print_backtest_results, format_backtest_row
 from typing_extensions import Callable
 from src.utils.ollama import ensure_ollama_and_model
+from src.services.persistence.cosmos import get_cosmos_persistence
+from src.utils.portfolio import merge_portfolio_structures
+from uuid import uuid4
 
 init(autoreset=True)
 
@@ -39,6 +42,8 @@ class Backtester:
         model_provider: str = "OpenAI",
         selected_analysts: list[str] = [],
         initial_margin_requirement: float = 0.0,
+        user_id: str | None = None,
+        strategy_id: str | None = None,
     ):
         """
         :param agent: The trading agent (Callable).
@@ -59,6 +64,11 @@ class Backtester:
         self.model_name = model_name
         self.model_provider = model_provider
         self.selected_analysts = selected_analysts
+        self.user_id = user_id or "backtester"
+        self.strategy_id = strategy_id
+
+        self.persistence = get_cosmos_persistence()
+        self.persistence_enabled = self.persistence.is_configured
 
         # Initialize portfolio with support for long/short positions
         self.portfolio_values = []
@@ -75,6 +85,44 @@ class Backtester:
                 for ticker in tickers
             },
         }
+
+        if self.persistence_enabled:
+            persisted_portfolio = self.persistence.portfolios.load_portfolio(self.user_id, self.strategy_id)
+            if persisted_portfolio:
+                self.portfolio = merge_portfolio_structures(self.portfolio, persisted_portfolio)
+
+    def _persist_run_results(
+        self,
+        run_identifier: str,
+        run_timestamp: str,
+        decisions: dict,
+        analyst_signals: dict,
+        metadata: dict,
+    ) -> None:
+        if not self.persistence_enabled:
+            return
+
+        self.persistence.analyst_documents.upsert_document(
+            run_identifier,
+            self.user_id,
+            analyst_signals,
+            strategy_id=self.strategy_id,
+            metadata=metadata,
+            timestamp=run_timestamp,
+        )
+        self.persistence.decision_documents.upsert_document(
+            run_identifier,
+            self.user_id,
+            decisions,
+            strategy_id=self.strategy_id,
+            metadata=metadata,
+            timestamp=run_timestamp,
+        )
+        self.persistence.portfolios.save_portfolio(
+            self.user_id,
+            self.portfolio,
+            strategy_id=self.strategy_id,
+        )
 
     def execute_trade(self, ticker: str, action: str, quantity: float, current_price: float):
         """
@@ -342,17 +390,34 @@ class Backtester:
             # ---------------------------------------------------------------
             # 1) Execute the agent's trades
             # ---------------------------------------------------------------
-            output = self.agent(
-                tickers=self.tickers,
-                start_date=lookback_start,
-                end_date=current_date_str,
-                portfolio=self.portfolio,
-                model_name=self.model_name,
-                model_provider=self.model_provider,
-                selected_analysts=self.selected_analysts,
+            run_identifier = str(uuid4())
+            agent_kwargs = {
+                "tickers": self.tickers,
+                "start_date": lookback_start,
+                "end_date": current_date_str,
+                "portfolio": self.portfolio,
+                "model_name": self.model_name,
+                "model_provider": self.model_provider,
+                "selected_analysts": self.selected_analysts,
+                "user_id": self.user_id,
+                "strategy_id": self.strategy_id,
+                "run_id": run_identifier,
+            }
+
+            try:
+                output = self.agent(**agent_kwargs)
+            except TypeError:
+                agent_kwargs.pop("user_id", None)
+                agent_kwargs.pop("strategy_id", None)
+                agent_kwargs.pop("run_id", None)
+                output = self.agent(**agent_kwargs)
+
+            decisions = output.get("decisions", {}) if isinstance(output, dict) else {}
+            analyst_signals = output.get("analyst_signals", {}) if isinstance(output, dict) else {}
+            run_identifier = output.get("run_id", run_identifier) if isinstance(output, dict) else run_identifier
+            run_timestamp = (
+                output.get("run_at") if isinstance(output, dict) and output.get("run_at") else datetime.now(timezone.utc).isoformat()
             )
-            decisions = output["decisions"]
-            analyst_signals = output["analyst_signals"]
 
             # Execute trades for each ticker
             executed_trades = {}
@@ -377,6 +442,18 @@ class Backtester:
             gross_exposure = long_exposure + short_exposure
             net_exposure = long_exposure - short_exposure
             long_short_ratio = long_exposure / short_exposure if short_exposure > 1e-9 else float("inf")
+
+            run_metadata = {
+                "tickers": self.tickers,
+                "start_date": lookback_start,
+                "end_date": current_date_str,
+                "model_name": self.model_name,
+                "model_provider": self.model_provider,
+                "mode": "backtest",
+                "long_exposure": long_exposure,
+                "short_exposure": short_exposure,
+            }
+            self._persist_run_results(run_identifier, run_timestamp, decisions, analyst_signals, run_metadata)
 
             # Track each day's portfolio value in self.portfolio_values
             self.portfolio_values.append({"Date": current_date, "Portfolio Value": total_value, "Long Exposure": long_exposure, "Short Exposure": short_exposure, "Gross Exposure": gross_exposure, "Net Exposure": net_exposure, "Long/Short Ratio": long_short_ratio})
