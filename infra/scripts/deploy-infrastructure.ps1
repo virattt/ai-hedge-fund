@@ -42,25 +42,25 @@ $deploymentName = "ai-hedge-fund-$(Get-Date -Format 'yyyyMMddHHmmss')"
 
 if ($WhatIf) {
     Write-Host "Running what-if for deployment $deploymentName" -ForegroundColor Yellow
-    az deployment group what-if \
-        --name $deploymentName \
-        --resource-group $ResourceGroupName \
-        --template-file $bicepPath \
-        --parameters "namePrefix=$NamePrefix" \
-                     "location=$Location" \
-                     "queueName=$QueueName" \
+    az deployment group what-if `
+        --name $deploymentName `
+        --resource-group $ResourceGroupName `
+        --template-file $bicepPath `
+        --parameters "namePrefix=$NamePrefix" `
+                     "location=$Location" `
+                     "queueName=$QueueName" `
                      "deadLetterQueueName=$DeadLetterQueueName"
     return
 }
 
 Write-Host "Deploying infrastructure (this may take several minutes)..." -ForegroundColor Cyan
-$deployment = az deployment group create \
-    --name $deploymentName \
-    --resource-group $ResourceGroupName \
-    --template-file $bicepPath \
-    --parameters "namePrefix=$NamePrefix" \
-                 "location=$Location" \
-                 "queueName=$QueueName" \
+$deployment = az deployment group create `
+    --name $deploymentName `
+    --resource-group $ResourceGroupName `
+    --template-file $bicepPath `
+    --parameters "namePrefix=$NamePrefix" `
+                 "location=$Location" `
+                 "queueName=$QueueName" `
                  "deadLetterQueueName=$DeadLetterQueueName" |
     ConvertFrom-Json
 
