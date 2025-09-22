@@ -293,6 +293,7 @@ typing-extensions = ">=4.6.0"
 [package.extras]
 aio = ["azure-core[aio] (>=1.30.0)"]
 
+
 [[package]]
 name = "black"
 version = "23.12.1"
@@ -4450,3 +4451,4 @@ cffi = ["cffi (>=1.17) ; python_version >= \"3.13\" and platform_python_implemen
 lock-version = "2.1"
 python-versions = "^3.11"
 content-hash = "831332569373e459cfce2dfeae6ed35df14e1f7517f5e6c5277c868ef7f18933"
+

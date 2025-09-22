@@ -1,6 +1,9 @@
 import asyncio
 import json
 import re
+from datetime import datetime, timezone
+from uuid import uuid4
+
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
 
@@ -10,6 +13,8 @@ from src.agents.risk_manager import risk_management_agent
 from src.main import start
 from src.utils.analysts import ANALYST_CONFIG
 from src.graph.state import AgentState
+from src.services.persistence.cosmos import get_cosmos_persistence
+from src.utils.portfolio import merge_portfolio_structures
 
 
 def extract_base_agent_key(unique_id: str) -> str:
@@ -129,13 +134,37 @@ def create_graph(graph_nodes: list, graph_edges: list) -> StateGraph:
     return graph
 
 
-async def run_graph_async(graph, portfolio, tickers, start_date, end_date, model_name, model_provider, request=None):
+async def run_graph_async(
+    graph,
+    portfolio,
+    tickers,
+    start_date,
+    end_date,
+    model_name,
+    model_provider,
+    request=None,
+    user_id: str | None = None,
+    strategy_id: str | None = None,
+    run_id: str | None = None,
+):
     """Async wrapper for run_graph to work with asyncio."""
-    # Use run_in_executor to run the synchronous function in a separate thread
-    # so it doesn't block the event loop
     loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(None, lambda: run_graph(graph, portfolio, tickers, start_date, end_date, model_name, model_provider, request))  # Use default executor
-    return result
+    return await loop.run_in_executor(
+        None,
+        lambda: run_graph(
+            graph,
+            portfolio,
+            tickers,
+            start_date,
+            end_date,
+            model_name,
+            model_provider,
+            request=request,
+            user_id=user_id,
+            strategy_id=strategy_id,
+            run_id=run_id,
+        ),
+    )
 
 
 def run_graph(
@@ -147,13 +176,49 @@ def run_graph(
     model_name: str,
     model_provider: str,
     request=None,
+    user_id: str | None = None,
+    strategy_id: str | None = None,
+    run_id: str | None = None,
 ) -> dict:
-    """
-    Run the graph with the given portfolio, tickers,
-    start date, end date, show reasoning, model name,
-    and model provider.
-    """
-    return graph.invoke(
+    """Run the graph and persist the resulting decisions to Cosmos DB when configured."""
+
+    persistence = get_cosmos_persistence()
+    persistence_enabled = persistence.is_configured
+
+    request_user = None
+    request_strategy = None
+    if request is not None:
+        if isinstance(request, dict):
+            request_user = request.get("user_id")
+            request_strategy = request.get("strategy_id")
+        else:
+            request_user = getattr(request, "user_id", None)
+            request_strategy = getattr(request, "strategy_id", None)
+
+    resolved_user_id = user_id or request_user or "backend"
+    resolved_strategy_id = strategy_id or request_strategy
+    run_identifier = run_id or str(uuid4())
+    run_timestamp = datetime.now(timezone.utc).isoformat()
+
+    working_portfolio = merge_portfolio_structures(portfolio, portfolio)
+    if persistence_enabled:
+        persisted_portfolio = persistence.portfolios.load_portfolio(resolved_user_id, resolved_strategy_id)
+        if persisted_portfolio:
+            working_portfolio = merge_portfolio_structures(working_portfolio, persisted_portfolio)
+
+    metadata_payload = {
+        "show_reasoning": False,
+        "model_name": model_name,
+        "model_provider": model_provider,
+        "request": request,
+        "run_id": run_identifier,
+        "run_at": run_timestamp,
+        "user_id": resolved_user_id,
+    }
+    if resolved_strategy_id:
+        metadata_payload["strategy_id"] = resolved_strategy_id
+
+    state = graph.invoke(
         {
             "messages": [
                 HumanMessage(
@@ -162,19 +227,62 @@ def run_graph(
             ],
             "data": {
                 "tickers": tickers,
-                "portfolio": portfolio,
+                "portfolio": working_portfolio,
                 "start_date": start_date,
                 "end_date": end_date,
                 "analyst_signals": {},
             },
-            "metadata": {
-                "show_reasoning": False,
-                "model_name": model_name,
-                "model_provider": model_provider,
-                "request": request,  # Pass the request for agent-specific model access
-            },
+            "metadata": metadata_payload,
         },
     )
+
+    state.setdefault("metadata", {}).update(metadata_payload)
+    decisions = {}
+    if state.get("messages"):
+        decisions = parse_hedge_fund_response(state["messages"][-1].content) or {}
+    analyst_signals = state.get("data", {}).get("analyst_signals", {}) or {}
+    portfolio_from_state = state.get("data", {}).get("portfolio")
+    if isinstance(portfolio_from_state, dict):
+        working_portfolio = merge_portfolio_structures(working_portfolio, portfolio_from_state)
+
+    if persistence_enabled:
+        metadata_document = {
+            "tickers": tickers,
+            "start_date": start_date,
+            "end_date": end_date,
+            "model_name": model_name,
+            "model_provider": model_provider,
+        }
+        persistence.analyst_documents.upsert_document(
+            run_identifier,
+            resolved_user_id,
+            analyst_signals,
+            strategy_id=resolved_strategy_id,
+            metadata=metadata_document,
+            timestamp=run_timestamp,
+        )
+        persistence.decision_documents.upsert_document(
+            run_identifier,
+            resolved_user_id,
+            decisions,
+            strategy_id=resolved_strategy_id,
+            metadata=metadata_document,
+            timestamp=run_timestamp,
+        )
+        persistence.portfolios.save_portfolio(
+            resolved_user_id,
+            working_portfolio,
+            strategy_id=resolved_strategy_id,
+        )
+
+    state.setdefault("data", {})["portfolio_snapshot"] = working_portfolio
+    state["metadata"]["run_id"] = run_identifier
+    state["metadata"]["run_at"] = run_timestamp
+    state["metadata"]["user_id"] = resolved_user_id
+    if resolved_strategy_id:
+        state["metadata"]["strategy_id"] = resolved_strategy_id
+
+    return state
 
 
 def parse_hedge_fund_response(response):
