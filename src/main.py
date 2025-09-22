@@ -11,10 +11,12 @@ from src.graph.state import AgentState
 from src.utils.display import print_trading_output
 from src.utils.analysts import ANALYST_ORDER, get_analyst_nodes
 from src.utils.progress import progress
-from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider
+from src.utils.visualize import save_graph_as_png
 from src.brokers import dispatch_paper_orders
 from typing import Any, Dict, Optional
-from src.utils.ollama import ensure_ollama_and_model
+from src.cli.input import (
+    parse_cli_inputs,
+)
 from src.services.persistence.cosmos import get_cosmos_persistence
 from src.utils.portfolio import merge_portfolio_structures
 
@@ -22,7 +24,6 @@ import argparse
 from copy import deepcopy
 from datetime import datetime, timezone
 from dateutil.relativedelta import relativedelta
-from src.utils.visualize import save_graph_as_png
 import json
 from uuid import uuid4
 
@@ -395,38 +396,37 @@ if __name__ == "__main__":
 
     # Initialize portfolio with cash amount and stock positions
     portfolio = {
-        "cash": args.initial_cash,  # Initial cash amount
-        "margin_requirement": args.margin_requirement,  # Initial margin requirement
-        "margin_used": 0.0,  # total margin usage across all short positions
+        "cash": inputs.initial_cash,
+        "margin_requirement": inputs.margin_requirement,
+        "margin_used": 0.0,
         "positions": {
             ticker: {
-                "long": 0,  # Number of shares held long
-                "short": 0,  # Number of shares held short
-                "long_cost_basis": 0.0,  # Average cost basis for long positions
-                "short_cost_basis": 0.0,  # Average price at which shares were sold short
-                "short_margin_used": 0.0,  # Dollars of margin used for this ticker's short
+                "long": 0,
+                "short": 0,
+                "long_cost_basis": 0.0,
+                "short_cost_basis": 0.0,
+                "short_margin_used": 0.0,
             }
             for ticker in tickers
         },
         "realized_gains": {
             ticker: {
-                "long": 0.0,  # Realized gains from long positions
-                "short": 0.0,  # Realized gains from short positions
+                "long": 0.0,
+                "short": 0.0,
             }
             for ticker in tickers
         },
     }
 
-    # Run the hedge fund
     result = run_hedge_fund(
         tickers=tickers,
-        start_date=start_date,
-        end_date=end_date,
+        start_date=inputs.start_date,
+        end_date=inputs.end_date,
         portfolio=portfolio,
-        show_reasoning=args.show_reasoning,
-        selected_analysts=selected_analysts,
-        model_name=model_name,
-        model_provider=model_provider,
+        show_reasoning=inputs.show_reasoning,
+        selected_analysts=inputs.selected_analysts,
+        model_name=inputs.model_name,
+        model_provider=inputs.model_provider,
         trade_mode=args.trade_mode,
         dry_run=args.dry_run,
         confidence_threshold=args.confidence_threshold,

@@ -317,8 +317,15 @@ def analyze_lynch_valuation(financial_line_items: list, market_cap: float | None
         latest_eps = eps_values[0]
         older_eps = eps_values[-1]
         if older_eps > 0:
-            eps_growth_rate = (latest_eps - older_eps) / older_eps
-            details.append(f"Approx EPS growth rate: {eps_growth_rate:.1%}")
+            # Calculate annualized growth rate (CAGR) for PEG ratio
+            num_years = len(eps_values) - 1
+            if latest_eps > 0:
+                # CAGR formula: (ending_value/beginning_value)^(1/years) - 1
+                eps_growth_rate = (latest_eps / older_eps) ** (1 / num_years) - 1
+            else:
+                # If latest EPS is negative, use simple average growth
+                eps_growth_rate = (latest_eps - older_eps) / (older_eps * num_years)
+            details.append(f"Annualized EPS growth rate: {eps_growth_rate:.1%}")
         else:
             details.append("Cannot compute EPS growth rate (older EPS <= 0)")
     else:
@@ -327,10 +334,10 @@ def analyze_lynch_valuation(financial_line_items: list, market_cap: float | None
     # Compute PEG if possible
     peg_ratio = None
     if pe_ratio and eps_growth_rate and eps_growth_rate > 0:
-        # Peg ratio typically uses a percentage growth rate
-        # So if growth rate is 0.25, we treat it as 25 for the formula => PE / 25
-        # Alternatively, some treat it as 0.25 => we do (PE / (0.25 * 100)).
-        # Implementation can vary, but let's do a standard approach: PEG = PE / (Growth * 100).
+        # PEG ratio formula: P/E divided by growth rate (as percentage)
+        # Since eps_growth_rate is stored as decimal (0.25 for 25%),
+        # we multiply by 100 to convert to percentage for the PEG calculation
+        # Example: P/E=20, growth=0.25 (25%) => PEG = 20/25 = 0.8
         peg_ratio = pe_ratio / (eps_growth_rate * 100)
         details.append(f"PEG ratio: {peg_ratio:.2f}")
 

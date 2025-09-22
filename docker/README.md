@@ -131,6 +131,18 @@ You can also specify a `--ollama` flag to run the AI hedge fund using local LLMs
 run.bat --ticker AAPL,MSFT,NVDA --ollama main
 ```
 
+If you already have an Ollama server running (locally or on your network), point the containers at it instead of starting the bundled instance. You can either pass an explicit base URL or export `OLLAMA_BASE_URL` before running the scripts.
+
+```bash
+# Linux / macOS
+./run.sh --ticker AAPL,MSFT,NVDA --ollama --ollama-base-url http://localhost:11434 main
+
+# Windows
+run.bat --ticker AAPL,MSFT,NVDA --ollama --ollama-base-url http://localhost:11434 main
+```
+
+When `OLLAMA_BASE_URL` is provided, the Docker compose services reuse that endpoint and the Ollama container is not started. To launch the embedded Ollama service manually with Docker Compose, add the `embedded-ollama` profile (e.g. `docker compose --profile embedded-ollama up`).
+
 You can optionally specify the start and end dates to make decisions for a specific time period.
 
 ```bash
