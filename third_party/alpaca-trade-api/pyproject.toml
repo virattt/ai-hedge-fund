@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alpaca-trade-api"
+version = "3.2.0"
+description = "Alpaca API python client"
+readme = ""
+requires-python = ">=3.8"
+authors = [{name = "Alpaca"}]
+keywords = ["financial", "timeseries", "api", "trade"]
+dependencies = [
+    "pandas>=0.18.1",
+    "numpy>=1.11.1",
+    "requests>2,<3",
+    "urllib3>=1.24,<3",
+    "websocket-client>=0.56.0,<2",
+    "websockets>=9.0,<11",
+    "msgpack==1.0.3",
+    "aiohttp>=3.8.3,<4",
+    "PyYAML==6.0.1",
+    "deprecation==2.1.0"
+]
+
+[tool.setuptools]
+packages = ["alpaca_trade_api"]

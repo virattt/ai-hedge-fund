@@ -27,6 +27,8 @@ colorama = "^0.4.6"
 questionary = "^2.1.0"
 rich = "^13.9.4"
 langchain-google-genai = "^2.0.11"
+# Broker integrations
+alpaca-trade-api = {path = "third_party/alpaca-trade-api", develop = false}
 azure-storage-queue = "^12.12.0"
 azure-cosmos = "^4.7.0"
 # Backend dependencies

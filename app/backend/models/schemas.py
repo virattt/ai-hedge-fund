@@ -141,6 +141,9 @@ class HedgeFundRequest(BaseHedgeFundRequest):
     end_date: Optional[str] = Field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d"))
     start_date: Optional[str] = None
     initial_cash: float = 100000.0
+    trade_mode: Optional[str] = None
+    dry_run: bool = False
+    confidence_threshold: Optional[int] = None
 
     def get_start_date(self) -> str:
         """Calculate start date if not provided"""

@@ -1,6 +1,8 @@
 import asyncio
+import asyncio
 import json
 import re
+from typing import Optional
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -143,13 +145,16 @@ async def run_graph_async(
     model_name,
     model_provider,
     request=None,
+    trade_mode: Optional[str] = None,
+    dry_run: bool = False,
+    confidence_threshold: Optional[int] = None,
     user_id: str | None = None,
     strategy_id: str | None = None,
     run_id: str | None = None,
 ):
     """Async wrapper for run_graph to work with asyncio."""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(
+    result = await loop.run_in_executor(
         None,
         lambda: run_graph(
             graph,
@@ -162,9 +167,13 @@ async def run_graph_async(
             request=request,
             user_id=user_id,
             strategy_id=strategy_id,
-            run_id=run_id,
+            run_id=run_id,            
+            trade_mode=trade_mode,
+            dry_run=dry_run,
+            confidence_threshold=confidence_threshold,
         ),
     )
+    return result
 
 
 def run_graph(
@@ -176,6 +185,9 @@ def run_graph(
     model_name: str,
     model_provider: str,
     request=None,
+    trade_mode: Optional[str] = None,
+    dry_run: bool = False,
+    confidence_threshold: Optional[int] = None,
     user_id: str | None = None,
     strategy_id: str | None = None,
     run_id: str | None = None,
@@ -232,7 +244,15 @@ def run_graph(
                 "end_date": end_date,
                 "analyst_signals": {},
             },
-            "metadata": metadata_payload,
+            "metadata": {
+                "show_reasoning": False,
+                "model_name": model_name,
+                "model_provider": model_provider,
+                "request": request,  # Pass the request for agent-specific model access
+                "trade_mode": trade_mode,
+                "dry_run": dry_run,
+                "confidence_threshold": confidence_threshold,
+            },
         },
     )
 
