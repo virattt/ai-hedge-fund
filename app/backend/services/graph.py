@@ -1,6 +1,8 @@
 import asyncio
+import asyncio
 import json
 import re
+from typing import Optional
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
 
@@ -129,12 +131,39 @@ def create_graph(graph_nodes: list, graph_edges: list) -> StateGraph:
     return graph
 
 
-async def run_graph_async(graph, portfolio, tickers, start_date, end_date, model_name, model_provider, request=None):
+async def run_graph_async(
+    graph,
+    portfolio,
+    tickers,
+    start_date,
+    end_date,
+    model_name,
+    model_provider,
+    request=None,
+    trade_mode: Optional[str] = None,
+    dry_run: bool = False,
+    confidence_threshold: Optional[int] = None,
+):
     """Async wrapper for run_graph to work with asyncio."""
     # Use run_in_executor to run the synchronous function in a separate thread
     # so it doesn't block the event loop
     loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(None, lambda: run_graph(graph, portfolio, tickers, start_date, end_date, model_name, model_provider, request))  # Use default executor
+    result = await loop.run_in_executor(
+        None,
+        lambda: run_graph(
+            graph,
+            portfolio,
+            tickers,
+            start_date,
+            end_date,
+            model_name,
+            model_provider,
+            request,
+            trade_mode=trade_mode,
+            dry_run=dry_run,
+            confidence_threshold=confidence_threshold,
+        ),
+    )
     return result
 
 
@@ -147,6 +176,9 @@ def run_graph(
     model_name: str,
     model_provider: str,
     request=None,
+    trade_mode: Optional[str] = None,
+    dry_run: bool = False,
+    confidence_threshold: Optional[int] = None,
 ) -> dict:
     """
     Run the graph with the given portfolio, tickers,
@@ -172,6 +204,9 @@ def run_graph(
                 "model_name": model_name,
                 "model_provider": model_provider,
                 "request": request,  # Pass the request for agent-specific model access
+                "trade_mode": trade_mode,
+                "dry_run": dry_run,
+                "confidence_threshold": confidence_threshold,
             },
         },
     )

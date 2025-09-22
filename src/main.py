@@ -12,6 +12,8 @@ from src.utils.display import print_trading_output
 from src.utils.analysts import ANALYST_ORDER, get_analyst_nodes
 from src.utils.progress import progress
 from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider
+from src.brokers import dispatch_paper_orders
+from typing import Any, Dict, Optional
 from src.utils.ollama import ensure_ollama_and_model
 
 import argparse
@@ -51,6 +53,9 @@ def run_hedge_fund(
     selected_analysts: list[str] = [],
     model_name: str = "gpt-4.1",
     model_provider: str = "OpenAI",
+    trade_mode: Optional[str] = None,
+    dry_run: bool = False,
+    confidence_threshold: Optional[int] = None,
 ):
     # Start progress tracking
     progress.start()
@@ -85,9 +90,23 @@ def run_hedge_fund(
             },
         )
 
+        decisions = parse_hedge_fund_response(final_state["messages"][-1].content)
+        analyst_signals = final_state["data"]["analyst_signals"]
+
+        broker_orders: list[dict[str, Any]] = []
+        if trade_mode and trade_mode.lower() == "paper" and decisions:
+            broker_orders = dispatch_paper_orders(
+                decisions=decisions,
+                analyst_signals=analyst_signals,
+                state_data=final_state["data"],
+                confidence_threshold=confidence_threshold,
+                dry_run=dry_run,
+            )
+
         return {
-            "decisions": parse_hedge_fund_response(final_state["messages"][-1].content),
-            "analyst_signals": final_state["data"]["analyst_signals"],
+            "decisions": decisions,
+            "analyst_signals": analyst_signals,
+            "broker_orders": broker_orders,
         }
     finally:
         # Stop progress tracking
@@ -146,6 +165,23 @@ if __name__ == "__main__":
     parser.add_argument("--show-reasoning", action="store_true", help="Show reasoning from each agent")
     parser.add_argument("--show-agent-graph", action="store_true", help="Show the agent graph")
     parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
+    parser.add_argument(
+        "--trade-mode",
+        choices=["analysis", "paper"],
+        default="analysis",
+        help="Choose 'paper' to execute trades via Alpaca's paper trading API",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Skip actual broker submission even when trade mode is paper",
+    )
+    parser.add_argument(
+        "--confidence-threshold",
+        type=int,
+        default=None,
+        help="Minimum confidence (0-100) required before submitting a broker order",
+    )
 
     args = parser.parse_args()
 
@@ -317,5 +353,8 @@ if __name__ == "__main__":
         selected_analysts=selected_analysts,
         model_name=model_name,
         model_provider=model_provider,
+        trade_mode=args.trade_mode,
+        dry_run=args.dry_run,
+        confidence_threshold=args.confidence_threshold,
     )
     print_trading_output(result)

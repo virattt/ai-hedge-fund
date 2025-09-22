@@ -12,6 +12,7 @@ from app.backend.services.backtest_service import BacktestService
 from app.backend.services.api_key_service import ApiKeyService
 from src.utils.progress import progress
 from src.utils.analysts import get_agents_list
+from src.brokers import dispatch_paper_orders
 
 router = APIRouter(prefix="/hedge-fund")
 
@@ -86,6 +87,9 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
                         model_name=request_data.model_name,
                         model_provider=model_provider,
                         request=request_data,  # Pass the full request for agent-specific model access
+                        trade_mode=request_data.trade_mode,
+                        dry_run=request_data.dry_run,
+                        confidence_threshold=request_data.confidence_threshold,
                     )
                 )
                 
@@ -127,11 +131,28 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
                     return
 
                 # Send the final result
+                decisions = parse_hedge_fund_response(result.get("messages", [])[-1].content)
+                analyst_signals = result.get("data", {}).get("analyst_signals", {})
+                broker_orders = []
+                if (
+                    request_data.trade_mode
+                    and request_data.trade_mode.lower() == "paper"
+                    and decisions
+                ):
+                    broker_orders = dispatch_paper_orders(
+                        decisions=decisions,
+                        analyst_signals=analyst_signals,
+                        state_data=result.get("data", {}),
+                        confidence_threshold=request_data.confidence_threshold,
+                        dry_run=request_data.dry_run,
+                    )
+
                 final_data = CompleteEvent(
                     data={
-                        "decisions": parse_hedge_fund_response(result.get("messages", [])[-1].content),
-                        "analyst_signals": result.get("data", {}).get("analyst_signals", {}),
+                        "decisions": decisions,
+                        "analyst_signals": analyst_signals,
                         "current_prices": result.get("data", {}).get("current_prices", {}),
+                        "broker_orders": broker_orders,
                     }
                 )
                 yield final_data.to_sse()
