@@ -86,6 +86,8 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
                         model_name=request_data.model_name,
                         model_provider=model_provider,
                         request=request_data,  # Pass the full request for agent-specific model access
+                        user_id=getattr(request_data, "user_id", None),
+                        strategy_id=getattr(request_data, "strategy_id", None),
                     )
                 )
                 
@@ -127,11 +129,17 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
                     return
 
                 # Send the final result
+                metadata = result.get("metadata", {}) if result else {}
                 final_data = CompleteEvent(
                     data={
                         "decisions": parse_hedge_fund_response(result.get("messages", [])[-1].content),
                         "analyst_signals": result.get("data", {}).get("analyst_signals", {}),
                         "current_prices": result.get("data", {}).get("current_prices", {}),
+                        "run_id": metadata.get("run_id"),
+                        "run_at": metadata.get("run_at"),
+                        "user_id": metadata.get("user_id"),
+                        "strategy_id": metadata.get("strategy_id"),
+                        "portfolio_snapshot": result.get("data", {}).get("portfolio_snapshot"),
                     }
                 )
                 yield final_data.to_sse()

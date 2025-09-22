@@ -1,9 +1,10 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dateutil.relativedelta import relativedelta
 import pandas as pd
 import numpy as np
 from typing import Callable, Dict, List, Optional, Any
 import asyncio
+from uuid import uuid4
 
 from src.tools.api import (
     get_company_news,
@@ -14,6 +15,8 @@ from src.tools.api import (
 )
 from app.backend.services.graph import run_graph_async, parse_hedge_fund_response
 from app.backend.services.portfolio import create_portfolio
+from src.services.persistence.cosmos import get_cosmos_persistence
+from src.utils.portfolio import merge_portfolio_structures
 
 class BacktestService:
     """
@@ -56,6 +59,16 @@ class BacktestService:
         self.model_provider = model_provider
         self.request = request
         self.portfolio_values = []
+        request_user = getattr(request, "user_id", None) if request else None
+        request_strategy = getattr(request, "strategy_id", None) if request else None
+        self.user_id = request_user or "backend"
+        self.strategy_id = request_strategy
+        self.persistence = get_cosmos_persistence()
+        self.persistence_enabled = self.persistence.is_configured
+        if self.persistence_enabled:
+            persisted_portfolio = self.persistence.portfolios.load_portfolio(self.user_id, self.strategy_id)
+            if persisted_portfolio:
+                self.portfolio = merge_portfolio_structures(self.portfolio, persisted_portfolio)
 
     def execute_trade(self, ticker: str, action: str, quantity: float, current_price: float) -> int:
         """
@@ -200,6 +213,39 @@ class BacktestService:
                 return quantity
 
         return 0
+
+    def _persist_run_results(
+        self,
+        run_identifier: str,
+        run_timestamp: str,
+        decisions: Dict[str, Any],
+        analyst_signals: Dict[str, Any],
+        metadata: Dict[str, Any],
+    ) -> None:
+        if not self.persistence_enabled:
+            return
+
+        self.persistence.analyst_documents.upsert_document(
+            run_identifier,
+            self.user_id,
+            analyst_signals,
+            strategy_id=self.strategy_id,
+            metadata=metadata,
+            timestamp=run_timestamp,
+        )
+        self.persistence.decision_documents.upsert_document(
+            run_identifier,
+            self.user_id,
+            decisions,
+            strategy_id=self.strategy_id,
+            metadata=metadata,
+            timestamp=run_timestamp,
+        )
+        self.persistence.portfolios.save_portfolio(
+            self.user_id,
+            self.portfolio,
+            strategy_id=self.strategy_id,
+        )
 
     def calculate_portfolio_value(self, current_prices: Dict[str, float]) -> float:
         """Calculate total portfolio value."""
@@ -360,6 +406,7 @@ class BacktestService:
             portfolio_for_graph.update(self.portfolio)
 
             # Execute graph-based agent decisions
+            run_identifier = str(uuid4())
             try:
                 result = await run_graph_async(
                     graph=self.graph,
@@ -370,20 +417,26 @@ class BacktestService:
                     model_name=self.model_name,
                     model_provider=self.model_provider,
                     request=self.request,
+                    user_id=self.user_id,
+                    strategy_id=self.strategy_id,
+                    run_id=run_identifier,
                 )
-                
-                # Parse the decisions from the graph result
+
                 if result and result.get("messages"):
                     decisions = parse_hedge_fund_response(result["messages"][-1].content)
                     analyst_signals = result.get("data", {}).get("analyst_signals", {})
                 else:
                     decisions = {}
                     analyst_signals = {}
-                    
+
+                run_metadata = result.get("metadata", {}) if result else {}
+                run_identifier = run_metadata.get("run_id", run_identifier)
+                run_timestamp = run_metadata.get("run_at") or datetime.now(timezone.utc).isoformat()
             except Exception as e:
                 print(f"Error running graph for {current_date_str}: {e}")
                 decisions = {}
                 analyst_signals = {}
+                run_timestamp = datetime.now(timezone.utc).isoformat()
 
             # Execute trades based on decisions
             executed_trades = {}
@@ -402,6 +455,18 @@ class BacktestService:
             gross_exposure = long_exposure + short_exposure
             net_exposure = long_exposure - short_exposure
             long_short_ratio = long_exposure / short_exposure if short_exposure > 1e-9 else None
+
+            run_metadata_payload = {
+                "tickers": self.tickers,
+                "start_date": lookback_start,
+                "end_date": current_date_str,
+                "model_name": self.model_name,
+                "model_provider": self.model_provider,
+                "mode": "backtest",
+                "long_exposure": long_exposure,
+                "short_exposure": short_exposure,
+            }
+            self._persist_run_results(run_identifier, run_timestamp, decisions, analyst_signals, run_metadata_payload)
 
             # Track portfolio value
             self.portfolio_values.append({
@@ -438,7 +503,9 @@ class BacktestService:
                 "portfolio_return": portfolio_return,
                 "performance_metrics": performance_metrics.copy(),
                 # Add detailed trading information for each ticker
-                "ticker_details": []
+                "ticker_details": [],
+                "run_id": run_identifier,
+                "run_at": run_timestamp,
             }
 
             # Build ticker details (similar to CLI format_backtest_row)
