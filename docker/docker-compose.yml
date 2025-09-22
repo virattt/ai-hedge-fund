@@ -98,5 +98,17 @@ services:
     tty: true
     stdin_open: true
 
+  queue-worker:
+    build:
+      context: ..
+      dockerfile: docker/worker.Dockerfile
+    image: ai-hedge-fund-worker
+    volumes:
+      - ../.env:/app/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+    command: python -m src.jobs.queue_worker
+
 volumes:
   ollama_data: 
