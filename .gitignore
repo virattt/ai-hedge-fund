@@ -45,6 +45,7 @@ Thumbs.db
 
 # Txt files
 *.txt
+!infra/monitoring/requirements.txt
 
 # PDF files
 *.pdf

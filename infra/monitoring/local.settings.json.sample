@@ -1,0 +1,21 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "MARKET_MONITOR_WATCHLIST": "AAPL,MSFT,NVDA",
+    "MARKET_MONITOR_QUEUE_NAME": "analysis-requests",
+    "MARKET_MONITOR_PERCENT_CHANGE_THRESHOLD": "0.02",
+    "MARKET_MONITOR_VOLUME_SPIKE_MULTIPLIER": "1.5",
+    "MARKET_MONITOR_VOLUME_LOOKBACK": "10",
+    "MARKET_MONITOR_ANALYSIS_WINDOW_MINUTES": "120",
+    "MARKET_MONITOR_COOLDOWN_SECONDS": "1800",
+    "MARKET_MONITOR_LOOKBACK_DAYS": "30",
+    "FINANCIAL_DATASETS_API_KEY": "<financialdatasets-key>",
+    "MARKET_MONITOR_QUEUE_CONNECTION_STRING": "<storage-connection-string>",
+    "COSMOS_ENDPOINT": "https://<account>.documents.azure.com:443/",
+    "COSMOS_KEY": "<cosmos-key>",
+    "COSMOS_DATABASE": "monitoring",
+    "COSMOS_CONTAINER": "ticker-cooldowns"
+  }
+}

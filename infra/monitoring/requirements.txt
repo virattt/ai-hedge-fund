@@ -1,0 +1,6 @@
+azure-functions
+azure-storage-queue>=12.7.0
+azure-cosmos>=4.5.0
+requests>=2.31.0
+pandas>=2.1.0
+pydantic>=2.4.0
