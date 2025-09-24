@@ -63,10 +63,10 @@ You can remove any keys you do not need; the publish script only pushes the valu
 
 ```powershell
 ./infra/scripts/publish-app.ps1 \`
-    -SubscriptionId "00000000-0000-0000-0000-000000000000" \`
-    -ResourceGroupName "rg-ai-hedge-fund" \`
-    -ApiImageTag "v1" \`
-    -WorkerImageTag "v1" \`
+    -SubscriptionId "a604d967-963b-4ff5-acb7-f0aaec811978" `
+    -ResourceGroupName "rg-ai-hedge-fund" `
+    -ApiImageTag "v1" `
+    -WorkerImageTag "v1" `
     -ConfigPath "infra/scripts/deployment-settings.json"
 ```
 

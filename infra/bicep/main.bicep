@@ -20,12 +20,35 @@ param deadLetterQueueName string = 'analysis-deadletter'
 @description('Azure region for Container Registry (defaults to location).')
 param acrLocation string = location
 
-@description('ACR SKU. Use Standard/Premium to avoid Basic blocks/policies.')
+@description('Resource group name of an existing Azure Container Registry. Leave blank to create a new registry.')
+param existingAcrResourceGroup string = ''
+
+@description('Name of an existing Azure Container Registry. Leave blank to create a new registry.')
+param existingAcrName string = ''
+
+@description('Admin username for an existing Azure Container Registry. Required when reusing an existing registry.')
+param existingAcrUsername string = ''
+
+@secure()
+@description('Admin password for an existing Azure Container Registry. Required when reusing an existing registry.')
+param existingAcrPassword string = ''
+
+@description('Resource group name of an existing Cosmos DB account. Leave blank to create a new account.')
+param existingCosmosResourceGroup string = ''
+
+@description('Name of an existing Cosmos DB account. Leave blank to create a new account.')
+param existingCosmosAccountName string = ''
+
+@description('Name of an existing Cosmos DB database to reuse. Required when reusing an existing Cosmos DB account.')
+param existingCosmosDatabaseName string = ''
+
+@description('ACR SKU. Use Standard/Premium for higher throughput where available.')
 @allowed([
+  'Basic'
   'Standard'
   'Premium'
 ])
-param acrSku string = 'Standard'
+param acrSku string = 'Basic'
 
 @description('Enable Cosmos DB free tier (one account per subscription). Turn off if already consumed.')
 param enableCosmosFreeTier bool = true
@@ -58,6 +81,9 @@ var monitorCooldownContainerName = 'monitor-cooldowns'
 var sanitizedQueueName = toLower(replace(queueName, '_', '-'))
 var sanitizedDeadLetterQueueName = toLower(replace(deadLetterQueueName, '_', '-'))
 
+var useExistingAcr = existingAcrName != ''
+var useExistingCosmos = existingCosmosAccountName != ''
+
 // ------------------------- Log Analytics -------------------------
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2025-02-01' = {
   name: logAnalyticsWorkspaceName
@@ -88,7 +114,7 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
 }
 
 // ------------------------- Azure Container Registry -------------------------
-resource acr 'Microsoft.ContainerRegistry/registries@2025-04-01' = {
+resource acr 'Microsoft.ContainerRegistry/registries@2025-04-01' = if (!useExistingAcr) {
   name: containerRegistryName
   location: acrLocation
   sku: {
@@ -105,6 +131,16 @@ resource acr 'Microsoft.ContainerRegistry/registries@2025-04-01' = {
     }
   }
 }
+
+resource acrExisting 'Microsoft.ContainerRegistry/registries@2025-04-01' existing = if (useExistingAcr) {
+  scope: resourceGroup(subscription().subscriptionId, existingAcrResourceGroup)
+  name: existingAcrName
+}
+
+var acrCredentials = !useExistingAcr ? acr.listCredentials() : null
+var acrLoginServer = useExistingAcr ? acrExisting.properties.loginServer : acr.properties.loginServer
+var acrAdminUsername = useExistingAcr ? existingAcrUsername : acrCredentials.username
+var acrAdminPassword = useExistingAcr ? existingAcrPassword : acrCredentials.passwords[0].value
 
 
 // ------------------------- Storage + Queues -------------------------
@@ -151,7 +187,7 @@ resource deadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/queues
 var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storage.name};AccountKey=${storage.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
 
 // ------------------------- Cosmos DB (Serverless) -------------------------
-resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2025-04-15' = {
+resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2025-04-15' = if (!useExistingCosmos) {
   name: cosmosAccountName
   location: cosmosLocation
   kind: 'GlobalDocumentDB'
@@ -178,7 +214,21 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2025-04-15' = {
   }
 }
 
-resource cosmosDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2025-04-15' = {
+resource cosmosAccountRefNew 'Microsoft.DocumentDB/databaseAccounts@2025-04-15' existing = if (!useExistingCosmos) {
+  name: cosmosAccount.name
+}
+
+resource cosmosAccountRefExisting 'Microsoft.DocumentDB/databaseAccounts@2025-04-15' existing = if (useExistingCosmos) {
+  scope: resourceGroup(subscription().subscriptionId, existingCosmosResourceGroup)
+  name: existingCosmosAccountName
+}
+
+var effectiveCosmosAccountName = useExistingCosmos ? existingCosmosAccountName : cosmosAccount.name
+var effectiveCosmosDatabaseName = useExistingCosmos && existingCosmosDatabaseName != '' ? existingCosmosDatabaseName : cosmosDatabaseName
+var cosmosKeys = useExistingCosmos ? cosmosAccountRefExisting.listKeys() : cosmosAccountRefNew.listKeys()
+var cosmosDocumentEndpoint = useExistingCosmos ? cosmosAccountRefExisting.properties.documentEndpoint : cosmosAccountRefNew.properties.documentEndpoint
+
+resource cosmosDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2025-04-15' = if (!useExistingCosmos) {
   parent: cosmosAccount
   name: cosmosDatabaseName
   properties: {
@@ -188,10 +238,10 @@ resource cosmosDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2025
 }
 
 // Containers module
-module cosmosContainers 'modules/cosmos-containers.bicep' = {
+module cosmosContainers 'modules/cosmos-containers.bicep' = if (!useExistingCosmos) {
   name: 'cosmos-containers'
   params: {
-    databaseAccountName: cosmosAccount.name
+    databaseAccountName: effectiveCosmosAccountName
     databaseName: cosmosDatabaseName
     portfolioContainerName: portfolioContainerName
     analystSignalsContainerName: analystSignalsContainerName
@@ -235,14 +285,14 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
       }
       registries: [
         {
-          server: acr.properties.loginServer
-          username: acr.listCredentials().username
+          server: acrLoginServer
+          username: acrAdminUsername
           passwordSecretRef: 'acr-password'
         }
       ]
       secrets: [
-        { name: 'acr-password', value: acr.listCredentials().passwords[0].value }
-        { name: 'cosmos-key', value: cosmosAccount.listKeys().primaryMasterKey }
+        { name: 'acr-password', value: acrAdminPassword }
+        { name: 'cosmos-key', value: cosmosKeys.primaryMasterKey }
         { name: 'queue-account-key', value: storage.listKeys().keys[0].value }
       ]
     }
@@ -250,14 +300,14 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
       containers: [
         {
           name: 'api'
-          image: '${acr.properties.loginServer}/ai-hedge-fund-api:latest'
+          image: '${acrLoginServer}/ai-hedge-fund-api:latest'
           command: [ 'python' ]
           args: [ '-m', 'uvicorn', 'app.backend.main:app', '--host', '0.0.0.0', '--port', '8000' ]
           env: [
             { name: 'PORT', value: '8000' }
-            { name: 'COSMOS_ENDPOINT', value: cosmosAccount.properties.documentEndpoint }
+            { name: 'COSMOS_ENDPOINT', value: cosmosDocumentEndpoint }
             { name: 'COSMOS_KEY', secretRef: 'cosmos-key' }
-            { name: 'COSMOS_DATABASE', value: cosmosDatabaseName }
+            { name: 'COSMOS_DATABASE', value: effectiveCosmosDatabaseName }
             { name: 'COSMOS_PORTFOLIOS_CONTAINER', value: portfolioContainerName }
             { name: 'COSMOS_ANALYST_SIGNALS_CONTAINER', value: analystSignalsContainerName }
             { name: 'COSMOS_DECISIONS_CONTAINER', value: decisionsContainerName }
@@ -282,16 +332,17 @@ resource queueWorkerJob 'Microsoft.App/jobs@2024-03-01' = {
   properties: {
     environmentId: managedEnv.id
     configuration: {
+      replicaTimeout: 900
       registries: [
         {
-          server: acr.properties.loginServer
-          username: acr.listCredentials().username
+          server: acrLoginServer
+          username: acrAdminUsername
           passwordSecretRef: 'acr-password'
         }
       ]
       secrets: [
-        { name: 'acr-password', value: acr.listCredentials().passwords[0].value }
-        { name: 'cosmos-key', value: cosmosAccount.listKeys().primaryMasterKey }
+        { name: 'acr-password', value: acrAdminPassword }
+        { name: 'cosmos-key', value: cosmosKeys.primaryMasterKey }
         { name: 'queue-account-key', value: storage.listKeys().keys[0].value }
         // Secret used by the scaler (matches triggerParameter 'connection')
         { name: 'queue-connection-string', value: storageConnectionString }
@@ -328,11 +379,11 @@ resource queueWorkerJob 'Microsoft.App/jobs@2024-03-01' = {
       containers: [
         {
           name: 'queue-worker'
-          image: '${acr.properties.loginServer}/ai-hedge-fund-worker:latest'
+          image: '${acrLoginServer}/ai-hedge-fund-worker:latest'
           env: [
-            { name: 'COSMOS_ENDPOINT', value: cosmosAccount.properties.documentEndpoint }
+            { name: 'COSMOS_ENDPOINT', value: cosmosDocumentEndpoint }
             { name: 'COSMOS_KEY', secretRef: 'cosmos-key' }
-            { name: 'COSMOS_DATABASE', value: cosmosDatabaseName }
+            { name: 'COSMOS_DATABASE', value: effectiveCosmosDatabaseName }
             { name: 'COSMOS_SNAPSHOT_CONTAINER', value: portfolioSnapshotsContainerName }
             { name: 'COSMOS_RESULTS_CONTAINER', value: runResultsContainerName }
             { name: 'COSMOS_STATUS_CONTAINER', value: runStatusContainerName }
@@ -375,9 +426,9 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
         { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }
         { name: 'MARKET_MONITOR_QUEUE_CONNECTION_STRING', value: storageConnectionString }
         { name: 'MARKET_MONITOR_QUEUE_NAME', value: sanitizedQueueName }
-        { name: 'COSMOS_ENDPOINT', value: cosmosAccount.properties.documentEndpoint }
-        { name: 'COSMOS_KEY', value: cosmosAccount.listKeys().primaryMasterKey }
-        { name: 'COSMOS_DATABASE', value: cosmosDatabaseName }
+        { name: 'COSMOS_ENDPOINT', value: cosmosDocumentEndpoint }
+        { name: 'COSMOS_KEY', value: cosmosKeys.primaryMasterKey }
+        { name: 'COSMOS_DATABASE', value: effectiveCosmosDatabaseName }
         { name: 'COSMOS_CONTAINER', value: monitorCooldownContainerName }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
         { name: 'APPINSIGHTS_INSTRUMENTATIONKEY', value: appInsights.properties.InstrumentationKey }
@@ -389,15 +440,15 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
 }
 
 // ------------------------- Outputs -------------------------
-output containerRegistryName string = containerRegistryName
-output containerRegistryLoginServer string = acr.properties.loginServer
+output containerRegistryName string = useExistingAcr ? existingAcrName : containerRegistryName
+output containerRegistryLoginServer string = acrLoginServer
 output storageAccountName string = storage.name
 output storageQueueName string = sanitizedQueueName
 output storageDeadLetterQueueName string = sanitizedDeadLetterQueueName
 output storageConnectionString string = storageConnectionString
-output cosmosAccountName string = cosmosAccount.name
-output cosmosEndpoint string = cosmosAccount.properties.documentEndpoint
-output cosmosDatabaseName string = cosmosDatabaseName
+output cosmosAccountName string = effectiveCosmosAccountName
+output cosmosEndpoint string = cosmosDocumentEndpoint
+output cosmosDatabaseName string = effectiveCosmosDatabaseName
 output cosmosContainers object = {
   portfolios: portfolioContainerName
   analystSignals: analystSignalsContainerName

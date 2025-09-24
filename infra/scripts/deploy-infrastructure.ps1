@@ -22,14 +22,27 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$DeadLetterQueueName = 'analysis-deadletter',
 
-    [ValidateSet('Standard', 'Premium')]
-    [string]$AcrSku = 'Standard',
+    [ValidateSet('Basic', 'Standard', 'Premium')]
+    [string]$AcrSku = 'Basic',
 
     [ValidateNotNullOrEmpty()]
     [string]$AcrLocation = '',
 
+    [string]$ExistingAcrResourceGroup = '',
 
-    [switch]$EnableCosmosFreeTier = $true,
+    [string]$ExistingAcrName = '',
+
+    [string]$ExistingAcrUsername = '',
+
+    [string]$ExistingAcrPassword = '',
+
+    [string]$ExistingCosmosResourceGroup = '',
+
+    [string]$ExistingCosmosAccountName = '',
+
+    [string]$ExistingCosmosDatabaseName = '',
+
+    [bool]$EnableCosmosFreeTier = $true,
 
     [switch]$WhatIf
 )
@@ -113,19 +126,53 @@ try {
     $deploymentName = "ai-hedge-fund-$(Get-Date -Format 'yyyyMMddHHmmss')"
     Write-Host "Deployment name: $deploymentName" -ForegroundColor Gray
 
+    $useExistingAcr = -not [string]::IsNullOrWhiteSpace($ExistingAcrName)
+    if ($useExistingAcr -and [string]::IsNullOrWhiteSpace($ExistingAcrResourceGroup)) {
+        throw "When specifying ExistingAcrName you must also provide ExistingAcrResourceGroup."
+    }
+
+    if ($useExistingAcr -and ([string]::IsNullOrWhiteSpace($ExistingAcrUsername) -or [string]::IsNullOrWhiteSpace($ExistingAcrPassword))) {
+        throw "When reusing an existing ACR you must provide ExistingAcrUsername and ExistingAcrPassword (admin credentials)."
+    }
+
+    $useExistingCosmos = -not [string]::IsNullOrWhiteSpace($ExistingCosmosAccountName)
+    if ($useExistingCosmos -and [string]::IsNullOrWhiteSpace($ExistingCosmosResourceGroup)) {
+        throw "When specifying ExistingCosmosAccountName you must also provide ExistingCosmosResourceGroup."
+    }
+
+    if ($useExistingCosmos -and [string]::IsNullOrWhiteSpace($ExistingCosmosDatabaseName)) {
+        throw "When reusing an existing Cosmos account you must provide ExistingCosmosDatabaseName."
+    }
+
+    if ($useExistingCosmos) {
+        $EnableCosmosFreeTier = $false
+    }
+
     # Prepare parameters
-    $deploymentParams = @(
-        "namePrefix=$NamePrefix"
-        "location=$Location"
-        "queueName=$QueueName"
-        "deadLetterQueueName=$DeadLetterQueueName"
-        "acrSku=$AcrSku"
-        "enableCosmosFreeTier=$($EnableCosmosFreeTier.ToString().ToLower())"
-    )
+    $deploymentParams = New-Object System.Collections.Generic.List[string]
+    $deploymentParams.Add("namePrefix=$NamePrefix") | Out-Null
+    $deploymentParams.Add("location=$Location") | Out-Null
+    $deploymentParams.Add("queueName=$QueueName") | Out-Null
+    $deploymentParams.Add("deadLetterQueueName=$DeadLetterQueueName") | Out-Null
+    $deploymentParams.Add("acrSku=$AcrSku") | Out-Null
+    $deploymentParams.Add("enableCosmosFreeTier=$($EnableCosmosFreeTier.ToString().ToLower())") | Out-Null
+
+    if ($useExistingAcr) {
+        $deploymentParams.Add("existingAcrResourceGroup=$ExistingAcrResourceGroup") | Out-Null
+        $deploymentParams.Add("existingAcrName=$ExistingAcrName") | Out-Null
+        $deploymentParams.Add("existingAcrUsername=$ExistingAcrUsername") | Out-Null
+        $deploymentParams.Add("existingAcrPassword=$ExistingAcrPassword") | Out-Null
+    }
 
     # Add cosmosLocation parameter if specified
-    if ($CosmosLocation) { $deploymentParams += "cosmosLocation=$CosmosLocation" }
-    if ($AcrLocation)    { $deploymentParams += "acrLocation=$AcrLocation" }
+    if ($CosmosLocation) { $deploymentParams.Add("cosmosLocation=$CosmosLocation") | Out-Null }
+    if ($AcrLocation)    { $deploymentParams.Add("acrLocation=$AcrLocation") | Out-Null }
+
+    if ($useExistingCosmos) {
+        $deploymentParams.Add("existingCosmosResourceGroup=$ExistingCosmosResourceGroup") | Out-Null
+        $deploymentParams.Add("existingCosmosAccountName=$ExistingCosmosAccountName") | Out-Null
+        $deploymentParams.Add("existingCosmosDatabaseName=$ExistingCosmosDatabaseName") | Out-Null
+    }
 
     # Display parameters
     Write-Host "Deployment Parameters:" -ForegroundColor Gray
@@ -138,6 +185,13 @@ try {
     Write-Host " - Dead Letter Queue: $DeadLetterQueueName" -ForegroundColor Gray
     Write-Host " - ACR SKU: $AcrSku" -ForegroundColor Gray
     Write-Host " - Cosmos Free Tier: $EnableCosmosFreeTier" -ForegroundColor Gray
+    if ($useExistingAcr) {
+        Write-Host " - Existing ACR: $ExistingAcrResourceGroup/$ExistingAcrName" -ForegroundColor Gray
+    }
+    if ($useExistingCosmos) {
+        Write-Host " - Existing Cosmos Account: $ExistingCosmosResourceGroup/$ExistingCosmosAccountName" -ForegroundColor Gray
+        Write-Host " - Existing Cosmos Database: $ExistingCosmosDatabaseName" -ForegroundColor Gray
+    }
 
     # Run what-if if requested
     if ($WhatIf) {

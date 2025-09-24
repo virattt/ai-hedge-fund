@@ -66,3 +66,6 @@ outputs/
 
 # Alembic (keep migration files, but ignore generated/cache files)
 app/backend/alembic/versions/__pycache__/
+
+# deployment settings (keep template, ignore actual settings)
+infra/scripts/deployment-settings.json
