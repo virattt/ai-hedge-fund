@@ -32,11 +32,15 @@ Use `infra/scripts/deploy-infrastructure.ps1` to compile the Bicep template and 
 ```powershell
 # Example: deploy into subscription 00000000-0000-0000-0000-000000000000
 # Resources will land in West Europe and use the prefix "hedgefund"
-./infra/scripts/deploy-infrastructure.ps1 \`
-    -SubscriptionId "00000000-0000-0000-0000-000000000000" \`
-    -ResourceGroupName "rg-ai-hedge-fund" \`
-    -NamePrefix "hedgefund" \`
-    -Location "westeurope"
+
+./infra/scripts/deploy-infrastructure.ps1 `
+    -SubscriptionId "a604d967-963b-4ff5-acb7-f0aaec811978" `
+    -ResourceGroupName "rg-ai-hedge-fund" `
+    -NamePrefix "hedgefund" `
+    -Location "westeurope" `
+    -CosmosLocation "northeurope" `
+    -AcrSku "Standard" `
+    -AcrLocation "northeurope"
 ```
 
 Optional: append `-WhatIf` to preview the changes without creating resources.

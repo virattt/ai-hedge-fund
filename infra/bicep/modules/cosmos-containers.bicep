@@ -1,153 +1,97 @@
-@description('Name of the Cosmos DB account to configure.')
+// Cosmos DB containers module
+
+@description('Name of the Cosmos DB account')
 param databaseAccountName string
 
-@description('Name of the SQL database inside the Cosmos account.')
+@description('Name of the database')
 param databaseName string
 
-@description('Container used to persist user portfolio snapshots.')
+@description('Name of the portfolio container')
 param portfolioContainerName string
 
-@description('Container storing analyst signal documents per run.')
+@description('Name of the analyst signals container')
 param analystSignalsContainerName string
 
-@description('Container storing decision documents per run.')
+@description('Name of the decisions container')
 param decisionsContainerName string
 
-@description('Container storing immutable portfolio snapshots for automation jobs.')
+@description('Name of the portfolio snapshots container')
 param portfolioSnapshotsContainerName string
 
-@description('Container storing queue worker results.')
+@description('Name of the run results container')
 param runResultsContainerName string
 
-@description('Container storing queue worker status summaries.')
+@description('Name of the run status container')
 param runStatusContainerName string
 
-@description('Container storing broker order executions.')
+@description('Name of the broker orders container')
 param brokerOrdersContainerName string
 
-@description('Container storing market monitor cooldown metadata.')
+@description('Name of the monitor cooldown container')
 param monitorCooldownContainerName string
 
-var partitionKeyPartition = {
-  kind: 'Hash'
-  paths: [
-    '/partition_key'
-  ]
-}
-
-var partitionKeyMessage = {
-  kind: 'Hash'
-  paths: [
-    '/messageId'
-  ]
-}
-
-var partitionKeyTicker = {
-  kind: 'Hash'
-  paths: [
-    '/ticker'
-  ]
-}
-
-resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2023-04-15' existing = {
+resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2025-04-15' existing = {
   name: databaseAccountName
 }
 
-resource sqlDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-04-15' existing = {
-  name: '${databaseAccountName}/${databaseName}'
+resource cosmosDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2025-04-15' existing = {
+  parent: cosmosAccount
+  name: databaseName
 }
 
-resource portfolios 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
-  name: '${cosmosAccount.name}/${sqlDatabase.name}/${portfolioContainerName}'
-  properties: {
-    resource: {
-      id: portfolioContainerName
-      partitionKey: partitionKeyPartition
-      indexingPolicy: {
-        indexingMode: 'consistent'
-      }
-    }
-    options: {}
-  }
+resource portfolioContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2025-04-15' = {
+  parent: cosmosDatabase
+  name: portfolioContainerName
+  properties: { resource: { id: portfolioContainerName, partitionKey: { paths: ['/id'], kind: 'Hash' } } }
 }
 
-resource analystSignals 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
-  name: '${cosmosAccount.name}/${sqlDatabase.name}/${analystSignalsContainerName}'
-  properties: {
-    resource: {
-      id: analystSignalsContainerName
-      partitionKey: partitionKeyPartition
-      defaultTtl: 2592000
-    }
-    options: {}
-  }
+resource analystSignalsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2025-04-15' = {
+  parent: cosmosDatabase
+  name: analystSignalsContainerName
+  properties: { resource: { id: analystSignalsContainerName, partitionKey: { paths: ['/id'], kind: 'Hash' } } }
 }
 
-resource decisions 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
-  name: '${cosmosAccount.name}/${sqlDatabase.name}/${decisionsContainerName}'
-  properties: {
-    resource: {
-      id: decisionsContainerName
-      partitionKey: partitionKeyPartition
-      defaultTtl: 2592000
-    }
-    options: {}
-  }
+resource decisionsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2025-04-15' = {
+  parent: cosmosDatabase
+  name: decisionsContainerName
+  properties: { resource: { id: decisionsContainerName, partitionKey: { paths: ['/id'], kind: 'Hash' } } }
 }
 
-resource portfolioSnapshots 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
-  name: '${cosmosAccount.name}/${sqlDatabase.name}/${portfolioSnapshotsContainerName}'
-  properties: {
-    resource: {
-      id: portfolioSnapshotsContainerName
-      partitionKey: partitionKeyPartition
-    }
-    options: {}
-  }
+resource portfolioSnapshotsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2025-04-15' = {
+  parent: cosmosDatabase
+  name: portfolioSnapshotsContainerName
+  properties: { resource: { id: portfolioSnapshotsContainerName, partitionKey: { paths: ['/id'], kind: 'Hash' } } }
 }
 
-resource runResults 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
-  name: '${cosmosAccount.name}/${sqlDatabase.name}/${runResultsContainerName}'
-  properties: {
-    resource: {
-      id: runResultsContainerName
-      partitionKey: partitionKeyMessage
-      defaultTtl: 2592000
-    }
-    options: {}
-  }
+resource runResultsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2025-04-15' = {
+  parent: cosmosDatabase
+  name: runResultsContainerName
+  properties: { resource: { id: runResultsContainerName, partitionKey: { paths: ['/id'], kind: 'Hash' } } }
 }
 
-resource runStatus 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
-  name: '${cosmosAccount.name}/${sqlDatabase.name}/${runStatusContainerName}'
-  properties: {
-    resource: {
-      id: runStatusContainerName
-      partitionKey: partitionKeyMessage
-      defaultTtl: 2592000
-    }
-    options: {}
-  }
+resource runStatusContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2025-04-15' = {
+  parent: cosmosDatabase
+  name: runStatusContainerName
+  properties: { resource: { id: runStatusContainerName, partitionKey: { paths: ['/id'], kind: 'Hash' } } }
 }
 
-resource brokerOrders 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
-  name: '${cosmosAccount.name}/${sqlDatabase.name}/${brokerOrdersContainerName}'
-  properties: {
-    resource: {
-      id: brokerOrdersContainerName
-      partitionKey: partitionKeyTicker
-    }
-    options: {}
-  }
+resource brokerOrdersContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2025-04-15' = {
+  parent: cosmosDatabase
+  name: brokerOrdersContainerName
+  properties: { resource: { id: brokerOrdersContainerName, partitionKey: { paths: ['/id'], kind: 'Hash' } } }
 }
 
-resource monitorCooldowns 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
-  name: '${cosmosAccount.name}/${sqlDatabase.name}/${monitorCooldownContainerName}'
-  properties: {
-    resource: {
-      id: monitorCooldownContainerName
-      partitionKey: partitionKeyTicker
-    }
-    options: {}
-  }
+resource monitorCooldownContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2025-04-15' = {
+  parent: cosmosDatabase
+  name: monitorCooldownContainerName
+  properties: { resource: { id: monitorCooldownContainerName, partitionKey: { paths: ['/id'], kind: 'Hash' } } }
 }
+
+output portfolioContainerName string = portfolioContainer.name
+output analystSignalsContainerName string = analystSignalsContainer.name
+output decisionsContainerName string = decisionsContainer.name
+output portfolioSnapshotsContainerName string = portfolioSnapshotsContainer.name
+output runResultsContainerName string = runResultsContainer.name
+output runStatusContainerName string = runStatusContainer.name
+output brokerOrdersContainerName string = brokerOrdersContainer.name
+output monitorCooldownContainerName string = monitorCooldownContainer.name
