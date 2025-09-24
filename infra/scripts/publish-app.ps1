@@ -70,16 +70,26 @@ az acr login --name $acrName | Out-Null
 Set-Location $repoRoot
 
 $apiImage = "$acrServer/ai-hedge-fund-api:$ApiImageTag"
+$apiImageLatest = "$acrServer/ai-hedge-fund-api:latest"
 $workerImage = "$acrServer/ai-hedge-fund-worker:$WorkerImageTag"
+$workerImageLatest = "$acrServer/ai-hedge-fund-worker:latest"
 
 Write-Host "Building API image $apiImage" -ForegroundColor Cyan
-docker build --file docker/Dockerfile --tag $apiImage .
+$apiBuildArgs = @('--file', 'docker/Dockerfile', '--tag', $apiImage)
+if ($ApiImageTag -ne 'latest') {
+    $apiBuildArgs += @('--tag', $apiImageLatest)
+}
+docker build @apiBuildArgs .
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to build API container image"
 }
 
 Write-Host "Building queue worker image $workerImage" -ForegroundColor Cyan
-docker build --file docker/worker.Dockerfile --tag $workerImage .
+$workerBuildArgs = @('--file', 'docker/worker.Dockerfile', '--tag', $workerImage)
+if ($WorkerImageTag -ne 'latest') {
+    $workerBuildArgs += @('--tag', $workerImageLatest)
+}
+docker build @workerBuildArgs .
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to build worker container image"
 }
@@ -89,18 +99,32 @@ docker push $apiImage
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to push API container image"
 }
+if ($ApiImageTag -ne 'latest') {
+    Write-Host "Pushing API image tag 'latest'" -ForegroundColor Cyan
+    docker push $apiImageLatest
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to push API container image (latest tag)"
+    }
+}
 
 Write-Host "Pushing worker image" -ForegroundColor Cyan
 docker push $workerImage
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to push worker container image"
 }
+if ($WorkerImageTag -ne 'latest') {
+    Write-Host "Pushing worker image tag 'latest'" -ForegroundColor Cyan
+    docker push $workerImageLatest
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to push worker container image (latest tag)"
+    }
+}
 
 Write-Host "Updating Container App '$apiAppName'" -ForegroundColor Cyan
 az containerapp update --name $apiAppName --resource-group $ResourceGroupName --image $apiImage | Out-Null
 
 Write-Host "Updating Container Apps job '$jobName'" -ForegroundColor Cyan
-az containerapp job update --name $jobName --resource-group $ResourceGroupName --set-template-containers "queue-worker=$workerImage" | Out-Null
+az containerapp job update --name $jobName --resource-group $ResourceGroupName --image $workerImage | Out-Null
 
 if ($ConfigPath) {
     if (-not (Test-Path $ConfigPath)) {

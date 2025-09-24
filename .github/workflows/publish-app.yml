@@ -1,0 +1,128 @@
+name: Publish application
+
+on:
+  workflow_dispatch:
+    inputs:
+      subscription_id:
+        description: Azure subscription ID that owns the deployment
+        required: true
+        type: string
+      resource_group:
+        description: Resource group that contains the Container App resources
+        required: true
+        type: string
+      api_image_tag:
+        description: Docker image tag to use for the API (leave empty to use the commit SHA)
+        required: false
+        default: ""
+        type: string
+      worker_image_tag:
+        description: Docker image tag to use for the worker (leave empty to use the commit SHA)
+        required: false
+        default: ""
+        type: string
+      config_path:
+        description: Optional path (relative to repo root) to the JSON config for secrets/app settings
+        required: false
+        default: ""
+        type: string
+
+env:
+  RESOURCE_GROUP: ${{ inputs.resource_group }}
+  SUBSCRIPTION_ID: ${{ inputs.subscription_id }}
+  API_IMAGE_TAG: ${{ inputs.api_image_tag != '' && inputs.api_image_tag || github.sha }}
+  WORKER_IMAGE_TAG: ${{ inputs.worker_image_tag != '' && inputs.worker_image_tag || github.sha }}
+
+jobs:
+  publish:
+    name: Build and publish application
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Sign in to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          enable-AzPSSession: true
+
+      - name: Select subscription
+        shell: bash
+        run: |
+          set -euo pipefail
+          az account set --subscription "$SUBSCRIPTION_ID"
+
+      - name: Capture latest deployment outputs
+        id: deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          deployment_json=$(az deployment group list \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "max_by([?properties.provisioningState=='Succeeded'], &properties.timestamp).properties" \
+            -o json)
+
+          if [ -z "$deployment_json" ] || [ "$deployment_json" = "null" ]; then
+            echo "No successful deployments found in resource group $RESOURCE_GROUP" >&2
+            exit 1
+          fi
+
+          outputs=$(echo "$deployment_json" | jq -r '.outputs')
+          if [ -z "$outputs" ] || [ "$outputs" = "null" ]; then
+            echo "Deployment did not return outputs. Ensure infra/scripts/deploy-infrastructure.ps1 was run." >&2
+            exit 1
+          fi
+
+          mkdir -p infra/scripts
+          echo "$outputs" | jq '.' > infra/scripts/latest-deployment.json
+
+          acr_name=$(echo "$outputs" | jq -r '.containerRegistryName.value')
+          acr_login_server=$(echo "$outputs" | jq -r '.containerRegistryLoginServer.value')
+          api_app_name=$(echo "$outputs" | jq -r '.apiContainerAppName.value')
+          job_name=$(echo "$outputs" | jq -r '.queueWorkerJobName.value')
+          function_app_name=$(echo "$outputs" | jq -r '.functionAppName.value')
+
+          required=0
+          for value in "$acr_name" "$acr_login_server" "$api_app_name" "$job_name" "$function_app_name"; do
+            if [ "$value" = "null" ] || [ -z "$value" ]; then
+              required=1
+            fi
+          done
+
+          if [ "$required" -ne 0 ]; then
+            echo "Missing expected outputs in deployment metadata. Check the Bicep outputs." >&2
+            cat infra/scripts/latest-deployment.json
+            exit 1
+          fi
+
+          echo "acr_name=$acr_name" >> "$GITHUB_OUTPUT"
+          echo "acr_login_server=$acr_login_server" >> "$GITHUB_OUTPUT"
+          echo "api_app_name=$api_app_name" >> "$GITHUB_OUTPUT"
+          echo "job_name=$job_name" >> "$GITHUB_OUTPUT"
+          echo "function_app_name=$function_app_name" >> "$GITHUB_OUTPUT"
+
+      - name: Publish application via PowerShell script
+        shell: pwsh
+        env:
+          CONFIG_PATH: ${{ inputs.config_path }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $params = @{
+            SubscriptionId     = "$env:SUBSCRIPTION_ID"
+            ResourceGroupName  = "$env:RESOURCE_GROUP"
+            DeploymentInfoPath = "infra/scripts/latest-deployment.json"
+            ApiImageTag        = "$env:API_IMAGE_TAG"
+            WorkerImageTag     = "$env:WORKER_IMAGE_TAG"
+          }
+
+          if (-not [string]::IsNullOrWhiteSpace($env:CONFIG_PATH)) {
+            $params.ConfigPath = $env:CONFIG_PATH
+          }
+
+          Write-Host "Invoking infra/scripts/publish-app.ps1 with tags API=$($params.ApiImageTag) and Worker=$($params.WorkerImageTag)" -ForegroundColor Cyan
+          & "infra/scripts/publish-app.ps1" @params
