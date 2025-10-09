@@ -8,6 +8,7 @@ from langchain_xai import ChatXAI
 from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from langchain_openai import ChatOpenAI
 from langchain_gigachat import GigaChat
+from langchain_mistralai import ChatMistralAI
 from langchain_ollama import ChatOllama
 from enum import Enum
 from pydantic import BaseModel
@@ -129,7 +130,7 @@ def get_models_list():
     ]
 
 
-def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | None:
+def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | ChatMistralAI | None:
     if model_provider == ModelProvider.GROQ:
         api_key = (api_keys or {}).get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
         if not api_key:
@@ -230,3 +231,9 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
             print(f"Azure Deployment Name Error: Please make sure AZURE_OPENAI_DEPLOYMENT_NAME is set in your .env file.")
             raise ValueError("Azure OpenAI deployment name not found.  Please make sure AZURE_OPENAI_DEPLOYMENT_NAME is set in your .env file.")
         return AzureChatOpenAI(azure_endpoint=azure_endpoint, azure_deployment=azure_deployment_name, api_key=api_key, api_version="2024-10-21")
+    elif model_provider == ModelProvider.MISTRAL:
+        api_key = (api_keys or {}).get("MISTRAL_API_KEY") or os.getenv("MISTRAL_API_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure MISTRAL_API_KEY is set in your .env file or provided via API keys.")
+            raise ValueError("Mistral API key not found. Please make sure MISTRAL_API_KEY is set in your .env file or provided via API keys.")
+        return ChatMistralAI(model=model_name, api_key=api_key)

@@ -83,5 +83,15 @@
     "display_name": "Azure Open AI Deployment",
     "model_name": "",
     "provider": "Azure OpenAI"
+  },
+  {
+    "display_name": "Mistral Large - Latest",
+    "model_name": "mistral-large-latest",
+    "provider": "Mistral"
+  },
+  {
+    "display_name": "Mistral Large 2411 - high reasoning",
+    "model_name": "mistral-large-2411",
+    "provider": "Mistral"
   }
 ]
