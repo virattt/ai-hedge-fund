@@ -19,4 +19,11 @@ RUN poetry config virtualenvs.create false \
 COPY . /app/
 
 # Default command (will be overridden by Docker Compose)
+
+# Create a non-root user for security
+RUN useradd -r -u 1001 -g root -s /bin/bash appuser
+
+# Switch to non-root user
+USER appuser
+
 CMD ["python", "src/main.py"] 
