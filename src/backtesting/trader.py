@@ -7,6 +7,14 @@ from .types import ActionLiteral, Action
 class TradeExecutor:
     """Executes trades against a Portfolio with Backtester-identical semantics."""
 
+    def __init__(self, long_only: bool = False) -> None:
+        """Initialize TradeExecutor.
+
+        Args:
+            long_only: If True, disable short selling and covering operations.
+        """
+        self._long_only = long_only
+
     def execute_trade(
         self,
         ticker: str,
@@ -29,8 +37,14 @@ class TradeExecutor:
         if action_enum == Action.SELL:
             return portfolio.apply_long_sell(ticker, int(quantity), float(current_price))
         if action_enum == Action.SHORT:
+            if self._long_only:
+                # Block short selling in long-only mode
+                return 0
             return portfolio.apply_short_open(ticker, int(quantity), float(current_price))
         if action_enum == Action.COVER:
+            if self._long_only:
+                # Block covering in long-only mode
+                return 0
             return portfolio.apply_short_cover(ticker, int(quantity), float(current_price))
 
         # hold or unknown action

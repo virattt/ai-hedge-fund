@@ -32,6 +32,7 @@ def main() -> int:
     )
     parser.add_argument("--initial-capital", type=float, default=100000)
     parser.add_argument("--margin-requirement", type=float, default=0.0)
+    parser.add_argument("--long-only", action="store_true", help="Enable long-only mode (disables short selling)")
     parser.add_argument("--analysts", type=str, required=False)
     parser.add_argument("--analysts-all", action="store_true")
     parser.add_argument("--ollama", action="store_true")
@@ -138,6 +139,7 @@ def main() -> int:
         model_provider=model_provider,
         selected_analysts=selected_analysts,
         initial_margin_requirement=args.margin_requirement,
+        long_only=args.long_only,
     )
 
     metrics = engine.run_backtest()

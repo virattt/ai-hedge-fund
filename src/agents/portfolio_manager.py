@@ -67,6 +67,8 @@ def portfolio_management_agent(state: AgentState, agent_id: str = "portfolio_man
 
     progress.update_status(agent_id, None, "Generating trading decisions")
 
+    long_only = state["metadata"].get("long_only", False)
+
     result = generate_trading_decision(
         tickers=tickers,
         signals_by_ticker=signals_by_ticker,
@@ -75,6 +77,7 @@ def portfolio_management_agent(state: AgentState, agent_id: str = "portfolio_man
         portfolio=portfolio,
         agent_id=agent_id,
         state=state,
+        long_only=long_only,
     )
     message = HumanMessage(
         content=json.dumps({ticker: decision.model_dump() for ticker, decision in result.decisions.items()}),
@@ -98,6 +101,7 @@ def compute_allowed_actions(
         current_prices: dict[str, float],
         max_shares: dict[str, int],
         portfolio: dict[str, float],
+        long_only: bool = False,
 ) -> dict[str, dict[str, int]]:
     """Compute allowed actions and max quantities for each ticker deterministically."""
     allowed = {}
@@ -129,19 +133,20 @@ def compute_allowed_actions(
             if max_buy > 0:
                 actions["buy"] = max_buy
 
-        # Short side
-        if short_shares > 0:
-            actions["cover"] = short_shares
-        if price > 0 and max_qty > 0:
-            if margin_requirement <= 0.0:
-                # If margin requirement is zero or unset, only cap by max_qty
-                max_short = max_qty
-            else:
-                available_margin = max(0.0, (equity / margin_requirement) - margin_used)
-                max_short_margin = int(available_margin // price)
-                max_short = max(0, min(max_qty, max_short_margin))
-            if max_short > 0:
-                actions["short"] = max_short
+        # Short side (skip if long_only mode)
+        if not long_only:
+            if short_shares > 0:
+                actions["cover"] = short_shares
+            if price > 0 and max_qty > 0:
+                if margin_requirement <= 0.0:
+                    # If margin requirement is zero or unset, only cap by max_qty
+                    max_short = max_qty
+                else:
+                    available_margin = max(0.0, (equity / margin_requirement) - margin_used)
+                    max_short_margin = int(available_margin // price)
+                    max_short = max(0, min(max_qty, max_short_margin))
+                if max_short > 0:
+                    actions["short"] = max_short
 
         # Hold always valid
         actions["hold"] = 0
@@ -182,11 +187,12 @@ def generate_trading_decision(
         portfolio: dict[str, float],
         agent_id: str,
         state: AgentState,
+        long_only: bool = False,
 ) -> PortfolioManagerOutput:
     """Get decisions from the LLM with deterministic constraints and a minimal prompt."""
 
     # Deterministic constraints
-    allowed_actions_full = compute_allowed_actions(tickers, current_prices, max_shares, portfolio)
+    allowed_actions_full = compute_allowed_actions(tickers, current_prices, max_shares, portfolio, long_only)
 
     # Pre-fill pure holds to avoid sending them to the LLM at all
     prefilled_decisions: dict[str, PortfolioDecision] = {}

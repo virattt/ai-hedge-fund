@@ -44,6 +44,7 @@ class BacktestEngine:
         model_provider: str,
         selected_analysts: list[str] | None,
         initial_margin_requirement: float,
+        long_only: bool = False,
     ) -> None:
         self._agent = agent
         self._tickers = tickers
@@ -53,13 +54,14 @@ class BacktestEngine:
         self._model_name = model_name
         self._model_provider = model_provider
         self._selected_analysts = selected_analysts
+        self._long_only = long_only
 
         self._portfolio = Portfolio(
             tickers=tickers,
             initial_cash=initial_capital,
             margin_requirement=initial_margin_requirement,
         )
-        self._executor = TradeExecutor()
+        self._executor = TradeExecutor(long_only=long_only)
         self._agent_controller = AgentController()
         self._perf = PerformanceMetricsCalculator()
         self._results = OutputBuilder(initial_capital=self._initial_capital)
@@ -138,6 +140,7 @@ class BacktestEngine:
                 model_name=self._model_name,
                 model_provider=self._model_provider,
                 selected_analysts=self._selected_analysts,
+                long_only=self._long_only,
             )
             decisions = agent_output["decisions"]
 
