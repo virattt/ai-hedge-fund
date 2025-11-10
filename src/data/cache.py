@@ -43,7 +43,16 @@ class Cache:
         if not self.stats_file.exists():
             return {
                 "total_hits": 0,
+                "total_api_calls": 0,
                 "by_type": {
+                    "prices": 0,
+                    "financial_metrics": 0,
+                    "line_items": 0,
+                    "insider_trades": 0,
+                    "company_news": 0,
+                    "market_cap": 0,
+                },
+                "api_calls_by_type": {
                     "prices": 0,
                     "financial_metrics": 0,
                     "line_items": 0,
@@ -59,17 +68,25 @@ class Cache:
                 # Ensure all cache types are present
                 if "by_type" not in stats:
                     stats["by_type"] = {}
+                if "api_calls_by_type" not in stats:
+                    stats["api_calls_by_type"] = {}
                 for cache_type in self._cache_types.keys():
                     if cache_type not in stats["by_type"]:
                         stats["by_type"][cache_type] = 0
+                    if cache_type not in stats["api_calls_by_type"]:
+                        stats["api_calls_by_type"][cache_type] = 0
                 if "total_hits" not in stats:
                     stats["total_hits"] = 0
+                if "total_api_calls" not in stats:
+                    stats["total_api_calls"] = 0
                 return stats
         except (json.JSONDecodeError, IOError) as e:
             print(f"Warning: Failed to load cache stats: {e}")
             return {
                 "total_hits": 0,
-                "by_type": {cache_type: 0 for cache_type in self._cache_types.keys()}
+                "total_api_calls": 0,
+                "by_type": {cache_type: 0 for cache_type in self._cache_types.keys()},
+                "api_calls_by_type": {cache_type: 0 for cache_type in self._cache_types.keys()}
             }
 
     def _save_stats(self):
@@ -80,11 +97,20 @@ class Cache:
         except IOError as e:
             print(f"Warning: Failed to save cache stats: {e}")
 
-    def _record_cache_hit(self, cache_type: str):
+    def record_cache_hit(self, cache_type: str):
         """Record a cache hit for the given cache type."""
         if cache_type in self._cache_types:
             self.stats["total_hits"] = self.stats.get("total_hits", 0) + 1
             self.stats["by_type"][cache_type] = self.stats["by_type"].get(cache_type, 0) + 1
+            self._save_stats()
+
+    def record_api_call(self, cache_type: str):
+        """Record an API call for the given cache type (cache miss)."""
+        if cache_type in self._cache_types:
+            self.stats["total_api_calls"] = self.stats.get("total_api_calls", 0) + 1
+            if "api_calls_by_type" not in self.stats:
+                self.stats["api_calls_by_type"] = {}
+            self.stats["api_calls_by_type"][cache_type] = self.stats["api_calls_by_type"].get(cache_type, 0) + 1
             self._save_stats()
 
     def _ticker_to_filename(self, ticker: str) -> str:
@@ -143,10 +169,7 @@ class Cache:
 
     def get_prices(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached price data if available."""
-        data = self._load_from_file("prices", ticker)
-        if data is not None:
-            self._record_cache_hit("prices")
-        return data
+        return self._load_from_file("prices", ticker)
 
     def set_prices(self, ticker: str, data: list[dict[str, any]]):
         """Append new price data to cache."""
@@ -157,10 +180,7 @@ class Cache:
     def get_financial_metrics(self, ticker: str, period: str = "ttm") -> list[dict[str, any]] | None:
         """Get cached financial metrics if available."""
         cache_key = f"{ticker}_{period}"
-        data = self._load_from_file("financial_metrics", cache_key)
-        if data is not None:
-            self._record_cache_hit("financial_metrics")
-        return data
+        return self._load_from_file("financial_metrics", cache_key)
 
     def set_financial_metrics(self, ticker: str, period: str, data: list[dict[str, any]]):
         """Update financial metrics cache with new data."""
@@ -186,10 +206,7 @@ class Cache:
     def get_line_items(self, ticker: str, period: str = "ttm") -> list[dict[str, any]] | None:
         """Get cached line items if available."""
         cache_key = f"{ticker}_{period}"
-        data = self._load_from_file("line_items", cache_key)
-        if data is not None:
-            self._record_cache_hit("line_items")
-        return data
+        return self._load_from_file("line_items", cache_key)
 
     def set_line_items(self, ticker: str, period: str, data: list[dict[str, any]]):
         """Update line items cache with new data."""
@@ -214,10 +231,7 @@ class Cache:
 
     def get_insider_trades(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached insider trades if available."""
-        data = self._load_from_file("insider_trades", ticker)
-        if data is not None:
-            self._record_cache_hit("insider_trades")
-        return data
+        return self._load_from_file("insider_trades", ticker)
 
     def set_insider_trades(self, ticker: str, data: list[dict[str, any]]):
         """Update insider trades cache with new data."""
@@ -241,10 +255,7 @@ class Cache:
 
     def get_company_news(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached company news if available."""
-        data = self._load_from_file("company_news", ticker)
-        if data is not None:
-            self._record_cache_hit("company_news")
-        return data
+        return self._load_from_file("company_news", ticker)
 
     def set_company_news(self, ticker: str, data: list[dict[str, any]]):
         """Update company news cache with new data."""
@@ -268,10 +279,7 @@ class Cache:
 
     def get_market_cap(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached market cap data if available."""
-        data = self._load_from_file("market_cap", ticker)
-        if data is not None:
-            self._record_cache_hit("market_cap")
-        return data
+        return self._load_from_file("market_cap", ticker)
 
     def set_market_cap(self, ticker: str, data: list[dict[str, any]]):
         """Update market cap cache with new data."""
@@ -314,14 +322,20 @@ class Cache:
         """Print cache statistics in a user-friendly format."""
         stats = self.get_cache_stats()
         total_hits = stats.get("total_hits", 0)
+        total_api_calls = stats.get("total_api_calls", 0)
         by_type = stats.get("by_type", {})
+        api_calls_by_type = stats.get("api_calls_by_type", {})
         
-        print("\n" + "=" * 50)
-        print("Cache Hit Statistics")
-        print("=" * 50)
-        print(f"Total Hits: {total_hits:,}")
+        print("\n" + "=" * 70)
+        print("Cache Statistics")
+        print("=" * 70)
+        print(f"Total Cache Hits (API calls avoided): {total_hits:,}")
+        print(f"Total API Calls: {total_api_calls:,}")
+        if total_hits + total_api_calls > 0:
+            cache_hit_rate = (total_hits / (total_hits + total_api_calls)) * 100
+            print(f"Cache Hit Rate: {cache_hit_rate:.1f}%")
         print("\nBy Type:")
-        print("-" * 50)
+        print("-" * 70)
         
         # Cache type display names
         type_names = {
@@ -333,12 +347,20 @@ class Cache:
             "market_cap": "Market Cap",
         }
         
+        # Print cache hits
+        print("Cache Hits (API calls avoided):")
         for cache_type, count in sorted(by_type.items(), key=lambda x: x[1], reverse=True):
             name = type_names.get(cache_type, cache_type)
             percentage = (count / total_hits * 100) if total_hits > 0 else 0
             print(f"  {name:35s}: {count:6,} ({percentage:5.1f}%)")
         
-        print("=" * 50 + "\n")
+        print("\nAPI Calls:")
+        for cache_type, count in sorted(api_calls_by_type.items(), key=lambda x: x[1], reverse=True):
+            name = type_names.get(cache_type, cache_type)
+            percentage = (count / total_api_calls * 100) if total_api_calls > 0 else 0
+            print(f"  {name:35s}: {count:6,} ({percentage:5.1f}%)")
+        
+        print("=" * 70 + "\n")
 
 
 # Global cache instance

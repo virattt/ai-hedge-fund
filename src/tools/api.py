@@ -64,9 +64,11 @@ def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None)
     
     # Check cache first - simple exact match
     if cached_data := _cache.get_prices(cache_key):
+        _cache.record_cache_hit("prices")
         return [Price(**price) for price in cached_data]
 
     # If not in cache, fetch from API
+    _cache.record_api_call("prices")
     headers = {}
     financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
     if financial_api_key:
@@ -101,14 +103,18 @@ def get_financial_metrics(
     
     # Check cache first
     cached_data = _cache.get_financial_metrics(ticker, period)
+    latest_cached_date = _cache.get_latest_financial_metrics_date(ticker, period)
     
     # Check if we need to refresh cache
     # Refresh if cache doesn't exist or latest report_period is before today
-    latest_cached_date = _cache.get_latest_financial_metrics_date(ticker, period)
     need_refresh = latest_cached_date is None or latest_cached_date < today
     
+    # If cache exists and doesn't need refresh, record cache hit and use cache
+    if cached_data and not need_refresh:
+        _cache.record_cache_hit("financial_metrics")
     # If cache needs refresh, fetch data up to today from API
-    if need_refresh:
+    elif need_refresh:
+        _cache.record_api_call("financial_metrics")
         headers = {}
         financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
         if financial_api_key:
@@ -156,50 +162,58 @@ def search_line_items(
     
     # Check cache first (only by ticker and period, no end_date/limit/line_items)
     cached_data = _cache.get_line_items(ticker, period)
+    latest_cached_date = _cache.get_latest_line_items_date(ticker, period)
     
-    # Common line items list for initial fetch (comprehensive list)
+    # Check if we need to refresh cache
+    # Refresh if cache doesn't exist or latest report_period is before today
+    need_refresh = latest_cached_date is None or latest_cached_date < today
     
-    common_line_items = [
-        "ebit",
-        "interest_expense",
-        "capital_expenditure",
-        "depreciation_and_amortization",
-        "outstanding_shares",
-        "net_income",
-        "total_debt",
-        "earnings_per_share", 
-        "revenue", 
-        "book_value_per_share", 
-        "total_assets", 
-        "total_liabilities", 
-        "current_assets", 
-        "current_liabilities",
-        "dividends_and_other_cash_distributions",
-        "operating_margin",
-        "debt_to_equity",
-        "free_cash_flow",
-        "gross_margin",
-        "research_and_development",
-        "operating_expense",
-        "operating_income",
-        "return_on_invested_capital",
-        "cash_and_equivalents",
-        "shareholders_equity",
-        "goodwill_and_intangible_assets",
-        "issuance_or_purchase_of_equity_shares",
-        "gross_profit",
-        "ebitda",
-        "working_capital",   
-    ]
-    
-    # If cache doesn't exist, fetch all available line items
-    if not cached_data:
+    # If cache exists and doesn't need refresh, record cache hit and use cache
+    if cached_data and not need_refresh:
+        _cache.record_cache_hit("line_items")
+    # If cache needs refresh, fetch all available line items
+    elif need_refresh:
+        _cache.record_api_call("line_items")
         headers = {}
         financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
         if financial_api_key:
             headers["X-API-KEY"] = financial_api_key
 
         url = "https://api.financialdatasets.ai/financials/search/line-items"
+
+        # Common line items list for initial fetch (comprehensive list)
+        common_line_items = [
+            "ebit",
+            "interest_expense",
+            "capital_expenditure",
+            "depreciation_and_amortization",
+            "outstanding_shares",
+            "net_income",
+            "total_debt",
+            "earnings_per_share", 
+            "revenue", 
+            "book_value_per_share", 
+            "total_assets", 
+            "total_liabilities", 
+            "current_assets", 
+            "current_liabilities",
+            "dividends_and_other_cash_distributions",
+            "operating_margin",
+            "debt_to_equity",
+            "free_cash_flow",
+            "gross_margin",
+            "research_and_development",
+            "operating_expense",
+            "operating_income",
+            "return_on_invested_capital",
+            "cash_and_equivalents",
+            "shareholders_equity",
+            "goodwill_and_intangible_assets",
+            "issuance_or_purchase_of_equity_shares",
+            "gross_profit",
+            "ebitda",
+            "working_capital",   
+        ]
 
         # First fetch: get all common line items with large limit and today's date
         body = {
@@ -274,12 +288,26 @@ def get_insider_trades(
     
     # Check cache first (only by ticker, no start_date/end_date/limit)
     cached_data = _cache.get_insider_trades(ticker)
+    latest_cached_date = _cache.get_latest_insider_trade_date(ticker)
     
     # Calculate one year ago date for default fetch
     one_year_ago = (datetime.datetime.now() - datetime.timedelta(days=365)).strftime("%Y-%m-%d")
     
-    # If cache doesn't exist, fetch default one year of data
-    if not cached_data:
+    # Extract date part from latest_cached_date if it includes time
+    latest_cached_date_only = None
+    if latest_cached_date:
+        latest_cached_date_only = latest_cached_date.split("T")[0] if "T" in latest_cached_date else latest_cached_date
+    
+    # Check if we need to refresh cache
+    # Refresh if cache doesn't exist or latest filing_date is before today
+    need_refresh = latest_cached_date_only is None or latest_cached_date_only < today
+    
+    # If cache exists and doesn't need refresh, record cache hit and use cache
+    if cached_data and not need_refresh:
+        _cache.record_cache_hit("insider_trades")
+    # If cache needs refresh, fetch default one year of data
+    elif need_refresh:
+        _cache.record_api_call("insider_trades")
         headers = {}
         financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
         if financial_api_key:
@@ -361,12 +389,26 @@ def get_company_news(
     
     # Check cache first (only by ticker, no start_date/end_date/limit)
     cached_data = _cache.get_company_news(ticker)
+    latest_cached_date = _cache.get_latest_company_news_date(ticker)
     
     # Calculate one year ago date for default fetch
     one_year_ago = (datetime.datetime.now() - datetime.timedelta(days=365)).strftime("%Y-%m-%d")
     
-    # If cache doesn't exist, fetch default one year of data
-    if not cached_data:
+    # Extract date part from latest_cached_date if it includes time
+    latest_cached_date_only = None
+    if latest_cached_date:
+        latest_cached_date_only = latest_cached_date.split("T")[0] if "T" in latest_cached_date else latest_cached_date
+    
+    # Check if we need to refresh cache
+    # Refresh if cache doesn't exist or latest date is before today
+    need_refresh = latest_cached_date_only is None or latest_cached_date_only < today
+    
+    # If cache exists and doesn't need refresh, record cache hit and use cache
+    if cached_data and not need_refresh:
+        _cache.record_cache_hit("company_news")
+    # If cache needs refresh, fetch default one year of data
+    elif need_refresh:
+        _cache.record_api_call("company_news")
         headers = {}
         financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
         if financial_api_key:
@@ -447,6 +489,7 @@ def get_market_cap(
     # Check cache first - try to get market cap for the specific end_date
     cached_market_cap = _cache.get_market_cap_by_date(ticker, end_date)
     if cached_market_cap is not None:
+        _cache.record_cache_hit("market_cap")
         return cached_market_cap
     
     # Cache doesn't have data for end_date, check if we need to refresh
@@ -457,12 +500,13 @@ def get_market_cap(
     if end_date == today:
         # If cache doesn't exist or latest date is not today, refresh
         if need_refresh:
+            _cache.record_api_call("market_cap")
             headers = {}
             financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
             if financial_api_key:
                 headers["X-API-KEY"] = financial_api_key
 
-            url = f"https://api.financialdatasets.ai/company/facts/?ticker={ticker}"
+            url = f"https://api.financialdatasets.ai/company/facts/?ticker={ticker}" # free
             response = _make_api_request(url, headers)
             if response.status_code != 200:
                 print(f"Error fetching company facts: {ticker} - {response.status_code}")
