@@ -1,12 +1,78 @@
-class Cache:
-    """In-memory cache for API responses."""
+import json
+from pathlib import Path
+from urllib.parse import quote
 
-    def __init__(self):
-        self._prices_cache: dict[str, list[dict[str, any]]] = {}
-        self._financial_metrics_cache: dict[str, list[dict[str, any]]] = {}
-        self._line_items_cache: dict[str, list[dict[str, any]]] = {}
-        self._insider_trades_cache: dict[str, list[dict[str, any]]] = {}
-        self._company_news_cache: dict[str, list[dict[str, any]]] = {}
+
+class Cache:
+    """File-based cache for API responses stored in .cache directory."""
+
+    def __init__(self, cache_dir: str = ".cache"):
+        """
+        Initialize the cache with a base directory.
+        
+        Args:
+            cache_dir: Base directory for cache files (default: ".cache")
+        """
+        # Cache type to subdirectory mapping
+        self._cache_types = {
+            "prices": "prices",
+            "financial_metrics": "financial_metrics",
+            "line_items": "line_items",
+            "insider_trades": "insider_trades",
+            "company_news": "company_news",
+        }
+        
+        self.cache_dir = Path(cache_dir)
+        self._ensure_cache_dirs()
+        
+        
+
+    def _ensure_cache_dirs(self):
+        """Ensure all cache subdirectories exist."""
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        for subdir in self._cache_types.values():
+            (self.cache_dir / subdir).mkdir(parents=True, exist_ok=True)
+
+    def _ticker_to_filename(self, ticker: str) -> str:
+        """Convert ticker to a safe filename by encoding special characters."""
+        # Replace common special characters with safe alternatives
+        # Use URL encoding for safety
+        safe_ticker = quote(ticker, safe="")
+        return f"{safe_ticker}.json"
+
+    def _get_cache_path(self, cache_type: str, ticker: str) -> Path:
+        """Get the file path for a specific cache entry."""
+        subdir = self._cache_types.get(cache_type)
+        if not subdir:
+            raise ValueError(f"Unknown cache type: {cache_type}")
+        filename = self._ticker_to_filename(ticker)
+        return self.cache_dir / subdir / filename
+
+    def _load_from_file(self, cache_type: str, ticker: str) -> list[dict[str, any]] | None:
+        """Load cached data from file."""
+        cache_path = self._get_cache_path(cache_type, ticker)
+        if not cache_path.exists():
+            return None
+        
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, list) else None
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"Warning: Failed to load cache from {cache_path}: {e}")
+            return None
+
+    def _save_to_file(self, cache_type: str, ticker: str, data: list[dict[str, any]]):
+        """Save cached data to file."""
+        cache_path = self._get_cache_path(cache_type, ticker)
+        try:
+            # Ensure parent directory exists
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except IOError as e:
+            print(f"Warning: Failed to save cache to {cache_path}: {e}")
 
     def _merge_data(self, existing: list[dict] | None, new_data: list[dict], key_field: str) -> list[dict]:
         """Merge existing and new data, avoiding duplicates based on a key field."""
@@ -23,43 +89,53 @@ class Cache:
 
     def get_prices(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached price data if available."""
-        return self._prices_cache.get(ticker)
+        return self._load_from_file("prices", ticker)
 
     def set_prices(self, ticker: str, data: list[dict[str, any]]):
         """Append new price data to cache."""
-        self._prices_cache[ticker] = self._merge_data(self._prices_cache.get(ticker), data, key_field="time")
+        existing = self.get_prices(ticker)
+        merged = self._merge_data(existing, data, key_field="time")
+        self._save_to_file("prices", ticker, merged)
 
-    def get_financial_metrics(self, ticker: str) -> list[dict[str, any]]:
+    def get_financial_metrics(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached financial metrics if available."""
-        return self._financial_metrics_cache.get(ticker)
+        return self._load_from_file("financial_metrics", ticker)
 
     def set_financial_metrics(self, ticker: str, data: list[dict[str, any]]):
         """Append new financial metrics to cache."""
-        self._financial_metrics_cache[ticker] = self._merge_data(self._financial_metrics_cache.get(ticker), data, key_field="report_period")
+        existing = self.get_financial_metrics(ticker)
+        merged = self._merge_data(existing, data, key_field="report_period")
+        self._save_to_file("financial_metrics", ticker, merged)
 
     def get_line_items(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached line items if available."""
-        return self._line_items_cache.get(ticker)
+        return self._load_from_file("line_items", ticker)
 
     def set_line_items(self, ticker: str, data: list[dict[str, any]]):
         """Append new line items to cache."""
-        self._line_items_cache[ticker] = self._merge_data(self._line_items_cache.get(ticker), data, key_field="report_period")
+        existing = self.get_line_items(ticker)
+        merged = self._merge_data(existing, data, key_field="report_period")
+        self._save_to_file("line_items", ticker, merged)
 
     def get_insider_trades(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached insider trades if available."""
-        return self._insider_trades_cache.get(ticker)
+        return self._load_from_file("insider_trades", ticker)
 
     def set_insider_trades(self, ticker: str, data: list[dict[str, any]]):
         """Append new insider trades to cache."""
-        self._insider_trades_cache[ticker] = self._merge_data(self._insider_trades_cache.get(ticker), data, key_field="filing_date")  # Could also use transaction_date if preferred
+        existing = self.get_insider_trades(ticker)
+        merged = self._merge_data(existing, data, key_field="filing_date")
+        self._save_to_file("insider_trades", ticker, merged)
 
     def get_company_news(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached company news if available."""
-        return self._company_news_cache.get(ticker)
+        return self._load_from_file("company_news", ticker)
 
     def set_company_news(self, ticker: str, data: list[dict[str, any]]):
         """Append new company news to cache."""
-        self._company_news_cache[ticker] = self._merge_data(self._company_news_cache.get(ticker), data, key_field="date")
+        existing = self.get_company_news(ticker)
+        merged = self._merge_data(existing, data, key_field="date")
+        self._save_to_file("company_news", ticker, merged)
 
 
 # Global cache instance
