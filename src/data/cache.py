@@ -20,6 +20,7 @@ class Cache:
             "line_items": "line_items",
             "insider_trades": "insider_trades",
             "company_news": "company_news",
+            "market_cap": "market_cap",
         }
         
         self.cache_dir = Path(cache_dir)
@@ -97,15 +98,31 @@ class Cache:
         merged = self._merge_data(existing, data, key_field="time")
         self._save_to_file("prices", ticker, merged)
 
-    def get_financial_metrics(self, ticker: str) -> list[dict[str, any]] | None:
+    def get_financial_metrics(self, ticker: str, period: str = "ttm") -> list[dict[str, any]] | None:
         """Get cached financial metrics if available."""
-        return self._load_from_file("financial_metrics", ticker)
+        cache_key = f"{ticker}_{period}"
+        return self._load_from_file("financial_metrics", cache_key)
 
-    def set_financial_metrics(self, ticker: str, data: list[dict[str, any]]):
-        """Append new financial metrics to cache."""
-        existing = self.get_financial_metrics(ticker)
+    def set_financial_metrics(self, ticker: str, period: str, data: list[dict[str, any]]):
+        """Update financial metrics cache with new data."""
+        cache_key = f"{ticker}_{period}"
+        existing = self.get_financial_metrics(ticker, period)
         merged = self._merge_data(existing, data, key_field="report_period")
-        self._save_to_file("financial_metrics", ticker, merged)
+        # Sort by report_period descending (newest first)
+        merged.sort(key=lambda x: x.get("report_period", ""), reverse=True)
+        self._save_to_file("financial_metrics", cache_key, merged)
+
+    def get_latest_financial_metrics_date(self, ticker: str, period: str = "ttm") -> str | None:
+        """Get the latest report_period in financial metrics cache."""
+        cached_data = self.get_financial_metrics(ticker, period)
+        if not cached_data:
+            return None
+        
+        # Data should be sorted by report_period descending, so first entry is latest
+        if cached_data:
+            return cached_data[0].get("report_period")
+        
+        return None
 
     def get_line_items(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached line items if available."""
@@ -122,20 +139,85 @@ class Cache:
         return self._load_from_file("insider_trades", ticker)
 
     def set_insider_trades(self, ticker: str, data: list[dict[str, any]]):
-        """Append new insider trades to cache."""
+        """Update insider trades cache with new data."""
         existing = self.get_insider_trades(ticker)
         merged = self._merge_data(existing, data, key_field="filing_date")
+        # Sort by filing_date descending (newest first)
+        merged.sort(key=lambda x: x.get("filing_date", ""), reverse=True)
         self._save_to_file("insider_trades", ticker, merged)
+
+    def get_latest_insider_trade_date(self, ticker: str) -> str | None:
+        """Get the latest filing_date in insider trades cache."""
+        cached_data = self.get_insider_trades(ticker)
+        if not cached_data:
+            return None
+        
+        # Data should be sorted by filing_date descending, so first entry is latest
+        if cached_data:
+            return cached_data[0].get("filing_date")
+        
+        return None
 
     def get_company_news(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached company news if available."""
         return self._load_from_file("company_news", ticker)
 
     def set_company_news(self, ticker: str, data: list[dict[str, any]]):
-        """Append new company news to cache."""
+        """Update company news cache with new data."""
         existing = self.get_company_news(ticker)
         merged = self._merge_data(existing, data, key_field="date")
+        # Sort by date descending (newest first)
+        merged.sort(key=lambda x: x.get("date", ""), reverse=True)
         self._save_to_file("company_news", ticker, merged)
+
+    def get_latest_company_news_date(self, ticker: str) -> str | None:
+        """Get the latest date in company news cache."""
+        cached_data = self.get_company_news(ticker)
+        if not cached_data:
+            return None
+        
+        # Data should be sorted by date descending, so first entry is latest
+        if cached_data:
+            return cached_data[0].get("date")
+        
+        return None
+
+    def get_market_cap(self, ticker: str) -> list[dict[str, any]] | None:
+        """Get cached market cap data if available."""
+        return self._load_from_file("market_cap", ticker)
+
+    def set_market_cap(self, ticker: str, data: list[dict[str, any]]):
+        """Update market cap cache with new data."""
+        existing = self.get_market_cap(ticker)
+        merged = self._merge_data(existing, data, key_field="date")
+        # Sort by date descending (newest first)
+        merged.sort(key=lambda x: x.get("date", ""), reverse=True)
+        self._save_to_file("market_cap", ticker, merged)
+
+    def get_market_cap_by_date(self, ticker: str, date: str) -> float | None:
+        """Get market cap for a specific date from cache."""
+        cached_data = self.get_market_cap(ticker)
+        if not cached_data:
+            return None
+        
+        # Find the entry with matching date
+        for entry in cached_data:
+            if entry.get("date") == date:
+                return entry.get("market_cap")
+        
+        return None
+
+    def get_latest_market_cap_date(self, ticker: str) -> str | None:
+        """Get the latest date in market cap cache."""
+        cached_data = self.get_market_cap(ticker)
+        if not cached_data:
+            return None
+        
+        # Data should be sorted by date descending, so first entry is latest
+        if cached_data:
+            return cached_data[0].get("date")
+        
+        return None
 
 
 # Global cache instance
