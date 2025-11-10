@@ -26,6 +26,10 @@ class Cache:
         self.cache_dir = Path(cache_dir)
         self._ensure_cache_dirs()
         
+        # Statistics file path
+        self.stats_file = self.cache_dir / "cache_stats.json"
+        self.stats = self._load_stats()
+        
         
 
     def _ensure_cache_dirs(self):
@@ -33,6 +37,55 @@ class Cache:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         for subdir in self._cache_types.values():
             (self.cache_dir / subdir).mkdir(parents=True, exist_ok=True)
+
+    def _load_stats(self) -> dict:
+        """Load cache statistics from file."""
+        if not self.stats_file.exists():
+            return {
+                "total_hits": 0,
+                "by_type": {
+                    "prices": 0,
+                    "financial_metrics": 0,
+                    "line_items": 0,
+                    "insider_trades": 0,
+                    "company_news": 0,
+                    "market_cap": 0,
+                }
+            }
+        
+        try:
+            with open(self.stats_file, "r", encoding="utf-8") as f:
+                stats = json.load(f)
+                # Ensure all cache types are present
+                if "by_type" not in stats:
+                    stats["by_type"] = {}
+                for cache_type in self._cache_types.keys():
+                    if cache_type not in stats["by_type"]:
+                        stats["by_type"][cache_type] = 0
+                if "total_hits" not in stats:
+                    stats["total_hits"] = 0
+                return stats
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"Warning: Failed to load cache stats: {e}")
+            return {
+                "total_hits": 0,
+                "by_type": {cache_type: 0 for cache_type in self._cache_types.keys()}
+            }
+
+    def _save_stats(self):
+        """Save cache statistics to file."""
+        try:
+            with open(self.stats_file, "w", encoding="utf-8") as f:
+                json.dump(self.stats, f, ensure_ascii=False, indent=2)
+        except IOError as e:
+            print(f"Warning: Failed to save cache stats: {e}")
+
+    def _record_cache_hit(self, cache_type: str):
+        """Record a cache hit for the given cache type."""
+        if cache_type in self._cache_types:
+            self.stats["total_hits"] = self.stats.get("total_hits", 0) + 1
+            self.stats["by_type"][cache_type] = self.stats["by_type"].get(cache_type, 0) + 1
+            self._save_stats()
 
     def _ticker_to_filename(self, ticker: str) -> str:
         """Convert ticker to a safe filename by encoding special characters."""
@@ -90,7 +143,10 @@ class Cache:
 
     def get_prices(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached price data if available."""
-        return self._load_from_file("prices", ticker)
+        data = self._load_from_file("prices", ticker)
+        if data is not None:
+            self._record_cache_hit("prices")
+        return data
 
     def set_prices(self, ticker: str, data: list[dict[str, any]]):
         """Append new price data to cache."""
@@ -101,7 +157,10 @@ class Cache:
     def get_financial_metrics(self, ticker: str, period: str = "ttm") -> list[dict[str, any]] | None:
         """Get cached financial metrics if available."""
         cache_key = f"{ticker}_{period}"
-        return self._load_from_file("financial_metrics", cache_key)
+        data = self._load_from_file("financial_metrics", cache_key)
+        if data is not None:
+            self._record_cache_hit("financial_metrics")
+        return data
 
     def set_financial_metrics(self, ticker: str, period: str, data: list[dict[str, any]]):
         """Update financial metrics cache with new data."""
@@ -126,7 +185,10 @@ class Cache:
 
     def get_line_items(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached line items if available."""
-        return self._load_from_file("line_items", ticker)
+        data = self._load_from_file("line_items", ticker)
+        if data is not None:
+            self._record_cache_hit("line_items")
+        return data
 
     def set_line_items(self, ticker: str, data: list[dict[str, any]]):
         """Append new line items to cache."""
@@ -136,7 +198,10 @@ class Cache:
 
     def get_insider_trades(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached insider trades if available."""
-        return self._load_from_file("insider_trades", ticker)
+        data = self._load_from_file("insider_trades", ticker)
+        if data is not None:
+            self._record_cache_hit("insider_trades")
+        return data
 
     def set_insider_trades(self, ticker: str, data: list[dict[str, any]]):
         """Update insider trades cache with new data."""
@@ -160,7 +225,10 @@ class Cache:
 
     def get_company_news(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached company news if available."""
-        return self._load_from_file("company_news", ticker)
+        data = self._load_from_file("company_news", ticker)
+        if data is not None:
+            self._record_cache_hit("company_news")
+        return data
 
     def set_company_news(self, ticker: str, data: list[dict[str, any]]):
         """Update company news cache with new data."""
@@ -184,7 +252,10 @@ class Cache:
 
     def get_market_cap(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached market cap data if available."""
-        return self._load_from_file("market_cap", ticker)
+        data = self._load_from_file("market_cap", ticker)
+        if data is not None:
+            self._record_cache_hit("market_cap")
+        return data
 
     def set_market_cap(self, ticker: str, data: list[dict[str, any]]):
         """Update market cap cache with new data."""
@@ -218,6 +289,40 @@ class Cache:
             return cached_data[0].get("date")
         
         return None
+
+    def get_cache_stats(self) -> dict:
+        """Get cache statistics."""
+        return self.stats.copy()
+
+    def print_cache_stats(self):
+        """Print cache statistics in a user-friendly format."""
+        stats = self.get_cache_stats()
+        total_hits = stats.get("total_hits", 0)
+        by_type = stats.get("by_type", {})
+        
+        print("\n" + "=" * 50)
+        print("缓存命中统计 (Cache Hit Statistics)")
+        print("=" * 50)
+        print(f"总命中次数 (Total Hits): {total_hits:,}")
+        print("\n按类型统计 (By Type):")
+        print("-" * 50)
+        
+        # Cache type display names
+        type_names = {
+            "prices": "价格数据 (Prices)",
+            "financial_metrics": "财务指标 (Financial Metrics)",
+            "line_items": "财务项目 (Line Items)",
+            "insider_trades": "内部交易 (Insider Trades)",
+            "company_news": "公司新闻 (Company News)",
+            "market_cap": "市值 (Market Cap)",
+        }
+        
+        for cache_type, count in sorted(by_type.items(), key=lambda x: x[1], reverse=True):
+            name = type_names.get(cache_type, cache_type)
+            percentage = (count / total_hits * 100) if total_hits > 0 else 0
+            print(f"  {name:35s}: {count:6,} ({percentage:5.1f}%)")
+        
+        print("=" * 50 + "\n")
 
 
 # Global cache instance

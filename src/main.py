@@ -15,6 +15,7 @@ from src.utils.visualize import save_graph_as_png
 from src.cli.input import (
     parse_cli_inputs,
 )
+from src.data.cache import get_cache
 
 import argparse
 from datetime import datetime
@@ -177,3 +178,7 @@ if __name__ == "__main__":
         model_provider=inputs.model_provider,
     )
     print_trading_output(result)
+    
+    # Display cache statistics
+    cache = get_cache()
+    cache.print_cache_stats()
