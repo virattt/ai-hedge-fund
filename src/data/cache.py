@@ -301,20 +301,20 @@ class Cache:
         by_type = stats.get("by_type", {})
         
         print("\n" + "=" * 50)
-        print("缓存命中统计 (Cache Hit Statistics)")
+        print("Cache Hit Statistics")
         print("=" * 50)
-        print(f"总命中次数 (Total Hits): {total_hits:,}")
-        print("\n按类型统计 (By Type):")
+        print(f"Total Hits: {total_hits:,}")
+        print("\nBy Type:")
         print("-" * 50)
         
         # Cache type display names
         type_names = {
-            "prices": "价格数据 (Prices)",
-            "financial_metrics": "财务指标 (Financial Metrics)",
-            "line_items": "财务项目 (Line Items)",
-            "insider_trades": "内部交易 (Insider Trades)",
-            "company_news": "公司新闻 (Company News)",
-            "market_cap": "市值 (Market Cap)",
+            "prices": "Prices",
+            "financial_metrics": "Financial Metrics",
+            "line_items": "Line Items",
+            "insider_trades": "Insider Trades",
+            "company_news": "Company News",
+            "market_cap": "Market Cap",
         }
         
         for cache_type, count in sorted(by_type.items(), key=lambda x: x[1], reverse=True):
