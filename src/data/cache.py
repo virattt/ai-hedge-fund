@@ -183,18 +183,34 @@ class Cache:
         
         return None
 
-    def get_line_items(self, ticker: str) -> list[dict[str, any]] | None:
+    def get_line_items(self, ticker: str, period: str = "ttm") -> list[dict[str, any]] | None:
         """Get cached line items if available."""
-        data = self._load_from_file("line_items", ticker)
+        cache_key = f"{ticker}_{period}"
+        data = self._load_from_file("line_items", cache_key)
         if data is not None:
             self._record_cache_hit("line_items")
         return data
 
-    def set_line_items(self, ticker: str, data: list[dict[str, any]]):
-        """Append new line items to cache."""
-        existing = self.get_line_items(ticker)
+    def set_line_items(self, ticker: str, period: str, data: list[dict[str, any]]):
+        """Update line items cache with new data."""
+        cache_key = f"{ticker}_{period}"
+        existing = self.get_line_items(ticker, period)
         merged = self._merge_data(existing, data, key_field="report_period")
-        self._save_to_file("line_items", ticker, merged)
+        # Sort by report_period descending (newest first)
+        merged.sort(key=lambda x: x.get("report_period", ""), reverse=True)
+        self._save_to_file("line_items", cache_key, merged)
+
+    def get_latest_line_items_date(self, ticker: str, period: str = "ttm") -> str | None:
+        """Get the latest report_period in line items cache."""
+        cached_data = self.get_line_items(ticker, period)
+        if not cached_data:
+            return None
+        
+        # Data should be sorted by report_period descending, so first entry is latest
+        if cached_data:
+            return cached_data[0].get("report_period")
+        
+        return None
 
     def get_insider_trades(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached insider trades if available."""

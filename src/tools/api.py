@@ -151,33 +151,101 @@ def search_line_items(
     limit: int = 10,
     api_key: str = None,
 ) -> list[LineItem]:
-    """Fetch line items from API."""
-    # If not in cache or insufficient data, fetch from API
-    headers = {}
-    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
-        headers["X-API-KEY"] = financial_api_key
+    """Fetch line items from cache or API."""
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    
+    # Check cache first (only by ticker and period, no end_date/limit/line_items)
+    cached_data = _cache.get_line_items(ticker, period)
+    
+    # Common line items list for initial fetch (comprehensive list)
+    common_line_items = [
+        "revenue", "net_income", "earnings_per_share", "free_cash_flow",
+        "operating_income", "operating_margin", "gross_profit", "gross_margin",
+        "ebit", "ebitda", "total_debt", "cash_and_equivalents",
+        "current_assets", "current_liabilities", "total_assets", "total_liabilities",
+        "shareholders_equity", "working_capital", "capital_expenditure",
+        "depreciation_and_amortization", "interest_expense", "research_and_development",
+        "dividends_and_other_cash_distributions", "outstanding_shares",
+        "issuance_or_purchase_of_equity_shares", "total_revenue", "cost_of_revenue",
+        "operating_expenses", "income_tax_expense", "net_income_attributable_to_common_stockholders",
+        "basic_earnings_per_share", "diluted_earnings_per_share", "book_value_per_share",
+        "return_on_equity", "return_on_assets", "debt_to_equity", "current_ratio",
+        "quick_ratio", "inventory", "accounts_receivable", "accounts_payable",
+        "long_term_debt", "short_term_debt", "intangible_assets", "goodwill",
+        "property_plant_and_equipment", "accumulated_depreciation", "retained_earnings",
+        "common_stock", "preferred_stock", "treasury_stock", "other_comprehensive_income",
+        "operating_cash_flow", "investing_cash_flow", "financing_cash_flow",
+        "net_change_in_cash", "stock_based_compensation", "amortization_of_intangibles",
+    ]
+    
+    # If cache doesn't exist, fetch all available line items
+    if not cached_data:
+        headers = {}
+        financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+        if financial_api_key:
+            headers["X-API-KEY"] = financial_api_key
 
-    url = "https://api.financialdatasets.ai/financials/search/line-items"
+        url = "https://api.financialdatasets.ai/financials/search/line-items"
 
-    body = {
-        "tickers": [ticker],
-        "line_items": line_items,
-        "end_date": end_date,
-        "period": period,
-        "limit": limit,
-    }
-    response = _make_api_request(url, headers, method="POST", json_data=body)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
-    data = response.json()
-    response_model = LineItemResponse(**data)
-    search_results = response_model.search_results
-    if not search_results:
+        # First fetch: get all common line items with large limit and today's date
+        body = {
+            "tickers": [ticker],
+            "line_items": common_line_items,
+            "end_date": today,
+            "period": period,
+            "limit": 1000,  # Large limit to get all available periods
+        }
+        response = _make_api_request(url, headers, method="POST", json_data=body)
+        if response.status_code != 200:
+            # If failed, try with empty line_items to get all available
+            body["line_items"] = []
+            response = _make_api_request(url, headers, method="POST", json_data=body)
+            if response.status_code != 200:
+                raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+        
+        data = response.json()
+        response_model = LineItemResponse(**data)
+        search_results = response_model.search_results
+
+        if search_results:
+            # Cache all results (only ticker and period in cache key)
+            _cache.set_line_items(ticker, period, [item.model_dump() for item in search_results])
+            # Update cached_data for filtering
+            cached_data = _cache.get_line_items(ticker, period)
+    
+    # Filter cached data based on line_items, end_date, and limit
+    if not cached_data:
         return []
-
-    # Cache the results
-    return search_results[:limit]
+    
+    filtered_items = []
+    for item in cached_data:
+        item_report_period = item.get("report_period", "")
+        
+        # Filter by end_date (report_period <= end_date)
+        if item_report_period > end_date:
+            continue
+        
+        # Filter by requested line_items (check if any requested line_item exists in the item)
+        item_dict = dict(item)
+        has_requested_line_item = False
+        for requested_item in line_items:
+            # Check if the requested line_item exists as a key in the item
+            if requested_item in item_dict and item_dict[requested_item] is not None:
+                has_requested_line_item = True
+                break
+        
+        if not has_requested_line_item:
+            continue
+        
+        filtered_items.append(item)
+    
+    # Sort by report_period descending (newest first)
+    filtered_items.sort(key=lambda x: x.get("report_period", ""), reverse=True)
+    
+    # Apply limit
+    filtered_items = filtered_items[:limit]
+    
+    return [LineItem(**item) for item in filtered_items]
 
 
 def get_insider_trades(
