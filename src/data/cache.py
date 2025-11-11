@@ -128,6 +128,15 @@ class Cache:
         filename = self._ticker_to_filename(ticker)
         return self.cache_dir / subdir / filename
 
+    def _get_metadata_path(self, cache_type: str, ticker: str) -> Path:
+        """Get the file path for cache metadata (last_updated date)."""
+        subdir = self._cache_types.get(cache_type)
+        if not subdir:
+            raise ValueError(f"Unknown cache type: {cache_type}")
+        filename = self._ticker_to_filename(ticker)
+        # Metadata file has .meta.json extension
+        return self.cache_dir / subdir / f"{filename}.meta.json"
+
     def _load_from_file(self, cache_type: str, ticker: str) -> list[dict[str, any]] | None:
         """Load cached data from file."""
         cache_path = self._get_cache_path(cache_type, ticker)
@@ -182,7 +191,7 @@ class Cache:
         cache_key = f"{ticker}_{period}"
         return self._load_from_file("financial_metrics", cache_key)
 
-    def set_financial_metrics(self, ticker: str, period: str, data: list[dict[str, any]]):
+    def set_financial_metrics(self, ticker: str, period: str, data: list[dict[str, any]], update_date: str = None):
         """Update financial metrics cache with new data."""
         cache_key = f"{ticker}_{period}"
         existing = self.get_financial_metrics(ticker, period)
@@ -190,25 +199,40 @@ class Cache:
         # Sort by report_period descending (newest first)
         merged.sort(key=lambda x: x.get("report_period", ""), reverse=True)
         self._save_to_file("financial_metrics", cache_key, merged)
+        # Update last_updated date if provided
+        if update_date:
+            self.set_last_updated_date("financial_metrics", cache_key, update_date)
 
-    def get_latest_financial_metrics_date(self, ticker: str, period: str = "ttm") -> str | None:
-        """Get the latest report_period in financial metrics cache."""
-        cached_data = self.get_financial_metrics(ticker, period)
-        if not cached_data:
+    def get_last_updated_date(self, cache_type: str, ticker: str) -> str | None:
+        """Get the last updated date (query date) for a cache entry."""
+        metadata_path = self._get_metadata_path(cache_type, ticker)
+        if not metadata_path.exists():
             return None
         
-        # Data should be sorted by report_period descending, so first entry is latest
-        if cached_data:
-            return cached_data[0].get("report_period")
-        
-        return None
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as f:
+                metadata = json.load(f)
+                return metadata.get("last_updated")
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"Warning: Failed to load metadata from {metadata_path}: {e}")
+            return None
+
+    def set_last_updated_date(self, cache_type: str, ticker: str, date: str):
+        """Set the last updated date (query date) for a cache entry."""
+        metadata_path = self._get_metadata_path(cache_type, ticker)
+        try:
+            metadata_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(metadata_path, "w", encoding="utf-8") as f:
+                json.dump({"last_updated": date}, f, ensure_ascii=False, indent=2)
+        except IOError as e:
+            print(f"Warning: Failed to save metadata to {metadata_path}: {e}")
 
     def get_line_items(self, ticker: str, period: str = "ttm") -> list[dict[str, any]] | None:
         """Get cached line items if available."""
         cache_key = f"{ticker}_{period}"
         return self._load_from_file("line_items", cache_key)
 
-    def set_line_items(self, ticker: str, period: str, data: list[dict[str, any]]):
+    def set_line_items(self, ticker: str, period: str, data: list[dict[str, any]], update_date: str = None):
         """Update line items cache with new data."""
         cache_key = f"{ticker}_{period}"
         existing = self.get_line_items(ticker, period)
@@ -216,66 +240,39 @@ class Cache:
         # Sort by report_period descending (newest first)
         merged.sort(key=lambda x: x.get("report_period", ""), reverse=True)
         self._save_to_file("line_items", cache_key, merged)
-
-    def get_latest_line_items_date(self, ticker: str, period: str = "ttm") -> str | None:
-        """Get the latest report_period in line items cache."""
-        cached_data = self.get_line_items(ticker, period)
-        if not cached_data:
-            return None
-        
-        # Data should be sorted by report_period descending, so first entry is latest
-        if cached_data:
-            return cached_data[0].get("report_period")
-        
-        return None
+        # Update last_updated date if provided
+        if update_date:
+            self.set_last_updated_date("line_items", cache_key, update_date)
 
     def get_insider_trades(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached insider trades if available."""
         return self._load_from_file("insider_trades", ticker)
 
-    def set_insider_trades(self, ticker: str, data: list[dict[str, any]]):
+    def set_insider_trades(self, ticker: str, data: list[dict[str, any]], update_date: str = None):
         """Update insider trades cache with new data."""
         existing = self.get_insider_trades(ticker)
         merged = self._merge_data(existing, data, key_field="filing_date")
         # Sort by filing_date descending (newest first)
         merged.sort(key=lambda x: x.get("filing_date", ""), reverse=True)
         self._save_to_file("insider_trades", ticker, merged)
-
-    def get_latest_insider_trade_date(self, ticker: str) -> str | None:
-        """Get the latest filing_date in insider trades cache."""
-        cached_data = self.get_insider_trades(ticker)
-        if not cached_data:
-            return None
-        
-        # Data should be sorted by filing_date descending, so first entry is latest
-        if cached_data:
-            return cached_data[0].get("filing_date")
-        
-        return None
+        # Update last_updated date if provided
+        if update_date:
+            self.set_last_updated_date("insider_trades", ticker, update_date)
 
     def get_company_news(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached company news if available."""
         return self._load_from_file("company_news", ticker)
 
-    def set_company_news(self, ticker: str, data: list[dict[str, any]]):
+    def set_company_news(self, ticker: str, data: list[dict[str, any]], update_date: str = None):
         """Update company news cache with new data."""
         existing = self.get_company_news(ticker)
         merged = self._merge_data(existing, data, key_field="date")
         # Sort by date descending (newest first)
         merged.sort(key=lambda x: x.get("date", ""), reverse=True)
         self._save_to_file("company_news", ticker, merged)
-
-    def get_latest_company_news_date(self, ticker: str) -> str | None:
-        """Get the latest date in company news cache."""
-        cached_data = self.get_company_news(ticker)
-        if not cached_data:
-            return None
-        
-        # Data should be sorted by date descending, so first entry is latest
-        if cached_data:
-            return cached_data[0].get("date")
-        
-        return None
+        # Update last_updated date if provided
+        if update_date:
+            self.set_last_updated_date("company_news", ticker, update_date)
 
     def get_market_cap(self, ticker: str) -> list[dict[str, any]] | None:
         """Get cached market cap data if available."""

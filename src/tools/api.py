@@ -103,11 +103,13 @@ def get_financial_metrics(
     
     # Check cache first
     cached_data = _cache.get_financial_metrics(ticker, period)
-    latest_cached_date = _cache.get_latest_financial_metrics_date(ticker, period)
+    cache_key = f"{ticker}_{period}"
+    # Use last_updated_date (query date) instead of data's latest date
+    latest_cached_date = _cache.get_last_updated_date("financial_metrics", cache_key)
     
     # Check if we need to refresh cache
-    # Refresh if cache doesn't exist or latest report_period is before today
-    need_refresh = latest_cached_date is None or latest_cached_date < today
+    # Refresh if cache doesn't exist or last query date is not today
+    need_refresh = latest_cached_date is None or latest_cached_date != today
     
     # If cache exists and doesn't need refresh, record cache hit and use cache
     if cached_data and not need_refresh:
@@ -131,8 +133,8 @@ def get_financial_metrics(
         financial_metrics = metrics_response.financial_metrics
 
         if financial_metrics:
-            # Cache the results (only ticker and period in cache key)
-            _cache.set_financial_metrics(ticker, period, [m.model_dump() for m in financial_metrics])
+            # Cache the results (only ticker and period in cache key) and update last_updated_date
+            _cache.set_financial_metrics(ticker, period, [m.model_dump() for m in financial_metrics], update_date=today)
             # Update cached_data for filtering
             cached_data = _cache.get_financial_metrics(ticker, period)
     
@@ -162,11 +164,13 @@ def search_line_items(
     
     # Check cache first (only by ticker and period, no end_date/limit/line_items)
     cached_data = _cache.get_line_items(ticker, period)
-    latest_cached_date = _cache.get_latest_line_items_date(ticker, period)
+    cache_key = f"{ticker}_{period}"
+    # Use last_updated_date (query date) instead of data's latest date
+    latest_cached_date = _cache.get_last_updated_date("line_items", cache_key)
     
     # Check if we need to refresh cache
-    # Refresh if cache doesn't exist or latest report_period is before today
-    need_refresh = latest_cached_date is None or latest_cached_date < today
+    # Refresh if cache doesn't exist or last query date is not today
+    need_refresh = latest_cached_date is None or latest_cached_date != today
     
     # If cache exists and doesn't need refresh, record cache hit and use cache
     if cached_data and not need_refresh:
@@ -236,8 +240,8 @@ def search_line_items(
         search_results = response_model.search_results
 
         if search_results:
-            # Cache all results (only ticker and period in cache key)
-            _cache.set_line_items(ticker, period, [item.model_dump() for item in search_results])
+            # Cache all results (only ticker and period in cache key) and update last_updated_date
+            _cache.set_line_items(ticker, period, [item.model_dump() for item in search_results], update_date=today)
             # Update cached_data for filtering
             cached_data = _cache.get_line_items(ticker, period)
     
@@ -288,19 +292,15 @@ def get_insider_trades(
     
     # Check cache first (only by ticker, no start_date/end_date/limit)
     cached_data = _cache.get_insider_trades(ticker)
-    latest_cached_date = _cache.get_latest_insider_trade_date(ticker)
+    # Use last_updated_date (query date) instead of data's latest date
+    latest_cached_date = _cache.get_last_updated_date("insider_trades", ticker)
     
     # Calculate one year ago date for default fetch
     one_year_ago = (datetime.datetime.now() - datetime.timedelta(days=365)).strftime("%Y-%m-%d")
     
-    # Extract date part from latest_cached_date if it includes time
-    latest_cached_date_only = None
-    if latest_cached_date:
-        latest_cached_date_only = latest_cached_date.split("T")[0] if "T" in latest_cached_date else latest_cached_date
-    
     # Check if we need to refresh cache
-    # Refresh if cache doesn't exist or latest filing_date is before today
-    need_refresh = latest_cached_date_only is None or latest_cached_date_only < today
+    # Refresh if cache doesn't exist or last query date is not today
+    need_refresh = latest_cached_date is None or latest_cached_date != today
     
     # If cache exists and doesn't need refresh, record cache hit and use cache
     if cached_data and not need_refresh:
@@ -345,8 +345,8 @@ def get_insider_trades(
                 break
 
         if all_trades:
-            # Cache the results (only ticker in cache key)
-            _cache.set_insider_trades(ticker, [trade.model_dump() for trade in all_trades])
+            # Cache the results (only ticker in cache key) and update last_updated_date
+            _cache.set_insider_trades(ticker, [trade.model_dump() for trade in all_trades], update_date=today)
             # Update cached_data for filtering
             cached_data = _cache.get_insider_trades(ticker)
     
@@ -389,19 +389,15 @@ def get_company_news(
     
     # Check cache first (only by ticker, no start_date/end_date/limit)
     cached_data = _cache.get_company_news(ticker)
-    latest_cached_date = _cache.get_latest_company_news_date(ticker)
+    # Use last_updated_date (query date) instead of data's latest date
+    latest_cached_date = _cache.get_last_updated_date("company_news", ticker)
     
     # Calculate one year ago date for default fetch
     one_year_ago = (datetime.datetime.now() - datetime.timedelta(days=365)).strftime("%Y-%m-%d")
     
-    # Extract date part from latest_cached_date if it includes time
-    latest_cached_date_only = None
-    if latest_cached_date:
-        latest_cached_date_only = latest_cached_date.split("T")[0] if "T" in latest_cached_date else latest_cached_date
-    
     # Check if we need to refresh cache
-    # Refresh if cache doesn't exist or latest date is before today
-    need_refresh = latest_cached_date_only is None or latest_cached_date_only < today
+    # Refresh if cache doesn't exist or last query date is not today
+    need_refresh = latest_cached_date is None or latest_cached_date != today
     
     # If cache exists and doesn't need refresh, record cache hit and use cache
     if cached_data and not need_refresh:
@@ -446,8 +442,8 @@ def get_company_news(
                 break
 
         if all_news:
-            # Cache the results (only ticker in cache key)
-            _cache.set_company_news(ticker, [news.model_dump() for news in all_news])
+            # Cache the results (only ticker in cache key) and update last_updated_date
+            _cache.set_company_news(ticker, [news.model_dump() for news in all_news], update_date=today)
             # Update cached_data for filtering
             cached_data = _cache.get_company_news(ticker)
     
