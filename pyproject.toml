@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ai-hedge-fund"
-version = "0.2.0"
+version = "1.0.0"
 description = "An AI-powered hedge fund that uses multiple agents to make trading decisions"
 authors = ["Your Name <your.email@example.com>"]
 readme = "README.md"
