@@ -1,5 +1,4 @@
-
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 from src.data.models import CompanyNews
@@ -22,13 +21,49 @@ class Sentiment(BaseModel):
     confidence: int = Field(description="Confidence 0-100")
 
 
+def _analyze_single_article(
+    news: CompanyNews, 
+    ticker: str, 
+    agent_id: str, 
+    state: AgentState
+) -> tuple[CompanyNews, int]:
+    """
+    Analyze sentiment for a single news article.
+    
+    Args:
+        news: The news article to analyze
+        ticker: The stock ticker symbol
+        agent_id: The agent ID for LLM calls
+        state: The agent state
+        
+    Returns:
+        Tuple of (updated news article, confidence score)
+    """
+    prompt = (
+        f"Analyze the sentiment of this news headline for stock {ticker}. "
+        f"Determine if it's 'positive', 'negative', or 'neutral' for the stock. "
+        f"Provide a confidence score from 0 to 100. Respond in JSON format.\n\n"
+        f"Headline: {news.title}"
+    )
+    
+    response = call_llm(prompt, Sentiment, agent_name=agent_id, state=state)
+    
+    if response:
+        news.sentiment = response.sentiment.lower()
+        return news, response.confidence
+    else:
+        news.sentiment = "neutral"
+        return news, 0
+
+
 def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agent"):
     """
     Analyzes news sentiment for a list of tickers and generates trading signals.
 
     This agent fetches company news, uses an LLM to classify the sentiment of articles
-    with missing sentiment data, and then aggregates the sentiments to produce an
-    overall signal (bullish, bearish, or neutral) and a confidence score for each ticker.
+    with missing sentiment data (in parallel for speed), and then aggregates the 
+    sentiments to produce an overall signal (bullish, bearish, or neutral) and a 
+    confidence score for each ticker.
 
     Args:
         state: The current state of the agent graph.
@@ -60,40 +95,46 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
             recent_articles = company_news[:10]
             articles_without_sentiment = [news for news in recent_articles if news.sentiment is None]
             
-            # Analyze only the 5 most recent articles without sentiment to reduce LLM calls
+            # Analyze articles without sentiment using parallel processing
             sentiments_classified_by_llm = 0
             if articles_without_sentiment:
-              # We only take the first 5 articles, but this is configurable
-              num_articles_to_analyze = 5
-              articles_to_analyze = articles_without_sentiment[:num_articles_to_analyze]
-              progress.update_status(agent_id, ticker, f"Analyzing sentiment for {len(articles_to_analyze)} articles")
-              
-              for idx, news in enumerate(articles_to_analyze):
-                # We analyze based on title, but can also pass in the entire article text,
-                # but this is more expensive and requires extracting the text from the article.
-                # Note: this is an opportunity for improvement!
-                progress.update_status(agent_id, ticker, f"Analyzing sentiment for article {idx + 1} of {len(articles_to_analyze)}")
-                prompt = (
-                    f"Please analyze the sentiment of the following news headline "
-                    f"with the following context: "
-                    f"The stock is {ticker}. "
-                    f"Determine if sentiment is 'positive', 'negative', or 'neutral' for the stock {ticker} only. "
-                    f"Also provide a confidence score for your prediction from 0 to 100. "
-                    f"Respond in JSON format.\n\n"
-                    f"Headline: {news.title}"
+                num_articles_to_analyze = min(5, len(articles_without_sentiment))
+                articles_to_analyze = articles_without_sentiment[:num_articles_to_analyze]
+                progress.update_status(
+                    agent_id, 
+                    ticker, 
+                    f"Analyzing sentiment for {len(articles_to_analyze)} articles (parallel)"
                 )
-                response = call_llm(prompt, Sentiment, agent_name=agent_id, state=state)
-                if response:
-                    news.sentiment = response.sentiment.lower()
-                    sentiment_confidences[id(news)] = response.confidence
-                else:
-                    news.sentiment = "neutral"
-                    sentiment_confidences[id(news)] = 0
-                sentiments_classified_by_llm += 1
+                
+                # Use ThreadPoolExecutor for parallel LLM calls
+                with ThreadPoolExecutor(max_workers=3) as executor:
+                    futures = {
+                        executor.submit(
+                            _analyze_single_article, 
+                            news, 
+                            ticker, 
+                            agent_id, 
+                            state
+                        ): news for news in articles_to_analyze
+                    }
+                    
+                    for future in as_completed(futures):
+                        try:
+                            updated_news, confidence = future.result()
+                            sentiment_confidences[id(updated_news)] = confidence
+                            sentiments_classified_by_llm += 1
+                        except Exception as e:
+                            # If analysis fails, mark as neutral
+                            original_news = futures[future]
+                            original_news.sentiment = "neutral"
+                            sentiment_confidences[id(original_news)] = 0
 
             # Aggregate sentiment across all articles
             sentiment = pd.Series([n.sentiment for n in company_news]).dropna()
-            news_signals = np.where(sentiment == "negative","bearish", np.where(sentiment == "positive", "bullish", "neutral")).tolist()
+            news_signals = np.where(
+                sentiment == "negative", "bearish", 
+                np.where(sentiment == "positive", "bullish", "neutral")
+            ).tolist()
 
         progress.update_status(agent_id, ticker, "Aggregating signals")
 
