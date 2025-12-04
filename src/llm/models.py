@@ -20,6 +20,7 @@ class ModelProvider(str, Enum):
 
     ALIBABA = "Alibaba"
     ANTHROPIC = "Anthropic"
+    CLAUDE_CODE = "Claude Code"
     DEEPSEEK = "DeepSeek"
     GOOGLE = "Google"
     GROQ = "Groq"
@@ -135,7 +136,26 @@ def get_models_list():
     ]
 
 
-def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | None:
+def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None):
+    """Get an LLM model instance based on provider."""
+
+    # Handle Claude Code (subscription-based, no API key)
+    if model_provider == ModelProvider.CLAUDE_CODE:
+        try:
+            from src.llm.claude_code_adapter import create_claude_code_adapter
+            timeout = int(os.getenv("CLAUDE_CODE_TIMEOUT", "60"))
+            cli_path = os.getenv("CLAUDE_CODE_CLI_PATH") or None
+            return create_claude_code_adapter(
+                timeout=timeout,
+                cli_path=cli_path,
+                model_name=model_name
+            )
+        except Exception as e:
+            print(f"Error creating Claude Code adapter: {e}")
+            print("Make sure Claude Code CLI is installed: npm install -g @anthropic-ai/claude-code")
+            print("And authenticated: claude /login")
+            raise ValueError("Claude Code not available. Install and authenticate first.")
+
     if model_provider == ModelProvider.GROQ:
         api_key = (api_keys or {}).get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
         if not api_key:
