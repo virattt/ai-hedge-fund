@@ -1,3 +1,9 @@
+# DISCLAIMER:
+# This module is part of an AI-powered hedge fund proof of concept
+# and is intended strictly for educational and research use.
+# It should not be used for live trading, portfolio management,
+# or any real-money investment decisions.
+
 import sys
 
 from dotenv import load_dotenv
