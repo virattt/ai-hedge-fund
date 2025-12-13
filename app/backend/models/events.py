@@ -27,6 +27,7 @@ class ProgressUpdateEvent(BaseEvent):
     ticker: Optional[str] = None
     status: str
     timestamp: Optional[str] = None
+    analysis: Optional[str] = None
 
 class ErrorEvent(BaseEvent):
     """Event indicating an error occurred"""

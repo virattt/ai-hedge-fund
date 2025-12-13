@@ -7,14 +7,15 @@ import json
 from typing_extensions import Literal
 from src.utils.progress import progress
 from src.utils.llm import call_llm
+from src.utils.api_key import get_api_key_from_state
 
 class CharlieMungerSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
-    confidence: float
+    confidence: int
     reasoning: str
 
 
-def charlie_munger_agent(state: AgentState):
+def charlie_munger_agent(state: AgentState, agent_id: str = "charlie_munger_agent"):
     """
     Analyzes stocks using Charlie Munger's investing principles and mental models.
     Focuses on moat strength, management quality, predictability, and valuation.
@@ -22,15 +23,15 @@ def charlie_munger_agent(state: AgentState):
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-    
+    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
     analysis_data = {}
     munger_analysis = {}
     
     for ticker in tickers:
-        progress.update_status("charlie_munger_agent", ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=10)  # Munger looks at longer periods
+        progress.update_status(agent_id, ticker, "Fetching financial metrics")
+        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=10, api_key=api_key)  # Munger looks at longer periods
         
-        progress.update_status("charlie_munger_agent", ticker, "Gathering financial line items")
+        progress.update_status(agent_id, ticker, "Gathering financial line items")
         financial_line_items = search_line_items(
             ticker,
             [
@@ -51,42 +52,41 @@ def charlie_munger_agent(state: AgentState):
             ],
             end_date,
             period="annual",
-            limit=10  # Munger examines long-term trends
+            limit=10,  # Munger examines long-term trends
+            api_key=api_key,
         )
         
-        progress.update_status("charlie_munger_agent", ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date)
+        progress.update_status(agent_id, ticker, "Getting market cap")
+        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
         
-        progress.update_status("charlie_munger_agent", ticker, "Fetching insider trades")
+        progress.update_status(agent_id, ticker, "Fetching insider trades")
         # Munger values management with skin in the game
         insider_trades = get_insider_trades(
             ticker,
             end_date,
-            # Look back 2 years for insider trading patterns
-            start_date=None,
-            limit=100
+            limit=100,
+            api_key=api_key,
         )
         
-        progress.update_status("charlie_munger_agent", ticker, "Fetching company news")
+        progress.update_status(agent_id, ticker, "Fetching company news")
         # Munger avoids businesses with frequent negative press
         company_news = get_company_news(
             ticker,
             end_date,
-            # Look back 1 year for news
-            start_date=None,
-            limit=100
+            limit=10,
+            api_key=api_key,
         )
         
-        progress.update_status("charlie_munger_agent", ticker, "Analyzing moat strength")
+        progress.update_status(agent_id, ticker, "Analyzing moat strength")
         moat_analysis = analyze_moat_strength(metrics, financial_line_items)
         
-        progress.update_status("charlie_munger_agent", ticker, "Analyzing management quality")
+        progress.update_status(agent_id, ticker, "Analyzing management quality")
         management_analysis = analyze_management_quality(financial_line_items, insider_trades)
         
-        progress.update_status("charlie_munger_agent", ticker, "Analyzing business predictability")
+        progress.update_status(agent_id, ticker, "Analyzing business predictability")
         predictability_analysis = analyze_predictability(financial_line_items)
         
-        progress.update_status("charlie_munger_agent", ticker, "Calculating Munger-style valuation")
+        progress.update_status(agent_id, ticker, "Calculating Munger-style valuation")
         valuation_analysis = calculate_munger_valuation(financial_line_items, market_cap)
         
         # Combine partial scores with Munger's weighting preferences
@@ -99,11 +99,11 @@ def charlie_munger_agent(state: AgentState):
         )
         
         max_possible_score = 10  # Scale to 0-10
-        
+                
         # Generate a simple buy/hold/sell signal
         if total_score >= 7.5:  # Munger has very high standards
             signal = "bullish"
-        elif total_score <= 4.5:
+        elif total_score <= 5.5:
             signal = "bearish"
         else:
             signal = "neutral"
@@ -120,12 +120,13 @@ def charlie_munger_agent(state: AgentState):
             "news_sentiment": analyze_news_sentiment(company_news) if company_news else "No news data available"
         }
         
-        progress.update_status("charlie_munger_agent", ticker, "Generating Charlie Munger analysis")
+        progress.update_status(agent_id, ticker, "Generating Charlie Munger analysis")
         munger_output = generate_munger_output(
             ticker=ticker, 
-            analysis_data=analysis_data,
-            model_name=state["metadata"]["model_name"],
-            model_provider=state["metadata"]["model_provider"],
+            analysis_data=analysis_data[ticker],
+            state=state,
+            agent_id=agent_id,
+            confidence_hint=compute_confidence(analysis_data[ticker], signal)
         )
         
         munger_analysis[ticker] = {
@@ -134,22 +135,22 @@ def charlie_munger_agent(state: AgentState):
             "reasoning": munger_output.reasoning
         }
         
-        progress.update_status("charlie_munger_agent", ticker, "Done")
+        progress.update_status(agent_id, ticker, "Done", analysis=munger_output.reasoning)
     
     # Wrap results in a single message for the chain
     message = HumanMessage(
         content=json.dumps(munger_analysis),
-        name="charlie_munger_agent"
+        name=agent_id
     )
     
     # Show reasoning if requested
     if state["metadata"]["show_reasoning"]:
         show_agent_reasoning(munger_analysis, "Charlie Munger Agent")
 
-    progress.update_status("charlie_munger_agent", None, "Done")
+    progress.update_status(agent_id, None, "Done")
     
     # Add signals to the overall state
-    state["data"]["analyst_signals"]["charlie_munger_agent"] = munger_analysis
+    state["data"]["analyst_signals"][agent_id] = munger_analysis
 
     return {
         "messages": [message],
@@ -260,6 +261,7 @@ def analyze_moat_strength(metrics: list, financial_line_items: list) -> dict:
     return {
         "score": final_score,
         "details": "; ".join(details)
+        
     }
 
 
@@ -413,13 +415,54 @@ def analyze_management_quality(financial_line_items: list, insider_trades: list)
     else:
         details.append("Insufficient share count data")
     
+
+    # FCF / NI ratios -> already computed for scoring
+    insider_buy_ratio = None
+    recent_de_ratio = None
+    cash_to_revenue = None
+    share_count_trend = "unknown"
+
+    # Debt ratio (D/E) -> we compute `recent_de_ratio`
+    if debt_values and equity_values and len(debt_values) == len(equity_values):
+        recent_de_ratio = debt_values[0] / equity_values[0] if equity_values[0] > 0 else float("inf")
+
+    # Cash/Revenue -> we compute `cash_to_revenue`
+    if cash_values and revenue_values and revenue_values[0] and revenue_values[0] > 0:
+        cash_to_revenue = cash_values[0] / revenue_values[0]
+
+    # Insider ratio -> we compute `insider_buy_ratio`
+    if insider_trades and len(insider_trades) > 0:
+        buys = sum(1 for t in insider_trades
+                   if getattr(t, "transaction_type", None)
+                   and t.transaction_type.lower() in ["buy", "purchase"])
+        sells = sum(1 for t in insider_trades
+                    if getattr(t, "transaction_type", None)
+                    and t.transaction_type.lower() in ["sell", "sale"])
+        total = buys + sells
+        insider_buy_ratio = (buys / total) if total > 0 else None
+
+    # Share count trend (decreasing / stable / increasing)
+    share_counts = [item.outstanding_shares for item in financial_line_items
+                    if hasattr(item, "outstanding_shares") and item.outstanding_shares is not None]
+    if share_counts and len(share_counts) >= 3:
+        if share_counts[0] < share_counts[-1] * 0.95:
+            share_count_trend = "decreasing"
+        elif share_counts[0] > share_counts[-1] * 1.05:
+            share_count_trend = "increasing"
+        else:
+            share_count_trend = "stable"
+
     # Scale score to 0-10 range
     # Maximum possible raw score would be 12 (3+3+2+2+2)
     final_score = max(0, min(10, score * 10 / 12))
     
     return {
         "score": final_score,
-        "details": "; ".join(details)
+        "details": "; ".join(details),
+        "insider_buy_ratio": insider_buy_ratio,
+        "recent_de_ratio": recent_de_ratio,
+        "cash_to_revenue": cash_to_revenue,
+        "share_count_trend": share_count_trend,
     }
 
 
@@ -442,26 +485,33 @@ def analyze_predictability(financial_line_items: list) -> dict:
                if hasattr(item, 'revenue') and item.revenue is not None]
     
     if revenues and len(revenues) >= 5:
-        # Calculate year-over-year growth rates
-        growth_rates = [(revenues[i] / revenues[i+1] - 1) for i in range(len(revenues)-1)]
+        # Calculate year-over-year growth rates, handling zero division
+        growth_rates = []
+        for i in range(len(revenues)-1):
+            if revenues[i+1] != 0:  # Avoid division by zero
+                growth_rate = (revenues[i] / revenues[i+1] - 1)
+                growth_rates.append(growth_rate)
         
-        avg_growth = sum(growth_rates) / len(growth_rates)
-        growth_volatility = sum(abs(r - avg_growth) for r in growth_rates) / len(growth_rates)
-        
-        if avg_growth > 0.05 and growth_volatility < 0.1:
-            # Steady, consistent growth (Munger loves this)
-            score += 3
-            details.append(f"Highly predictable revenue: {avg_growth:.1%} avg growth with low volatility")
-        elif avg_growth > 0 and growth_volatility < 0.2:
-            # Positive but somewhat volatile growth
-            score += 2
-            details.append(f"Moderately predictable revenue: {avg_growth:.1%} avg growth with some volatility")
-        elif avg_growth > 0:
-            # Growing but unpredictable
-            score += 1
-            details.append(f"Growing but less predictable revenue: {avg_growth:.1%} avg growth with high volatility")
+        if not growth_rates:
+            details.append("Cannot calculate revenue growth: zero revenue values found")
         else:
-            details.append(f"Declining or highly unpredictable revenue: {avg_growth:.1%} avg growth")
+            avg_growth = sum(growth_rates) / len(growth_rates)
+            growth_volatility = sum(abs(r - avg_growth) for r in growth_rates) / len(growth_rates)
+            
+            if avg_growth > 0.05 and growth_volatility < 0.1:
+                # Steady, consistent growth (Munger loves this)
+                score += 3
+                details.append(f"Highly predictable revenue: {avg_growth:.1%} avg growth with low volatility")
+            elif avg_growth > 0 and growth_volatility < 0.2:
+                # Positive but somewhat volatile growth
+                score += 2
+                details.append(f"Moderately predictable revenue: {avg_growth:.1%} avg growth with some volatility")
+            elif avg_growth > 0:
+                # Growing but unpredictable
+                score += 1
+                details.append(f"Growing but less predictable revenue: {avg_growth:.1%} avg growth with high volatility")
+            else:
+                details.append(f"Declining or highly unpredictable revenue: {avg_growth:.1%} avg growth")
     else:
         details.append("Insufficient revenue history for predictability analysis")
     
@@ -579,6 +629,12 @@ def calculate_munger_valuation(financial_line_items: list, market_cap: float) ->
         }
     
     # 2. Calculate FCF yield (inverse of P/FCF multiple)
+    if market_cap <= 0:
+        return {
+            "score": 0,
+            "details": f"Invalid market cap ({market_cap}), cannot value"
+        }
+    
     fcf_yield = normalized_fcf / market_cap
     
     # 3. Apply Munger's FCF multiple based on business quality
@@ -603,19 +659,19 @@ def calculate_munger_valuation(financial_line_items: list, market_cap: float) ->
     optimistic_value = normalized_fcf * 20    # 20x FCF = 5% yield
     
     # 5. Calculate margins of safety
-    current_to_reasonable = (reasonable_value - market_cap) / market_cap
+    margin_of_safety_vs_fair_value = (reasonable_value - market_cap) / market_cap
     
-    if current_to_reasonable > 0.3:  # >30% upside
+    if margin_of_safety_vs_fair_value > 0.3:  # >30% upside
         score += 3
-        details.append(f"Large margin of safety: {current_to_reasonable:.1%} upside to reasonable value")
-    elif current_to_reasonable > 0.1:  # >10% upside
+        details.append(f"Large margin of safety: {margin_of_safety_vs_fair_value:.1%} upside to reasonable value")
+    elif margin_of_safety_vs_fair_value > 0.1:  # >10% upside
         score += 2
-        details.append(f"Moderate margin of safety: {current_to_reasonable:.1%} upside to reasonable value")
-    elif current_to_reasonable > -0.1:  # Within 10% of reasonable value
+        details.append(f"Moderate margin of safety: {margin_of_safety_vs_fair_value:.1%} upside to reasonable value")
+    elif margin_of_safety_vs_fair_value > -0.1:  # Within 10% of reasonable value
         score += 1
-        details.append(f"Fair price: Within 10% of reasonable value ({current_to_reasonable:.1%})")
+        details.append(f"Fair price: Within 10% of reasonable value ({margin_of_safety_vs_fair_value:.1%})")
     else:
-        details.append(f"Expensive: {-current_to_reasonable:.1%} premium to reasonable value")
+        details.append(f"Expensive: {-margin_of_safety_vs_fair_value:.1%} premium to reasonable value")
     
     # 6. Check earnings trajectory for additional context
     # Munger likes growing owner earnings
@@ -631,7 +687,7 @@ def calculate_munger_valuation(financial_line_items: list, market_cap: float) ->
             details.append("Stable to growing FCF supports valuation")
         else:
             details.append("Declining FCF trend is concerning")
-    
+
     # Scale score to 0-10 range
     # Maximum possible raw score would be 10 (4+3+3)
     final_score = min(10, score * 10 / 10) 
@@ -645,7 +701,9 @@ def calculate_munger_valuation(financial_line_items: list, market_cap: float) ->
             "optimistic": optimistic_value
         },
         "fcf_yield": fcf_yield,
-        "normalized_fcf": normalized_fcf
+        "normalized_fcf": normalized_fcf,
+        "margin_of_safety_vs_fair_value": margin_of_safety_vs_fair_value,
+
     }
 
 
@@ -660,87 +718,139 @@ def analyze_news_sentiment(news_items: list) -> str:
     # Just return a simple count for now - in a real implementation, this would use NLP
     return f"Qualitative review of {len(news_items)} recent news items would be needed"
 
+def _r(x, n=3):
+    try:
+        return round(float(x), n)
+    except Exception:
+        return None
+
+def make_munger_facts_bundle(analysis: dict[str, any]) -> dict[str, any]:
+    moat = analysis.get("moat_analysis") or {}
+    mgmt = analysis.get("management_analysis") or {}
+    pred = analysis.get("predictability_analysis") or {}
+    val  = analysis.get("valuation_analysis") or {}
+    ivr  = val.get("intrinsic_value_range") or {}
+
+    moat_score = _r(moat.get("score"), 2) or 0
+    mgmt_score = _r(mgmt.get("score"), 2) or 0
+    pred_score = _r(pred.get("score"), 2) or 0
+    val_score  = _r(val.get("score"), 2) or 0
+
+    # Simple mental-model flags (booleans/ints = cheap tokens, strong guidance)
+    flags = {
+        "moat_strong": moat_score >= 7,
+        "predictable": pred_score >= 7,
+        "owner_aligned": (mgmt_score >= 7) or ((mgmt.get("insider_buy_ratio") or 0) >= 0.6),
+        "low_leverage": (mgmt.get("recent_de_ratio") is not None and mgmt.get("recent_de_ratio") < 0.7),
+        "sensible_cash": (mgmt.get("cash_to_revenue") is not None and 0.1 <= mgmt.get("cash_to_revenue") <= 0.25),
+        "low_capex": None,  # inferred in moat score already; keep placeholder if you later expose a ratio
+        "mos_positive": (val.get("mos_to_reasonable") or 0) > 0.0,
+        "fcf_yield_ok": (val.get("fcf_yield") or 0) >= 0.05,
+        "share_count_friendly": (mgmt.get("share_count_trend") == "decreasing"),
+    }
+
+    return {
+        "pre_signal": analysis.get("signal"),
+        "score": _r(analysis.get("score"), 2),
+        "max_score": _r(analysis.get("max_score"), 2),
+        "moat_score": moat_score,
+        "mgmt_score": mgmt_score,
+        "predictability_score": pred_score,
+        "valuation_score": val_score,
+        "fcf_yield": _r(val.get("fcf_yield"), 4),
+        "normalized_fcf": _r(val.get("normalized_fcf"), 0),
+        "reasonable_value": _r(ivr.get("reasonable"), 0),
+        "margin_of_safety_vs_fair_value": _r(val.get("margin_of_safety_vs_fair_value"), 3),
+        "insider_buy_ratio": _r(mgmt.get("insider_buy_ratio"), 2),
+        "recent_de_ratio": _r(mgmt.get("recent_de_ratio"), 2),
+        "cash_to_revenue": _r(mgmt.get("cash_to_revenue"), 2),
+        "share_count_trend": mgmt.get("share_count_trend"),
+        "flags": flags,
+        # keep one-liners, very short
+        "notes": {
+            "moat": (moat.get("details") or "")[:120],
+            "mgmt": (mgmt.get("details") or "")[:120],
+            "predictability": (pred.get("details") or "")[:120],
+            "valuation": (val.get("details") or "")[:120],
+        },
+    }
+
+def compute_confidence(analysis: dict, signal: str) -> int:
+    # Pull component scores (0..10 each in your pipeline)
+    moat = float((analysis.get("moat_analysis") or {}).get("score") or 0)
+    mgmt = float((analysis.get("management_analysis") or {}).get("score") or 0)
+    pred = float((analysis.get("predictability_analysis") or {}).get("score") or 0)
+    val  = float((analysis.get("valuation_analysis") or {}).get("score") or 0)
+
+    # Quality dominates (Munger): 0.35*moat + 0.25*mgmt + 0.25*pred (max 8.5)
+    quality = 0.35 * moat + 0.25 * mgmt + 0.25 * pred  # 0..8.5
+    quality_pct = 100 * (quality / 8.5) if quality > 0 else 0  # 0..100
+
+    # Valuation bump from MOS vs “reasonable”
+    mos = (analysis.get("valuation_analysis") or {}).get("margin_of_safety_vs_fair_value")
+    mos = float(mos) if mos is not None else 0.0
+    # Convert MOS into a bounded +/-10pp adjustment
+    val_adj = max(-10.0, min(10.0, mos * 100.0 / 3.0))  # ~+/-10pp if MOS is around +/-30%
+
+    # Base confidence: weighted toward quality, then small valuation adjustment
+    base = 0.85 * quality_pct + 0.15 * (val * 10)  # val score 0..10 -> 0..100
+    base = base + val_adj
+
+    # Ensure bucket semantics by clamping into Munger buckets depending on signal
+    if signal == "bullish":
+        # If overvalued (mos<0), cap to mixed bucket
+        upper = 100 if mos > 0 else 69
+        lower = 50 if quality_pct >= 55 else 30
+    elif signal == "bearish":
+        # If clearly overvalued (mos< -0.05), allow very low bucket
+        lower = 10 if mos < -0.05 else 30
+        upper = 49
+    else:  # neutral
+        lower, upper = 50, 69
+
+    conf = int(round(max(lower, min(upper, base))))
+    # Keep inside global 10..100
+    return max(10, min(100, conf))
+
 
 def generate_munger_output(
     ticker: str,
     analysis_data: dict[str, any],
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
+    agent_id: str,
+    confidence_hint: int,
 ) -> CharlieMungerSignal:
-    """
-    Generates investment decisions in the style of Charlie Munger.
-    """
+    facts_bundle = make_munger_facts_bundle(analysis_data)
     template = ChatPromptTemplate.from_messages([
-        (
-            "system",
-            """You are a Charlie Munger AI agent, making investment decisions using his principles:
-
-            1. Focus on the quality and predictability of the business.
-            2. Rely on mental models from multiple disciplines to analyze investments.
-            3. Look for strong, durable competitive advantages (moats).
-            4. Emphasize long-term thinking and patience.
-            5. Value management integrity and competence.
-            6. Prioritize businesses with high returns on invested capital.
-            7. Pay a fair price for wonderful businesses.
-            8. Never overpay, always demand a margin of safety.
-            9. Avoid complexity and businesses you don't understand.
-            10. "Invert, always invert" - focus on avoiding stupidity rather than seeking brilliance.
-            
-            Rules:
-            - Praise businesses with predictable, consistent operations and cash flows.
-            - Value businesses with high ROIC and pricing power.
-            - Prefer simple businesses with understandable economics.
-            - Admire management with skin in the game and shareholder-friendly capital allocation.
-            - Focus on long-term economics rather than short-term metrics.
-            - Be skeptical of businesses with rapidly changing dynamics or excessive share dilution.
-            - Avoid excessive leverage or financial engineering.
-            - Provide a rational, data-driven recommendation (bullish, bearish, or neutral).
-            
-            When providing your reasoning, be thorough and specific by:
-            1. Explaining the key factors that influenced your decision the most (both positive and negative)
-            2. Applying at least 2-3 specific mental models or disciplines to explain your thinking
-            3. Providing quantitative evidence where relevant (e.g., specific ROIC values, margin trends)
-            4. Citing what you would "avoid" in your analysis (invert the problem)
-            5. Using Charlie Munger's direct, pithy conversational style in your explanation
-            
-            For example, if bullish: "The high ROIC of 22% demonstrates the company's moat. When applying basic microeconomics, we can see that competitors would struggle to..."
-            For example, if bearish: "I see this business making a classic mistake in capital allocation. As I've often said about [relevant Mungerism], this company appears to be..."
-            """
-        ),
-        (
-            "human",
-            """Based on the following analysis, create a Munger-style investment signal.
-
-            Analysis Data for {ticker}:
-            {analysis_data}
-
-            Return the trading signal in this JSON format:
-            {{
-              "signal": "bullish/bearish/neutral",
-              "confidence": float (0-100),
-              "reasoning": "string"
-            }}
-            """
-        )
+        ("system",
+         "You are Charlie Munger. Decide bullish, bearish, or neutral using only the facts. "
+         "Return JSON only. Keep reasoning under 120 characters. "
+         "Use the provided confidence exactly; do not change it."),
+        ("human",
+         "Ticker: {ticker}\n"
+         "Facts:\n{facts}\n"
+         "Confidence: {confidence}\n"
+         "Return exactly:\n"
+         "{{\n"  # escaped {
+         '  "signal": "bullish" | "bearish" | "neutral",\n'
+         f'  "confidence": {confidence_hint},\n'
+         '  "reasoning": "short justification"\n'
+         "}}")  # escaped }
     ])
 
     prompt = template.invoke({
-        "analysis_data": json.dumps(analysis_data, indent=2),
-        "ticker": ticker
+        "ticker": ticker,
+        "facts": json.dumps(facts_bundle, separators=(",", ":"), ensure_ascii=False),
+        "confidence": confidence_hint,
     })
 
-    def create_default_charlie_munger_signal():
-        return CharlieMungerSignal(
-            signal="neutral",
-            confidence=0.0,
-            reasoning="Error in analysis, defaulting to neutral"
-        )
+    def _default():
+        return CharlieMungerSignal(signal="neutral", confidence=confidence_hint, reasoning="Insufficient data")
 
     return call_llm(
-        prompt=prompt, 
-        model_name=model_name, 
-        model_provider=model_provider, 
-        pydantic_model=CharlieMungerSignal, 
-        agent_name="charlie_munger_agent", 
-        default_factory=create_default_charlie_munger_signal,
+        prompt=prompt,
+        pydantic_model=CharlieMungerSignal,
+        agent_name=agent_id,
+        state=state,
+        default_factory=_default,
     )

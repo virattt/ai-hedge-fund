@@ -1,4 +1,6 @@
+import tailwindcssTypography from '@tailwindcss/typography';
 import type { Config } from 'tailwindcss';
+import tailwindcssAnimate from 'tailwindcss-animate';
 
 const config: Config = {
   darkMode: ['class', 'class'],
@@ -68,6 +70,7 @@ const config: Config = {
   				DEFAULT: 'hsl(var(--destructive))',
   				foreground: 'hsl(var(--destructive-foreground))'
   			},
+  			panel: 'hsl(var(--panel-bg))',
   			'ramp-grey': {
   				'100': 'var(--ramp-grey-100)',
   				'200': 'var(--ramp-grey-200)',
@@ -132,8 +135,8 @@ const config: Config = {
   	}
   },
   plugins: [
-    require('tailwindcss-animate'),
-    require('@tailwindcss/typography')
+    tailwindcssAnimate,
+    tailwindcssTypography
   ],
 };
 

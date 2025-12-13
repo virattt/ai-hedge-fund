@@ -1,11 +1,16 @@
 import {
-  ArrowDownToLine,
-  ArrowUpFromLine,
+  BadgeDollarSign,
   Bot,
+  Brain,
+  Calculator,
+  ChartLine,
+  ChartPie,
   LucideIcon,
-  Type
+  Network,
+  Play,
+  Zap
 } from 'lucide-react';
-import { agents } from './agents';
+import { Agent, getAgents } from './agents';
 
 // Define component items by group
 export interface ComponentItem {
@@ -20,51 +25,50 @@ export interface ComponentGroup {
   items: ComponentItem[];
 }
 
-// Define all component groups and items
-export const componentGroups: ComponentGroup[] = [
-  {
-    name: "agents",
-    icon: Bot,
-    iconColor: "text-red-400",
-    items: agents.map(agent => ({
-      name: agent.display_name,
-      icon: Bot
-    }))
-  },
-  {
-    name: "inputs",
-    icon: ArrowDownToLine,
-    iconColor: "text-blue-400",
-    items: [
-      // { name: "Chat Input", icon: MessageSquare },
-      { name: "Text Input", icon: Type },
-      // { name: "File Input", icon: FileText }
-    ]
-  },
+/**
+ * Get all component groups, including agents fetched from the backend
+ */
+export const getComponentGroups = async (): Promise<ComponentGroup[]> => {
+  const agents = await getAgents();
+  
+  return [
     {
-      name: "outputs",
-      icon: ArrowUpFromLine,
-      iconColor: "text-green-400",
+      name: "Start Nodes",
+      icon: Play,
+      iconColor: "text-blue-500",
       items: [
-        { name: "Text Output", icon: Type },
+        { name: "Portfolio Input", icon: ChartPie },
+        { name: "Stock Input", icon: ChartLine },
       ]
     },
-  // {
-  //   name: "data",
-  //   icon: Database,
-  //   iconColor: "text-yellow-400",
-  //   items: [
-  //     { name: "Data Store", icon: Database },
-  //     { name: "Vector Store", icon: LinkIcon }
-  //   ]
-  // },
-  // {
-  //   name: "processing",
-  //   icon: Zap,
-  //   iconColor: "text-purple-400",
-  //   items: [
-  //     { name: "Code Processor", icon: Code },
-  //     { name: "Function", icon: Zap }
-  //   ]
-  // },
-]; 
+    {
+      name: "Analysts",
+      icon: Bot,
+      iconColor: "text-red-500",
+      items: agents.map((agent: Agent) => ({
+        name: agent.display_name,
+        icon: Bot
+      }))
+    },
+    {
+      name: "Swarms",
+      icon: Network,
+      iconColor: "text-yellow-500",
+      items: [
+        { name: "Data Wizards", icon: Calculator },
+        { name: "Market Mavericks", icon: Zap },
+        { name: "Value Investors", icon: BadgeDollarSign },
+      ]
+    },
+    {
+      name: "End Nodes",
+      icon: Brain,
+      iconColor: "text-green-500",
+      items: [
+        { name: "Portfolio Manager", icon: Brain },
+        // { name: "JSON Output", icon: FileJson },
+        // { name: "Investment Report", icon: FileText },
+      ]
+    },
+  ];
+};

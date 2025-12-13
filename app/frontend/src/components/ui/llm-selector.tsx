@@ -1,6 +1,7 @@
-import { Check, ChevronsUpDown } from "lucide-react"
+import { ChevronsUpDown } from "lucide-react"
 import * as React from "react"
 
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -15,13 +16,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { type ModelItem } from "@/data/models"
+import { type LanguageModel } from "@/data/models"
 import { cn } from "@/lib/utils"
 
 interface ModelSelectorProps {
-  models: ModelItem[];
+  models: LanguageModel[];
   value: string;
-  onChange: (item: ModelItem | null) => void;
+  onChange: (item: LanguageModel | null) => void;
   placeholder?: string;
 }
 
@@ -40,26 +41,30 @@ export function ModelSelector({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between"
+          className="w-full justify-between bg-node border border-border"
         >
-          <span className="text-subtitle text-muted-foreground">
+          <span className="text-subtitle">
             {value
               ? models.find((model) => model.model_name === value)?.display_name
               : placeholder}
           </span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-full min-w-[300px] p-0">
-        <Command>
-          <CommandInput placeholder="Search model..." className="h-9" />
-          <CommandList>
+      <PopoverContent className="w-full min-w-[350px] p-0 bg-node border border-border shadow-lg">
+        <Command className="bg-node">
+          <CommandInput placeholder="Search model..." className="h-9 bg-node" />
+          <CommandList className="bg-node">
             <CommandEmpty>No model found.</CommandEmpty>
             <CommandGroup>
               {models.map((model) => (
                 <CommandItem
                   key={model.model_name}
                   value={model.model_name}
+                  className={cn(
+                    "cursor-pointer bg-node hover:bg-accent",
+                    value === model.model_name && "bg-blue-600/10 border-l-2 border-blue-500/50"
+                  )}
                   onSelect={(currentValue) => {
                     if (currentValue === value) {
                       onChange(null);
@@ -72,16 +77,15 @@ export function ModelSelector({
                     setOpen(false);
                   }}
                 >
-                  <div className="flex flex-col items-start">
-                    <span className="text-title">{model.display_name}</span>
-                    <span className="text-subtitle text-muted-foreground">{model.provider}</span>
+                  <div className="flex items-center justify-between w-full">
+                    <div className="flex flex-col items-start min-w-0 flex-1">
+                      <span className="text-title">{model.display_name}</span>
+                      <span className="text-xs text-muted-foreground font-mono">{model.model_name}</span>
+                    </div>
+                    <Badge className="text-xs text-primary bg-primary/10 border-primary/30 hover:bg-primary/20 hover:border-primary/50">
+                      {model.provider}
+                    </Badge>
                   </div>
-                  <Check
-                    className={cn(
-                      "ml-auto",
-                      value === model.model_name ? "opacity-100" : "opacity-0"
-                    )}
-                  />
                 </CommandItem>
               ))}
             </CommandGroup>

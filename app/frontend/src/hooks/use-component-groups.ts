@@ -25,12 +25,6 @@ export function useComponentGroups(componentGroups: ComponentGroup[]) {
     }).filter(group => group.items.length > 0); // Only include groups with matching items
   }, [componentGroups, searchQuery]);
 
-  // Handle item selection
-  const handleItemClick = (itemName: string) => {
-    setActiveItem(itemName);
-    // Additional logic for handling component selection could go here
-  };
-
   // Handle search query changes
   useEffect(() => {
     if (searchQuery) {
@@ -72,7 +66,6 @@ export function useComponentGroups(componentGroups: ComponentGroup[]) {
     setOpenGroups,
     isSearching,
     filteredGroups,
-    handleItemClick,
     handleAccordionChange
   };
 } 

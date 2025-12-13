@@ -7,6 +7,7 @@ import json
 from typing_extensions import Literal
 from src.utils.progress import progress
 from src.utils.llm import call_llm
+from src.utils.api_key import get_api_key_from_state
 
 
 class CathieWoodSignal(BaseModel):
@@ -15,7 +16,7 @@ class CathieWoodSignal(BaseModel):
     reasoning: str
 
 
-def cathie_wood_agent(state: AgentState):
+def cathie_wood_agent(state: AgentState, agent_id: str = "cathie_wood_agent"):
     """
     Analyzes stocks using Cathie Wood's investing principles and LLM reasoning.
     1. Prioritizes companies with breakthrough technologies or business models
@@ -26,15 +27,15 @@ def cathie_wood_agent(state: AgentState):
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-
+    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
     analysis_data = {}
     cw_analysis = {}
 
     for ticker in tickers:
-        progress.update_status("cathie_wood_agent", ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=5)
+        progress.update_status(agent_id, ticker, "Fetching financial metrics")
+        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=5, api_key=api_key)
 
-        progress.update_status("cathie_wood_agent", ticker, "Gathering financial line items")
+        progress.update_status(agent_id, ticker, "Gathering financial line items")
         # Request multiple periods of data (annual or TTM) for a more robust view.
         financial_line_items = search_line_items(
             ticker,
@@ -55,18 +56,19 @@ def cathie_wood_agent(state: AgentState):
             end_date,
             period="annual",
             limit=5,
+            api_key=api_key,
         )
 
-        progress.update_status("cathie_wood_agent", ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date)
+        progress.update_status(agent_id, ticker, "Getting market cap")
+        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
 
-        progress.update_status("cathie_wood_agent", ticker, "Analyzing disruptive potential")
+        progress.update_status(agent_id, ticker, "Analyzing disruptive potential")
         disruptive_analysis = analyze_disruptive_potential(metrics, financial_line_items)
 
-        progress.update_status("cathie_wood_agent", ticker, "Analyzing innovation-driven growth")
+        progress.update_status(agent_id, ticker, "Analyzing innovation-driven growth")
         innovation_analysis = analyze_innovation_growth(metrics, financial_line_items)
 
-        progress.update_status("cathie_wood_agent", ticker, "Calculating valuation & high-growth scenario")
+        progress.update_status(agent_id, ticker, "Calculating valuation & high-growth scenario")
         valuation_analysis = analyze_cathie_wood_valuation(financial_line_items, market_cap)
 
         # Combine partial scores or signals
@@ -82,26 +84,26 @@ def cathie_wood_agent(state: AgentState):
 
         analysis_data[ticker] = {"signal": signal, "score": total_score, "max_score": max_possible_score, "disruptive_analysis": disruptive_analysis, "innovation_analysis": innovation_analysis, "valuation_analysis": valuation_analysis}
 
-        progress.update_status("cathie_wood_agent", ticker, "Generating Cathie Wood analysis")
+        progress.update_status(agent_id, ticker, "Generating Cathie Wood analysis")
         cw_output = generate_cathie_wood_output(
             ticker=ticker,
             analysis_data=analysis_data,
-            model_name=state["metadata"]["model_name"],
-            model_provider=state["metadata"]["model_provider"],
+            state=state,
+            agent_id=agent_id,
         )
 
         cw_analysis[ticker] = {"signal": cw_output.signal, "confidence": cw_output.confidence, "reasoning": cw_output.reasoning}
 
-        progress.update_status("cathie_wood_agent", ticker, "Done")
+        progress.update_status(agent_id, ticker, "Done", analysis=cw_output.reasoning)
 
-    message = HumanMessage(content=json.dumps(cw_analysis), name="cathie_wood_agent")
+    message = HumanMessage(content=json.dumps(cw_analysis), name=agent_id)
 
     if state["metadata"].get("show_reasoning"):
-        show_agent_reasoning(cw_analysis, "Cathie Wood Agent")
+        show_agent_reasoning(cw_analysis, agent_id)
 
-    state["data"]["analyst_signals"]["cathie_wood_agent"] = cw_analysis
+    state["data"]["analyst_signals"][agent_id] = cw_analysis
 
-    progress.update_status("cathie_wood_agent", None, "Done")
+    progress.update_status(agent_id, None, "Done")
 
     return {"messages": [message], "data": state["data"]}
 
@@ -361,8 +363,8 @@ def analyze_cathie_wood_valuation(financial_line_items: list, market_cap: float)
 def generate_cathie_wood_output(
     ticker: str,
     analysis_data: dict[str, any],
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
+    agent_id: str = "cathie_wood_agent",
 ) -> CathieWoodSignal:
     """
     Generates investment decisions in the style of Cathie Wood.
@@ -424,10 +426,9 @@ def generate_cathie_wood_output(
 
     return call_llm(
         prompt=prompt,
-        model_name=model_name,
-        model_provider=model_provider,
         pydantic_model=CathieWoodSignal,
-        agent_name="cathie_wood_agent",
+        agent_name=agent_id,
+        state=state,
         default_factory=create_default_cathie_wood_signal,
     )
 

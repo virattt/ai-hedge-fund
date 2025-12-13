@@ -1,10 +1,7 @@
-# AI Hedge Fund [WIP] 🚧
-
-This project is currently a work in progress. To track progress, please get updates [here](https://x.com/virattt).
-
+# Web Application
 The AI Hedge Fund app is a complete system with both frontend and backend components that enables you to run an AI-powered hedge fund trading system through a web interface on your own computer.
 
-<img width="1692" alt="Screenshot 2025-05-15 at 8 57 56 PM" src="https://github.com/user-attachments/assets/2173fa5b-1029-49dd-8b04-d7583616de1b" />
+<img width="1721" alt="Screenshot 2025-06-28 at 6 41 03 PM" src="https://github.com/user-attachments/assets/b95ab696-c9f4-416c-9ad1-51feb1f5374b" />
 
 
 ## Overview
@@ -14,9 +11,71 @@ The AI Hedge Fund consists of:
 - **Backend**: A FastAPI application that provides a REST API to run the hedge fund trading system and backtester
 - **Frontend**: A React/Vite application that offers a user-friendly interface to visualize and control the hedge fund operations
 
-## Quick Setup
+## Table of Contents
 
-Follow these steps to get both the frontend and backend running:
+- [🚀 Quick Start (For Non-Technical Users)](#-quick-start-for-non-technical-users)
+  - [Option 1: Using 1-Line Shell Script (Recommended)](#option-1-using-1-line-shell-script-recommended)
+  - [Option 2: Using npm (Alternative)](#option-2-using-npm-alternative)
+- [🛠️ Manual Setup (For Developers)](#️-manual-setup-for-developers)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Running the Application](#running-the-application)
+- [Detailed Documentation](#detailed-documentation)
+- [Disclaimer](#disclaimer)
+- [Troubleshooting](#troubleshooting])
+
+## 🚀 Quick Start (For Non-Technical Users)
+
+**One-line setup and run command:**
+
+### Option 1: Using 1-Line Shell Script (Recommended)
+
+#### For Mac/Linux:
+```bash
+./run.sh
+```
+
+If you get a "permission denied" error, run this first:
+```bash
+chmod +x run.sh && ./run.sh
+```
+
+Or alternatively, you can run:
+```bash
+bash run.sh
+```
+
+#### For Windows:
+```cmd
+run.bat
+```
+
+### Option 2: Using npm (Alternative)
+```bash
+cd app && npm install && npm run setup
+```
+
+**That's it!** These scripts will:
+1. Check for required dependencies (Node.js, Python, Poetry)
+2. Install all dependencies automatically
+3. Start both frontend and backend services
+4. **Automatically open your web browser** to the application
+
+**Requirements:**
+- [Node.js](https://nodejs.org/) (includes npm)
+- [Python 3](https://python.org/)
+- [Poetry](https://python-poetry.org/)
+
+**After running, you can access:**
+- Frontend (Web Interface): http://localhost:5173
+- Backend API: http://localhost:8000
+- API Documentation: http://localhost:8000/docs
+
+---
+
+## 🛠️ Manual Setup (For Developers)
+
+If you prefer to set up each component manually or need more control:
 
 ### Prerequisites
 
@@ -111,4 +170,62 @@ This project is for **educational and research purposes only**.
 - Creator assumes no liability for financial losses
 - Consult a financial advisor for investment decisions
 
-By using this software, you agree to use it solely for learning purposes. 
+By using this software, you agree to use it solely for learning purposes.
+
+## Troubleshooting
+
+### Common Issues
+
+#### "Command not found: uvicorn" Error
+If you see this error when running the setup script:
+
+```bash
+[ERROR] Backend failed to start. Check the logs:
+Command not found: uvicorn
+```
+
+**Solution:**
+1. **Clean Poetry environment:**
+   ```bash
+   cd app/backend
+   poetry env remove --all
+   poetry install
+   ```
+
+2. **Or force reinstall:**
+   ```bash
+   cd app/backend
+   poetry install --sync
+   ```
+
+3. **Verify installation:**
+   ```bash
+   cd app/backend
+   poetry run python -c "import uvicorn; import fastapi"
+   ```
+
+#### Python Version Issues
+- **Use Python 3.11**: Python 3.13+ may have compatibility issues
+- **Check your Python version:** `python --version`
+- **Switch Python versions if needed** (using pyenv, conda, etc.)
+
+#### Environment Variable Issues
+- **Ensure .env file exists** in the project root directory
+- **Copy from template:** `cp .env.example .env`
+- **Add your API keys** to the .env file
+
+#### Permission Issues (Mac/Linux)
+If you get "permission denied":
+```bash
+chmod +x run.sh
+./run.sh
+```
+
+#### Port Already in Use
+If ports 8000 or 5173 are in use:
+- **Kill existing processes:** `pkill -f "uvicorn\|vite"`
+- **Or use different ports** by modifying the scripts
+
+### Getting Help
+- Check the [GitHub Issues](https://github.com/virattt/ai-hedge-fund/issues)
+- Follow updates on [Twitter](https://x.com/virattt) 

@@ -15,7 +15,7 @@ from typing_extensions import Literal
 from src.utils.progress import progress
 from src.utils.llm import call_llm
 import statistics
-
+from src.utils.api_key import get_api_key_from_state
 
 class StanleyDruckenmillerSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
@@ -23,7 +23,7 @@ class StanleyDruckenmillerSignal(BaseModel):
     reasoning: str
 
 
-def stanley_druckenmiller_agent(state: AgentState):
+def stanley_druckenmiller_agent(state: AgentState, agent_id: str = "stanley_druckenmiller_agent"):
     """
     Analyzes stocks using Stanley Druckenmiller's investing principles:
       - Seeking asymmetric risk-reward opportunities
@@ -37,15 +37,15 @@ def stanley_druckenmiller_agent(state: AgentState):
     start_date = data["start_date"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-
+    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
     analysis_data = {}
     druck_analysis = {}
 
     for ticker in tickers:
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=5)
+        progress.update_status(agent_id, ticker, "Fetching financial metrics")
+        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=5, api_key=api_key)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Gathering financial line items")
+        progress.update_status(agent_id, ticker, "Gathering financial line items")
         # Include relevant line items for Stan Druckenmiller's approach:
         #   - Growth & momentum: revenue, EPS, operating_income, ...
         #   - Valuation: net_income, free_cash_flow, ebit, ebitda
@@ -72,33 +72,34 @@ def stanley_druckenmiller_agent(state: AgentState):
             end_date,
             period="annual",
             limit=5,
+            api_key=api_key,
         )
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date)
+        progress.update_status(agent_id, ticker, "Getting market cap")
+        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Fetching insider trades")
-        insider_trades = get_insider_trades(ticker, end_date, start_date=None, limit=50)
+        progress.update_status(agent_id, ticker, "Fetching insider trades")
+        insider_trades = get_insider_trades(ticker, end_date, limit=50, api_key=api_key)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Fetching company news")
-        company_news = get_company_news(ticker, end_date, start_date=None, limit=50)
+        progress.update_status(agent_id, ticker, "Fetching company news")
+        company_news = get_company_news(ticker, end_date, limit=50, api_key=api_key)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Fetching recent price data for momentum")
-        prices = get_prices(ticker, start_date=start_date, end_date=end_date)
+        progress.update_status(agent_id, ticker, "Fetching recent price data for momentum")
+        prices = get_prices(ticker, start_date=start_date, end_date=end_date, api_key=api_key)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Analyzing growth & momentum")
+        progress.update_status(agent_id, ticker, "Analyzing growth & momentum")
         growth_momentum_analysis = analyze_growth_and_momentum(financial_line_items, prices)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Analyzing sentiment")
+        progress.update_status(agent_id, ticker, "Analyzing sentiment")
         sentiment_analysis = analyze_sentiment(company_news)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Analyzing insider activity")
+        progress.update_status(agent_id, ticker, "Analyzing insider activity")
         insider_activity = analyze_insider_activity(insider_trades)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Analyzing risk-reward")
+        progress.update_status(agent_id, ticker, "Analyzing risk-reward")
         risk_reward_analysis = analyze_risk_reward(financial_line_items, prices)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Performing Druckenmiller-style valuation")
+        progress.update_status(agent_id, ticker, "Performing Druckenmiller-style valuation")
         valuation_analysis = analyze_druckenmiller_valuation(financial_line_items, market_cap)
 
         # Combine partial scores with weights typical for Druckenmiller:
@@ -133,12 +134,12 @@ def stanley_druckenmiller_agent(state: AgentState):
             "valuation_analysis": valuation_analysis,
         }
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Generating Stanley Druckenmiller analysis")
+        progress.update_status(agent_id, ticker, "Generating Stanley Druckenmiller analysis")
         druck_output = generate_druckenmiller_output(
             ticker=ticker,
             analysis_data=analysis_data,
-            model_name=state["metadata"]["model_name"],
-            model_provider=state["metadata"]["model_provider"],
+            state=state,
+            agent_id=agent_id,
         )
 
         druck_analysis[ticker] = {
@@ -147,17 +148,17 @@ def stanley_druckenmiller_agent(state: AgentState):
             "reasoning": druck_output.reasoning,
         }
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Done")
+        progress.update_status(agent_id, ticker, "Done", analysis=druck_output.reasoning)
 
     # Wrap results in a single message
-    message = HumanMessage(content=json.dumps(druck_analysis), name="stanley_druckenmiller_agent")
+    message = HumanMessage(content=json.dumps(druck_analysis), name=agent_id)
 
     if state["metadata"].get("show_reasoning"):
         show_agent_reasoning(druck_analysis, "Stanley Druckenmiller Agent")
 
-    state["data"]["analyst_signals"]["stanley_druckenmiller_agent"] = druck_analysis
+    state["data"]["analyst_signals"][agent_id] = druck_analysis
 
-    progress.update_status("stanley_druckenmiller_agent", None, "Done")
+    progress.update_status(agent_id, None, "Done")
     
     return {"messages": [message], "data": state["data"]}
 
@@ -176,23 +177,25 @@ def analyze_growth_and_momentum(financial_line_items: list, prices: list) -> dic
     raw_score = 0  # We'll sum up a maximum of 9 raw points, then scale to 0–10
 
     #
-    # 1. Revenue Growth
+    # 1. Revenue Growth (annualized CAGR)
     #
     revenues = [fi.revenue for fi in financial_line_items if fi.revenue is not None]
     if len(revenues) >= 2:
         latest_rev = revenues[0]
         older_rev = revenues[-1]
-        if older_rev > 0:
-            rev_growth = (latest_rev - older_rev) / abs(older_rev)
-            if rev_growth > 0.30:
+        num_years = len(revenues) - 1
+        if older_rev > 0 and latest_rev > 0:
+            # CAGR formula: (ending_value/beginning_value)^(1/years) - 1
+            rev_growth = (latest_rev / older_rev) ** (1 / num_years) - 1
+            if rev_growth > 0.08:  # 8% annualized (adjusted for CAGR)
                 raw_score += 3
-                details.append(f"Strong revenue growth: {rev_growth:.1%}")
-            elif rev_growth > 0.15:
+                details.append(f"Strong annualized revenue growth: {rev_growth:.1%}")
+            elif rev_growth > 0.04:  # 4% annualized
                 raw_score += 2
-                details.append(f"Moderate revenue growth: {rev_growth:.1%}")
-            elif rev_growth > 0.05:
+                details.append(f"Moderate annualized revenue growth: {rev_growth:.1%}")
+            elif rev_growth > 0.01:  # 1% annualized
                 raw_score += 1
-                details.append(f"Slight revenue growth: {rev_growth:.1%}")
+                details.append(f"Slight annualized revenue growth: {rev_growth:.1%}")
             else:
                 details.append(f"Minimal/negative revenue growth: {rev_growth:.1%}")
         else:
@@ -201,26 +204,28 @@ def analyze_growth_and_momentum(financial_line_items: list, prices: list) -> dic
         details.append("Not enough revenue data points for growth calculation.")
 
     #
-    # 2. EPS Growth
+    # 2. EPS Growth (annualized CAGR)
     #
     eps_values = [fi.earnings_per_share for fi in financial_line_items if fi.earnings_per_share is not None]
     if len(eps_values) >= 2:
         latest_eps = eps_values[0]
         older_eps = eps_values[-1]
-        # Avoid division by zero
-        if abs(older_eps) > 1e-9:
-            eps_growth = (latest_eps - older_eps) / abs(older_eps)
-            if eps_growth > 0.30:
+        num_years = len(eps_values) - 1
+        # Calculate CAGR for positive EPS values
+        if older_eps > 0 and latest_eps > 0:
+            # CAGR formula for EPS
+            eps_growth = (latest_eps / older_eps) ** (1 / num_years) - 1
+            if eps_growth > 0.08:  # 8% annualized (adjusted for CAGR)
                 raw_score += 3
-                details.append(f"Strong EPS growth: {eps_growth:.1%}")
-            elif eps_growth > 0.15:
+                details.append(f"Strong annualized EPS growth: {eps_growth:.1%}")
+            elif eps_growth > 0.04:  # 4% annualized
                 raw_score += 2
-                details.append(f"Moderate EPS growth: {eps_growth:.1%}")
-            elif eps_growth > 0.05:
+                details.append(f"Moderate annualized EPS growth: {eps_growth:.1%}")
+            elif eps_growth > 0.01:  # 1% annualized
                 raw_score += 1
-                details.append(f"Slight EPS growth: {eps_growth:.1%}")
+                details.append(f"Slight annualized EPS growth: {eps_growth:.1%}")
             else:
-                details.append(f"Minimal/negative EPS growth: {eps_growth:.1%}")
+                details.append(f"Minimal/negative annualized EPS growth: {eps_growth:.1%}")
         else:
             details.append("Older EPS is near zero; skipping EPS growth calculation.")
     else:
@@ -524,8 +529,8 @@ def analyze_druckenmiller_valuation(financial_line_items: list, market_cap: floa
 def generate_druckenmiller_output(
     ticker: str,
     analysis_data: dict[str, any],
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
+    agent_id: str,
 ) -> StanleyDruckenmillerSignal:
     """
     Generates a JSON signal in the style of Stanley Druckenmiller.
@@ -590,9 +595,8 @@ def generate_druckenmiller_output(
 
     return call_llm(
         prompt=prompt,
-        model_name=model_name,
-        model_provider=model_provider,
         pydantic_model=StanleyDruckenmillerSignal,
-        agent_name="stanley_druckenmiller_agent",
+        agent_name=agent_id,
+        state=state,
         default_factory=create_default_signal,
     )

@@ -6,8 +6,8 @@ from colorama import Fore, Style
 import questionary
 
 def ensure_ollama_and_model(model_name: str, ollama_url: str) -> bool:
-    """Ensure the Ollama model is available in a Docker environment."""
-    print(f"{Fore.CYAN}Docker environment detected.{Style.RESET_ALL}")
+    """Ensure the Ollama model is available at the target Ollama endpoint."""
+    print(f"{Fore.CYAN}Using Ollama endpoint at {ollama_url}{Style.RESET_ALL}")
     
     # Step 1: Check if Ollama service is available
     if not is_ollama_available(ollama_url):

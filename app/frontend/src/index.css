@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 0 0% 94%;
     --foreground: 0 0% 3.9%;
     --card: 0 0% 100%;
     --card-foreground: 0 0% 3.9%;
@@ -20,11 +20,25 @@
     --accent-foreground: 0 0% 9%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
+    --border: 0 0% 85%;
+    --node-border: 0 0% 88%;
+    --node-border-hover: 0 0% 75%;
+    --node-border-selected: 0 0% 10%;
+    --status-border: 0 0% 85%;
     --input: 0 0% 89.8%;
     --ring: 0 0% 3.9%;
     --radius: 0.5rem;
     --sidebar-background: 0 0% 98%;
+    --panel-bg: 0 0% 100%;
+    --node-bg: 0 0% 100%;
+    
+    /* Hover colors for light theme */
+    --hover-background: rgb(156 163 175 / 0.3); /* gray-400/30 */
+    --hover-foreground: 0 0% 15%;
+    
+    /* Active/selected colors for light theme */
+    --active-background: rgb(229 231 235 / 0.8); /* gray-200/80 */
+    --active-foreground: 0 0% 10%;
     
     /* Ramp Grey Colors */
     --ramp-grey-100: #f5f5f5;
@@ -37,6 +51,18 @@
     --ramp-grey-800: #2c2c2c;
     --ramp-grey-900: #1e1e1e;
     --ramp-grey-1000: #111111;
+
+    /* Tab Colors - Light Theme */
+    --tab-active-text: #1a1a1a;
+    --tab-inactive-text: #666666;
+    --tab-hover-text: #1a1a1a;
+    --tab-background: #ffffff;
+    --tab-hover-background: #f0f0f0;
+    --tab-border: #e0e0e0;
+    --tab-accent: #007acc;
+    --tab-icon-active: #007acc;
+    --tab-icon-inactive: #666666;
+    --tab-close-hover: #e0e0e0;
 
     font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
     line-height: 1.5;
@@ -72,10 +98,37 @@
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
+    --border: 0 0% 25%;
+    --node-border: 0 0% 25%;
+    --node-border-hover: 0 0% 40%;
+    --node-border-selected: 0 0% 90%;
+    --status-border: 0 0% 25%;
     --input: 0 0% 14.9%;
     --ring: 0 0% 83.1%;
-    --sidebar-background: 240 5.9% 10%;
+    --panel-bg: 240 3% 11%;
+    --node-bg: 240 3% 11%;
+    --sidebar-background: 240 5.9% 16%;
+    
+    /* Hover colors for dark theme */
+    --hover-background: rgb(55 65 81 / 0.5); /* gray-700/50 */
+    --hover-foreground: 0 0% 95%;
+    
+    /* Active/selected colors for dark theme */
+    --active-background: rgb(55 65 81 / 0.8); /* gray-700/80 */
+    --active-foreground: 0 0% 98%;
+
+    /* Tab Colors - Dark Theme */
+    --tab-active-text: #cccccc;
+    --tab-inactive-text: #969696;
+    --tab-hover-text: #cccccc;
+    --tab-background: #1e1e1e;
+    --tab-hover-background: #1e1e1e;
+    --tab-border: #333333;
+    --tab-accent: #007acc;
+    --tab-icon-active: #007acc;
+    --tab-icon-inactive: #858585;
+    --tab-close-hover: #464647;
+
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -88,6 +141,52 @@
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer utilities {
+  .bg-node {
+    background-color: hsl(var(--node-bg));
+  }
+  
+  .border-status {
+    border-color: hsl(var(--status-border));
+  }
+  
+  .border-node {
+    border-color: hsl(var(--node-border));
+  }
+  
+  .border-node-hover {
+    border-color: hsl(var(--node-border-hover));
+  }
+  
+  .border-node-selected {
+    border-color: hsl(var(--node-border-selected));
+  }
+  
+  .hover-bg {
+    @apply hover:bg-[var(--hover-background)];
+  }
+  
+  .hover-text {
+    @apply hover:text-[hsl(var(--hover-foreground))];
+  }
+  
+  .hover-item {
+    @apply hover:bg-[var(--hover-background)] hover:text-[hsl(var(--hover-foreground))];
+  }
+  
+  .active-bg {
+    @apply bg-[var(--active-background)];
+  }
+  
+  .active-text {
+    @apply text-[hsl(var(--active-foreground))];
+  }
+  
+  .active-item {
+    @apply bg-[var(--active-background)] text-[hsl(var(--active-foreground))];
   }
 }
 
@@ -233,4 +332,25 @@
   );
   background-size: 200% 100%;
   animation: gradientFlow 3s linear infinite;
+}
+
+/* Gradient text animation */
+.gradient-text {
+  background: linear-gradient(90deg, 
+    #2383F4, #5e61e7, #8F00FF, #7831d4, #2383F4
+  );
+  background-size: 200% 100%;
+  animation: gradientFlow 3s linear infinite;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* Remove white lines between ReactFlow Controls buttons */
+.react-flow__controls .react-flow__controls-button {
+  border-right: none !important;
+}
+
+.react-flow__controls .react-flow__controls-button + .react-flow__controls-button {
+  border-left: none !important;
 }

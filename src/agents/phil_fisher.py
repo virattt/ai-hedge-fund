@@ -1,6 +1,5 @@
 from src.graph.state import AgentState, show_agent_reasoning
 from src.tools.api import (
-    get_financial_metrics,
     get_market_cap,
     search_line_items,
     get_insider_trades,
@@ -14,7 +13,7 @@ from typing_extensions import Literal
 from src.utils.progress import progress
 from src.utils.llm import call_llm
 import statistics
-
+from src.utils.api_key import get_api_key_from_state
 
 class PhilFisherSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
@@ -22,7 +21,7 @@ class PhilFisherSignal(BaseModel):
     reasoning: str
 
 
-def phil_fisher_agent(state: AgentState):
+def phil_fisher_agent(state: AgentState, agent_id: str = "phil_fisher_agent"):
     """
     Analyzes stocks using Phil Fisher's investing principles:
       - Seek companies with long-term above-average growth potential
@@ -37,15 +36,12 @@ def phil_fisher_agent(state: AgentState):
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-
+    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
     analysis_data = {}
     fisher_analysis = {}
 
     for ticker in tickers:
-        progress.update_status("phil_fisher_agent", ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=5)
-
-        progress.update_status("phil_fisher_agent", ticker, "Gathering financial line items")
+        progress.update_status(agent_id, ticker, "Gathering financial line items")
         # Include relevant line items for Phil Fisher's approach:
         #   - Growth & Quality: revenue, net_income, earnings_per_share, R&D expense
         #   - Margins & Stability: operating_income, operating_margin, gross_margin
@@ -71,33 +67,34 @@ def phil_fisher_agent(state: AgentState):
             end_date,
             period="annual",
             limit=5,
+            api_key=api_key,
         )
 
-        progress.update_status("phil_fisher_agent", ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date)
+        progress.update_status(agent_id, ticker, "Getting market cap")
+        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
 
-        progress.update_status("phil_fisher_agent", ticker, "Fetching insider trades")
-        insider_trades = get_insider_trades(ticker, end_date, start_date=None, limit=50)
+        progress.update_status(agent_id, ticker, "Fetching insider trades")
+        insider_trades = get_insider_trades(ticker, end_date, limit=50, api_key=api_key)
 
-        progress.update_status("phil_fisher_agent", ticker, "Fetching company news")
-        company_news = get_company_news(ticker, end_date, start_date=None, limit=50)
+        progress.update_status(agent_id, ticker, "Fetching company news")
+        company_news = get_company_news(ticker, end_date, limit=50, api_key=api_key)
 
-        progress.update_status("phil_fisher_agent", ticker, "Analyzing growth & quality")
+        progress.update_status(agent_id, ticker, "Analyzing growth & quality")
         growth_quality = analyze_fisher_growth_quality(financial_line_items)
 
-        progress.update_status("phil_fisher_agent", ticker, "Analyzing margins & stability")
+        progress.update_status(agent_id, ticker, "Analyzing margins & stability")
         margins_stability = analyze_margins_stability(financial_line_items)
 
-        progress.update_status("phil_fisher_agent", ticker, "Analyzing management efficiency & leverage")
+        progress.update_status(agent_id, ticker, "Analyzing management efficiency & leverage")
         mgmt_efficiency = analyze_management_efficiency_leverage(financial_line_items)
 
-        progress.update_status("phil_fisher_agent", ticker, "Analyzing valuation (Fisher style)")
+        progress.update_status(agent_id, ticker, "Analyzing valuation (Fisher style)")
         fisher_valuation = analyze_fisher_valuation(financial_line_items, market_cap)
 
-        progress.update_status("phil_fisher_agent", ticker, "Analyzing insider activity")
+        progress.update_status(agent_id, ticker, "Analyzing insider activity")
         insider_activity = analyze_insider_activity(insider_trades)
 
-        progress.update_status("phil_fisher_agent", ticker, "Analyzing sentiment")
+        progress.update_status(agent_id, ticker, "Analyzing sentiment")
         sentiment_analysis = analyze_sentiment(company_news)
 
         # Combine partial scores with weights typical for Fisher:
@@ -138,12 +135,12 @@ def phil_fisher_agent(state: AgentState):
             "sentiment_analysis": sentiment_analysis,
         }
 
-        progress.update_status("phil_fisher_agent", ticker, "Generating Phil Fisher-style analysis")
+        progress.update_status(agent_id, ticker, "Generating Phil Fisher-style analysis")
         fisher_output = generate_fisher_output(
             ticker=ticker,
             analysis_data=analysis_data,
-            model_name=state["metadata"]["model_name"],
-            model_provider=state["metadata"]["model_provider"],
+            state=state,
+            agent_id=agent_id,
         )
 
         fisher_analysis[ticker] = {
@@ -152,17 +149,17 @@ def phil_fisher_agent(state: AgentState):
             "reasoning": fisher_output.reasoning,
         }
 
-        progress.update_status("phil_fisher_agent", ticker, "Done")
+        progress.update_status(agent_id, ticker, "Done", analysis=fisher_output.reasoning)
 
     # Wrap results in a single message
-    message = HumanMessage(content=json.dumps(fisher_analysis), name="phil_fisher_agent")
+    message = HumanMessage(content=json.dumps(fisher_analysis), name=agent_id)
 
     if state["metadata"].get("show_reasoning"):
         show_agent_reasoning(fisher_analysis, "Phil Fisher Agent")
 
-    state["data"]["analyst_signals"]["phil_fisher_agent"] = fisher_analysis
+    state["data"]["analyst_signals"][agent_id] = fisher_analysis
 
-    progress.update_status("phil_fisher_agent", None, "Done")
+    progress.update_status(agent_id, None, "Done")
     
     return {"messages": [message], "data": state["data"]}
 
@@ -183,48 +180,52 @@ def analyze_fisher_growth_quality(financial_line_items: list) -> dict:
     details = []
     raw_score = 0  # up to 9 raw points => scale to 0–10
 
-    # 1. Revenue Growth (YoY)
+    # 1. Revenue Growth (annualized CAGR)
     revenues = [fi.revenue for fi in financial_line_items if fi.revenue is not None]
     if len(revenues) >= 2:
-        # We'll look at the earliest vs. latest to gauge multi-year growth if possible
+        # Calculate annualized growth rate (CAGR) for proper comparison
         latest_rev = revenues[0]
         oldest_rev = revenues[-1]
-        if oldest_rev > 0:
-            rev_growth = (latest_rev - oldest_rev) / abs(oldest_rev)
-            if rev_growth > 0.80:
+        num_years = len(revenues) - 1
+        if oldest_rev > 0 and latest_rev > 0:
+            # CAGR formula: (ending_value/beginning_value)^(1/years) - 1
+            rev_growth = (latest_rev / oldest_rev) ** (1 / num_years) - 1
+            if rev_growth > 0.20:  # 20% annualized
                 raw_score += 3
-                details.append(f"Very strong multi-period revenue growth: {rev_growth:.1%}")
-            elif rev_growth > 0.40:
+                details.append(f"Very strong annualized revenue growth: {rev_growth:.1%}")
+            elif rev_growth > 0.10:  # 10% annualized
                 raw_score += 2
-                details.append(f"Moderate multi-period revenue growth: {rev_growth:.1%}")
-            elif rev_growth > 0.10:
+                details.append(f"Moderate annualized revenue growth: {rev_growth:.1%}")
+            elif rev_growth > 0.03:  # 3% annualized
                 raw_score += 1
-                details.append(f"Slight multi-period revenue growth: {rev_growth:.1%}")
+                details.append(f"Slight annualized revenue growth: {rev_growth:.1%}")
             else:
-                details.append(f"Minimal or negative multi-period revenue growth: {rev_growth:.1%}")
+                details.append(f"Minimal or negative annualized revenue growth: {rev_growth:.1%}")
         else:
             details.append("Oldest revenue is zero/negative; cannot compute growth.")
     else:
         details.append("Not enough revenue data points for growth calculation.")
 
-    # 2. EPS Growth (YoY)
+    # 2. EPS Growth (annualized CAGR)
     eps_values = [fi.earnings_per_share for fi in financial_line_items if fi.earnings_per_share is not None]
     if len(eps_values) >= 2:
         latest_eps = eps_values[0]
         oldest_eps = eps_values[-1]
-        if abs(oldest_eps) > 1e-9:
-            eps_growth = (latest_eps - oldest_eps) / abs(oldest_eps)
-            if eps_growth > 0.80:
+        num_years = len(eps_values) - 1
+        if oldest_eps > 0 and latest_eps > 0:
+            # CAGR formula for EPS
+            eps_growth = (latest_eps / oldest_eps) ** (1 / num_years) - 1
+            if eps_growth > 0.20:  # 20% annualized
                 raw_score += 3
-                details.append(f"Very strong multi-period EPS growth: {eps_growth:.1%}")
-            elif eps_growth > 0.40:
+                details.append(f"Very strong annualized EPS growth: {eps_growth:.1%}")
+            elif eps_growth > 0.10:  # 10% annualized
                 raw_score += 2
-                details.append(f"Moderate multi-period EPS growth: {eps_growth:.1%}")
-            elif eps_growth > 0.10:
+                details.append(f"Moderate annualized EPS growth: {eps_growth:.1%}")
+            elif eps_growth > 0.03:  # 3% annualized
                 raw_score += 1
-                details.append(f"Slight multi-period EPS growth: {eps_growth:.1%}")
+                details.append(f"Slight annualized EPS growth: {eps_growth:.1%}")
             else:
-                details.append(f"Minimal or negative multi-period EPS growth: {eps_growth:.1%}")
+                details.append(f"Minimal or negative annualized EPS growth: {eps_growth:.1%}")
         else:
             details.append("Oldest EPS near zero; skipping EPS growth calculation.")
     else:
@@ -530,8 +531,8 @@ def analyze_sentiment(news_items: list) -> dict:
 def generate_fisher_output(
     ticker: str,
     analysis_data: dict[str, any],
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
+    agent_id: str,
 ) -> PhilFisherSignal:
     """
     Generates a JSON signal in the style of Phil Fisher.
@@ -595,9 +596,8 @@ def generate_fisher_output(
 
     return call_llm(
         prompt=prompt,
-        model_name=model_name,
-        model_provider=model_provider,
         pydantic_model=PhilFisherSignal,
-        agent_name="phil_fisher_agent",
+        state=state,
+        agent_name=agent_id,
         default_factory=create_default_signal,
     )
