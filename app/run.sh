@@ -12,6 +12,11 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Allow custom backend port via environment variable, default to 8000
+BACKEND_PORT=${BACKEND_PORT:-8000}
+# Allow custom frontend port via environment variable, default to 5173
+FRONTEND_PORT=${FRONTEND_PORT:-5173}
+
 # Function to print colored output
 print_status() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -172,9 +177,9 @@ setup_database() {
 # Function to install backend dependencies
 install_backend() {
     print_status "Installing backend dependencies..."
-    
+
     cd backend
-    
+
     # Check if dependencies are actually installed and working
     if poetry run python -c "import uvicorn; import fastapi" >/dev/null 2>&1; then
         print_success "Backend dependencies already installed!"
@@ -189,7 +194,7 @@ install_backend() {
             exit 1
         fi
     fi
-    
+
     cd ..
 }
 
@@ -247,10 +252,10 @@ start_services() {
     trap cleanup SIGINT SIGTERM
     
     # Start backend
-    print_status "Starting backend server..."
+    print_status "Starting backend server on port $BACKEND_PORT..."
     # Run from the app directory (parent of backend) to ensure proper Python imports
     cd ..
-    poetry run uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000 > "$LOG_DIR/backend.log" 2>&1 &
+    poetry run uvicorn app.backend.main:app --reload --host 127.0.0.1 --port $BACKEND_PORT > "$LOG_DIR/backend.log" 2>&1 &
     BACKEND_PID=$!
     cd app
     
@@ -277,9 +282,9 @@ start_services() {
     fi
     
     # Start frontend
-    print_status "Starting frontend development server..."
+    print_status "Starting frontend development server on port $FRONTEND_PORT..."
     cd frontend
-    npm run dev > "$FRONTEND_LOG" 2>&1 &
+    VITE_API_URL=http://localhost:$BACKEND_PORT npm run dev -- --port $FRONTEND_PORT > "$FRONTEND_LOG" 2>&1 &
     FRONTEND_PID=$!
     cd ..
     
@@ -299,15 +304,15 @@ start_services() {
     # Open browser after frontend is running
     print_status "Opening web browser..."
     sleep 2  # Give frontend a moment to fully start
-    open_browser "http://localhost:5173"
+    open_browser "http://localhost:$FRONTEND_PORT"
     
     echo ""
     print_success "🚀 AI Hedge Fund web application is now running!"
-    print_success "🌐 Browser should open automatically to http://localhost:5173"
+    print_success "🌐 Browser should open automatically to http://localhost:$FRONTEND_PORT"
     echo ""
-    print_status "Frontend (Web Interface): http://localhost:5173"
-    print_status "Backend (API): http://localhost:8000"
-    print_status "API Documentation: http://localhost:8000/docs"
+    print_status "Frontend (Web Interface): http://localhost:$FRONTEND_PORT"
+    print_status "Backend (API): http://localhost:$BACKEND_PORT"
+    print_status "API Documentation: http://localhost:$BACKEND_PORT/docs"
     print_status "Database: SQLite (hedge_fund.db in project root)"
     echo ""
     print_status "Press Ctrl+C to stop both services"
@@ -337,6 +342,12 @@ main() {
     echo ""
     print_status "🚀 AI Hedge Fund Web Application Setup"
     print_status "This script will install dependencies and start both frontend and backend services"
+    if [[ -n "$BACKEND_PORT" && "$BACKEND_PORT" != "8000" ]]; then
+        print_status "Using custom backend port: $BACKEND_PORT"
+    fi
+    if [[ -n "$FRONTEND_PORT" && "$FRONTEND_PORT" != "5173" ]]; then
+        print_status "Using custom frontend port: $FRONTEND_PORT"
+    fi
     echo ""
     
     check_directory
@@ -367,10 +378,14 @@ if [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
     echo "  - Poetry (https://python-poetry.org/)"
     echo ""
     echo "After running, you can access:"
-    echo "  - Frontend: http://localhost:5173"
-    echo "  - Backend API: http://localhost:8000"
-    echo "  - API Docs: http://localhost:8000/docs"
+    echo "  - Frontend: http://localhost:\${FRONTEND_PORT:-5173}"
+    echo "  - Backend API: http://localhost:\${BACKEND_PORT:-8000}"
+    echo "  - API Docs: http://localhost:\${BACKEND_PORT:-8000}/docs"
     echo "  - Database: SQLite file (hedge_fund.db) in project root"
+    echo ""
+    echo "Environment Variables:"
+    echo "  - BACKEND_PORT: Port for the backend server (default: 8000)"
+    echo "  - FRONTEND_PORT: Port for the frontend server (default: 5173)"
     echo ""
     exit 0
 fi
