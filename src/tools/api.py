@@ -2,22 +2,7 @@ import os
 import pandas as pd
 import requests
 
-from data.cache import get_cache
-from data.models import (
-    CompanyNews,
-    CompanyNewsResponse,
-    FinancialMetrics,
-    FinancialMetricsResponse,
-    Price,
-    PriceResponse,
-    LineItem,
-    LineItemResponse,
-    InsiderTrade,
-    InsiderTradeResponse,
-)
 
-# Global cache instance
-_cache = get_cache()
 
 
 def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
