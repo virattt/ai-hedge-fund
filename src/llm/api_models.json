@@ -1,0 +1,72 @@
+[
+  {
+    "display_name": "Grok 4",
+    "model_name": "grok-4-0709",
+    "provider": "xAI"
+  },
+  {
+    "display_name": "GPT-5.1",
+    "model_name": "gpt-5.1",
+    "provider": "OpenAI"
+  },
+  {
+    "display_name": "GPT-4.1",
+    "model_name": "gpt-4.1",
+    "provider": "OpenAI"
+  },
+  {
+    "display_name": "Claude Sonnet 4.5",
+    "model_name": "claude-sonnet-4-5-20250929",
+    "provider": "Anthropic"
+  },
+  {
+    "display_name": "Claude Haiku 4.5",
+    "model_name": "claude-haiku-4-5-20251001",
+    "provider": "Anthropic"
+  },
+  {
+    "display_name": "Claude Opus 4.1",
+    "model_name": "claude-opus-4-1-20250805",
+    "provider": "Anthropic"
+  },
+  {
+    "display_name": "DeepSeek R1",
+    "model_name": "deepseek-reasoner",
+    "provider": "DeepSeek"
+  },
+  {
+    "display_name": "DeepSeek V3",
+    "model_name": "deepseek-chat",
+    "provider": "DeepSeek"
+  },
+  {
+    "display_name": "Gemini 2.5 Pro",
+    "model_name": "gemini-2.5-pro-preview-06-05",
+    "provider": "Google"
+  },
+  {
+    "display_name": "GLM-4.5 Air",
+    "model_name": "z-ai/glm-4.5-air",
+    "provider": "OpenRouter"
+  },
+  {
+    "display_name": "GLM-4.5",
+    "model_name": "z-ai/glm-4.5",
+    "provider": "OpenRouter"
+  },
+  {
+    "display_name": "Qwen 3 (235B) Thinking",
+    "model_name": "qwen/qwen3-235b-a22b-thinking-2507",
+    "provider": "OpenRouter"
+  },
+  {
+    "display_name": "GigaChat-2-Max",
+    "model_name": "GigaChat-2-Max",
+    "provider": "GigaChat"
+  },
+  {
+    "display_name": "Azure Open AI Deployment",
+    "model_name": "",
+    "provider": "Azure OpenAI"
+  }
+]
