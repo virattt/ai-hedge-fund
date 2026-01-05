@@ -45,6 +45,21 @@
     "provider": "Google"
   },
   {
+    "display_name": "Gemini 2.5 Flash",
+    "model_name": "gemini-2.5-flash",
+    "provider": "Google"
+  },
+  {
+    "display_name": "Gemini 2.5 Flash Lite",
+    "model_name": "gemini-2.5-flash-lite",
+    "provider": "Google"
+  },
+  {
+    "display_name": "Openrouter Deepseek-v3.2",
+    "model_name": "deepseek/deepseek-v3.2",
+    "provider": "OpenRouter"
+  },
+  {
     "display_name": "GLM-4.5 Air",
     "model_name": "z-ai/glm-4.5-air",
     "provider": "OpenRouter"

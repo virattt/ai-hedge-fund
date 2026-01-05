@@ -10,8 +10,13 @@ from app.backend.services.graph import create_graph, parse_hedge_fund_response, 
 from app.backend.services.portfolio import create_portfolio
 from app.backend.services.backtest_service import BacktestService
 from app.backend.services.api_key_service import ApiKeyService
+from app.backend.services.agent_data_service import AgentDataService
+from app.backend.services.flow_run_service import FlowRunService
 from src.utils.progress import progress
 from src.utils.analysts import get_agents_list
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/hedge-fund")
 
@@ -125,6 +130,58 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
                 if not result or not result.get("messages"):
                     yield ErrorEvent(message="Failed to generate hedge fund decisions").to_sse()
                     return
+
+                # Save results to database if POSTGRES_URI is set
+                try:
+                    import os
+                    if os.getenv("POSTGRES_URI"):
+                        # Extract data for database saving
+                        analyst_signals_raw = result.get("data", {}).get("analyst_signals", {})
+                        trading_decisions_raw = parse_hedge_fund_response(result.get("messages", [])[-1].content)
+                        portfolio_snapshot = result.get("data", {}).get("portfolio", {})
+                        
+                        # Format analyst signals for database
+                        agent_data_service = AgentDataService()
+                        analyst_signals_summary = agent_data_service.format_analyst_signals_for_db(analyst_signals_raw)
+                        
+                        # Create flow run and cycle (flow_id is optional - will skip if not provided)
+                        flow_run_service = FlowRunService(db)
+                        flow_id = getattr(request_data, "flow_id", None)  # Check if flow_id exists in request
+                        
+                        # For now, we'll skip database saving if no flow_id is provided
+                        # In the future, we could create a default flow or standalone cycles
+                        if flow_id:
+                            flow_run = flow_run_service.create_or_get_flow_run(
+                                flow_id=flow_id,
+                                request_data=request_data.model_dump() if hasattr(request_data, "model_dump") else None
+                            )
+                            
+                            if flow_run:
+                                cycle = flow_run_service.create_cycle(
+                                    flow_run_id=flow_run.id,
+                                    trigger_reason="manual"
+                                )
+                                
+                                if cycle:
+                                    flow_run_service.update_cycle_with_results(
+                                        cycle_id=cycle.id,
+                                        analyst_signals=analyst_signals_summary,
+                                        trading_decisions=trading_decisions_raw,
+                                        portfolio_snapshot=portfolio_snapshot
+                                    )
+                                    
+                                    # Complete the flow run
+                                    flow_run_service.complete_flow_run(
+                                        flow_run_id=flow_run.id,
+                                        final_portfolio=portfolio_snapshot,
+                                        results={
+                                            "decisions": trading_decisions_raw,
+                                            "analyst_signals": analyst_signals_summary
+                                        }
+                                    )
+                except Exception as db_error:
+                    # Log but don't fail the request if database save fails
+                    logger.error(f"Error saving to database: {db_error}", exc_info=True)
 
                 # Send the final result
                 final_data = CompleteEvent(
