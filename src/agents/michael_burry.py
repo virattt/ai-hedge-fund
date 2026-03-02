@@ -16,6 +16,7 @@ from src.tools.api import (
     get_market_cap,
     search_line_items,
 )
+from src.tools.sentiment_analyzer import enrich_news_sentiment
 from src.utils.llm import call_llm
 from src.utils.progress import progress
 from src.utils.api_key import get_api_key_from_state
@@ -31,7 +32,7 @@ class MichaelBurrySignal(BaseModel):
 
 def michael_burry_agent(state: AgentState, agent_id: str = "michael_burry_agent"):
     """Analyse stocks using Michael Burry's deep‑value, contrarian framework."""
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    api_key = get_api_key_from_state(state, "FMP_API_KEY")
     data = state["data"]
     end_date: str = data["end_date"]  # YYYY‑MM‑DD
     tickers: list[str] = data["tickers"]
@@ -86,6 +87,10 @@ def michael_burry_agent(state: AgentState, agent_id: str = "michael_burry_agent"
 
         progress.update_status(agent_id, ticker, "Analyzing insider activity")
         insider_analysis = _analyze_insider_activity(insider_trades)
+
+        # Enrich news with LLM-based sentiment (FMP does not provide sentiment)
+        progress.update_status(agent_id, ticker, "Enriching news sentiment via LLM")
+        enrich_news_sentiment(news, ticker=ticker, max_articles=10)
 
         progress.update_status(agent_id, ticker, "Analyzing contrarian sentiment")
         contrarian_analysis = _analyze_contrarian_sentiment(news)

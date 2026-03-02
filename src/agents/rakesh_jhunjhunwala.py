@@ -19,7 +19,7 @@ def rakesh_jhunjhunwala_agent(state: AgentState, agent_id: str = "rakesh_jhunjhu
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    api_key = get_api_key_from_state(state, "FMP_API_KEY")
     # Collect all analysis for LLM reasoning
     analysis_data = {}
     jhunjhunwala_analysis = {}

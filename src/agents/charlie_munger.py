@@ -1,5 +1,6 @@
 from src.graph.state import AgentState, show_agent_reasoning
 from src.tools.api import get_financial_metrics, get_market_cap, search_line_items, get_insider_trades, get_company_news
+from src.tools.sentiment_analyzer import enrich_news_sentiment
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
@@ -23,7 +24,7 @@ def charlie_munger_agent(state: AgentState, agent_id: str = "charlie_munger_agen
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    api_key = get_api_key_from_state(state, "FMP_API_KEY")
     analysis_data = {}
     munger_analysis = {}
     
@@ -77,6 +78,9 @@ def charlie_munger_agent(state: AgentState, agent_id: str = "charlie_munger_agen
             api_key=api_key,
         )
         
+        # Enrich news with LLM-based sentiment (FMP does not provide sentiment)
+        enrich_news_sentiment(company_news, ticker=ticker, max_articles=5)
+
         progress.update_status(agent_id, ticker, "Analyzing moat strength")
         moat_analysis = analyze_moat_strength(metrics, financial_line_items)
         

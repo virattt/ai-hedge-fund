@@ -22,7 +22,7 @@ def growth_analyst_agent(state: AgentState, agent_id: str = "growth_analyst_agen
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    api_key = get_api_key_from_state(state, "FMP_API_KEY")
     growth_analysis: dict[str, dict] = {}
 
     for ticker in tickers:

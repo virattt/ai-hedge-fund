@@ -9,6 +9,7 @@ import json
 
 from src.graph.state import AgentState, show_agent_reasoning
 from src.tools.api import get_company_news
+from src.tools.sentiment_analyzer import analyze_sentiment as openrouter_analyze_sentiment
 from src.utils.api_key import get_api_key_from_state
 from src.utils.llm import call_llm
 from src.utils.progress import progress
@@ -30,6 +31,10 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
     with missing sentiment data, and then aggregates the sentiments to produce an
     overall signal (bullish, bearish, or neutral) and a confidence score for each ticker.
 
+    Since FMP does not provide sentiment scores, this agent uses:
+      1. The project's configured LLM (via call_llm) as the primary classifier.
+      2. OpenRouter-based SentimentAnalyzer as a fallback.
+
     Args:
         state: The current state of the agent graph.
         agent_id: The ID of the agent.
@@ -40,7 +45,7 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
     data = state.get("data", {})
     end_date = data.get("end_date")
     tickers = data.get("tickers")
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    api_key = get_api_key_from_state(state, "FMP_API_KEY")
     sentiment_analysis = {}
 
     for ticker in tickers:
@@ -69,10 +74,9 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
               progress.update_status(agent_id, ticker, f"Analyzing sentiment for {len(articles_to_analyze)} articles")
               
               for idx, news in enumerate(articles_to_analyze):
-                # We analyze based on title, but can also pass in the entire article text,
-                # but this is more expensive and requires extracting the text from the article.
-                # Note: this is an opportunity for improvement!
                 progress.update_status(agent_id, ticker, f"Analyzing sentiment for article {idx + 1} of {len(articles_to_analyze)}")
+                
+                # Primary: use the project's configured LLM
                 prompt = (
                     f"Please analyze the sentiment of the following news headline "
                     f"with the following context: "
@@ -83,12 +87,16 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
                     f"Headline: {news.title}"
                 )
                 response = call_llm(prompt, Sentiment, agent_name=agent_id, state=state)
-                if response:
+                
+                if response and hasattr(response, "sentiment"):
                     news.sentiment = response.sentiment.lower()
                     sentiment_confidences[id(news)] = response.confidence
                 else:
-                    news.sentiment = "neutral"
-                    sentiment_confidences[id(news)] = 0
+                    # Fallback: use OpenRouter SentimentAnalyzer
+                    fallback = openrouter_analyze_sentiment(news.title, ticker)
+                    news.sentiment = fallback["sentiment"]
+                    sentiment_confidences[id(news)] = fallback["confidence"]
+                
                 sentiments_classified_by_llm += 1
 
             # Aggregate sentiment across all articles
@@ -176,17 +184,6 @@ def _calculate_confidence_score(
     
     Uses a weighted approach combining LLM confidence scores (70%) with 
     signal proportion (30%) when LLM classifications are available.
-    
-    Args:
-        sentiment_confidences: Dictionary mapping news article IDs to confidence scores.
-        company_news: List of CompanyNews objects.
-        overall_signal: The overall sentiment signal ("bullish", "bearish", or "neutral").
-        bullish_signals: Count of bullish signals.
-        bearish_signals: Count of bearish signals.
-        total_signals: Total number of signals.
-        
-    Returns:
-        Confidence score as a float between 0 and 100.
     """
     if total_signals == 0:
         return 0.0

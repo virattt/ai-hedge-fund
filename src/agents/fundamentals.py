@@ -13,7 +13,7 @@ def fundamentals_analyst_agent(state: AgentState, agent_id: str = "fundamentals_
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    api_key = get_api_key_from_state(state, "FMP_API_KEY")
     # Initialize fundamental analysis for each ticker
     fundamental_analysis = {}
 

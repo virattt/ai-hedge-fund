@@ -6,6 +6,7 @@ import numpy as np
 import json
 from src.utils.api_key import get_api_key_from_state
 from src.tools.api import get_insider_trades, get_company_news
+from src.tools.sentiment_analyzer import enrich_news_sentiment
 
 
 ##### Sentiment Agent #####
@@ -14,7 +15,7 @@ def sentiment_analyst_agent(state: AgentState, agent_id: str = "sentiment_analys
     data = state.get("data", {})
     end_date = data.get("end_date")
     tickers = data.get("tickers")
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    api_key = get_api_key_from_state(state, "FMP_API_KEY")
     # Initialize sentiment analysis for each ticker
     sentiment_analysis = {}
 
@@ -39,6 +40,10 @@ def sentiment_analyst_agent(state: AgentState, agent_id: str = "sentiment_analys
 
         # Get the company news
         company_news = get_company_news(ticker, end_date, limit=100, api_key=api_key)
+
+        # Enrich news with LLM-based sentiment (FMP does not provide sentiment)
+        progress.update_status(agent_id, ticker, "Analyzing news sentiment via LLM")
+        enrich_news_sentiment(company_news, ticker=ticker, max_articles=10)
 
         # Get the sentiment from the company news
         sentiment = pd.Series([n.sentiment for n in company_news]).dropna()

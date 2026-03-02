@@ -45,7 +45,7 @@ def technical_analyst_agent(state: AgentState, agent_id: str = "technical_analys
     start_date = data["start_date"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    api_key = get_api_key_from_state(state, "FMP_API_KEY")
     # Initialize analysis for each ticker
     technical_analysis = {}
 

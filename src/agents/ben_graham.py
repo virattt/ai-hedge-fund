@@ -28,7 +28,7 @@ def ben_graham_agent(state: AgentState, agent_id: str = "ben_graham_agent"):
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    api_key = get_api_key_from_state(state, "FMP_API_KEY")
     
     analysis_data = {}
     graham_analysis = {}
