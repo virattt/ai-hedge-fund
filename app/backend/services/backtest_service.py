@@ -122,7 +122,9 @@ class BacktestService:
         elif action == "short":
             proceeds = current_price * quantity
             margin_required = proceeds * self.portfolio["margin_requirement"]
-            if margin_required <= self.portfolio["cash"]:
+            available_margin_cash = max(0.0, self.portfolio["cash"] - self.portfolio["margin_used"])
+
+            if margin_required <= available_margin_cash:
                 # Weighted average short cost basis
                 old_short_shares = position["short"]
                 old_cost_basis = position["short_cost_basis"]
@@ -144,7 +146,7 @@ class BacktestService:
             else:
                 margin_ratio = self.portfolio["margin_requirement"]
                 if margin_ratio > 0:
-                    max_quantity = int(self.portfolio["cash"] / (current_price * margin_ratio))
+                    max_quantity = int(available_margin_cash / (current_price * margin_ratio))
                 else:
                     max_quantity = 0
 
