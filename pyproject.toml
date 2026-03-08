@@ -29,10 +29,10 @@ questionary = "^2.1.0"
 rich = "^13.9.4"
 langchain-google-genai = "^2.0.11"
 # Backend dependencies
-fastapi = {extras = ["standard"], version = "^0.104.0"}
-fastapi-cli = "^0.0.7"
+fastapi = {extras = ["standard"], version = "^0.135.1"}
+fastapi-cli = "^0.0.24"
 pydantic = "^2.4.2"
-httpx = "^0.27.0"
+httpx = "^0.28.1"
 sqlalchemy = "^2.0.22"
 alembic = "^1.12.0"
 langchain-gigachat = "^0.3.12"
