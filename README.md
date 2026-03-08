@@ -2,6 +2,8 @@
 
 An AI-powered portfolio construction and analysis system that combines multi-agent intelligence with systematic risk management. Built to translate macro investment theses into actionable, regime-aware portfolios across equities, crypto perpetuals, and short-dated options.
 
+In our workflow, [Dexter](https://github.com/eliza420ai-beep/dexter) is the primary thesis-driven researcher: it reads `SOUL.md`, builds the sleeves, and defines the bar for what the portfolio is supposed to do. AI Hedge Fund is the second-opinion engine. It runs 18 analyst agents plus risk and portfolio management against the same names so conviction gets challenged before it gets trusted.
+
 > **This project is for educational and research purposes only.** It does not execute live trades. See [Disclaimer](#disclaimer).
 
 [![Twitter Follow](https://img.shields.io/twitter/follow/virattt?style=social)](https://twitter.com/virattt)
@@ -11,6 +13,8 @@ An AI-powered portfolio construction and analysis system that combines multi-age
 Most retail investors read compelling investment theses — like "AI infrastructure is the biggest capex cycle since postwar" — but lack the tools to systematically evaluate positions, size them for risk, and stress-test the portfolio. This project bridges that gap.
 
 The system takes a list of tickers, runs them through 18 specialized AI analyst agents (each modeled after a real-world investing legend or quantitative discipline), aggregates their signals through a risk manager, and produces position-level trading decisions with confidence scores and reasoning.
+
+That matters even more in a thesis-driven stack. As described in [The Researcher Who Thinks](https://ikigaistudio.substack.com/p/the-researcher-who-thinks), Dexter is built to start from identity and thesis, not from ticker trivia. As described in [The Fund](https://ikigaistudio.substack.com/p/the-fund), that thesis currently expresses itself through two sleeves with zero overlap. This repo exists to be the adversarial committee around that process: a structured second opinion on the names, sizing, and regime assumptions coming out of Dexter.
 
 ### The Three Layers
 
@@ -36,6 +40,24 @@ An experimental module for generating income and expressing short-duration views
 - **Spread construction**: Using agent confidence scores to calibrate strike selection — higher confidence = tighter spreads (more premium, more risk), lower confidence = wider wings
 
 This layer is **experimental** — options are complex instruments and daily expirations amplify both gains and losses. The goal is to explore whether AI agent consensus signals can inform short-duration options strategies in a systematically profitable way.
+
+## How This Fits With Dexter
+
+This repo is not meant to replace Dexter. It is meant to challenge it.
+
+- **Dexter** is the primary researcher and portfolio architect. It reads `SOUL.md`, reasons from the thesis inward, and defines the target structure for the fund.
+- **AI Hedge Fund** is the second-opinion layer. It runs a diversified committee of analyst agents on the same names and forces the thesis through a more traditional investing lens: fundamentals, valuation, technicals, sentiment, growth, and risk constraints.
+- **FastAPI gives us a trigger surface**. In addition to the local CLI, this repo already ships a FastAPI backend for the web application, which means Dexter can call AI Hedge Fund over HTTP from the Dexter terminal when we want the second opinion to be part of the live research loop instead of a separate manual step.
+- **The output we care about is disagreement**. If Dexter loves a name and the committee hates it, that gap is useful. If both systems converge, confidence goes up. If both systems diverge for different reasons, the position needs more work.
+
+For the two-sleeve architecture described in [The Fund](https://ikigaistudio.substack.com/p/the-fund), the practical workflow is:
+
+1. Use [Dexter](https://github.com/eliza420ai-beep/dexter) to define the thesis, sleeves, and candidate names.
+2. Run those names through AI Hedge Fund as a second opinion, either through the local CLI or by having Dexter trigger the FastAPI endpoints directly.
+3. Compare committee consensus against thesis conviction.
+4. Use the risk manager and portfolio manager here to pressure-test sizing before anything becomes portfolio truth.
+
+The point is not to make the systems identical. The point is to keep the thesis honest.
 
 ## How It Works
 
@@ -133,6 +155,7 @@ By using this software, you agree to use it solely for learning purposes.
 - [How to Run](#how-to-run)
   - [Command Line Interface](#️-command-line-interface)
   - [Web Application](#️-web-application)
+- [How This Fits With Dexter](#how-this-fits-with-dexter)
 - [Portfolio Builder](#portfolio-builder)
 - [Hyperliquid Integration](#hyperliquid-integration)
 - [Tastytrade Daily Options](#tastytrade-daily-options-experimental)
@@ -144,7 +167,7 @@ By using this software, you agree to use it solely for learning purposes.
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/virattt/ai-hedge-fund.git
+git clone https://github.com/eliza420ai-beep/ai-hedge-fund.git
 cd ai-hedge-fund
 ```
 
@@ -172,7 +195,7 @@ FINANCIAL_DATASETS_API_KEY=your-key   # Required for tickers beyond AAPL, GOOGL,
 
 ### 3. (Optional) Shared config directory `~/.ai-hedge-fund/`
 
-You can keep a **thesis document** (SOUL.md) and other config in a shared directory that both this repo and [Dexter](https://github.com/virattt/dexter) can use:
+You can keep a **thesis document** (SOUL.md) and other config in a shared directory that both this repo and [Dexter](https://github.com/eliza420ai-beep/dexter) can use:
 
 - **`~/.ai-hedge-fund/`** — shared config directory (create it yourself if you want to use it).
   - **SOUL.md** — your structural investment thesis. All 18 analyst agents and the portfolio manager receive this as context so they reason against *your* thesis (e.g. AI infrastructure layers, conviction tiers, sizing rules).
@@ -229,6 +252,12 @@ poetry run python src/main.py --tickers NVDA --ollama
 
 # Custom portfolio size and margin
 poetry run python src/main.py --tickers NVDA,AAPL --initial-cash 500000 --margin-requirement 0.5
+
+# Second-opinion pass on a picks-and-shovels sleeve from Dexter / The Fund
+poetry run python src/main.py --tickers AMAT,ASML,LRCX,KLAC,VRT,CEG --analysts-all --show-reasoning
+
+# Second-opinion pass on an on-chain sleeve or hedge basket
+poetry run python src/main.py --tickers TSM,NVDA,PLTR,ORCL,COIN,HOOD --analysts-all --show-reasoning
 ```
 
 ### Run the Backtester
@@ -244,7 +273,9 @@ poetry run python src/backtester.py --tickers NVDA --start-date 2024-01-01 --end
 
 The web UI provides a visual interface for portfolio construction, analysis, and backtesting.
 
-See detailed instructions [here](https://github.com/virattt/ai-hedge-fund/tree/main/app).
+Under the hood, the app uses a FastAPI backend in `app/backend/`. That matters beyond the browser: it gives us the option to expose AI Hedge Fund as a callable service so Dexter can trigger analyses from its own terminal workflow over HTTP instead of shelling out to this repo manually.
+
+See detailed instructions [here](https://github.com/eliza420ai-beep/ai-hedge-fund/tree/main/app).
 
 <img width="1721" alt="Screenshot 2025-06-28 at 6 41 03 PM" src="https://github.com/user-attachments/assets/b95ab696-c9f4-416c-9ad1-51feb1f5374b" />
 
@@ -329,7 +360,7 @@ Daily options can lose 100% of their value in hours. This module is purely exper
 
 ## Feature Requests
 
-If you have a feature request, please open an [issue](https://github.com/virattt/ai-hedge-fund/issues) and tag it with `enhancement`.
+If you have a feature request, please open an [issue](https://github.com/eliza420ai-beep/ai-hedge-fund/issues) and tag it with `enhancement`.
 
 ## License
 
