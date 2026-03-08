@@ -196,6 +196,14 @@ curl -sSL https://install.python-poetry.org | python3 -
 poetry install
 ```
 
+This repo is configured to use an in-project Poetry virtualenv at `.venv/` so installs are consistent across terminals and editors. You can verify that Poetry is using the local environment with:
+
+```bash
+poetry env info --path
+```
+
+It should resolve to `./.venv` inside the repository.
+
 ## How to Run
 
 ### ⌨️ Command Line Interface
