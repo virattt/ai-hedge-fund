@@ -4,9 +4,33 @@ An AI-powered portfolio construction and analysis system that combines multi-age
 
 In our workflow, [Dexter](https://github.com/eliza420ai-beep/dexter) is the primary thesis-driven researcher: it reads `SOUL.md`, builds the sleeves, and defines the bar for what the portfolio is supposed to do. AI Hedge Fund is the second-opinion engine. It runs 18 analyst agents plus risk and portfolio management against the same names so conviction gets challenged before it gets trusted.
 
-> **This project is for educational and research purposes only.** It does not execute live trades. See [Disclaimer](#disclaimer).
+> **Disclaimer** — This project is for **educational and research purposes only**. Not financial advice. No guarantees. Options and leveraged perpetuals carry substantial risk of loss. See [full disclaimer](#disclaimer).
 
-[![Twitter Follow](https://img.shields.io/twitter/follow/virattt?style=social)](https://twitter.com/virattt)
+---
+
+## Table of Contents
+
+- [Why This Exists](#why-this-exists)
+- [Architecture](#architecture)
+- [Agent Details](#agent-details)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Configuration](#configuration)
+- [Usage](#usage)
+  - [CLI](#cli)
+  - [Backtester](#backtester)
+  - [Web Application](#web-application)
+- [How This Fits With Dexter](#how-this-fits-with-dexter)
+- [Portfolio Builder](#portfolio-builder)
+- [Hyperliquid Integration](#hyperliquid-integration)
+- [Tastytrade Daily Options](#tastytrade-daily-options-experimental)
+- [Project Structure](#project-structure)
+- [Contributing](#contributing)
+- [License](#license)
+- [Disclaimer](#disclaimer)
+
+---
 
 ## Why This Exists
 
@@ -22,55 +46,26 @@ That matters even more in a thesis-driven stack. As described in [The Researcher
 The foundation. 18 analyst agents analyze stocks across fundamentals, technicals, valuation, sentiment, and growth — then a risk manager and portfolio manager synthesize everything into buy/sell/hold decisions with position sizing. This works today.
 
 **Layer 2 — Hyperliquid Integration (Crypto Perpetuals)**
-Equities alone can't express every thesis. Hyperliquid provides access to crypto perpetual futures with on-chain transparency, deep liquidity, and up to 50x leverage. We integrated Hyperliquid to enable:
-
-- **Hedging**: Short crypto-correlated positions when the regime detector signals capitulation (e.g., short BTC perps as a risk-off hedge against crypto-adjacent equity holdings like RIOT, CORZ, HUT)
-- **Funding rate capture**: Earn yield by holding positions where funding rates are structurally positive — an additional alpha source uncorrelated to directional equity bets
-- **Thesis expression**: Some AI infrastructure plays (GPU compute, decentralized inference) have crypto-native proxies that trade 24/7 with better liquidity than their OTC equity equivalents
-- **Regime-conditional sizing**: The same regime overlay (trending-bull / mean-reverting / capitulation) that governs equity position sizes also governs leverage and directional exposure on Hyperliquid
-
-The intent is not to "trade crypto" — it's to use perpetual futures as a precision instrument for portfolio-level hedging and thesis expression that equities alone can't provide.
+Equities alone can't express every thesis. Hyperliquid provides access to crypto perpetual futures with on-chain transparency, deep liquidity, and up to 50x leverage. See [Hyperliquid Integration](#hyperliquid-integration) for details.
 
 **Layer 3 — Tastytrade Daily Options (Experimental)**
-An experimental module for generating income and expressing short-duration views through daily (0DTE) and short-dated options on Tastytrade. This layer explores:
+An experimental module for generating income and expressing short-duration views through daily (0DTE) and short-dated options. See [Tastytrade Daily Options](#tastytrade-daily-options-experimental) for details.
 
-- **Premium selling on high-conviction holds**: Selling covered calls or cash-secured puts on positions the portfolio manager is already bullish on (e.g., selling puts on NVDA during pullbacks when all agents signal BUY at 95% confidence)
-- **Defined-risk hedges**: Buying protective puts on positions with binary catalysts (earnings, geopolitical events) — similar to the essay-style "use put options rather than outright shorts for defined downside" approach
-- **0DTE income generation**: Harvesting theta on same-day expiration options where the system's intraday sentiment and technical signals have an edge
-- **Spread construction**: Using agent confidence scores to calibrate strike selection — higher confidence = tighter spreads (more premium, more risk), lower confidence = wider wings
+---
 
-This layer is **experimental** — options are complex instruments and daily expirations amplify both gains and losses. The goal is to explore whether AI agent consensus signals can inform short-duration options strategies in a systematically profitable way.
-
-## How This Fits With Dexter
-
-This repo is not meant to replace Dexter. It is meant to challenge it.
-
-- **Dexter** is the primary researcher and portfolio architect. It reads `SOUL.md`, reasons from the thesis inward, and defines the target structure for the fund.
-- **AI Hedge Fund** is the second-opinion layer. It runs a diversified committee of analyst agents on the same names and forces the thesis through a more traditional investing lens: fundamentals, valuation, technicals, sentiment, growth, and risk constraints.
-- **FastAPI gives us a trigger surface**. In addition to the local CLI, this repo already ships a FastAPI backend for the web application, which means Dexter can call AI Hedge Fund over HTTP from the Dexter terminal when we want the second opinion to be part of the live research loop instead of a separate manual step.
-- **The output we care about is disagreement**. If Dexter loves a name and the committee hates it, that gap is useful. If both systems converge, confidence goes up. If both systems diverge for different reasons, the position needs more work.
-
-For the two-sleeve architecture described in [The Fund](https://ikigaistudio.substack.com/p/the-fund), the practical workflow is:
-
-1. Use [Dexter](https://github.com/eliza420ai-beep/dexter) to define the thesis, sleeves, and candidate names.
-2. Run those names through AI Hedge Fund as a second opinion, either through the local CLI or by having Dexter trigger the FastAPI endpoints directly.
-3. Compare committee consensus against thesis conviction.
-4. Use the risk manager and portfolio manager here to pressure-test sizing before anything becomes portfolio truth.
-
-The point is not to make the systems identical. The point is to keep the thesis honest.
-
-## How It Works
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        INPUT                                    │
 │  Tickers + Portfolio (cash, positions) + Date Range             │
+│  + SOUL.md thesis context (optional)                            │
 └──────────────────────────┬──────────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                   18 AI ANALYST AGENTS                          │
-│                   (run in parallel)                              │
+│                   (run in parallel via LangGraph)               │
 │                                                                 │
 │  Legend Agents:           Quantitative Agents:                   │
 │  ├─ Aswath Damodaran      ├─ Technical Analyst                  │
@@ -110,7 +105,8 @@ The point is not to make the systems identical. The point is to keep the thesis 
          └─────────┘ └──────────┘ └──────────────┘
 ```
 
-<img width="1042" alt="Screenshot 2025-03-22 at 6 19 07 PM" src="https://github.com/user-attachments/assets/cbae3dcf-b571-490d-b0ad-3f0f035ac0d4" />
+
+---
 
 ## Agent Details
 
@@ -137,41 +133,50 @@ The point is not to make the systems identical. The point is to keep the thesis 
 
 Plus **Risk Manager** (volatility/correlation-adjusted position limits) and **Portfolio Manager** (final decision synthesis).
 
-## Disclaimer
+---
 
-This project is for **educational and research purposes only**.
+## Getting Started
 
-- Not intended for real trading or investment
-- No investment advice or guarantees provided
-- Creator assumes no liability for financial losses
-- Consult a financial advisor for investment decisions
-- Past performance does not indicate future results
-- Options and leveraged perpetuals carry substantial risk of loss
+### Prerequisites
 
-By using this software, you agree to use it solely for learning purposes.
+- **Python 3.11+**
+- **Poetry** (dependency management)
+- **Node.js 18+** (only if running the web application)
+- At least one LLM provider API key (OpenAI, Anthropic, Groq, DeepSeek, Google, xAI, or Ollama for local)
 
-## Table of Contents
-- [How to Install](#how-to-install)
-- [How to Run](#how-to-run)
-  - [Command Line Interface](#️-command-line-interface)
-  - [Web Application](#️-web-application)
-- [How This Fits With Dexter](#how-this-fits-with-dexter)
-- [Portfolio Builder](#portfolio-builder)
-- [Hyperliquid Integration](#hyperliquid-integration)
-- [Tastytrade Daily Options](#tastytrade-daily-options-experimental)
-- [How to Contribute](#how-to-contribute)
-- [License](#license)
-
-## How to Install
-
-### 1. Clone the Repository
+### Installation
 
 ```bash
+# Clone the repository
 git clone https://github.com/eliza420ai-beep/ai-hedge-fund.git
 cd ai-hedge-fund
+
+# Install Poetry (if not already installed)
+curl -sSL https://install.python-poetry.org | python3 -
+
+# Install dependencies
+poetry install
 ```
 
-### 2. Set up API keys
+Poetry is configured to use an in-project virtualenv at `.venv/`. Verify with:
+
+```bash
+poetry env info --path   # Should resolve to ./.venv
+```
+
+#### Optional extras
+
+```bash
+# Hyperliquid crypto perpetuals support
+poetry install --extras hyperliquid
+
+# Tastytrade options support
+poetry install --extras tastytrade
+```
+
+### Configuration
+
+#### 1. Set up API keys
 
 ```bash
 cp .env.example .env
@@ -186,6 +191,7 @@ ANTHROPIC_API_KEY=your-key       # Claude Sonnet/Opus 4.5
 GROQ_API_KEY=your-key            # Llama 3.3 70B (free tier available)
 DEEPSEEK_API_KEY=your-key        # DeepSeek R1/V3
 GOOGLE_API_KEY=your-key          # Gemini 3 Pro
+XAI_API_KEY=your-key             # Grok 4
 
 # Financial Data
 FINANCIAL_DATASETS_API_KEY=your-key   # Required for tickers beyond AAPL, GOOGL, MSFT, NVDA, TSLA
@@ -193,55 +199,46 @@ FINANCIAL_DATASETS_API_KEY=your-key   # Required for tickers beyond AAPL, GOOGL,
 
 **Financial Data**: AAPL, GOOGL, MSFT, NVDA, and TSLA are free. All other tickers require a [Financial Datasets API key](https://financialdatasets.ai/).
 
-### 3. (Optional) Shared config directory `~/.ai-hedge-fund/`
+#### 2. (Optional) Thesis context — `SOUL.md`
 
-You can keep a **thesis document** (SOUL.md) and other config in a shared directory that both this repo and [Dexter](https://github.com/eliza420ai-beep/dexter) can use:
+You can provide a structural investment thesis that all 18 analyst agents and the portfolio manager receive as context, so they reason against *your* thesis (e.g., AI infrastructure layers, conviction tiers, sizing rules).
 
-- **`~/.ai-hedge-fund/`** — shared config directory (create it yourself if you want to use it).
-  - **SOUL.md** — your structural investment thesis. All 18 analyst agents and the portfolio manager receive this as context so they reason against *your* thesis (e.g. AI infrastructure layers, conviction tiers, sizing rules).
-  - **PORTFOLIO.md** — (future) target allocations.
-  - **VOICE.md** — (future) brand voice.
+**Loading order:**
 
-Thesis is **optional**. If you don’t set it up, agents run as before with no thesis context.
+1. CLI flag: `--thesis /path/to/SOUL.md`
+2. Repo root: `./SOUL.md`
+3. Shared config: `~/.ai-hedge-fund/SOUL.md`
 
-**Where SOUL.md is loaded (in order):**
+If no thesis is found, agents run with no thesis context.
 
-1. CLI: `--thesis /path/to/SOUL.md` (if provided).
-2. Repo root: `./SOUL.md`.
-3. Shared config: `~/.ai-hedge-fund/SOUL.md`.
+#### 3. (Optional) Shared config directory
 
-You can copy the repo’s [SOUL.md](SOUL.md) to `~/.ai-hedge-fund/SOUL.md` and edit it, or symlink it. The same path is used when running the web app.
+Create `~/.ai-hedge-fund/` for config shared between this repo and [Dexter](https://github.com/eliza420ai-beep/dexter):
 
-### 4. Install dependencies
+| File | Purpose |
+|------|---------|
+| `SOUL.md` | Structural investment thesis |
+| `PORTFOLIO.md` | Target allocations *(future)* |
+| `VOICE.md` | Brand voice *(future)* |
 
-```bash
-curl -sSL https://install.python-poetry.org | python3 -
-poetry install
-```
+---
 
-This repo is configured to use an in-project Poetry virtualenv at `.venv/` so installs are consistent across terminals and editors. You can verify that Poetry is using the local environment with:
+## Usage
 
-```bash
-poetry env info --path
-```
-
-It should resolve to `./.venv` inside the repository.
-
-## How to Run
-
-### ⌨️ Command Line Interface
+### CLI
 
 ```bash
-# Basic analysis
+# Basic analysis (defaults to GPT-4.1)
 poetry run python src/main.py --tickers AAPL,MSFT,NVDA
 
 # Pick specific analysts
-poetry run python src/main.py --tickers NVDA,TSM,AMAT --analysts warren_buffett,cathie_wood,technical_analyst
+poetry run python src/main.py --tickers NVDA,TSM,AMAT \
+  --analysts warren_buffett,cathie_wood,technical_analyst
 
 # Use all analysts with reasoning output
 poetry run python src/main.py --tickers NVDA,AAPL --analysts-all --show-reasoning
 
-# Specify model (useful for non-interactive environments)
+# Specify model provider
 poetry run python src/main.py --tickers NVDA --model llama-3.3-70b-versatile
 
 # Custom date range
@@ -253,44 +250,81 @@ poetry run python src/main.py --tickers NVDA --ollama
 # Custom portfolio size and margin
 poetry run python src/main.py --tickers NVDA,AAPL --initial-cash 500000 --margin-requirement 0.5
 
-# Second-opinion pass on a picks-and-shovels sleeve from Dexter / The Fund
-poetry run python src/main.py --tickers AMAT,ASML,LRCX,KLAC,VRT,CEG --analysts-all --show-reasoning
-
-# Second-opinion pass on an on-chain sleeve or hedge basket
-poetry run python src/main.py --tickers TSM,NVDA,PLTR,ORCL,COIN,HOOD --analysts-all --show-reasoning
+# Second-opinion pass on a picks-and-shovels sleeve
+poetry run python src/main.py \
+  --tickers AMAT,ASML,LRCX,KLAC,VRT,CEG \
+  --analysts-all --show-reasoning
 ```
 
-### Run the Backtester
+### Backtester
+
+Test how the agent committee would have performed over historical periods:
 
 ```bash
 poetry run python src/backtester.py --tickers AAPL,MSFT,NVDA
 poetry run python src/backtester.py --tickers NVDA --start-date 2024-01-01 --end-date 2024-06-01
 ```
 
-<img width="941" alt="Screenshot 2025-01-06 at 5 47 52 PM" src="https://github.com/user-attachments/assets/00e794ea-8628-44e6-9a84-8f8a31ad3b47" />
+<img width="941" alt="Backtester output" src="https://github.com/user-attachments/assets/00e794ea-8628-44e6-9a84-8f8a31ad3b47" />
 
-### 🖥️ Web Application
+### Web Application
 
-The web UI provides a visual interface for portfolio construction, analysis, and backtesting.
+The web UI provides a visual interface for portfolio construction, analysis, and backtesting. Under the hood it uses a FastAPI backend, which also serves as a callable service so Dexter can trigger analyses over HTTP.
 
-Under the hood, the app uses a FastAPI backend in `app/backend/`. That matters beyond the browser: it gives us the option to expose AI Hedge Fund as a callable service so Dexter can trigger analyses from its own terminal workflow over HTTP instead of shelling out to this repo manually.
+```bash
+# Mac/Linux
+cd app && bash run.sh
 
-See detailed instructions [here](https://github.com/eliza420ai-beep/ai-hedge-fund/tree/main/app).
+# Windows
+cd app && run.bat
+```
 
-<img width="1721" alt="Screenshot 2025-06-28 at 6 41 03 PM" src="https://github.com/user-attachments/assets/b95ab696-c9f4-416c-9ad1-51feb1f5374b" />
+See the [app README](https://github.com/eliza420ai-beep/ai-hedge-fund/tree/main/app) for detailed setup instructions.
+
+<img width="1721" alt="Web application" src="https://github.com/user-attachments/assets/b95ab696-c9f4-416c-9ad1-51feb1f5374b" />
+
+### Docker
+
+A Docker setup is available for containerized deployment:
+
+```bash
+cd docker
+docker compose up
+```
+
+See [`docker/README.md`](docker/README.md) for details.
+
+---
+
+## How This Fits With Dexter
+
+This repo is not meant to replace Dexter. It is meant to challenge it.
+
+- **Dexter** is the primary researcher and portfolio architect. It reads `SOUL.md`, reasons from the thesis inward, and defines the target structure for the fund.
+- **AI Hedge Fund** is the second-opinion layer. It runs a diversified committee of analyst agents on the same names and forces the thesis through a more traditional investing lens: fundamentals, valuation, technicals, sentiment, growth, and risk constraints.
+- **FastAPI gives us a trigger surface**. Dexter can call AI Hedge Fund over HTTP when the second opinion should be part of the live research loop.
+- **The output we care about is disagreement**. If Dexter loves a name and the committee hates it, that gap is useful. If both systems converge, confidence goes up.
+
+For the two-sleeve architecture described in [The Fund](https://ikigaistudio.substack.com/p/the-fund), the practical workflow is:
+
+1. Use [Dexter](https://github.com/eliza420ai-beep/dexter) to define the thesis, sleeves, and candidate names.
+2. Run those names through AI Hedge Fund as a second opinion (CLI or FastAPI).
+3. Compare committee consensus against thesis conviction.
+4. Use the risk manager and portfolio manager to pressure-test sizing before anything becomes portfolio truth.
+
+---
 
 ## Portfolio Builder
 
-The portfolio builder is the starting point for any analysis. It defines your capital allocation and existing positions before the agents run.
+The portfolio builder defines your capital allocation and existing positions before the agents run.
 
-### What it does
+**What it does:**
+1. **Define your portfolio** — Set initial cash, existing long/short positions with entry prices
+2. **Choose your analysts** — Select which AI agents evaluate the tickers (or use all 18)
+3. **Set your constraints** — Margin requirements, date ranges, risk parameters
+4. **Get decisions** — Each ticker receives a BUY/SELL/SHORT/COVER/HOLD decision with quantity, confidence score, and reasoning from every analyst
 
-1. **Define your portfolio**: Set initial cash, existing long/short positions with entry prices
-2. **Choose your analysts**: Select which AI agents evaluate the tickers (or use all 18)
-3. **Set your constraints**: Margin requirements, date ranges, risk parameters
-4. **Get decisions**: Each ticker receives a BUY/SELL/SHORT/COVER/HOLD decision with quantity, confidence score, and reasoning from every analyst
-
-### Why it matters
+**Why it matters:**
 
 The portfolio builder isn't just a stock screener — it's a **position-aware decision engine**. When it recommends buying 82 shares of NVDA, that number accounts for:
 
@@ -300,21 +334,13 @@ The portfolio builder isn't just a stock screener — it's a **position-aware de
 - The aggregate signal strength across all selected analysts
 - Existing position exposure (won't double up on concentrated bets)
 
-This is how institutional portfolio construction works, scaled down and made accessible.
+---
 
 ## Hyperliquid Integration
 
-> Status: **Planned** — architecture designed, implementation in progress
+> **Status: Planned** — architecture designed, implementation in progress
 
-[Hyperliquid](https://hyperliquid.xyz) is a high-performance L1 blockchain purpose-built for on-chain perpetual futures trading. We chose Hyperliquid over centralized crypto exchanges for three reasons:
-
-1. **On-chain transparency**: All orders, fills, and funding rates are verifiable on-chain — no exchange counterparty risk
-2. **Deep liquidity**: Consistently top-3 perp DEX by volume, with tight spreads on majors
-3. **API-first design**: The Hyperliquid Python SDK enables programmatic order placement, position management, and real-time market data
-
-### How it fits the portfolio
-
-The equity analysis pipeline produces signals like "RIOT is bearish with 10% confidence" or "NVDA is bullish at 95%." Hyperliquid extends what we can do with those signals:
+[Hyperliquid](https://hyperliquid.xyz) is a high-performance L1 blockchain purpose-built for on-chain perpetual futures trading. We chose it for on-chain transparency, deep liquidity, and API-first design.
 
 | Scenario | Equity Action | Hyperliquid Action |
 |----------|--------------|-------------------|
@@ -323,45 +349,104 @@ The equity analysis pipeline produces signals like "RIOT is bearish with 10% con
 | High funding rates on ETH | — | Earn funding by shorting perp while holding spot elsewhere |
 | Agent consensus: strong bearish on crypto | — | Open short perps with defined stop-loss |
 
-The position sizing follows the same regime overlay as equities: full size in trending-bull, reduced in mean-reverting, minimal in capitulation.
+Position sizing follows the same regime overlay as equities: full size in trending-bull, reduced in mean-reverting, minimal in capitulation.
 
 ## Tastytrade Daily Options (Experimental)
 
-> Status: **Experimental** — research phase, not production-ready
+> **Status: Experimental** — research phase, not production-ready
 
-[Tastytrade](https://tastytrade.com) offers commission-friendly options trading with excellent API support for short-dated and 0DTE (zero days to expiration) strategies. This module explores whether AI agent consensus can improve options strategy selection.
+[Tastytrade](https://tastytrade.com) offers commission-friendly options trading with API support for short-dated and 0DTE strategies. This module tests whether AI agent consensus can improve options strategy selection.
 
-### The experiment
+| Agent Signal | Options Strategy |
+|-------------|-----------------|
+| Bullish at 90%+ confidence | Sell put spreads |
+| Bearish at 80%+ confidence | Buy put protection or sell call spreads |
+| Neutral / mixed | Sell iron condors |
+| High volatility regime | Widen strikes, reduce size, favor defined-risk |
 
-Traditional options selling (theta decay capture) relies on implied volatility being higher than realized volatility. We're testing whether agent signals add a second edge:
+**Risk warning**: Daily options can lose 100% of their value in hours. This module is purely experimental and any real implementation would require extensive backtesting and paper trading before live capital.
 
-- **Agent consensus says BULLISH at 90%+ confidence** → Sell put spreads (collect premium, profit if stock stays flat or rises)
-- **Agent consensus says BEARISH at 80%+ confidence** → Buy put protection or sell call spreads
-- **Agent consensus is NEUTRAL/MIXED** → Sell iron condors (profit from range-bound movement)
-- **High volatility regime detected** → Widen strikes, reduce position size, favor defined-risk structures
+---
 
-### Why daily options
+## Project Structure
 
-Daily options have the fastest theta decay — an option loses the most time value in its final day. This creates opportunity for premium sellers but demands precision. The hypothesis is that 18 agents producing real-time signals can improve strike selection and directional bias compared to purely mechanical strategies.
+```
+ai-hedge-fund/
+├── src/
+│   ├── agents/              # 18 analyst agents + risk & portfolio managers
+│   ├── backtesting/         # Backtesting engine, metrics, benchmarks
+│   ├── cli/                 # CLI input parsing
+│   ├── data/                # Data layer and providers (yfinance, Financial Datasets)
+│   ├── execution/           # Broker integrations (paper, Hyperliquid, Tastytrade)
+│   │   └── options/         # Options chain, strategy, greeks
+│   ├── graph/               # LangGraph state definitions
+│   ├── llm/                 # LLM model configuration and routing
+│   ├── tools/               # Financial data API tools
+│   ├── utils/               # Display, progress, thesis loading, visualization
+│   ├── main.py              # Main entry point
+│   ├── backtester.py        # Backtester entry point
+│   └── scheduler.py         # Scheduling utilities
+├── app/
+│   ├── backend/             # FastAPI REST API
+│   │   ├── routes/          # HTTP endpoints
+│   │   ├── services/        # Business logic
+│   │   ├── models/          # Pydantic schemas
+│   │   ├── database/        # SQLAlchemy + Alembic migrations
+│   │   └── repositories/    # Data access layer
+│   └── frontend/            # React + Vite + TypeScript + Tailwind
+│       ├── src/components/  # UI components
+│       ├── src/nodes/       # Flow graph nodes
+│       └── src/services/    # API services
+├── tests/                   # Integration tests and fixtures
+├── docker/                  # Docker Compose setup
+├── docs/                    # PRDs and design documents
+├── SOUL.md                  # Default investment thesis
+├── pyproject.toml           # Poetry config and dependencies
+└── .env.example             # Environment variable template
+```
 
-### Risk warning
+### Tech Stack
 
-Daily options can lose 100% of their value in hours. This module is purely experimental and any real implementation would require extensive backtesting, paper trading, and strict risk controls before live capital is involved.
+| Layer | Technology |
+|-------|-----------|
+| Agent orchestration | [LangGraph](https://github.com/langchain-ai/langgraph) |
+| LLM providers | OpenAI, Anthropic, Groq, DeepSeek, Google Gemini, xAI, GigaChat, Ollama |
+| Financial data | [Financial Datasets](https://financialdatasets.ai/), Yahoo Finance |
+| Backend API | FastAPI, SQLAlchemy, Alembic |
+| Frontend | React, Vite, TypeScript, Tailwind CSS |
+| Package management | Poetry (Python), npm (frontend) |
 
-## How to Contribute
+---
+
+## Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
+2. Create a feature branch (`git checkout -b feature/my-feature`)
+3. Commit your changes (`git commit -m 'Add my feature'`)
+4. Push to the branch (`git push origin feature/my-feature`)
 5. Create a Pull Request
 
-**Important**: Please keep your pull requests small and focused.
-
-## Feature Requests
+**Please keep pull requests small and focused.**
 
 If you have a feature request, please open an [issue](https://github.com/eliza420ai-beep/ai-hedge-fund/issues) and tag it with `enhancement`.
 
+---
+
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+
+---
+
+## Disclaimer
+
+This project is for **educational and research purposes only**.
+
+- Not intended for real trading or investment
+- No investment advice or guarantees provided
+- Creator assumes no liability for financial losses
+- Consult a financial advisor for investment decisions
+- Past performance does not indicate future results
+- Options and leveraged perpetuals carry substantial risk of loss
+
+By using this software, you agree to use it solely for learning purposes.
