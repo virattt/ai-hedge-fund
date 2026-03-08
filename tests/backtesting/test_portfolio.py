@@ -74,6 +74,40 @@ def test_apply_short_open_partial_when_insufficient_margin_cash() -> None:
     assert snap["cash"] == pytest.approx(400.0)
 
 
+def test_apply_short_open_respects_existing_margin_used(portfolio: Portfolio) -> None:
+    """Second short should only use remaining available cash (cash - margin_used)."""
+    # First short: 100 AAPL @ 50, margin = 50*100*0.5 = 2500
+    portfolio.apply_short_open("AAPL", 100, 50.0)
+    snap1 = portfolio.get_snapshot()
+    margin_after_first = snap1["margin_used"]
+    cash_after_first = snap1["cash"]
+    available = cash_after_first - margin_after_first
+
+    # Second short: MSFT @ 200, margin per share = 100
+    # Available cash limits how many we can open
+    max_shares = int(available / (200.0 * 0.5))
+    executed = portfolio.apply_short_open("MSFT", max_shares + 5, 200.0)
+    assert executed == max_shares
+
+    snap2 = portfolio.get_snapshot()
+    assert snap2["positions"]["MSFT"]["short"] == max_shares
+
+
+def test_apply_short_open_blocked_when_margin_exhausted() -> None:
+    """When all cash is tied up in margin, no new shorts can open."""
+    # With 100% margin requirement, proceeds == margin, so available cash stays flat
+    p = Portfolio(tickers=["AAPL", "MSFT"], initial_cash=1_000.0, margin_requirement=1.0)
+    # Short 10 AAPL @ 100 → proceeds 1000, margin 1000 → available = 0
+    p.apply_short_open("AAPL", 10, 100.0)
+    snap = p.get_snapshot()
+    available = snap["cash"] - snap["margin_used"]
+    assert available == pytest.approx(0.0)
+
+    # No margin left for a second short
+    executed = p.apply_short_open("MSFT", 5, 100.0)
+    assert executed == 0
+
+
 def test_apply_short_cover_realized_gain_and_margin_release(portfolio: Portfolio) -> None:
     # Open short 100 @ 50, then cover 40 @ 40 → gain = (50-40)*40 = 400
     portfolio.apply_short_open("AAPL", 100, 50.0)
