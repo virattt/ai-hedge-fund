@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from typing_extensions import Literal
 from src.utils.progress import progress
 from src.utils.llm import call_llm
+from src.utils.thesis import thesis_injection_for_prompt
 
 
 class PortfolioDecision(BaseModel):
@@ -208,6 +209,16 @@ def generate_trading_decision(
     compact_signals = _compact_signals({t: signals_by_ticker.get(t, {}) for t in tickers_for_llm})
     compact_allowed = {t: allowed_actions_full[t] for t in tickers_for_llm}
 
+    thesis_context = state["data"].get("thesis_context", "") or ""
+    thesis_block = thesis_injection_for_prompt(thesis_context)
+    sizing_rules = ""
+    if thesis_block:
+        sizing_rules = (
+            " Use the portfolio thesis when present: consider conviction tier (Core vs Thematic vs Hedge), "
+            "regime overlay (trending-bull / mean-reverting / capitulation), and layer durability "
+            "(equipment/EDA/foundry = hold through regimes; growth = regime-sensitive)."
+        )
+
     # Minimal prompt template
     template = ChatPromptTemplate.from_messages(
         [
@@ -217,6 +228,8 @@ def generate_trading_decision(
                 "Inputs per ticker: analyst signals and allowed actions with max qty (already validated).\n"
                 "Pick one allowed action per ticker and a quantity ≤ the max. "
                 "Keep reasoning very concise (max 100 chars). No cash or margin math. Return JSON only."
+                + sizing_rules
+                + thesis_block
             ),
             (
                 "human",

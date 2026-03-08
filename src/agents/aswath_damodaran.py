@@ -15,6 +15,7 @@ from src.tools.api import (
 )
 from src.utils.api_key import get_api_key_from_state
 from src.utils.llm import call_llm
+from src.utils.thesis import thesis_injection_for_prompt
 from src.utils.progress import progress
 
 
@@ -382,7 +383,8 @@ def generate_damodaran_output(
                   ◦ Connect that story to key numerical drivers: revenue growth, margins, reinvestment, risk
                   ◦ Conclude with value: your FCFF DCF estimate, margin of safety, and relative valuation sanity checks
                   ◦ Highlight major uncertainties and how they affect value
-                Return ONLY the JSON specified below.""",
+                Return ONLY the JSON specified below."""
+                + thesis_injection_for_prompt(state["data"].get("thesis_context", "") or ""),
             ),
             (
                 "human",

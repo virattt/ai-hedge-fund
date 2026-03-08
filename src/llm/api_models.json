@@ -60,6 +60,11 @@
     "provider": "OpenRouter"
   },
   {
+    "display_name": "Llama 3.3 70B (Groq)",
+    "model_name": "llama-3.3-70b-versatile",
+    "provider": "Groq"
+  },
+  {
     "display_name": "GigaChat-2-Max",
     "model_name": "GigaChat-2-Max",
     "provider": "GigaChat"

@@ -17,6 +17,7 @@ from src.tools.api import (
     search_line_items,
 )
 from src.utils.llm import call_llm
+from src.utils.thesis import thesis_injection_for_prompt
 from src.utils.progress import progress
 from src.utils.api_key import get_api_key_from_state
 
@@ -341,7 +342,8 @@ def _generate_burry_output(
                 
                 For example, if bullish: "FCF yield 12.8%. EV/EBIT 6.2. Debt-to-equity 0.4. Net insider buying 25k shares. Market missing value due to overreaction to recent litigation. Strong buy."
                 For example, if bearish: "FCF yield only 2.1%. Debt-to-equity concerning at 2.3. Management diluting shareholders. Pass."
-                """,
+                """
+                + thesis_injection_for_prompt(state["data"].get("thesis_context", "") or ""),
             ),
             (
                 "human",

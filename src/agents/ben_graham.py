@@ -9,6 +9,7 @@ from src.utils.progress import progress
 from src.utils.llm import call_llm
 import math
 from src.utils.api_key import get_api_key_from_state
+from src.utils.thesis import thesis_injection_for_prompt
 
 
 class BenGrahamSignal(BaseModel):
@@ -314,7 +315,8 @@ def generate_graham_output(
             For example, if bearish: "Despite consistent earnings, the current price of $50 exceeds our calculated Graham Number of $35, offering no margin of safety. Additionally, the current ratio of only 1.2 falls below Graham's preferred 2.0 threshold..."
                         
             Return a rational recommendation: bullish, bearish, or neutral, with a confidence level (0-100) and thorough reasoning.
-            """,
+            """
+            + thesis_injection_for_prompt(state["data"].get("thesis_context", "") or ""),
             ),
             (
                 "human",

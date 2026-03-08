@@ -7,6 +7,7 @@ import json
 from typing_extensions import Literal
 from src.utils.progress import progress
 from src.utils.llm import call_llm
+from src.utils.thesis import thesis_injection_for_prompt
 from src.utils.api_key import get_api_key_from_state
 
 class CharlieMungerSignal(BaseModel):
@@ -821,11 +822,13 @@ def generate_munger_output(
     confidence_hint: int,
 ) -> CharlieMungerSignal:
     facts_bundle = make_munger_facts_bundle(analysis_data)
+    thesis_block = thesis_injection_for_prompt(state["data"].get("thesis_context", "") or "")
     template = ChatPromptTemplate.from_messages([
         ("system",
          "You are Charlie Munger. Decide bullish, bearish, or neutral using only the facts. "
          "Return JSON only. Keep reasoning under 120 characters. "
-         "Use the provided confidence exactly; do not change it."),
+         "Use the provided confidence exactly; do not change it."
+         + thesis_block),
         ("human",
          "Ticker: {ticker}\n"
          "Facts:\n{facts}\n"

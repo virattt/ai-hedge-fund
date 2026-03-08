@@ -1,5 +1,5 @@
 class Cache:
-    """In-memory cache for API responses."""
+    """In-memory cache (legacy). Use get_cache() for default file-backed cache."""
 
     def __init__(self):
         self._prices_cache: dict[str, list[dict[str, any]]] = {}
@@ -62,10 +62,15 @@ class Cache:
         self._company_news_cache[ticker] = self._merge_data(self._company_news_cache.get(ticker), data, key_field="date")
 
 
-# Global cache instance
-_cache = Cache()
+# Global cache instance: file-backed with TTL (survives restarts)
+_file_cache: "FileCache | None" = None
 
 
-def get_cache() -> Cache:
-    """Get the global cache instance."""
-    return _cache
+def get_cache() -> "Cache | FileCache":
+    """Get the global cache instance. Uses FileCache by default for persistence."""
+    global _file_cache
+    if _file_cache is None:
+        from src.data.file_cache import FileCache
+
+        _file_cache = FileCache()
+    return _file_cache

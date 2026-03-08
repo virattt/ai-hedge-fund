@@ -12,6 +12,7 @@ from src.tools.api import get_company_news
 from src.utils.api_key import get_api_key_from_state
 from src.utils.llm import call_llm
 from src.utils.progress import progress
+from src.utils.thesis import thesis_injection_for_prompt
 from typing_extensions import Literal
 
 
@@ -68,13 +69,15 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
               articles_to_analyze = articles_without_sentiment[:num_articles_to_analyze]
               progress.update_status(agent_id, ticker, f"Analyzing sentiment for {len(articles_to_analyze)} articles")
               
+              thesis_prefix = thesis_injection_for_prompt(data.get("thesis_context", "") or "")
               for idx, news in enumerate(articles_to_analyze):
                 # We analyze based on title, but can also pass in the entire article text,
                 # but this is more expensive and requires extracting the text from the article.
                 # Note: this is an opportunity for improvement!
                 progress.update_status(agent_id, ticker, f"Analyzing sentiment for article {idx + 1} of {len(articles_to_analyze)}")
                 prompt = (
-                    f"Please analyze the sentiment of the following news headline "
+                    thesis_prefix
+                    + f"Please analyze the sentiment of the following news headline "
                     f"with the following context: "
                     f"The stock is {ticker}. "
                     f"Determine if sentiment is 'positive', 'negative', or 'neutral' for the stock {ticker} only. "

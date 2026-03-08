@@ -8,6 +8,7 @@ from src.tools.api import get_financial_metrics, get_market_cap, search_line_ite
 from src.utils.llm import call_llm
 from src.utils.progress import progress
 from src.utils.api_key import get_api_key_from_state
+from src.utils.thesis import thesis_injection_for_prompt
 
 
 class WarrenBuffettSignal(BaseModel):
@@ -766,6 +767,9 @@ def generate_buffett_output(
         "margin_of_safety": analysis_data.get("margin_of_safety"),
     }
 
+    thesis_context = state["data"].get("thesis_context", "") or ""
+    thesis_block = thesis_injection_for_prompt(thesis_context)
+
     template = ChatPromptTemplate.from_messages(
         [
             (
@@ -793,6 +797,7 @@ def generate_buffett_output(
                 "- 10-29%: Poor business or significantly overvalued\n"
                 "\n"
                 "Keep reasoning under 120 characters. Do not invent data. Return JSON only."
+                + thesis_block
             ),
             (
                 "human",

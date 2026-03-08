@@ -12,6 +12,7 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.11"
 langchain = "^0.3.7"
+yfinance = "^0.2.50"
 langchain-anthropic = "0.3.5"
 langchain-groq = "0.2.3"
 langchain-openai = "^0.3.5"
@@ -36,6 +37,13 @@ sqlalchemy = "^2.0.22"
 alembic = "^1.12.0"
 langchain-gigachat = "^0.3.12"
 langchain-xai = "^0.2.5"
+tastytrade = {version = "^12", optional = true}
+hyperliquid-python-sdk = {version = "*", optional = true}
+apscheduler = "^3.10"
+
+[tool.poetry.extras]
+tastytrade = ["tastytrade"]
+hyperliquid = ["hyperliquid-python-sdk"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"

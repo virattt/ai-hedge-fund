@@ -260,6 +260,13 @@ def parse_cli_inputs(
     if include_graph_flag:
         parser.add_argument("--show-agent-graph", action="store_true", help="Show the agent graph")
 
+    parser.add_argument(
+        "--thesis",
+        type=str,
+        default=None,
+        help="Path to SOUL.md thesis file (default: ./SOUL.md or ~/.ai-hedge-fund/SOUL.md)",
+    )
+
     args = parser.parse_args()
 
     # Normalize parsed values

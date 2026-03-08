@@ -7,6 +7,7 @@ import json
 from typing_extensions import Literal
 from src.utils.progress import progress
 from src.utils.llm import call_llm
+from src.utils.thesis import thesis_injection_for_prompt
 from src.utils.api_key import get_api_key_from_state
 
 
@@ -324,7 +325,8 @@ def generate_pabrai_output(
           - Avoid leverage, complexity, and fragile balance sheets.
 
             Provide candid, checklist-driven reasoning, with emphasis on capital preservation and expected mispricing.
-            """,
+            """
+        + thesis_injection_for_prompt(state["data"].get("thesis_context", "") or ""),
         ),
         (
           "human",

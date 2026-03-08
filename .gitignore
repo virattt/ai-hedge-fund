@@ -55,6 +55,16 @@ node_modules
 # Outputs
 outputs/
 
+# Data cache (file-backed cache directory)
+.cache/
+
+# Execution layer local state and audit (paths configurable)
+.paper_broker_state.json
+.order_manager_idempotency.json
+.risk_engine_state.json
+audit.log.jsonl
+**/audit.log.jsonl
+
 # Database files (users will have their own local databases)
 *.db
 *.db-journal

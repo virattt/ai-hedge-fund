@@ -9,6 +9,7 @@ from src.agents.portfolio_manager import portfolio_management_agent
 from src.agents.risk_manager import risk_management_agent
 from src.main import start
 from src.utils.analysts import ANALYST_CONFIG
+from src.utils.thesis import load_thesis
 from src.graph.state import AgentState
 
 
@@ -153,6 +154,7 @@ def run_graph(
     start date, end date, show reasoning, model name,
     and model provider.
     """
+    thesis_text = load_thesis(None)
     return graph.invoke(
         {
             "messages": [
@@ -166,6 +168,7 @@ def run_graph(
                 "start_date": start_date,
                 "end_date": end_date,
                 "analyst_signals": {},
+                "thesis_context": thesis_text,
             },
             "metadata": {
                 "show_reasoning": False,

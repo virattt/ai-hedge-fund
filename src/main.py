@@ -12,9 +12,8 @@ from src.utils.display import print_trading_output
 from src.utils.analysts import ANALYST_ORDER, get_analyst_nodes
 from src.utils.progress import progress
 from src.utils.visualize import save_graph_as_png
-from src.cli.input import (
-    parse_cli_inputs,
-)
+from src.cli.input import parse_cli_inputs
+from src.utils.thesis import load_thesis
 
 import argparse
 from datetime import datetime
@@ -52,6 +51,7 @@ def run_hedge_fund(
     selected_analysts: list[str] = [],
     model_name: str = "gpt-4.1",
     model_provider: str = "OpenAI",
+    thesis_context: str = "",
 ):
     # Start progress tracking
     progress.start()
@@ -74,6 +74,7 @@ def run_hedge_fund(
                     "start_date": start_date,
                     "end_date": end_date,
                     "analyst_signals": {},
+                    "thesis_context": thesis_context,
                 },
                 "metadata": {
                     "show_reasoning": show_reasoning,
@@ -166,6 +167,8 @@ if __name__ == "__main__":
         },
     }
 
+    thesis_text = load_thesis(getattr(inputs.raw_args, "thesis", None))
+
     result = run_hedge_fund(
         tickers=tickers,
         start_date=inputs.start_date,
@@ -175,5 +178,6 @@ if __name__ == "__main__":
         selected_analysts=inputs.selected_analysts,
         model_name=inputs.model_name,
         model_provider=inputs.model_provider,
+        thesis_context=thesis_text,
     )
     print_trading_output(result)
