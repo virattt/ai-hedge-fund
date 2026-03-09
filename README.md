@@ -1,6 +1,40 @@
 # AI Hedge Fund
 
-An AI-powered portfolio construction and analysis system that combines multi-agent intelligence with systematic risk management. Built to translate macro investment theses into actionable, regime-aware portfolios across equities, crypto perpetuals, and short-dated options.
+Someone just open sourced an AI hedge fund with 18 agents that think like Wall Street legends.
+
+Warren Buffett. Charlie Munger. Michael Burry. Cathie Wood. Bill Ackman. Ben Graham. Aswath Damodaran. All running on your laptop.
+
+It is called AI Hedge Fund. You give it stock tickers. Eighteen AI agents analyze the company from every angle, then vote on whether to buy, sell, or hold.
+
+Not a toy. Not a dashboard. A full multi-agent investment research system.
+
+No Bloomberg Terminal. No $25K brokerage minimums. No financial advisor fees. Just AI agents doing the kind of research hedge funds charge 2-and-20 for.
+
+## Meet the Team
+
+- `Warren Buffett Agent` — Looks for wonderful businesses, durable moats, and fair prices
+- `Charlie Munger Agent` — Demands quality, discipline, and margin of safety
+- `Michael Burry Agent` — Hunts deep value, hidden risks, and contrarian setups
+- `Cathie Wood Agent` — Focuses on innovation, disruption, and high-conviction growth
+- `Bill Ackman Agent` — Looks for concentrated bets and catalyst-driven upside
+- `Ben Graham Agent` — Screens for classic value and mispriced assets
+- `Aswath Damodaran Agent` — Balances story, valuation, and intrinsic worth
+- `11 more specialized agents` — Cover technicals, sentiment, fundamentals, growth, valuation, and news
+
+## How It Works
+
+1. Enter stock tickers such as `AAPL`, `NVDA`, or `TSLA`
+2. Agents pull real financial data: earnings, balance sheets, insider activity, and news
+3. Each agent analyzes the company through its own investment philosophy
+4. A `Risk Manager` checks position sizing, concentration, and portfolio exposure
+5. A `Portfolio Manager` synthesizes the signals and makes the final call
+6. You get a `BUY`, `SELL`, or `HOLD` decision with full reasoning from the committee
+
+## Why It Feels Different
+
+Turn on `--show-reasoning` and you can watch each agent explain its logic step by step. The Buffett agent breaks down the moat. The Burry agent flags hidden downside. The Cathie agent makes the disruption case. They do not just generate answers. They debate them.
+
+It also includes a full backtester, so you can run the system against historical data and see how the strategy would have performed.
 
 In our workflow, [Dexter](https://github.com/eliza420ai-beep/dexter) is the primary thesis-driven researcher: it reads `SOUL.md`, builds the sleeves, and defines the bar for what the portfolio is supposed to do. AI Hedge Fund is the second-opinion engine. It runs 18 analyst agents plus risk and portfolio management against the same names so conviction gets challenged before it gets trusted.
 
@@ -132,6 +166,11 @@ An experimental module for generating income and expressing short-duration views
 | 18 | News Sentiment Analyst | News analysis | News-driven sentiment shifts |
 
 Plus **Risk Manager** (volatility/correlation-adjusted position limits) and **Portfolio Manager** (final decision synthesis).
+
+An AI-powered portfolio construction and analysis system that combines multi-agent 
+intelligence with systematic risk management. Built to translate macro investment 
+theses into actionable, regime-aware portfolios across equities, crypto perpetuals, 
+and short-dated options.
 
 ---
 
