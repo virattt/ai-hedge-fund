@@ -46,13 +46,11 @@ class PerformanceMetricsCalculator:
         else:
             sharpe = 0.0
 
-        negative_excess = excess[excess < 0]
-        if len(negative_excess) > 0:
-            downside_std = negative_excess.std()
-            if downside_std > 1e-12:
-                sortino = float(np.sqrt(self.annual_trading_days) * (mean_excess / downside_std))
-            else:
-                sortino = float("inf") if mean_excess > 0 else 0.0
+        # Target downside deviation: sqrt(mean(min(excess, 0)^2)) over all periods
+        downside_diff = np.minimum(excess, 0)
+        downside_dev = float(np.sqrt(np.mean(downside_diff**2)))
+        if downside_dev > 1e-12:
+            sortino = float(np.sqrt(self.annual_trading_days) * (mean_excess / downside_dev))
         else:
             sortino = float("inf") if mean_excess > 0 else 0.0
 
