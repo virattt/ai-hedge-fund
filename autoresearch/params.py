@@ -127,9 +127,9 @@ ANALYST_WEIGHTS = {
 # ─────────────────────────────────────────────────────────────
 # 5. PORTFOLIO DECISION — Deterministic Trading Rules
 # ─────────────────────────────────────────────────────────────
-BUY_THRESHOLD = 0.15
-SELL_THRESHOLD = -0.15
-SHORT_THRESHOLD = -0.30
+BUY_THRESHOLD = 0.05
+SELL_THRESHOLD = -0.05
+SHORT_THRESHOLD = -0.90
 CONFIDENCE_POWER = 1.0        # exponent on confidence (>1 amplifies high-conf signals)
 POSITION_SIZE_FRACTION = 0.5  # fraction of max_shares to trade
 MIN_CONFIDENCE_TO_ACT = 20    # ignore signals below this confidence (0-100)
