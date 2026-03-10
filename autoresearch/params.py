@@ -16,8 +16,8 @@ RULES (for the AI agent):
 # 1. TECHNICAL ANALYST — Strategy Ensemble Weights
 # ─────────────────────────────────────────────────────────────
 STRATEGY_WEIGHTS = {
-    "trend": 0.25,
-    "mean_reversion": 0.20,
+    "trend": 0.35,
+    "mean_reversion": 0.10,
     "momentum": 0.25,
     "volatility": 0.15,
     "stat_arb": 0.15,
