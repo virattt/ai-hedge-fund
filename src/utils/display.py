@@ -1,8 +1,13 @@
+import json
+import os
+import re
+from datetime import datetime
+from pathlib import Path
+
 from colorama import Fore, Style
 from tabulate import tabulate
+
 from .analysts import ANALYST_ORDER
-import os
-import json
 
 
 def sort_agent_signals(signals):
@@ -12,6 +17,260 @@ def sort_agent_signals(signals):
     analyst_order["Risk Management"] = len(ANALYST_ORDER)  # Add Risk Management at the end
 
     return sorted(signals, key=lambda x: analyst_order.get(x[0], 999))
+
+
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _stringify_reasoning(reasoning) -> str:
+    """Convert reasoning payloads into readable text."""
+    if not reasoning:
+        return ""
+
+    if isinstance(reasoning, str):
+        return reasoning
+    if isinstance(reasoning, dict):
+        return json.dumps(reasoning, indent=2)
+    return str(reasoning)
+
+
+def _wrap_text(text: str, max_line_length: int = 60) -> str:
+    """Wrap long text for terminal display."""
+    if not text:
+        return ""
+
+    wrapped_lines = []
+    current_line = ""
+    for word in text.split():
+        if len(current_line) + len(word) + 1 > max_line_length:
+            wrapped_lines.append(current_line)
+            current_line = word
+        else:
+            current_line = f"{current_line} {word}".strip()
+
+    if current_line:
+        wrapped_lines.append(current_line)
+
+    return "\n".join(wrapped_lines)
+
+
+def _strip_ansi(text: str) -> str:
+    return ANSI_ESCAPE_RE.sub("", text)
+
+
+def _markdown_safe(text: str) -> str:
+    """Make text safe for Markdown tables."""
+    return _strip_ansi(str(text)).replace("|", "\\|").replace("\n", "<br>")
+
+
+def _markdown_list_item(text: str) -> str:
+    """Make text safe for simple Markdown bullets."""
+    return _strip_ansi(str(text)).replace("\n", " ")
+
+
+def _format_agent_name(agent: str) -> str:
+    return agent.replace("_agent", "").replace("_", " ").title()
+
+
+def _format_reasoning_markdown(reasoning) -> list[str]:
+    """Render reasoning as AI-friendly Markdown blocks."""
+    if not reasoning:
+        return ["No reasoning provided."]
+
+    if isinstance(reasoning, dict):
+        return ["```json", json.dumps(reasoning, indent=2), "```"]
+
+    text = _strip_ansi(str(reasoning)).strip()
+    if not text:
+        return ["No reasoning provided."]
+
+    return [text]
+
+
+def _build_report_path(tickers: list[str], report_file: str | None = None) -> Path:
+    """Resolve the markdown report output path."""
+    if report_file:
+        return Path(report_file).expanduser()
+
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    ticker_suffix = "-".join(tickers[:5]).lower()
+    if len(tickers) > 5:
+        ticker_suffix = f"{ticker_suffix}-plus-{len(tickers) - 5}"
+    ticker_suffix = re.sub(r"[^a-z0-9_-]+", "-", ticker_suffix).strip("-")
+
+    reports_dir = Path("reports")
+    filename = f"analysis-{timestamp}"
+    if ticker_suffix:
+        filename = f"{filename}-{ticker_suffix}"
+    return reports_dir / f"{filename}.md"
+
+
+def save_trading_output_markdown(result: dict, metadata: dict | None = None, report_file: str | None = None) -> str | None:
+    """Persist a trading analysis run to a Markdown report."""
+    decisions = result.get("decisions")
+    if not decisions:
+        return None
+
+    metadata = metadata or {}
+    tickers = list(decisions.keys())
+    analyst_signals = result.get("analyst_signals", {})
+
+    report_path = _build_report_path(tickers, report_file)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+
+    lines = ["# AI Hedge Fund Analysis Report", "", "## Run Metadata", "", f"- Generated: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`"]
+
+    if tickers:
+        lines.append(f"- Tickers: `{', '.join(tickers)}`")
+    if metadata.get("start_date") and metadata.get("end_date"):
+        lines.append(f"- Date range: `{metadata['start_date']}` to `{metadata['end_date']}`")
+    if metadata.get("model_provider") and metadata.get("model_name"):
+        lines.append(f"- Model: `{metadata['model_provider']}` / `{metadata['model_name']}`")
+    if metadata.get("selected_analysts"):
+        lines.append(f"- Analysts: `{', '.join(metadata['selected_analysts'])}`")
+    elif metadata.get("analysts_all"):
+        lines.append("- Analysts: `all`")
+    if "show_reasoning" in metadata:
+        lines.append(f"- Show reasoning: `{metadata['show_reasoning']}`")
+
+    lines.extend(["", "---", ""])
+
+    portfolio_data = []
+    portfolio_manager_reasoning = None
+
+    for _, decision in decisions.items():
+        if decision.get("reasoning"):
+            portfolio_manager_reasoning = decision.get("reasoning")
+            break
+
+    for ticker, decision in decisions.items():
+        bullish_count = 0
+        bearish_count = 0
+        neutral_count = 0
+
+        for _, signals in analyst_signals.items():
+            if ticker not in signals:
+                continue
+            signal = signals[ticker].get("signal", "").upper()
+            if signal == "BULLISH":
+                bullish_count += 1
+            elif signal == "BEARISH":
+                bearish_count += 1
+            elif signal == "NEUTRAL":
+                neutral_count += 1
+
+        portfolio_data.append(
+            [
+                ticker,
+                decision.get("action", "").upper(),
+                decision.get("quantity"),
+                f"{decision.get('confidence', 0):.1f}%",
+                bullish_count,
+                bearish_count,
+                neutral_count,
+            ]
+        )
+
+    lines.extend(
+        [
+            "## Executive Summary",
+            "",
+            tabulate(
+                portfolio_data,
+                headers=["Ticker", "Action", "Quantity", "Confidence", "Bullish", "Bearish", "Neutral"],
+                tablefmt="github",
+            ),
+            "",
+        ]
+    )
+
+    for ticker, decision in decisions.items():
+        lines.extend([f"## Analysis for `{ticker}`", ""])
+
+        agent_rows = []
+        for agent, signals in analyst_signals.items():
+            if ticker not in signals or agent == "risk_management_agent":
+                continue
+
+            signal = signals[ticker]
+            agent_rows.append(
+                [
+                    _format_agent_name(agent),
+                    signal.get("signal", "").upper(),
+                    f"{signal.get('confidence', 0)}%",
+                    signal.get("reasoning"),
+                ]
+            )
+
+        agent_rows = sort_agent_signals(agent_rows)
+        lines.extend(
+            [
+                "### Decision",
+                "",
+                tabulate(
+                    [
+                        ["Action", decision.get("action", "").upper()],
+                        ["Quantity", decision.get("quantity")],
+                        ["Confidence", f"{decision.get('confidence', 0):.1f}%"],
+                    ],
+                    tablefmt="github",
+                ),
+                "",
+                "### Decision Reasoning",
+                "",
+                _strip_ansi(_stringify_reasoning(decision.get("reasoning"))),
+                "",
+                "### Agent Signals",
+                "",
+                tabulate(
+                    [[name, signal, confidence] for name, signal, confidence, _ in agent_rows],
+                    headers=["Agent", "Signal", "Confidence"],
+                    tablefmt="github",
+                ),
+                "",
+                "### Agent Reasoning",
+                "",
+            ]
+        )
+
+        for agent_name, signal_type, confidence, reasoning in agent_rows:
+            lines.extend(
+                [
+                    f"#### {agent_name}",
+                    "",
+                    f"- Signal: `{signal_type}`",
+                    f"- Confidence: `{confidence}`",
+                    "- Reasoning:",
+                ]
+            )
+            lines.extend(_format_reasoning_markdown(reasoning))
+            lines.extend(["", ""])
+
+    lines.extend(
+        [
+            "## Portfolio Summary",
+            "",
+            tabulate(
+                portfolio_data,
+                headers=["Ticker", "Action", "Quantity", "Confidence", "Bullish", "Bearish", "Neutral"],
+                tablefmt="github",
+            ),
+            "",
+        ]
+    )
+
+    if portfolio_manager_reasoning:
+        lines.extend(
+            [
+                "## Portfolio Strategy",
+                "",
+                _strip_ansi(_stringify_reasoning(portfolio_manager_reasoning)),
+                "",
+            ]
+        )
+
+    report_path.write_text("\n".join(lines), encoding="utf-8")
+    return str(report_path)
 
 
 def print_trading_output(result: dict) -> None:
@@ -42,7 +301,7 @@ def print_trading_output(result: dict) -> None:
                 continue
 
             signal = signals[ticker]
-            agent_name = agent.replace("_agent", "").replace("_", " ").title()
+            agent_name = _format_agent_name(agent)
             signal_type = signal.get("signal", "").upper()
             confidence = signal.get("confidence", 0)
 
@@ -55,36 +314,7 @@ def print_trading_output(result: dict) -> None:
             # Get reasoning if available
             reasoning_str = ""
             if "reasoning" in signal and signal["reasoning"]:
-                reasoning = signal["reasoning"]
-                
-                # Handle different types of reasoning (string, dict, etc.)
-                if isinstance(reasoning, str):
-                    reasoning_str = reasoning
-                elif isinstance(reasoning, dict):
-                    # Convert dict to string representation
-                    reasoning_str = json.dumps(reasoning, indent=2)
-                else:
-                    # Convert any other type to string
-                    reasoning_str = str(reasoning)
-                
-                # Wrap long reasoning text to make it more readable
-                wrapped_reasoning = ""
-                current_line = ""
-                # Use a fixed width of 60 characters to match the table column width
-                max_line_length = 60
-                for word in reasoning_str.split():
-                    if len(current_line) + len(word) + 1 > max_line_length:
-                        wrapped_reasoning += current_line + "\n"
-                        current_line = word
-                    else:
-                        if current_line:
-                            current_line += " " + word
-                        else:
-                            current_line = word
-                if current_line:
-                    wrapped_reasoning += current_line
-                
-                reasoning_str = wrapped_reasoning
+                reasoning_str = _wrap_text(_stringify_reasoning(signal["reasoning"]))
 
             table_data.append(
                 [
@@ -123,20 +353,7 @@ def print_trading_output(result: dict) -> None:
         # Wrap long reasoning text to make it more readable
         wrapped_reasoning = ""
         if reasoning:
-            current_line = ""
-            # Use a fixed width of 60 characters to match the table column width
-            max_line_length = 60
-            for word in reasoning.split():
-                if len(current_line) + len(word) + 1 > max_line_length:
-                    wrapped_reasoning += current_line + "\n"
-                    current_line = word
-                else:
-                    if current_line:
-                        current_line += " " + word
-                    else:
-                        current_line = word
-            if current_line:
-                wrapped_reasoning += current_line
+            wrapped_reasoning = _wrap_text(_stringify_reasoning(reasoning))
 
         decision_data = [
             ["Action", f"{action_color}{action}{Style.RESET_ALL}"],
@@ -222,34 +439,8 @@ def print_trading_output(result: dict) -> None:
     
     # Print Portfolio Manager's reasoning if available
     if portfolio_manager_reasoning:
-        # Handle different types of reasoning (string, dict, etc.)
-        reasoning_str = ""
-        if isinstance(portfolio_manager_reasoning, str):
-            reasoning_str = portfolio_manager_reasoning
-        elif isinstance(portfolio_manager_reasoning, dict):
-            # Convert dict to string representation
-            reasoning_str = json.dumps(portfolio_manager_reasoning, indent=2)
-        else:
-            # Convert any other type to string
-            reasoning_str = str(portfolio_manager_reasoning)
-            
-        # Wrap long reasoning text to make it more readable
-        wrapped_reasoning = ""
-        current_line = ""
-        # Use a fixed width of 60 characters to match the table column width
-        max_line_length = 60
-        for word in reasoning_str.split():
-            if len(current_line) + len(word) + 1 > max_line_length:
-                wrapped_reasoning += current_line + "\n"
-                current_line = word
-            else:
-                if current_line:
-                    current_line += " " + word
-                else:
-                    current_line = word
-        if current_line:
-            wrapped_reasoning += current_line
-            
+        wrapped_reasoning = _wrap_text(_stringify_reasoning(portfolio_manager_reasoning))
+
         print(f"\n{Fore.WHITE}{Style.BRIGHT}Portfolio Strategy:{Style.RESET_ALL}")
         print(f"{Fore.CYAN}{wrapped_reasoning}{Style.RESET_ALL}")
 

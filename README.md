@@ -293,6 +293,85 @@ poetry run python src/main.py --tickers NVDA,AAPL --initial-cash 500000 --margin
 poetry run python src/main.py \
   --tickers AMAT,ASML,LRCX,KLAC,VRT,CEG \
   --analysts-all --show-reasoning
+
+### 1. Tastytrade sleeve only
+
+Use this to validate the names Dexter currently included in the tastytrade sleeve.
+
+```bash
+poetry run python src/main.py --tickers AMAT,ASML,LRCX,KLAC,TEL,VRT,CEG,EQT,ANET,SNPS,CDNS,BESIY,SNDK,WDC,STX,LITE,COHR,CIEN --analysts-all --show-reasoning
+```
+
+### 2. Hyperliquid sleeve only
+
+Use this to validate the names Dexter currently included in the Hyperliquid sleeve.
+
+```bash
+poetry run python src/main.py --tickers TSM,NVDA,PLTR,ORCL,COIN,HOOD,CRCL,TSLA,META,MSFT,AMZN,GOOGL,GLD,SLV,SPY,SMH --analysts-all --show-reasoning
+```
+
+### 3. Tastytrade sleeve plus the main excluded challengers
+
+This is the best test of whether Dexter left out better non-HL names.
+
+```bash
+poetry run python src/main.py --tickers AMAT,ASML,LRCX,KLAC,TEL,VRT,CEG,EQT,ANET,SNPS,CDNS,BESIY,SNDK,WDC,STX,LITE,COHR,CIEN,NVDA,AVGO,MRVL,ARM,AAPL,BE,SEI,CRWV,CORZ --analysts-all --show-reasoning
+```
+
+### 4. Hyperliquid sleeve plus the main excluded challengers
+
+This checks whether the current HL basket should include other names such as `MU` or `AMD`.
+
+```bash
+poetry run python src/main.py --tickers TSM,NVDA,PLTR,ORCL,COIN,HOOD,CRCL,TSLA,META,MSFT,AMZN,GOOGL,GLD,SLV,SPY,SMH,MU,NFLX,RIVN,AAPL,AMD,MSTR --analysts-all --show-reasoning
+```
+
+### 5. Excluded names only
+
+This is often the most useful command. It tells you which omitted names AIHF actually likes.
+
+```bash
+poetry run python src/main.py --tickers NVDA,AVGO,MRVL,ARM,AAPL,BE,SEI,CRWV,CORZ,MU,NFLX,RIVN,AMD,MSTR --analysts-all --show-reasoning
+```
+
+### 6. Reproducible run with fixed dates
+
+If you want stable comparisons over time, pin the date range:
+
+```bash
+poetry run python src/main.py --tickers TSM,NVDA,PLTR,ORCL,COIN,HOOD,CRCL,TSLA,META,MSFT,AMZN,GOOGL --analysts-all --show-reasoning --start-date 2025-12-01 --end-date 2026-03-08
+```
+
+## How To Read The Output
+
+You do not want perfect agreement. You want to find **high-conviction disagreement**.
+
+### Good confirmation
+
+- Dexter includes a name
+- AIHF is also positive or supportive on it
+
+### Possible problem
+
+- Dexter includes a name
+- AIHF is strongly negative on it
+
+### Most valuable signal
+
+- Dexter excluded a name
+- AIHF comes back strongly positive on it
+
+That last category is the real reason to run AIHF manually.
+
+## Suggested Workflow
+
+Run the commands in this order:
+
+1. `excluded names only`
+2. `tastytrade + challengers`
+3. `hyperliquid + challengers`
+
+This sequence gives the fastest feedback on whether Dexter missed anything important.
 ```
 
 ### Backtester

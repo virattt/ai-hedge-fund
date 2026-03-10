@@ -8,7 +8,7 @@ import questionary
 from src.agents.portfolio_manager import portfolio_management_agent
 from src.agents.risk_manager import risk_management_agent
 from src.graph.state import AgentState
-from src.utils.display import print_trading_output
+from src.utils.display import print_trading_output, save_trading_output_markdown
 from src.utils.analysts import ANALYST_ORDER, get_analyst_nodes
 from src.utils.progress import progress
 from src.utils.visualize import save_graph_as_png
@@ -181,3 +181,21 @@ if __name__ == "__main__":
         thesis_context=thesis_text,
     )
     print_trading_output(result)
+
+    if inputs.save_report:
+        report_path = save_trading_output_markdown(
+            result,
+            metadata={
+                "tickers": tickers,
+                "start_date": inputs.start_date,
+                "end_date": inputs.end_date,
+                "selected_analysts": inputs.selected_analysts,
+                "analysts_all": False,
+                "model_name": inputs.model_name,
+                "model_provider": inputs.model_provider,
+                "show_reasoning": inputs.show_reasoning,
+            },
+            report_file=inputs.report_file,
+        )
+        if report_path:
+            print(f"\n{Fore.GREEN}{Style.BRIGHT}Saved Markdown report:{Style.RESET_ALL} {Fore.CYAN}{report_path}{Style.RESET_ALL}")

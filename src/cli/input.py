@@ -221,6 +221,8 @@ class CLIInputs:
     margin_requirement: float
     show_reasoning: bool = False
     show_agent_graph: bool = False
+    save_report: bool = True
+    report_file: Optional[str] = None
     raw_args: Optional[argparse.Namespace] = None
 
 
@@ -259,6 +261,17 @@ def parse_cli_inputs(
         parser.add_argument("--show-reasoning", action="store_true", help="Show reasoning from each agent")
     if include_graph_flag:
         parser.add_argument("--show-agent-graph", action="store_true", help="Show the agent graph")
+    parser.add_argument(
+        "--no-save-report",
+        action="store_true",
+        help="Disable automatic Markdown report export after a run",
+    )
+    parser.add_argument(
+        "--report-file",
+        type=str,
+        default=None,
+        help="Optional path for the Markdown analysis report (default: reports/analysis-<timestamp>.md)",
+    )
 
     parser.add_argument(
         "--thesis",
@@ -289,6 +302,8 @@ def parse_cli_inputs(
         margin_requirement=getattr(args, "margin_requirement", 0.0),
         show_reasoning=getattr(args, "show_reasoning", False),
         show_agent_graph=getattr(args, "show_agent_graph", False),
+        save_report=not getattr(args, "no_save_report", False),
+        report_file=getattr(args, "report_file", None),
         raw_args=args,
     )
 
