@@ -34,7 +34,7 @@ No Bloomberg Terminal. No $25K brokerage minimums. No financial advisor fees. Ju
 
 Turn on `--show-reasoning` and you can watch each agent explain its logic step by step. The Buffett agent breaks down the moat. The Burry agent flags hidden downside. The Cathie agent makes the disruption case. They do not just generate answers. They debate them.
 
-It also includes a full backtester, so you can run the system against historical data and see how the strategy would have performed.
+It also includes a full backtester, so you can run the system against historical data and see how the strategy would have performed. And with [autoresearch](#autoresearch--autonomous-parameter-optimization), you can let an AI agent autonomously tune every parameter in the system overnight — the same technique Karpathy used to find improvements no human spotted in years of manual work.
 
 In our workflow, [Dexter](https://github.com/eliza420ai-beep/dexter) is the primary thesis-driven researcher: it reads `SOUL.md`, builds the sleeves, and defines the bar for what the portfolio is supposed to do. AI Hedge Fund is the second-opinion engine. It runs 18 analyst agents plus risk and portfolio management against the same names so conviction gets challenged before it gets trusted.
 
@@ -57,6 +57,7 @@ In our workflow, [Dexter](https://github.com/eliza420ai-beep/dexter) is the prim
   - [Web Application](#web-application)
 - [How This Fits With Dexter](#how-this-fits-with-dexter)
 - [Portfolio Builder](#portfolio-builder)
+- [Autoresearch — Autonomous Parameter Optimization](#autoresearch--autonomous-parameter-optimization)
 - [Hyperliquid Integration](#hyperliquid-integration)
 - [Tastytrade Daily Options](#tastytrade-daily-options-experimental)
 - [Project Structure](#project-structure)
@@ -74,15 +75,18 @@ The system takes a list of tickers, runs them through 18 specialized AI analyst 
 
 That matters even more in a thesis-driven stack. As described in [The Researcher Who Thinks](https://ikigaistudio.substack.com/p/the-researcher-who-thinks), Dexter is built to start from identity and thesis, not from ticker trivia. As described in [The Fund](https://ikigaistudio.substack.com/p/the-fund), that thesis currently expresses itself through two sleeves with zero overlap. This repo exists to be the adversarial committee around that process: a structured second opinion on the names, sizing, and regime assumptions coming out of Dexter.
 
-### The Three Layers
+### The Four Layers
 
 **Layer 1 — AI-Powered Equity Analysis (Core)**
 The foundation. 18 analyst agents analyze stocks across fundamentals, technicals, valuation, sentiment, and growth — then a risk manager and portfolio manager synthesize everything into buy/sell/hold decisions with position sizing. This works today.
 
-**Layer 2 — Hyperliquid Integration (Crypto Perpetuals)**
+**Layer 2 — Autoresearch (Autonomous Parameter Optimization)**
+The system has dozens of tunable parameters — indicator windows, strategy weights, risk bands, agent trust levels, buy/sell thresholds. An AI agent runs hundreds of automated experiments to find better settings, the same way Karpathy's autoresearch found 20 improvements to a neural network in 2 days unattended. See [Autoresearch](#autoresearch--autonomous-parameter-optimization) for details.
+
+**Layer 3 — Hyperliquid Integration (Crypto Perpetuals)**
 Equities alone can't express every thesis. Hyperliquid provides access to crypto perpetual futures with on-chain transparency, deep liquidity, and up to 50x leverage. See [Hyperliquid Integration](#hyperliquid-integration) for details.
 
-**Layer 3 — Tastytrade Daily Options (Experimental)**
+**Layer 4 — Tastytrade Daily Options (Experimental)**
 An experimental module for generating income and expressing short-duration views through daily (0DTE) and short-dated options. See [Tastytrade Daily Options](#tastytrade-daily-options-experimental) for details.
 
 ---
@@ -454,6 +458,90 @@ The portfolio builder isn't just a stock screener — it's a **position-aware de
 
 ---
 
+## Autoresearch — Autonomous Parameter Optimization
+
+Inspired by [Karpathy's autoresearch](https://github.com/karpathy/autoresearch) and its [Apple Silicon MLX port](https://github.com/trevin-creator/autoresearch-mlx).
+
+The hedge fund has dozens of tunable knobs — technical indicator windows, strategy weights, risk bands, analyst trust levels, buy/sell thresholds — and the right settings depend on the market regime. Humans tune these by hand. Autoresearch lets an AI agent run hundreds of experiments autonomously to find better settings while you sleep.
+
+### Why this matters
+
+Karpathy demonstrated that an AI agent running 700 unattended experiments discovered ~20 real improvements to a neural network that no human had found in years of manual work. The same principle applies here: the parameter space of a multi-agent trading system is too large for manual search. An autonomous loop that modifies one knob, measures the Sharpe ratio, and keeps or reverts the change can explore it far more thoroughly than a human ever would.
+
+The key insight is **separation of concerns**. The expensive work (running 18 LLM-powered analyst agents) is done once and cached. The cheap work (aggregating signals, computing risk limits, making portfolio decisions, running the backtest) is pure math. Each experiment takes ~5 seconds with zero LLM calls and zero API costs. That means **hundreds of experiments per hour, thousands overnight, all running free on your Apple Silicon Mac**.
+
+### How it works
+
+```
+┌───────────────────────────────────────────────────────┐
+│  Step 0: CACHE (one-time)                             │
+│  Cache price data (~30 sec, free)                     │
+│  Optionally cache all 18 agent signals (~30 min, $$)  │
+└─────────────────────┬─────────────────────────────────┘
+                      │
+┌─────────────────────▼─────────────────────────────────┐
+│  AUTORESEARCH LOOP (overnight, autonomous)            │
+│                                                       │
+│  1. AI reads program.md                               │
+│  2. AI modifies params.py (one knob at a time)        │
+│  3. Runs: poetry run python -m autoresearch.evaluate  │
+│     → loads cached data (no LLM, no API)              │
+│     → recomputes technical signals with new params    │
+│     → runs fast deterministic backtest                │
+│     → outputs val_sharpe=X.XXXX                       │
+│  4. If Sharpe improved → git commit (keep)            │
+│     If Sharpe dropped  → git checkout (revert)        │
+│  5. Repeat from step 1                                │
+└───────────────────────────────────────────────────────┘
+```
+
+### What gets tuned
+
+| Category | Examples | Impact |
+|----------|---------|--------|
+| Strategy weights | trend vs momentum vs mean reversion | Which quantitative strategies to trust |
+| Indicator params | EMA windows, RSI periods, Bollinger width | Signal sensitivity and noise |
+| Signal thresholds | Bullish/bearish classification cutoffs | How aggressive signals are |
+| Risk management | Volatility bands, correlation multipliers | Position sizing |
+| Portfolio rules | Buy/sell thresholds, position sizing fraction | Trade generation |
+| Analyst trust | Per-agent weight (Buffett vs Burry vs Technicals) | Who to listen to (requires signal cache) |
+
+### Quick start
+
+```bash
+# 1. Cache price data (required, ~30 seconds, free)
+poetry run python -m autoresearch.cache_signals --prices-only
+
+# 2. Run baseline experiment
+poetry run python -m autoresearch.evaluate
+
+# 3. Point an AI coding agent at the instructions and let it run
+#    (Claude Code, Cursor Agent, etc.)
+#    Tell it: "Open autoresearch/program.md and follow the instructions."
+```
+
+The three files that matter:
+
+- **`autoresearch/params.py`** — The only file the AI modifies. Every tunable knob in one place.
+- **`autoresearch/evaluate.py`** — Runs one experiment, prints `val_sharpe=X.XXXX`, appends to `results.tsv`.
+- **`autoresearch/program.md`** — Full instructions for the AI agent (hypothesis → change → measure → keep/revert).
+
+### Optional: full 18-agent signal cache
+
+The base mode only uses technical analyst signals (free, no LLM calls). To also tune how much weight each of the 18 analyst agents gets, run the full signal cache once:
+
+```bash
+poetry run python -m autoresearch.cache_signals \
+  --tickers AAPL,NVDA,MSFT,GOOGL,TSLA \
+  --start 2025-01-02 --end 2026-03-07
+```
+
+This costs one round of LLM calls per business day in the window (~300 days). After that, the autoresearch loop can tune analyst weights without any further LLM costs.
+
+See [`autoresearch/README.md`](autoresearch/README.md) for the full documentation.
+
+---
+
 ## Hyperliquid Integration
 
 > **Status: Planned** — architecture designed, implementation in progress
@@ -504,6 +592,13 @@ ai-hedge-fund/
 │   ├── main.py              # Main entry point
 │   ├── backtester.py        # Backtester entry point
 │   └── scheduler.py         # Scheduling utilities
+├── autoresearch/            # Autonomous parameter optimization (Karpathy-style)
+│   ├── params.py            # The single mutable file — all tunable knobs
+│   ├── evaluate.py          # Runs one experiment, outputs Sharpe ratio
+│   ├── fast_backtest.py     # Deterministic backtester (no LLM calls)
+│   ├── cache_signals.py     # One-time data caching script
+│   ├── program.md           # AI agent instructions for the research loop
+│   └── results.tsv          # Running experiment log
 ├── app/
 │   ├── backend/             # FastAPI REST API
 │   │   ├── routes/          # HTTP endpoints

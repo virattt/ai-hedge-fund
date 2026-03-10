@@ -58,6 +58,9 @@ outputs/
 # Data cache (file-backed cache directory)
 .cache/
 
+# Autoresearch cache (large cached price/signal data)
+autoresearch/cache/
+
 # Execution layer local state and audit (paths configurable)
 .paper_broker_state.json
 .order_manager_idempotency.json
