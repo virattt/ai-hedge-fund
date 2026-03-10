@@ -16,11 +16,11 @@ RULES (for the AI agent):
 # 1. TECHNICAL ANALYST — Strategy Ensemble Weights
 # ─────────────────────────────────────────────────────────────
 STRATEGY_WEIGHTS = {
-    "trend": 0.45,
-    "mean_reversion": 0.10,
-    "momentum": 0.25,
-    "volatility": 0.05,
-    "stat_arb": 0.15,
+    "trend": 0.25,
+    "mean_reversion": 0.20,
+    "momentum": 0.35,
+    "volatility": 0.10,
+    "stat_arb": 0.10,
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ ADX_PERIOD = 10
 # Mean Reversion
 MA_WINDOW = 50
 BOLLINGER_WINDOW = 20
-BOLLINGER_STD = 2.0
+BOLLINGER_STD = 2.5
 RSI_SHORT = 14
 RSI_LONG = 28
 ZSCORE_BULLISH = -2.0
@@ -45,12 +45,12 @@ BB_BULLISH = 0.2
 BB_BEARISH = 0.8
 
 # Momentum
-MOM_1M_WEIGHT = 0.4
-MOM_3M_WEIGHT = 0.3
-MOM_6M_WEIGHT = 0.3
-MOM_BULLISH = 0.05
-MOM_BEARISH = -0.05
-MOM_CONFIDENCE_SCALE = 5.0
+MOM_1M_WEIGHT = 1.0
+MOM_3M_WEIGHT = 0.0
+MOM_6M_WEIGHT = 0.0
+MOM_BULLISH = 0.01
+MOM_BEARISH = -0.01
+MOM_CONFIDENCE_SCALE = 15.0
 
 # Volatility
 VOL_HIST_WINDOW = 21
@@ -73,14 +73,14 @@ SIGNAL_BEARISH_THRESHOLD = -0.2
 # ─────────────────────────────────────────────────────────────
 # 3. RISK MANAGEMENT — Position Sizing
 # ─────────────────────────────────────────────────────────────
-RISK_BASE_LIMIT = 0.40
+RISK_BASE_LIMIT = 0.18
 
 # Volatility band thresholds and multipliers
 RISK_VOL_BANDS = [
     # (max_annualized_vol, multiplier)
-    (0.15, 1.50),   # Low vol → up to 50% more
-    (0.30, 1.10),   # Medium vol → slight boost
-    (0.50, 0.75),   # High vol → reduced
+    (0.15, 1.25),   # Low vol → modest boost
+    (0.30, 0.90),   # Medium vol → slight reduction
+    (0.50, 0.60),   # High vol → more aggressive reduction
 ]
 RISK_EXTREME_VOL_MULT = 0.50
 RISK_MED_VOL_DECAY = 0.5
@@ -131,7 +131,7 @@ BUY_THRESHOLD = 0.05
 SELL_THRESHOLD = -0.05
 SHORT_THRESHOLD = -0.90
 CONFIDENCE_POWER = 1.0        # exponent on confidence (>1 amplifies high-conf signals)
-POSITION_SIZE_FRACTION = 1.0  # fraction of max_shares to trade
+POSITION_SIZE_FRACTION = 0.35  # fraction of max_shares to trade
 MIN_CONFIDENCE_TO_ACT = 20    # ignore signals below this confidence (0-100)
 
 # ─────────────────────────────────────────────────────────────
