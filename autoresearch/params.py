@@ -28,8 +28,8 @@ STRATEGY_WEIGHTS = {
 # ─────────────────────────────────────────────────────────────
 
 # Trend
-EMA_SHORT = 8
-EMA_MEDIUM = 21
+EMA_SHORT = 5
+EMA_MEDIUM = 13
 EMA_LONG = 55
 ADX_PERIOD = 14
 
