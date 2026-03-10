@@ -30,7 +30,7 @@ STRATEGY_WEIGHTS = {
 # Trend
 EMA_SHORT = 5
 EMA_MEDIUM = 13
-EMA_LONG = 55
+EMA_LONG = 34
 ADX_PERIOD = 14
 
 # Mean Reversion
