@@ -398,54 +398,83 @@ def calculate_enhanced_dcf_value(
     market_cap: float,
     revenue_growth: float | None = None
 ) -> float:
-    """Enhanced DCF with multi-stage growth."""
-    
+    """Enhanced DCF with multi-stage growth.
+
+    Includes safeguards against unrealistic valuations by:
+    - Ensuring minimum spread between WACC and terminal growth
+    - Capping terminal value relative to market cap
+    - Applying sanity checks on final valuation
+    """
+
     if not fcf_history or fcf_history[0] <= 0:
         return 0
-    
+
     # Analyze FCF trend and quality
     fcf_current = fcf_history[0]
     fcf_avg_3yr = sum(fcf_history[:3]) / min(3, len(fcf_history))
     fcf_volatility = calculate_fcf_volatility(fcf_history)
-    
+
     # Stage 1: High Growth (Years 1-3)
     # Use revenue growth but cap based on business maturity
     high_growth = min(revenue_growth or 0.05, 0.25) if revenue_growth else 0.05
     if market_cap > 50_000_000_000:  # Large cap
         high_growth = min(high_growth, 0.10)
-    
+
     # Stage 2: Transition (Years 4-7)
     transition_growth = (high_growth + 0.03) / 2
-    
+
     # Stage 3: Terminal (steady state)
-    terminal_growth = min(0.03, high_growth * 0.6)
-    
+    # Cap terminal growth at 2.5% to be more conservative
+    terminal_growth = min(0.025, high_growth * 0.5)
+
     # Project FCF with stages
     pv = 0
     base_fcf = max(fcf_current, fcf_avg_3yr * 0.85)  # Conservative base
-    
+
     # High growth stage
     for year in range(1, 4):
         fcf_projected = base_fcf * (1 + high_growth) ** year
         pv += fcf_projected / (1 + wacc) ** year
-    
-    # Transition stage
+
+    # Transition stage - use cumulative growth calculation
+    fcf_end_high_growth = base_fcf * (1 + high_growth) ** 3
+    cumulative_fcf = fcf_end_high_growth
     for year in range(4, 8):
-        transition_rate = transition_growth * (8 - year) / 4  # Declining
-        fcf_projected = base_fcf * (1 + high_growth) ** 3 * (1 + transition_rate) ** (year - 3)
-        pv += fcf_projected / (1 + wacc) ** year
-    
-    # Terminal value
-    final_fcf = base_fcf * (1 + high_growth) ** 3 * (1 + transition_growth) ** 4
-    if wacc <= terminal_growth:
-        terminal_growth = wacc * 0.8  # Adjust if invalid
+        # Declining growth rate during transition
+        transition_rate = transition_growth * (8 - year) / 4
+        cumulative_fcf = cumulative_fcf * (1 + transition_rate)
+        pv += cumulative_fcf / (1 + wacc) ** year
+
+    # Terminal value with safeguards
+    final_fcf = cumulative_fcf
+
+    # Ensure minimum spread between WACC and terminal growth (at least 4%)
+    min_spread = 0.04
+    if wacc - terminal_growth < min_spread:
+        terminal_growth = wacc - min_spread
+        if terminal_growth < 0:
+            terminal_growth = 0.01
+            wacc = max(wacc, min_spread + terminal_growth)
+
     terminal_value = (final_fcf * (1 + terminal_growth)) / (wacc - terminal_growth)
+
+    # Cap terminal value at 50x current market cap to prevent unrealistic valuations
+    max_terminal_value = market_cap * 50 if market_cap > 0 else terminal_value
+    terminal_value = min(terminal_value, max_terminal_value)
+
     pv_terminal = terminal_value / (1 + wacc) ** 7
-    
+
     # Quality adjustment based on FCF volatility
     quality_factor = max(0.7, 1 - (fcf_volatility * 0.5))
-    
-    return (pv + pv_terminal) * quality_factor
+
+    intrinsic_value = (pv + pv_terminal) * quality_factor
+
+    # Final sanity check: cap at 100x market cap for extreme growth scenarios
+    if market_cap > 0:
+        max_valuation = market_cap * 100
+        intrinsic_value = min(intrinsic_value, max_valuation)
+
+    return intrinsic_value
 
 
 def calculate_dcf_scenarios(
@@ -455,21 +484,28 @@ def calculate_dcf_scenarios(
     market_cap: float,
     revenue_growth: float | None = None
 ) -> dict:
-    """Calculate DCF under multiple scenarios."""
-    
+    """Calculate DCF under multiple scenarios.
+
+    Applies scenario adjustments with safeguards:
+    - Minimum WACC floor of 7% to prevent unrealistic valuations
+    - Growth rate caps to maintain reasonable projections
+    """
+
     scenarios = {
         'bear': {'growth_adj': 0.5, 'wacc_adj': 1.2, 'terminal_adj': 0.8},
         'base': {'growth_adj': 1.0, 'wacc_adj': 1.0, 'terminal_adj': 1.0},
         'bull': {'growth_adj': 1.5, 'wacc_adj': 0.9, 'terminal_adj': 1.2}
     }
-    
+
     results = {}
-    base_revenue_growth = revenue_growth or 0.05
-    
+    # Cap base revenue growth at 30% to prevent extreme projections
+    base_revenue_growth = min(revenue_growth or 0.05, 0.30)
+
     for scenario, adjustments in scenarios.items():
         adjusted_revenue_growth = base_revenue_growth * adjustments['growth_adj']
-        adjusted_wacc = wacc * adjustments['wacc_adj']
-        
+        # Apply WACC adjustment with minimum floor of 7%
+        adjusted_wacc = max(wacc * adjustments['wacc_adj'], 0.07)
+
         results[scenario] = calculate_enhanced_dcf_value(
             fcf_history=fcf_history,
             growth_metrics=growth_metrics,
@@ -477,14 +513,14 @@ def calculate_dcf_scenarios(
             market_cap=market_cap,
             revenue_growth=adjusted_revenue_growth
         )
-    
+
     # Probability-weighted average
     expected_value = (
-        results['bear'] * 0.2 + 
-        results['base'] * 0.6 + 
+        results['bear'] * 0.2 +
+        results['base'] * 0.6 +
         results['bull'] * 0.2
     )
-    
+
     return {
         'scenarios': results,
         'expected_value': expected_value,
