@@ -74,6 +74,24 @@ def test_apply_short_open_partial_when_insufficient_margin_cash() -> None:
     assert snap["cash"] == pytest.approx(400.0)
 
 
+def test_apply_short_open_uses_available_cash_not_total_cash() -> None:
+    p = Portfolio(tickers=["AAPL"], initial_cash=1_000.0, margin_requirement=0.5)
+
+    # First short consumes all free margin but increases total cash with proceeds.
+    first = p.apply_short_open("AAPL", 10, 100.0)
+    assert first == 10
+
+    # Available cash should still be 1,000 (cash 1,500 - margin_used 500),
+    # so max additional quantity at $100 with 50% margin is 20 shares.
+    second = p.apply_short_open("AAPL", 30, 100.0)
+    assert second == 20
+
+    snap = p.get_snapshot()
+    pos = snap["positions"]["AAPL"]
+    assert pos["short"] == 30
+    assert snap["margin_used"] == pytest.approx(1_500.0)
+
+
 def test_apply_short_cover_realized_gain_and_margin_release(portfolio: Portfolio) -> None:
     # Open short 100 @ 50, then cover 40 @ 40 → gain = (50-40)*40 = 400
     portfolio.apply_short_open("AAPL", 100, 50.0)

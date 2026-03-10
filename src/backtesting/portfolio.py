@@ -133,7 +133,10 @@ class Portfolio:
         proceeds = price * quantity
         margin_ratio = self._portfolio["margin_requirement"]
         margin_required = proceeds * margin_ratio
-        if margin_required <= self._portfolio["cash"]:
+        available_cash = max(
+            0.0, self._portfolio["cash"] - self._portfolio["margin_used"]
+        )
+        if margin_required <= available_cash:
             old_short_shares = position["short"]
             old_cost_basis = position["short_cost_basis"]
             total_shares = old_short_shares + quantity
@@ -147,7 +150,7 @@ class Portfolio:
             self._portfolio["cash"] += proceeds
             self._portfolio["cash"] -= margin_required
             return quantity
-        max_quantity = int(self._portfolio["cash"] / (price * margin_ratio)) if margin_ratio > 0 and price > 0 else 0
+        max_quantity = int(available_cash / (price * margin_ratio)) if margin_ratio > 0 and price > 0 else 0
         if max_quantity > 0:
             proceeds = price * max_quantity
             margin_required = proceeds * margin_ratio
