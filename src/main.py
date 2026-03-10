@@ -55,6 +55,9 @@ def run_hedge_fund(
     model_provider: str = "OpenAI",
     data_source: str = "auto",
 ):
+    # Ensure module-level global is set so library callers (not just __main__) get the right source
+    set_default_data_source(data_source)
+
     # Start progress tracking
     progress.start()
 
