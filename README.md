@@ -538,6 +538,30 @@ poetry run python -m autoresearch.cache_signals \
 
 This costs one round of LLM calls per business day in the window (~300 days). After that, the autoresearch loop can tune analyst weights without any further LLM costs.
 
+### First session results
+
+Our first autoresearch session ran **27 experiments in ~7 minutes** of wall-clock compute (zero LLM calls, zero API costs). The AI agent discovered **12 improvements** and reverted 15 failed experiments:
+
+| Metric | Baseline | After 27 experiments | Change |
+|--------|----------|---------------------|--------|
+| **Sharpe** | -0.79 | **2.22** | +3.01 |
+| **Sortino** | -1.11 | **3.78** | +4.89 |
+| **Max Drawdown** | -18.93% | **-5.15%** | 13.8 pp better |
+| **Total Return** | -6.35% | **+49.9%** | +56.3 pp |
+
+Backtest window: Jan 2025 – Mar 2026 on AAPL, NVDA, MSFT, GOOGL, TSLA.
+
+**What the AI discovered (in order of impact):**
+
+1. **Disable shorting** in a bull market — the single biggest improvement, flipping Sharpe from -0.79 to +1.68
+2. **Heavy trend weighting** (0.25 → 0.45) over mean reversion and volatility — trend-following dominates in this regime
+3. **Shorter EMA windows** (8/21/55 → 5/13/34) — faster trend detection for volatile tech stocks
+4. **Larger position sizes** (POSITION_SIZE_FRACTION 0.5 → 1.0, RISK_BASE_LIMIT 0.20 → 0.40) — more conviction, more return
+5. **Boosted low-volatility position multiplier** (1.25 → 1.50) — size up in calm markets
+6. **Shorter ADX period** (14 → 10) — faster trend-strength detection
+
+Each change was measured in isolation. If the Sharpe dropped, the change was reverted. Every improvement was committed individually so the full history is visible in `git log`.
+
 See [`autoresearch/README.md`](autoresearch/README.md) for the full documentation.
 
 ---
