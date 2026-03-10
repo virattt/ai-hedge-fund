@@ -78,8 +78,8 @@ RISK_BASE_LIMIT = 0.40
 # Volatility band thresholds and multipliers
 RISK_VOL_BANDS = [
     # (max_annualized_vol, multiplier)
-    (0.15, 1.25),   # Low vol → up to 25%
-    (0.30, 1.00),   # Medium vol → 20% baseline, decays
+    (0.15, 1.50),   # Low vol → up to 50% more
+    (0.30, 1.10),   # Medium vol → slight boost
     (0.50, 0.75),   # High vol → reduced
 ]
 RISK_EXTREME_VOL_MULT = 0.50
