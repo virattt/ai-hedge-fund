@@ -1,22 +1,33 @@
 """Helper functions for LLM"""
 
 import json
+import logging
+import time
+from typing import Any
+
 from pydantic import BaseModel
 from src.llm.models import get_model, get_model_info
 from src.utils.progress import progress
 from src.graph.state import AgentState
 
+# Configure logging
+logger = logging.getLogger(__name__)
+
 
 def call_llm(
-    prompt: any,
+    prompt: Any,
     pydantic_model: type[BaseModel],
     agent_name: str | None = None,
     state: AgentState | None = None,
     max_retries: int = 3,
     default_factory=None,
+    temperature: float | None = None,
 ) -> BaseModel:
     """
-    Makes an LLM call with retry logic, handling both JSON supported and non-JSON supported models.
+    Makes an LLM call with retry logic and exponential backoff.
+    
+    Handles both JSON-supported and non-JSON-supported models, with automatic
+    parsing and validation against the provided Pydantic model.
 
     Args:
         prompt: The prompt to send to the LLM
@@ -25,6 +36,7 @@ def call_llm(
         state: Optional state object to extract agent-specific model configuration
         max_retries: Maximum number of retries (default: 3)
         default_factory: Optional factory function to create default response on failure
+        temperature: Optional temperature override for the model (0.0-1.0)
 
     Returns:
         An instance of the specified Pydantic model
@@ -48,14 +60,15 @@ def call_llm(
     model_info = get_model_info(model_name, model_provider)
     llm = get_model(model_name, model_provider, api_keys)
 
-    # For non-JSON support models, we can use structured output
+    # For JSON-supporting models, use structured output
     if not (model_info and not model_info.has_json_mode()):
         llm = llm.with_structured_output(
             pydantic_model,
             method="json_mode",
         )
 
-    # Call the LLM with retries
+    # Call the LLM with retries and exponential backoff
+    last_error = None
     for attempt in range(max_retries):
         try:
             # Call the LLM
@@ -66,15 +79,33 @@ def call_llm(
                 parsed_result = extract_json_from_response(result.content)
                 if parsed_result:
                     return pydantic_model(**parsed_result)
+                else:
+                    raise ValueError("Failed to extract JSON from LLM response")
             else:
                 return result
 
         except Exception as e:
+            last_error = e
+            
+            # Calculate exponential backoff delay: 1s, 2s, 4s, ...
+            delay = min(2 ** attempt, 10)  # Cap at 10 seconds
+            
             if agent_name:
-                progress.update_status(agent_name, None, f"Error - retry {attempt + 1}/{max_retries}")
+                progress.update_status(
+                    agent_name, 
+                    None, 
+                    f"Error - retry {attempt + 1}/{max_retries} in {delay}s"
+                )
+            
+            logger.warning(
+                f"LLM call failed (attempt {attempt + 1}/{max_retries}): {e}. "
+                f"Retrying in {delay}s..."
+            )
 
-            if attempt == max_retries - 1:
-                print(f"Error in LLM call after {max_retries} attempts: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(delay)
+            else:
+                logger.error(f"LLM call failed after {max_retries} attempts: {last_error}")
                 # Use default_factory if provided, otherwise create a basic default
                 if default_factory:
                     return default_factory()
@@ -107,17 +138,79 @@ def create_default_response(model_class: type[BaseModel]) -> BaseModel:
 
 
 def extract_json_from_response(content: str) -> dict | None:
-    """Extracts JSON from markdown-formatted response."""
+    """
+    Extracts JSON from LLM response, handling multiple formats.
+    
+    Supports:
+    - JSON wrapped in ```json ... ``` code blocks
+    - JSON wrapped in ``` ... ``` code blocks
+    - Raw JSON without code blocks
+    - JSON with leading/trailing text
+    
+    Args:
+        content: The raw string response from the LLM
+        
+    Returns:
+        Parsed JSON as a dictionary, or None if parsing fails
+    """
+    if not content:
+        return None
+        
+    content = content.strip()
+    
+    # Try 1: Extract from ```json code block
     try:
         json_start = content.find("```json")
         if json_start != -1:
-            json_text = content[json_start + 7 :]  # Skip past ```json
+            json_text = content[json_start + 7:]
             json_end = json_text.find("```")
             if json_end != -1:
                 json_text = json_text[:json_end].strip()
                 return json.loads(json_text)
-    except Exception as e:
-        print(f"Error extracting JSON from response: {e}")
+    except json.JSONDecodeError:
+        pass
+    
+    # Try 2: Extract from ``` code block (no language specified)
+    try:
+        json_start = content.find("```")
+        if json_start != -1:
+            json_text = content[json_start + 3:]
+            json_end = json_text.find("```")
+            if json_end != -1:
+                json_text = json_text[:json_end].strip()
+                # Skip language identifier if present on first line
+                if json_text and not json_text.startswith('{'):
+                    first_newline = json_text.find('\n')
+                    if first_newline != -1:
+                        json_text = json_text[first_newline:].strip()
+                return json.loads(json_text)
+    except json.JSONDecodeError:
+        pass
+    
+    # Try 3: Parse the entire content as JSON
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        pass
+    
+    # Try 4: Find JSON object boundaries { ... }
+    try:
+        start = content.find('{')
+        if start != -1:
+            # Find matching closing brace
+            brace_count = 0
+            for i, char in enumerate(content[start:], start):
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        json_text = content[start:i+1]
+                        return json.loads(json_text)
+    except json.JSONDecodeError:
+        pass
+    
+    logger.warning(f"Failed to extract JSON from response: {content[:200]}...")
     return None
 
 
