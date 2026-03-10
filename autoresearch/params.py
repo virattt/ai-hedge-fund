@@ -73,7 +73,7 @@ SIGNAL_BEARISH_THRESHOLD = -0.2
 # ─────────────────────────────────────────────────────────────
 # 3. RISK MANAGEMENT — Position Sizing
 # ─────────────────────────────────────────────────────────────
-RISK_BASE_LIMIT = 0.30
+RISK_BASE_LIMIT = 0.40
 
 # Volatility band thresholds and multipliers
 RISK_VOL_BANDS = [
