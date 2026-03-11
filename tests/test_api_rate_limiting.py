@@ -1,3 +1,4 @@
+```python
 import os
 import pytest
 from unittest.mock import Mock, patch, call
@@ -246,4 +247,5 @@ class TestRateLimiting:
 
 
 if __name__ == "__main__":
-    pytest.main([__file__]) 
+    pytest.main([__file__])
+```

@@ -1,6 +1,8 @@
+```python
 import pytest
 
 from src.backtesting.portfolio import Portfolio
+import pandas as pd
 
 
 @pytest.fixture()
@@ -15,12 +17,9 @@ def prices() -> dict[str, float]:
 
 @pytest.fixture()
 def price_df_factory():
-    import pandas as pd
-
     def _factory(closes: list[float]):
         # Minimal price DataFrame with a close column
         return pd.DataFrame({"close": closes})
 
     return _factory
-
-
+```
