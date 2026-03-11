@@ -14,10 +14,9 @@ async def get_dynamic_models() -> List[Dict[str, Any]]:
     OpenAI-provider models so they route through get_model() correctly.
     """
     api_key = os.getenv("OPENAI_API_KEY")
-    base_url = os.getenv("OPENAI_API_BASE", "").rstrip("/")
+    base_url = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1").rstrip("/")
 
-    # Only activate when a custom base URL is explicitly configured
-    if not api_key or not base_url or "api.openai.com" in base_url:
+    if not api_key:
         return []
 
     if not base_url.startswith("http://") and not base_url.startswith("https://"):
@@ -40,10 +39,10 @@ async def get_dynamic_models() -> List[Dict[str, Any]]:
             for item in data.get("data", [])
             if item.get("id")
         ]
-        logger.info(f"[OpenAI custom base] Discovered {len(models)} models from {url}")
+        logger.info(f"[OpenAI] Discovered {len(models)} models from {url}")
         return models
     except Exception as e:
-        logger.warning(f"[OpenAI custom base] Failed to fetch models from {url}: {e}")
+        logger.warning(f"[OpenAI] Failed to fetch models from {url}: {e}")
 
     # Fallback: use OPENAI_MODELS if the /models endpoint is not supported
     models_env = os.getenv("OPENAI_MODELS", "")

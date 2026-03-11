@@ -143,9 +143,9 @@ def get_dynamic_llm_order() -> List[Tuple[str, str, str]]:
     Falls back to an empty list on any error so the CLI still works offline.
     """
     api_key = os.getenv("OPENAI_API_KEY", "")
-    base_url = os.getenv("OPENAI_API_BASE", "").rstrip("/")
+    base_url = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1").rstrip("/")
 
-    if not api_key or not base_url or "api.openai.com" in base_url:
+    if not api_key:
         return []
 
     if not base_url.startswith("http://") and not base_url.startswith("https://"):
