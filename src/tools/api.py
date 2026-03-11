@@ -4,6 +4,13 @@ import pandas as pd
 import requests
 import time
 
+
+def _previous_iso_date(date_str: str) -> str:
+    """Return the previous calendar day for a YYYY-MM-DD or ISO datetime string."""
+    return (
+        datetime.date.fromisoformat(date_str.split("T")[0]) - datetime.timedelta(days=1)
+    ).isoformat()
+
 from src.data.cache import get_cache
 from src.data.models import (
     CompanyNews,
@@ -224,12 +231,16 @@ def get_insider_trades(
         if not start_date or len(insider_trades) < limit:
             break
 
-        # Update end_date to the oldest filing date from current batch for next iteration
-        current_end_date = min(trade.filing_date for trade in insider_trades).split("T")[0]
+        # Move the pagination boundary to the day before the oldest filing date we just saw.
+        # Reusing the same date with `filing_date_lte` can re-fetch the boundary page forever
+        # (or duplicate records heavily) when many filings share that date.
+        oldest_filing_date = min(trade.filing_date for trade in insider_trades).split("T")[0]
 
-        # If we've reached or passed the start_date, we can stop
-        if current_end_date <= start_date:
+        # If we've reached or passed the requested start date, we already have the final page.
+        if oldest_filing_date <= start_date:
             break
+
+        current_end_date = _previous_iso_date(oldest_filing_date)
 
     if not all_trades:
         return []
