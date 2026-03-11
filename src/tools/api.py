@@ -1,8 +1,14 @@
+```python
 import datetime
 import os
-import pandas as pd
 import requests
 import time
+
+try:
+    import pandas as pd
+except ImportError:
+    print("Please install the 'pandas' module.")
+    raise
 
 from src.data.cache import get_cache
 from src.data.models import (
@@ -356,3 +362,4 @@ def prices_to_df(prices: list[Price]) -> pd.DataFrame:
 def get_price_data(ticker: str, start_date: str, end_date: str, api_key: str = None) -> pd.DataFrame:
     prices = get_prices(ticker, start_date, end_date, api_key=api_key)
     return prices_to_df(prices)
+```
