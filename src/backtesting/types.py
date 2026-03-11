@@ -1,10 +1,15 @@
+```python
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Dict, Mapping, Optional, Sequence, TypedDict, Literal
 from enum import Enum
 
-import pandas as pd
+try:
+    import pandas as pd
+except ImportError:
+    print("Please install pandas: pip install pandas")
+    raise
 
 
 class Action(str, Enum):
@@ -101,5 +106,4 @@ class PerformanceMetrics(TypedDict, total=False):
     long_short_ratio: Optional[float]
     gross_exposure: Optional[float]
     net_exposure: Optional[float]
-
-
+```
