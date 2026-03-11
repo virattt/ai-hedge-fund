@@ -2,7 +2,7 @@ import os
 import pytest
 from unittest.mock import Mock, patch, call
 
-from src.tools.api import _make_api_request, get_prices
+from src.tools.api import _make_api_request, get_insider_trades, get_prices
 
 class TestRateLimiting:
     """Test suite for API rate limiting functionality."""
@@ -243,6 +243,109 @@ class TestRateLimiting:
         assert mock_sleep.call_count == 2
         expected_calls = [call(60), call(90)]
         mock_sleep.assert_has_calls(expected_calls)
+
+
+
+
+
+def _mock_insider_trade(filing_date: str, shares: float = 1.0):
+    return {
+        "ticker": "TSLA",
+        "issuer": "Tesla, Inc.",
+        "name": "Insider",
+        "title": "Director",
+        "is_board_director": True,
+        "transaction_date": filing_date,
+        "transaction_shares": shares,
+        "transaction_price_per_share": 100.0,
+        "transaction_value": shares * 100.0,
+        "shares_owned_before_transaction": 1000.0,
+        "shares_owned_after_transaction": 1000.0 + shares,
+        "security_title": "Common Stock",
+        "filing_date": f"{filing_date}T00:00:00Z",
+    }
+
+
+class TestInsiderTradePagination:
+    @patch('src.tools.api._cache')
+    @patch('src.tools.api._make_api_request')
+    def test_get_insider_trades_moves_past_boundary_day(self, mock_request, mock_cache):
+        mock_cache.get_insider_trades.return_value = None
+
+        page_one = Mock()
+        page_one.status_code = 200
+        page_one.json.return_value = {
+            "insider_trades": [
+                _mock_insider_trade("2025-01-05", 10),
+                _mock_insider_trade("2025-01-03", 20),
+            ]
+        }
+
+        page_two = Mock()
+        page_two.status_code = 200
+        page_two.json.return_value = {
+            "insider_trades": [
+                _mock_insider_trade("2025-01-02", 30),
+                _mock_insider_trade("2025-01-01", 40),
+            ]
+        }
+
+        mock_request.side_effect = [page_one, page_two]
+
+        trades = get_insider_trades(
+            "TSLA",
+            end_date="2025-01-05",
+            start_date="2025-01-01",
+            limit=2,
+            api_key="test-key",
+        )
+
+        assert [trade.filing_date.split("T")[0] for trade in trades] == [
+            "2025-01-05",
+            "2025-01-03",
+            "2025-01-02",
+            "2025-01-01",
+        ]
+
+        requested_urls = [call.args[0] for call in mock_request.call_args_list]
+        assert "filing_date_lte=2025-01-05" in requested_urls[0]
+        assert "filing_date_lte=2025-01-02" in requested_urls[1]
+        mock_cache.set_insider_trades.assert_called_once()
+
+    @patch('src.tools.api._cache')
+    @patch('src.tools.api._make_api_request')
+    def test_get_insider_trades_does_not_repeat_same_day_boundary(self, mock_request, mock_cache):
+        mock_cache.get_insider_trades.return_value = None
+
+        page_one = Mock()
+        page_one.status_code = 200
+        page_one.json.return_value = {
+            "insider_trades": [
+                _mock_insider_trade("2025-01-05", 10),
+                _mock_insider_trade("2025-01-05", 20),
+            ]
+        }
+
+        page_two = Mock()
+        page_two.status_code = 200
+        page_two.json.return_value = {"insider_trades": []}
+
+        mock_request.side_effect = [page_one, page_two]
+
+        trades = get_insider_trades(
+            "TSLA",
+            end_date="2025-01-05",
+            start_date="2025-01-01",
+            limit=2,
+            api_key="test-key",
+        )
+
+        assert len(trades) == 2
+        requested_urls = [call.args[0] for call in mock_request.call_args_list]
+        assert "filing_date_lte=2025-01-05" in requested_urls[0]
+        assert "filing_date_lte=2025-01-04" in requested_urls[1]
+        assert len(requested_urls) == 2
+        mock_cache.set_insider_trades.assert_called_once()
 
 
 if __name__ == "__main__":
