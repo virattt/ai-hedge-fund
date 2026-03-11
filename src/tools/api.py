@@ -224,8 +224,13 @@ def get_insider_trades(
         if not start_date or len(insider_trades) < limit:
             break
 
-        # Update end_date to the oldest filing date from current batch for next iteration
-        current_end_date = min(trade.filing_date for trade in insider_trades).split("T")[0]
+        # Update end_date to the oldest filing date from current batch for next iteration.
+        # Guard against non-advancing pagination cursors to avoid infinite loops when the API
+        # repeatedly returns the same oldest filing date.
+        next_end_date = min(trade.filing_date for trade in insider_trades).split("T")[0]
+        if next_end_date >= current_end_date:
+            break
+        current_end_date = next_end_date
 
         # If we've reached or passed the start_date, we can stop
         if current_end_date <= start_date:
@@ -289,8 +294,13 @@ def get_company_news(
         if not start_date or len(company_news) < limit:
             break
 
-        # Update end_date to the oldest date from current batch for next iteration
-        current_end_date = min(news.date for news in company_news).split("T")[0]
+        # Update end_date to the oldest date from current batch for next iteration.
+        # Guard against non-advancing pagination cursors to avoid infinite loops when the API
+        # repeatedly returns the same oldest date.
+        next_end_date = min(news.date for news in company_news).split("T")[0]
+        if next_end_date >= current_end_date:
+            break
+        current_end_date = next_end_date
 
         # If we've reached or passed the start_date, we can stop
         if current_end_date <= start_date:
