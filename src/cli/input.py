@@ -6,7 +6,7 @@ import questionary
 from colorama import Fore, Style
 
 from src.utils.analysts import ANALYST_ORDER
-from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider, find_model_by_name
+from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider, find_model_by_name, get_dynamic_llm_order
 from src.utils.ollama import ensure_ollama_and_model
 
 from dataclasses import dataclass
@@ -150,9 +150,14 @@ def select_model(use_ollama: bool, model_flag: str | None = None) -> tuple[str, 
             f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n"
         )
     else:
+        dynamic = get_dynamic_llm_order()
+        static_names = {name for _, name, _ in LLM_ORDER}
+        extra = [(display, name, provider) for display, name, provider in dynamic if name not in static_names]
+        combined_order = LLM_ORDER + extra
+
         model_choice = questionary.select(
             "Select your LLM model:",
-            choices=[questionary.Choice(display, value=(name, provider)) for display, name, provider in LLM_ORDER],
+            choices=[questionary.Choice(display, value=(name, provider)) for display, name, provider in combined_order],
             style=questionary.Style(
                 [
                     ("selected", "fg:green bold"),
@@ -176,13 +181,9 @@ def select_model(use_ollama: bool, model_flag: str | None = None) -> tuple[str, 
                 print("\n\nInterrupt received. Exiting...")
                 sys.exit(0)
 
-        if model_info:
-            print(
-                f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n"
-            )
-        else:
-            model_provider = "Unknown"
-            print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
+        print(
+            f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n"
+        )
 
     return model_name, model_provider or ""
 
