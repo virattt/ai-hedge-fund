@@ -12,8 +12,8 @@ Run: poetry run python -m autoresearch.evaluate --params autoresearch.params_mem
 
 # Start from tech params — memory already crushes with tech tuning
 STRATEGY_WEIGHTS = {
-    "trend": 0.30,
-    "mean_reversion": 0.18,
+    "trend": 0.34,
+    "mean_reversion": 0.14,
     "momentum": 0.37,
     "volatility": 0.15,
     "stat_arb": 0.00,
