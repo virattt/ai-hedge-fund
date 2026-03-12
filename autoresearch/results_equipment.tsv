@@ -4,3 +4,4 @@
 2026-03-12T13:42	BOLLINGER_WINDOW 20→30 + RISK_EXTREME_VOL_MULT 0.60	val_sharpe=1.8589	val_return=+94.96%	OOS=2.35
 2026-03-12T13:57	MA_WINDOW 50→63 (quarterly lookback)	val_sharpe=1.8606	val_return=+95.06%	OOS=2.359
 2026-03-12T13:58	MOM_CONFIDENCE_SCALE 15→18	val_sharpe=1.8731	val_return=+95.78%	OOS=2.36
+2026-03-12T14:01	VOL_LOW_REGIME 0.95→0.90 (tighter low-vol)	val_sharpe=1.8745	val_return=+95.86%	OOS=2.36
