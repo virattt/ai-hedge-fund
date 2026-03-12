@@ -4,8 +4,8 @@ import pandas as pd
 import requests
 import time
 
-from src.data.cache import get_cache
-from src.data.models import (
+from data.cache import get_cache
+from data.models import (
     CompanyNews,
     CompanyNewsResponse,
     FinancialMetrics,

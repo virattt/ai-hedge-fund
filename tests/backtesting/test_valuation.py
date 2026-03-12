@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+
 from src.backtesting.valuation import calculate_portfolio_value, compute_exposures, compute_portfolio_summary
 
 
