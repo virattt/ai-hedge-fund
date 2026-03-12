@@ -399,52 +399,57 @@ def calculate_enhanced_dcf_value(
     revenue_growth: float | None = None
 ) -> float:
     """Enhanced DCF with multi-stage growth."""
-    
+
     if not fcf_history or fcf_history[0] <= 0:
         return 0
-    
+
     # Analyze FCF trend and quality
     fcf_current = fcf_history[0]
     fcf_avg_3yr = sum(fcf_history[:3]) / min(3, len(fcf_history))
     fcf_volatility = calculate_fcf_volatility(fcf_history)
-    
+
     # Stage 1: High Growth (Years 1-3)
     # Use revenue growth but cap based on business maturity
     high_growth = min(revenue_growth or 0.05, 0.25) if revenue_growth else 0.05
     if market_cap > 50_000_000_000:  # Large cap
         high_growth = min(high_growth, 0.10)
-    
+
     # Stage 2: Transition (Years 4-7)
     transition_growth = (high_growth + 0.03) / 2
-    
+
     # Stage 3: Terminal (steady state)
     terminal_growth = min(0.03, high_growth * 0.6)
-    
+
+    # Ensure a minimum spread between WACC and terminal growth so the
+    # Gordon Growth denominator never approaches zero.
+    min_spread = 0.02
+    if wacc - terminal_growth < min_spread:
+        terminal_growth = max(wacc - min_spread, 0.0)
+
     # Project FCF with stages
     pv = 0
     base_fcf = max(fcf_current, fcf_avg_3yr * 0.85)  # Conservative base
-    
+
     # High growth stage
     for year in range(1, 4):
         fcf_projected = base_fcf * (1 + high_growth) ** year
         pv += fcf_projected / (1 + wacc) ** year
-    
-    # Transition stage
+
+    # Transition stage -- compound sequentially with declining growth rates
+    fcf_running = base_fcf * (1 + high_growth) ** 3
     for year in range(4, 8):
         transition_rate = transition_growth * (8 - year) / 4  # Declining
-        fcf_projected = base_fcf * (1 + high_growth) ** 3 * (1 + transition_rate) ** (year - 3)
-        pv += fcf_projected / (1 + wacc) ** year
-    
-    # Terminal value
-    final_fcf = base_fcf * (1 + high_growth) ** 3 * (1 + transition_growth) ** 4
-    if wacc <= terminal_growth:
-        terminal_growth = wacc * 0.8  # Adjust if invalid
+        fcf_running = fcf_running * (1 + transition_rate)
+        pv += fcf_running / (1 + wacc) ** year
+
+    # Terminal value using the actual end-of-transition FCF
+    final_fcf = fcf_running
     terminal_value = (final_fcf * (1 + terminal_growth)) / (wacc - terminal_growth)
     pv_terminal = terminal_value / (1 + wacc) ** 7
-    
+
     # Quality adjustment based on FCF volatility
     quality_factor = max(0.7, 1 - (fcf_volatility * 0.5))
-    
+
     return (pv + pv_terminal) * quality_factor
 
 
@@ -456,20 +461,22 @@ def calculate_dcf_scenarios(
     revenue_growth: float | None = None
 ) -> dict:
     """Calculate DCF under multiple scenarios."""
-    
+
     scenarios = {
         'bear': {'growth_adj': 0.5, 'wacc_adj': 1.2, 'terminal_adj': 0.8},
         'base': {'growth_adj': 1.0, 'wacc_adj': 1.0, 'terminal_adj': 1.0},
         'bull': {'growth_adj': 1.5, 'wacc_adj': 0.9, 'terminal_adj': 1.2}
     }
-    
+
     results = {}
-    base_revenue_growth = revenue_growth or 0.05
-    
+    base_revenue_growth = min(revenue_growth or 0.05, 0.50)
+
     for scenario, adjustments in scenarios.items():
         adjusted_revenue_growth = base_revenue_growth * adjustments['growth_adj']
-        adjusted_wacc = wacc * adjustments['wacc_adj']
-        
+        # Keep the WACC floor after scenario adjustment so the bull case
+        # doesn't push the discount rate below the floor set by calculate_wacc.
+        adjusted_wacc = max(wacc * adjustments['wacc_adj'], 0.06)
+
         results[scenario] = calculate_enhanced_dcf_value(
             fcf_history=fcf_history,
             growth_metrics=growth_metrics,
