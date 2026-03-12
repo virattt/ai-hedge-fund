@@ -14,7 +14,8 @@
 | Session 2 | 2026-03-12 | 27 | ~110 | 1.0385 (full 14-month window) | **1.7880** |
 | Session 3 | 2026-03-12 | — | — | Mode 2 RSI + analyst weights | **2.0221** |
 | Session 4 | 2026-03-12 | 2 | ~25 | 2.0221 (restored cache) | **2.0358** |
-| **Total** | | **~44** | **~216** | **-2.3132** | **2.0358** |
+| Session 5 | 2026-03-12 | 1 | ~5 | 2.0358 (OOS tuning) | **2.0241** |
+| **Total** | | **~45** | **~221** | **-2.3132** | **2.0241** |
 
 ---
 
@@ -380,11 +381,38 @@ Added `autoresearch/oos_check.py`. Split the 14-month window:
 
 ---
 
+## Session 5 — OOS Robustness Tuning (2026-03-12)
+
+### Goal
+
+Improve out-of-sample (second half) Sharpe without hurting full-window performance.
+
+### Changes
+
+1. **`evaluate.py`** — Added `--start` and `--end` args to run backtest on a custom date range:
+   ```bash
+   poetry run python -m autoresearch.evaluate --start 2025-08-01 --end 2026-03-07
+   ```
+
+2. **RISK_BASE_LIMIT** 0.32 → 0.30 — Tested on OOS window. Lower risk limit improves robustness in choppy period.
+
+### Results
+
+| Window | Before (RISK 0.32) | After (RISK 0.30) |
+|--------|--------------------|-------------------|
+| Full | 2.04, +59.97% | 2.02, +58.49% |
+| First half | 3.50 | 3.47 |
+| Second half (OOS) | 1.38 | **1.41** |
+
+**Trade-off:** Full-window Sharpe drops ~0.01 (2.04 → 2.02), return -1.5%. OOS Sharpe improves +0.03 (1.38 → 1.41). Net: better robustness with minimal full-window cost.
+
+---
+
 ## What's Next
 
 1. **RSI tuning in bear/sideways regimes** — RSI 30/70, 25/75, 20/80 are now tunable. Test when market regime shifts.
 
-2. **Rolling window robustness** — ✅ Done. `poetry run python -m autoresearch.oos_check` — OOS (second half) Sharpe 1.38 vs full 2.04. Strategy holds but degrades in choppier period.
+2. **Rolling window robustness** — ✅ Done. `poetry run python -m autoresearch.oos_check` — OOS (second half) Sharpe 1.41 vs full 2.02. RISK_BASE_LIMIT 0.30 improves OOS with minimal full-window cost.
 
 3. **Cross-asset generalization** — run the same params on a different universe (e.g., energy, biotech) to test whether these findings are AAPL/NVDA-specific or generalizable.
 

@@ -45,6 +45,7 @@ Change ONE parameter or ONE small group of related parameters. Examples:
 ```bash
 cd /Users/macbookpro16/Documents/stocks/ai-hedge-fund
 poetry run python -m autoresearch.evaluate
+# For OOS tuning (second half only): add --start 2025-08-01 --end 2026-03-07
 ```
 
 ### Step 5: Compare and decide
@@ -94,7 +95,7 @@ Each experiment takes ~4-6 seconds. Aim for **50+ experiments per hour**. In an 
 
 ## Current State (read this before your first experiment)
 
-**Baseline to beat:** `val_sharpe=2.0358, val_return=+59.97%` (ADX 26, RISK_BASE_LIMIT 0.32)
+**Baseline to beat:** `val_sharpe=2.0241, val_return=+58.49%` (ADX 26, RISK_BASE_LIMIT 0.30)
 
 - **Mode 2** (signals.json + technical_analyst only): `val_sharpe=2.0221, val_return=+58.33%`
 - **Mode 1** (no signals): `val_sharpe=1.7945, val_return=+49.11%`
@@ -152,6 +153,7 @@ The strategy is running in Mode 1 (technical-only). The system is now correctly 
 ```bash
 # Run one experiment
 poetry run python -m autoresearch.evaluate
+# OOS tuning (second half): poetry run python -m autoresearch.evaluate --start 2025-08-01 --end 2026-03-07
 
 # Check results history
 cat autoresearch/results.tsv

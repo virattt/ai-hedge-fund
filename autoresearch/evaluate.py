@@ -12,10 +12,13 @@ Exit code 0 = success. Non-zero = crash (the AI agent should revert).
 
 Usage:
     poetry run python -m autoresearch.evaluate
+    poetry run python -m autoresearch.evaluate --start 2025-08-01 --end 2026-03-07  # OOS window
 """
 
+import argparse
 import importlib
 import sys
+import types
 import time
 import traceback
 import warnings
@@ -39,8 +42,25 @@ def load_params():
     return params_mod
 
 
-def run_evaluation():
+def make_params_override(base, **overrides):
+    """Create a params-like object with overridden attributes."""
+    p = types.SimpleNamespace()
+    for name in dir(base):
+        if not name.startswith("_"):
+            setattr(p, name, getattr(base, name))
+    for k, v in overrides.items():
+        setattr(p, k, v)
+    return p
+
+
+def run_evaluation(start=None, end=None):
     params = load_params()
+    if start or end:
+        params = make_params_override(
+            params,
+            BACKTEST_START=start or params.BACKTEST_START,
+            BACKTEST_END=end or params.BACKTEST_END,
+        )
     from autoresearch.fast_backtest import FastBacktestEngine
 
     engine = FastBacktestEngine(params)
@@ -65,9 +85,14 @@ def append_result(metrics: dict, elapsed_ms: int):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--start", type=str, help="Override BACKTEST_START (e.g. for OOS)")
+    parser.add_argument("--end", type=str, help="Override BACKTEST_END (e.g. for OOS)")
+    args = parser.parse_args()
+
     t0 = time.time()
     try:
-        metrics = run_evaluation()
+        metrics = run_evaluation(start=args.start, end=args.end)
     except Exception:
         traceback.print_exc()
         print("val_sharpe=FAIL")

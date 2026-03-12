@@ -136,7 +136,7 @@ Or run experiments manually:
 | File | Purpose | Who modifies it |
 |------|---------|----------------|
 | `params.py` | All tunable knobs | The AI agent (only file it touches) |
-| `evaluate.py` | Runs one experiment, prints metric | Nobody (fixed) |
+| `evaluate.py` | Runs one experiment, prints metric. Use `--start`/`--end` for OOS tuning | Nobody (fixed) |
 | `fast_backtest.py` | Deterministic backtester (no LLM) | Nobody (fixed) |
 | `cache_signals.py` | One-time data caching | Nobody (run once) |
 | `oos_check.py` | Out-of-sample validation (first vs second half) | Nobody (run to check robustness) |
