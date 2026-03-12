@@ -15,7 +15,9 @@
 | Session 3 | 2026-03-12 | — | — | Mode 2 RSI + analyst weights | **2.0221** |
 | Session 4 | 2026-03-12 | 2 | ~25 | 2.0221 (restored cache) | **2.0358** |
 | Session 5 | 2026-03-12 | 1 | ~5 | 2.0358 (OOS tuning) | **2.0241** |
-| **Total** | | **~45** | **~221** | **-2.3132** | **2.0241** |
+| Session 8 | 2026-03-12 | — | ~12 | low-vol band (saturated) | reverted |
+| Session 8 | 2026-03-12 | 2 | ~12 | Equipment baseline 1.63 → ADX 40 + EMA 5/21/55 | **equip 1.7035** |
+| **Total** | | **~47** | **~233** | **-2.3132** | **tech 2.0241 / equip 1.7035** |
 
 ---
 
@@ -448,12 +450,51 @@ Added `cross_asset_check.py` and support for alternate ticker universes:
 
 ### Results
 
-| Universe | Tickers | Sharpe | Return | Max DD |
-|----------|---------|--------|--------|--------|
-| Tech | AAPL, NVDA, MSFT, GOOGL, TSLA | 2.02 | +58.5% | -8.2% |
-| Energy | XOM, CVX, OXY, SLB, EOG | 0.03 | +3.8% | -17.8% |
+| Universe | Tickers | Sharpe | Return | Max DD | OOS Sharpe |
+|----------|---------|--------|--------|--------|-----------|
+| Tech | AAPL, NVDA, MSFT, GOOGL, TSLA | 2.02 | +58.5% | -8.2% | 1.41 |
+| Energy | XOM, CVX, OXY, SLB, EOG | 0.03 | +3.8% | -17.8% | n/a |
+| Equipment | AMAT, ASML, LRCX, KLAC, TEL | **1.7035** | +81.5% | -16.9% | **2.09** |
 
-**Conclusion:** Strategy is tech-specific. Same params (momentum/trend weights, ADX, risk limits) produce near-zero alpha on energy. Energy had different regime (oil/commodity cycle) — params would need separate tuning for that universe.
+**Tech:** Fully tuned, baseline to beat. `params.py` (RISK_BASE_LIMIT 0.30, ADX 26, EMA 5/13/34, Sharpe 2.02).
+
+**Energy:** Does not generalize. Oil/commodity regime differs fundamentally from tech momentum.
+
+**Equipment (Session 8):** Strong generalization from tech params. Key tuning wins:
+- ADX_PERIOD: 26→40 (+3.2% Sharpe)
+- EMA_MEDIUM/LONG: 13/34 → 21/55 (+1.2% Sharpe)
+- RISK_BASE_LIMIT 0.30 (same as tech; reducing hurt, not helped)
+- OOS Sharpe **2.09** — _better_ than full-window, very robust
+
+Equipment now has a dedicated `params_equipment.py`. Run with:
+```bash
+poetry run python -m autoresearch.evaluate --params autoresearch.params_equipment
+```
+
+---
+
+## Session 8 — Low-Vol Band + Equipment Sector Baseline (2026-03-12)
+
+### Low-Vol Band Multiplier
+| Experiment | Val Sharpe | Change |
+|---|---|---|
+| Low-vol mult 1.25 (baseline) | 2.0241 | — |
+| Low-vol mult 1.40 | 2.0241 | 0 |
+| Low-vol mult 1.50 | 2.0241 | 0 |
+| **Result** | — | Saturated — no effect. The existing low-vol regime is not frequently triggered in this tech universe |
+
+### Equipment Baseline
+| Experiment | Val Sharpe | Return | Max DD |
+|---|---|---|---|
+| Tech params on equipment | 1.6305 | +76.9% | -16.7% |
+| RISK_BASE_LIMIT 0.22 | 1.4949 | +67.0% | -15.8% |
+| RISK_BASE_LIMIT 0.26 | 1.5811 | +73.3% | -16.2% |
+| RISK_BASE_LIMIT 0.30 (tech level) | 1.6305 | +76.9% | -16.7% |
+| ADX_PERIOD 40 | 1.6831 | +79.8% | -16.7% |
+| EMA 5/21/55 + ADX 40 | **1.7035** | **+81.5%** | -16.9% |
+| OOS check (H2 2025) | **2.0939** | +59.4% | -16.9% |
+
+**Conclusion:** Equipment generalizes well from tech params (Sharpe 1.63 at baseline vs energy 0.03). Longer EMA and ADX periods reflect the quarterly capex-cycle cadence. The dedicated `params_equipment.py` is now the baseline for future equipment autoresearch.
 
 ---
 
@@ -466,6 +507,12 @@ Added `cross_asset_check.py` and support for alternate ticker universes:
 3. **Cross-asset generalization** — ✅ Done (Session 7). `poetry run python -m autoresearch.cross_asset_check`. Tech: Sharpe 2.02, +58.5%. Energy (XOM, CVX, OXY, SLB, EOG): Sharpe 0.03, +3.8%, -17.8% DD. **Strategy is tech-specific** — momentum/trend params tuned for tech don't generalize to energy.
 
 4. **Selective LLM agent re-enablement** — ✅ Tested (Session 6). cathie_wood 0.1 → Sharpe 0.10, -31% dd. stanley_druckenmiller 0.1 → 0.46. growth_analyst 0.1 → 1.84. sentiment_analyst 0.1 → 1.37. news_sentiment 0.1/0.2 → 2.02 (neutral, no improvement). **Conclusion:** All LLM agents except news_sentiment hurt; news_sentiment is neutral. Technical-only remains best.
+
+5. **Equipment sector (Session 8)** — ✅ Done. `params_equipment.py` created with ADX 40 + EMA 5/21/55. Sharpe 1.7035, OOS 2.09.
+
+6. **Equipment overnight autoresearch** — Run full autoresearch loop on equipment universe with `params_equipment.py` as mutable target.
+
+7. **Additional sectors** — Power/infra (VST, CEG, NRG), EDA (CDNS, SNPS), Memory (MU, WDC, STX). Cache prices, baseline, then autoresearch.
 
 ---
 

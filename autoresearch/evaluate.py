@@ -14,6 +14,7 @@ Usage:
     poetry run python -m autoresearch.evaluate
     poetry run python -m autoresearch.evaluate --start 2025-08-01 --end 2026-03-07  # OOS window
     poetry run python -m autoresearch.evaluate --tickers XOM,CVX,OXY,SLB,EOG --prices-path prices_energy.json  # cross-asset
+    poetry run python -m autoresearch.evaluate --params autoresearch.params_equipment --tickers AMAT,ASML,LRCX,KLAC,TEL --prices-path prices_equipment.json
 """
 
 import argparse
@@ -36,9 +37,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 RESULTS_FILE = Path(__file__).resolve().parent / "results.tsv"
 
 
-def load_params():
-    """Force-reload params.py to pick up any modifications."""
-    import autoresearch.params as params_mod
+def load_params(module_name: str = "autoresearch.params"):
+    """Force-reload params module to pick up any modifications."""
+    params_mod = importlib.import_module(module_name)
     importlib.reload(params_mod)
     return params_mod
 
@@ -54,8 +55,8 @@ def make_params_override(base, **overrides):
     return p
 
 
-def run_evaluation(start=None, end=None, tickers=None, prices_path=None):
-    params = load_params()
+def run_evaluation(start=None, end=None, tickers=None, prices_path=None, params_module=None):
+    params = load_params(params_module or "autoresearch.params")
     overrides = {}
     if start or end:
         overrides["BACKTEST_START"] = start or params.BACKTEST_START
@@ -64,9 +65,13 @@ def run_evaluation(start=None, end=None, tickers=None, prices_path=None):
         overrides["BACKTEST_TICKERS"] = tickers
     if overrides:
         params = make_params_override(params, **overrides)
-    from autoresearch.fast_backtest import FastBacktestEngine
 
-    engine = FastBacktestEngine(params, tickers_override=tickers, prices_path_override=prices_path)
+    # If no prices_path given, check if the params module declares one
+    effective_prices_path = prices_path or getattr(params, "PRICES_PATH", None)
+    effective_tickers = tickers or None  # keep None so engine reads from params
+
+    from autoresearch.fast_backtest import FastBacktestEngine
+    engine = FastBacktestEngine(params, tickers_override=effective_tickers, prices_path_override=effective_prices_path)
     metrics = engine.run()
     return metrics
 
@@ -93,13 +98,14 @@ def main():
     parser.add_argument("--end", type=str, help="Override BACKTEST_END (e.g. for OOS)")
     parser.add_argument("--tickers", type=str, help="Override tickers (e.g. XOM,CVX,OXY,SLB,EOG for cross-asset)")
     parser.add_argument("--prices-path", type=str, help="Override prices cache (e.g. prices_energy.json)")
+    parser.add_argument("--params", type=str, help="Params module to load (e.g. autoresearch.params_equipment)")
     args = parser.parse_args()
 
     tickers = [t.strip() for t in args.tickers.split(",")] if args.tickers else None
 
     t0 = time.time()
     try:
-        metrics = run_evaluation(start=args.start, end=args.end, tickers=tickers, prices_path=args.prices_path)
+        metrics = run_evaluation(start=args.start, end=args.end, tickers=tickers, prices_path=args.prices_path, params_module=args.params)
     except Exception:
         traceback.print_exc()
         print("val_sharpe=FAIL")
