@@ -18,8 +18,13 @@ import importlib
 import sys
 import time
 import traceback
+import warnings
 from datetime import datetime
 from pathlib import Path
+
+# Suppress numpy "Degrees of freedom <= 0" / "invalid value in divide" from rolling stats on short windows
+warnings.filterwarnings("ignore", message="Degrees of freedom <= 0", category=RuntimeWarning, module="numpy")
+warnings.filterwarnings("ignore", message="invalid value encountered", category=RuntimeWarning, module="numpy")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))

@@ -162,12 +162,17 @@ This is sufficient to find significant improvements and runs completely free. St
 
 ### Mode 2: Full-Signal (needs one LLM run)
 
-If you also run the full signal cache:
+**Important:** `cache_signals` defaults now match the backtest window (2025-01-02 → 2026-03-07). If you have an older cache built for a shorter range, rebuild it to get sharpe≈2.02:
+```bash
+rm autoresearch/cache/signals.json
+poetry run python -m autoresearch.cache_signals
+```
+
+If you also run the full signal cache (defaults match backtest window):
 
 ```bash
 poetry run python -m autoresearch.cache_signals \
   --tickers AAPL,NVDA,MSFT,GOOGL,TSLA \
-  --start 2025-06-01 --end 2025-12-01 \
   --model gpt-4.1 --provider OpenAI
 ```
 

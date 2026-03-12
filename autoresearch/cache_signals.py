@@ -156,8 +156,8 @@ def cache_agent_signals(
 def main():
     parser = argparse.ArgumentParser(description="Cache agent signals for autoresearch")
     parser.add_argument("--tickers", type=str, default="AAPL,NVDA,MSFT,GOOGL,TSLA")
-    parser.add_argument("--start", type=str, default="2025-06-01")
-    parser.add_argument("--end", type=str, default="2025-12-01")
+    parser.add_argument("--start", type=str, default="2025-01-02", help="Match params.BACKTEST_START")
+    parser.add_argument("--end", type=str, default="2026-03-07", help="Match params.BACKTEST_END")
     parser.add_argument("--model", type=str, default="gpt-4.1")
     parser.add_argument("--provider", type=str, default="OpenAI")
     parser.add_argument("--prices-only", action="store_true", help="Only cache prices, skip agent signals")

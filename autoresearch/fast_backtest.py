@@ -97,13 +97,21 @@ def compute_adx(df: pd.DataFrame, period: int) -> pd.Series:
 
 
 def compute_hurst(series: pd.Series, max_lag: int) -> float:
-    lags = range(2, max_lag)
-    tau = []
-    arr = series.values
-    for lag in lags:
-        tau.append(max(1e-8, np.sqrt(np.std(arr[lag:] - arr[:-lag]))))
+    arr = np.asarray(series.dropna().values, dtype=float)
+    if len(arr) < max_lag + 2:
+        return 0.5
+    lags_used, tau = [], []
+    for lag in range(2, max_lag):
+        diff = arr[lag:] - arr[:-lag]
+        if len(diff) < 2:
+            continue
+        s = np.var(diff, ddof=0)
+        lags_used.append(lag)
+        tau.append(max(1e-8, np.sqrt(s)))
+    if len(tau) < 2:
+        return 0.5
     try:
-        reg = np.polyfit(np.log(list(lags)), np.log(tau), 1)
+        reg = np.polyfit(np.log(lags_used), np.log(tau), 1)
         return float(reg[0])
     except Exception:
         return 0.5
