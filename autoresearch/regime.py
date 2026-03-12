@@ -91,13 +91,21 @@ def get_regime_for_paper_trading(
     benchmark_tickers: list[str] | None = None,
     lookback: int = 20,
     use_drawdown: bool = False,
+    use_renko: bool = False,
+    renko_ticker: str = "AAPL",
 ) -> str:
     """
     Get regime for paper trading. Tries benchmark tickers in order.
     Default: SPY (prices_benchmark.json), then AAPL (tech proxy).
+
+    With use_renko=True, overlays Renko+BBWAS signal from renko_ticker.
+    The Renko regime can override to bear if momentum is clearly bearish,
+    or upgrade confidence in bull if Renko confirms.
     """
     import json
     cache_dir = Path(__file__).resolve().parent / "cache"
+
+    base_regime = "sideways"
     for ticker in benchmark_tickers or ["SPY", "AAPL", "NVDA"]:
         path = cache_dir / "prices.json"
         if ticker == "SPY":
@@ -114,6 +122,45 @@ def get_regime_for_paper_trading(
         df["date"] = pd.to_datetime(df["date"])
         df = df.set_index("date").sort_index()
         if use_drawdown:
-            return get_regime_with_drawdown(df["close"], lookback=lookback)
-        return get_regime(df["close"], lookback=lookback)
-    return "sideways"
+            base_regime = get_regime_with_drawdown(df["close"], lookback=lookback)
+        else:
+            base_regime = get_regime(df["close"], lookback=lookback)
+        break
+
+    if not use_renko:
+        return base_regime
+
+    return renko_overlay(base_regime, renko_ticker)
+
+
+def renko_overlay(base_regime: str, renko_ticker: str = "AAPL") -> str:
+    """
+    Overlay Renko+BBWAS on a base regime. Renko can downgrade bull→sideways
+    or sideways→bear, but never upgrades bear→bull (FA-first, TA as guardrail).
+    """
+    try:
+        from autoresearch.renko_bbwas import renko_regime
+        sig = renko_regime(renko_ticker)
+    except Exception:
+        return base_regime
+
+    renko_dir = sig.get("direction", "neutral")
+
+    if base_regime == "bull" and renko_dir == "bear":
+        return "sideways"
+    if base_regime == "sideways" and renko_dir == "bear" and sig.get("energy") == "expanding":
+        return "bear"
+    return base_regime
+
+
+def renko_scale_factor(ticker: str = "AAPL") -> float:
+    """
+    Return a Renko-derived scale factor (0.35–1.0) for position sizing.
+    Can be multiplied with the base regime_scale.
+    """
+    try:
+        from autoresearch.renko_bbwas import renko_regime
+        sig = renko_regime(ticker)
+        return sig.get("scale", 0.6)
+    except Exception:
+        return 1.0

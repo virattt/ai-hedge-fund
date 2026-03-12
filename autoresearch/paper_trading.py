@@ -103,6 +103,8 @@ def main():
     parser.add_argument("--cost-bps", type=float, default=0, help="Transaction cost in bps (e.g. 10 = 0.1%%)")
     parser.add_argument("--no-regime", action="store_true", help="Disable regime-adaptive position scaling")
     parser.add_argument("--regime-drawdown", action="store_true", help="Use drawdown-based regime (bear if DD>5%%)")
+    parser.add_argument("--renko-regime", action="store_true", help="Overlay Renko+BBWAS momentum on regime detection")
+    parser.add_argument("--renko-ticker", type=str, default="AAPL", help="Ticker for Renko regime overlay (default AAPL)")
     parser.add_argument("--lookback-days", type=int, default=10, help="Backtest lookback for signal generation (default 10)")
     parser.add_argument("--max-ticker-weight", type=float, default=0.15, help="Max weight per ticker (0.15 = 15%%, 0 = no cap)")
     parser.add_argument("--vol-weight", action="store_true", help="Use inverse-volatility (risk parity) position sizing")
@@ -134,8 +136,21 @@ def main():
     regime_scale_factor = 1.0
     regime = "bull"
     if not args.no_regime:
-        regime = get_regime_for_paper_trading(use_drawdown=args.regime_drawdown)
+        regime = get_regime_for_paper_trading(
+            use_drawdown=args.regime_drawdown,
+            use_renko=args.renko_regime,
+            renko_ticker=args.renko_ticker,
+        )
         regime_scale_factor = regime_scale(regime)
+        if args.renko_regime:
+            from autoresearch.regime import renko_scale_factor as get_renko_scale
+            renko_sf = get_renko_scale(args.renko_ticker)
+            regime_scale_factor *= renko_sf
+            from autoresearch.renko_bbwas import renko_regime as renko_sig
+            sig = renko_sig(args.renko_ticker)
+            print(f"  Renko ({args.renko_ticker}): {sig['regime']} dir={sig['direction']} "
+                  f"energy={sig['energy']} trend={sig['brick_trend']:+.3f} bw={sig['bandwidth']:.4f} "
+                  f"{'SQUEEZE' if sig['squeeze'] else ''}")
         if args.max_drawdown_pct > 0:
             regime_scale_factor = scale_for_drawdown(
                 regime_scale_factor, args.state_path, args.max_drawdown_pct,

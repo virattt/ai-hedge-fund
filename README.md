@@ -610,6 +610,13 @@ poetry run python -m autoresearch.paper_trading --execute --max-drawdown-pct 15 
 # Volatility-based (risk parity) position sizing
 poetry run python -m autoresearch.paper_trading --vol-weight
 
+# Renko + BBWAS momentum overlay (timing/sizing guardrail)
+poetry run python -m autoresearch.paper_trading --renko-regime --renko-ticker NVDA
+
+# Standalone Renko signal for any ticker or all cached tickers
+poetry run python -m autoresearch.renko_bbwas --ticker NVDA
+poetry run python -m autoresearch.renko_bbwas --all-tickers
+
 # Daily automation (cron-friendly)
 ./autoresearch/run_daily.sh
 
@@ -624,6 +631,8 @@ poetry run python -m autoresearch.sector_correlation --output autoresearch/logs/
 **Tastytrade setup:** Set `TASTYTRADE_CLIENT_SECRET`, `TASTYTRADE_REFRESH_TOKEN` in `.env`. Get credentials via [developer.tastytrade.com](https://developer.tastytrade.com/). Dry-run first; live orders require `TASTYTRADE_ORDER_ENABLED=true`.
 
 **Data validation:** Before execution, price caches are validated (staleness, missing days, outliers). Run `poetry run python -m autoresearch.validate_prices` to check manually.
+
+**Renko + BBWAS overlay:** `--renko-regime` adds an ATR-based Renko chart with Bollinger Band Width / Area Squeeze overlay as a momentum guardrail. It can downgrade a bull regime to sideways (or sideways to bear) when brick momentum is clearly bearish, and detect squeeze zones where a big move is loading. Inspired by [The chart that doesn't lie](https://ikigaistudio.substack.com/p/the-chart-that-doesnt-lie). The overlay never upgrades a bearish FA call — it's a timing/sizing guardrail, not an alpha source.
 
 ---
 
