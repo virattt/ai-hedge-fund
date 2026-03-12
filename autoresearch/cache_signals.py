@@ -68,8 +68,8 @@ def cache_agent_signals(
     tickers: list[str],
     start_date: str,
     end_date: str,
-    model_name: str = "gpt-4.1",
-    model_provider: str = "OpenAI",
+    model_name: str = "z-ai/glm-4.5-air",
+    model_provider: str = "OpenRouter",
 ) -> dict:
     """Run the full agent pipeline for each business day and cache signals.
 
@@ -158,8 +158,8 @@ def main():
     parser.add_argument("--tickers", type=str, default="AAPL,NVDA,MSFT,GOOGL,TSLA")
     parser.add_argument("--start", type=str, default="2025-01-02", help="Match params.BACKTEST_START")
     parser.add_argument("--end", type=str, default="2026-03-07", help="Match params.BACKTEST_END")
-    parser.add_argument("--model", type=str, default="gpt-4.1")
-    parser.add_argument("--provider", type=str, default="OpenAI")
+    parser.add_argument("--model", type=str, default="z-ai/glm-4.5-air")
+    parser.add_argument("--provider", type=str, default="OpenRouter")
     parser.add_argument("--prices-only", action="store_true", help="Only cache prices, skip agent signals")
     args = parser.parse_args()
 
@@ -175,10 +175,14 @@ def main():
     print(f"Cache dir:  {CACHE_DIR}")
     print("=" * 60)
 
-    # Phase 1: Cache prices
+    # Phase 1: Cache prices (OVERWRITES — no resume; backup existing first)
     print("\n--- Phase 1: Caching price data ---")
-    price_cache = cache_prices(tickers, args.start, args.end)
     prices_path = CACHE_DIR / "prices.json"
+    if prices_path.exists():
+        backup_path = CACHE_DIR / "prices.json.bak"
+        backup_path.write_text(prices_path.read_text())
+        print(f"  Backed up existing prices → {backup_path}")
+    price_cache = cache_prices(tickers, args.start, args.end)
     with open(prices_path, "w") as f:
         json.dump(price_cache, f, indent=2)
     print(f"\nPrices saved → {prices_path}")

@@ -185,7 +185,7 @@ and short-dated options.
 - **Python 3.11+**
 - **Poetry** (dependency management)
 - **Node.js 18+** (only if running the web application)
-- At least one LLM provider API key (OpenAI, Anthropic, Groq, DeepSeek, Google, xAI, or Ollama for local)
+- At least one LLM provider API key (OpenAI, Anthropic, Groq, DeepSeek, Google, xAI, OpenRouter, or Ollama for local)
 
 ### Installation
 
@@ -235,6 +235,7 @@ GROQ_API_KEY=your-key            # Llama 3.3 70B (free tier available)
 DEEPSEEK_API_KEY=your-key        # DeepSeek R1/V3
 GOOGLE_API_KEY=your-key          # Gemini 3 Pro
 XAI_API_KEY=your-key             # Grok 4
+OPENROUTER_API_KEY=your-key      # OpenRouter (z-ai/glm-4.5-air, etc.) — recommended for autoresearch cache
 
 # Financial Data
 FINANCIAL_DATASETS_API_KEY=your-key   # Required for tickers beyond AAPL, GOOGL, MSFT, NVDA, TSLA
@@ -536,7 +537,21 @@ poetry run python -m autoresearch.cache_signals \
   --start 2025-01-02 --end 2026-03-07
 ```
 
-This costs one round of LLM calls per business day in the window (~300 days). After that, the autoresearch loop can tune analyst weights without any further LLM costs.
+**Defaults:** OpenRouter with `z-ai/glm-4.5-air` (set `OPENROUTER_API_KEY` in `.env`). No OpenAI quota needed.
+
+**Pricing:** ~$3–5 for the full ~300-day cache. One run of LLM calls per business day; after that, the autoresearch loop can tune analyst weights with zero further LLM costs.
+
+**Free models:** OpenRouter free models (`:free` suffix, e.g. `z-ai/glm-4.5-air:free` or `nvidia/nemotron-3-nano-30b-a3b:free`) are rate-limited to 16 requests/min. The code auto-throttles when it detects `:free` in the model name, but a full cache takes ~6 hours. Use the paid model for faster runs.
+
+```bash
+# Paid (default) — ~$3–5, no rate limits
+poetry run python -m autoresearch.cache_signals
+
+# Free — ~6h, auto-throttled
+poetry run python -m autoresearch.cache_signals --model z-ai/glm-4.5-air:free --provider OpenRouter
+```
+
+**Cache behavior:** `signals.json` resumes automatically (skips already-cached dates). `prices.json` is **overwritten every run** — the script backs up the previous copy to `prices.json.bak` before replacing. Use `--start` and `--end` to match `params.BACKTEST_START` / `BACKTEST_END` (2025-01-02 → 2026-03-07) so the cache covers the full backtest window.
 
 ### First session results
 
@@ -647,7 +662,7 @@ ai-hedge-fund/
 | Layer | Technology |
 |-------|-----------|
 | Agent orchestration | [LangGraph](https://github.com/langchain-ai/langgraph) |
-| LLM providers | OpenAI, Anthropic, Groq, DeepSeek, Google Gemini, xAI, GigaChat, Ollama |
+| LLM providers | OpenAI, Anthropic, Groq, DeepSeek, Google Gemini, xAI, OpenRouter, GigaChat, Ollama |
 | Financial data | [Financial Datasets](https://financialdatasets.ai/), Yahoo Finance |
 | Backend API | FastAPI, SQLAlchemy, Alembic |
 | Frontend | React, Vite, TypeScript, Tailwind CSS |

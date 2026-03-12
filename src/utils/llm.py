@@ -1,10 +1,17 @@
 """Helper functions for LLM"""
 
 import json
+import threading
+import time
 from pydantic import BaseModel
 from src.llm.models import get_model, get_model_info
 from src.utils.progress import progress
 from src.graph.state import AgentState
+
+# Rate limit for OpenRouter free models (16 req/min) — serialize calls
+_free_model_lock = threading.Lock()
+_free_model_last_call = 0.0
+FREE_MODEL_MIN_INTERVAL = 4.0  # seconds (~15/min, under 16 limit)
 
 
 def call_llm(
@@ -29,7 +36,8 @@ def call_llm(
     Returns:
         An instance of the specified Pydantic model
     """
-    
+    global _free_model_last_call
+
     # Extract model configuration if state is provided and agent_name is available
     if state and agent_name:
         model_name, model_provider = get_agent_model_config(state, agent_name)
@@ -56,10 +64,19 @@ def call_llm(
         )
 
     # Call the LLM with retries
+    use_free_rate_limit = ":free" in (model_name or "")
+
     for attempt in range(max_retries):
         try:
-            # Call the LLM
-            result = llm.invoke(prompt)
+            if use_free_rate_limit:
+                with _free_model_lock:
+                    elapsed = time.time() - _free_model_last_call
+                    if elapsed < FREE_MODEL_MIN_INTERVAL:
+                        time.sleep(FREE_MODEL_MIN_INTERVAL - elapsed)
+                    result = llm.invoke(prompt)
+                    _free_model_last_call = time.time()
+            else:
+                result = llm.invoke(prompt)
 
             # For non-JSON support models, we need to extract and parse the JSON manually
             if model_info and not model_info.has_json_mode():
