@@ -1,4 +1,5 @@
 import sys
+import traceback
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
@@ -97,6 +98,34 @@ def start(state: AgentState):
     return state
 
 
+def create_safe_agent(agent_func, agent_name):
+    """Wrap an agent function so that exceptions are caught and logged
+    instead of crashing the entire workflow. On failure the agent returns
+    an empty result and the remaining agents continue normally."""
+
+    def safe_wrapper(state: AgentState):
+        try:
+            return agent_func(state)
+        except Exception as e:
+            error_msg = f"{agent_name} failed: {e}"
+            print(f"\n{Fore.RED}Warning: {error_msg}{Style.RESET_ALL}")
+            traceback.print_exc()
+            progress.update_status(agent_name, None, f"Error: {e}")
+            # Return an empty result so the workflow can continue
+            # with signals from the agents that succeeded.
+            return {
+                "messages": [
+                    HumanMessage(
+                        content=json.dumps({}),
+                        name=agent_name,
+                    )
+                ],
+                "data": state["data"],
+            }
+
+    return safe_wrapper
+
+
 def create_workflow(selected_analysts=None):
     """Create the workflow with selected analysts."""
     workflow = StateGraph(AgentState)
@@ -111,7 +140,7 @@ def create_workflow(selected_analysts=None):
     # Add selected analyst nodes
     for analyst_key in selected_analysts:
         node_name, node_func = analyst_nodes[analyst_key]
-        workflow.add_node(node_name, node_func)
+        workflow.add_node(node_name, create_safe_agent(node_func, node_name))
         workflow.add_edge("start_node", node_name)
 
     # Always add risk and portfolio management
