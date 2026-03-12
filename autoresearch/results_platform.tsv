@@ -1,2 +1,5 @@
 2026-03-11	baseline (tech params)	val_sharpe=0.9607	val_return=?	OOS=?
 2026-03-11	SIG 0.36 + RISK 0.38	val_sharpe=1.2872	val_return=?	OOS=0.22
+2026-03-11	EMA_LONG 40	val_sharpe=1.3245	OOS=0.24
+2026-03-11	+ RISK_EXTREME 0.60	val_sharpe=1.3487	OOS=0.24
+2026-03-11	SIG 0.32 (OOS-aware)	val_sharpe=1.2122	OOS=0.33

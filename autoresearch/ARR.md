@@ -11,10 +11,10 @@
 | Sector | Sharpe | Return | OOS Sharpe | Status |
 |--------|--------|--------|------------|--------|
 | **Memory** | **2.78** | +301% | **2.98** | Tuned |
-| **Photonics** | **2.24** | — | **2.53** | Tuned (LITE, COHR) |
+| **Photonics** | **2.26** | — | **2.53** | Tuned (RISK_EXT 0.60) |
 | **Tech** | **2.04** | +60% | 1.38 | Tuned |
 | **Equipment** | **1.91** | +99% | **2.39** | Tuned |
-| **Platform** | **1.29** | — | 0.22 | Tuned (MSFT,AMZN,GOOGL,META,ORCL,PLTR) |
+| **Platform** | **1.21** | — | **0.33** | Tuned (EMA 40, RISK_EXT 0.60, SIG 0.32) |
 | **Foundry** | **1.03** | — | **1.22** | Tuned (TSM,GFS,UMC) |
 | **Power (VRT,CEG,EQT)** | **1.12** | +40.8% | **0.68** | Tuned |
 | **Energy** | **0.88** | +24.5% | **1.45** | Tuned |
@@ -26,7 +26,7 @@
 
 **Infrastructure:** Per-sector params (`params_<sector>.py`), `--params` in evaluate.py, PRICES_PATH auto-load, sector programs (`program_<sector>.md`), results logs (`results_<sector>.tsv`).
 
-**Recent tuning (2026-03-11):** Added Foundry (TSM, GFS, UMC) RISK 0.38 → 1.03, OOS 1.22. Platform (MSFT, AMZN, GOOGL, META, ORCL, PLTR) SIG 0.36 + RISK 0.38 → 1.29, OOS 0.22. Photonics (LITE, COHR) SIG 0.36 + RISK 0.38 → 2.24, OOS 2.53.
+**Recent tuning (2026-03-11):** Platform OOS: EMA 40, RISK_EXT 0.60, SIG 0.32 → val 1.21, OOS 0.33. Photonics RISK_EXT 0.60 → 2.26. Networking rescue attempts (SIG 0.28, RISK 0.38) no improvement; OOS -0.09.
 
 ---
 
@@ -582,19 +582,19 @@ poetry run python -m autoresearch.evaluate --params autoresearch.params_equipmen
 
 ## What's Next
 
-1. **Foundry / Platform / Photonics** — ✅ Done. Foundry 1.03 (OOS 1.22), Platform 1.29 (OOS 0.22), Photonics 2.24 (OOS 2.53).
+1. **Foundry / Platform / Photonics** — ✅ Done. Platform OOS tuning: EMA 40, RISK_EXT 0.60, SIG 0.32 → val 1.21, OOS 0.33. Photonics RISK_EXT 0.60 → 2.26.
 
-2. **EDA expansion** — ✅ Added ARM (3-ticker). Best -0.14; strategy still negative for design-tool regime.
+2. **EDA** — No-go. 3-ticker (SNPS, CDNS, ARM) best -0.14; strategy doesn't fit design-tool regime.
 
 3. **Networking OOS** — ✅ EMA_LONG 40 improved OOS -0.11 → -0.09.
 
 4. **Memory/Equipment/Energy** — All tuned. Optional further passes.
 
-5. **Platform OOS** — Val 1.29 strong, OOS 0.22. Try OOS-aware tuning (EMA_LONG, RISK_EXTREME).
+5. **Platform OOS** — ✅ Done. OOS 0.22 → 0.33 via EMA 40, RISK_EXT 0.60, SIG 0.32.
 
 6. **RSI tuning in bear/sideways regimes** — RSI 30/70, 25/75, 20/80 are tunable. Test when market regime shifts.
 
-7. **Rolling window robustness** — ✅ Done. OOS Sharpe: memory 2.98, photonics 2.53, equipment 2.39, tech 1.38, energy 1.45, healthcare 2.71, foundry 1.22, tokenization 0.54, power infra 0.68. Platform 0.22, Networking -0.09.
+7. **Rolling window robustness** — ✅ Done. OOS Sharpe: memory 2.98, photonics 2.53, equipment 2.39, tech 1.38, energy 1.45, healthcare 2.71, foundry 1.22, tokenization 0.54, power infra 0.68, platform 0.33. Networking -0.09.
 
 8. **Cross-asset generalization** — ✅ Done. 12 sectors tuned.
 
