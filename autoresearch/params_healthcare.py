@@ -1,11 +1,10 @@
 """
-autoresearch/params_energy.py — Sector-specific params for energy (XOM, CVX, OXY, SLB, EOG).
+autoresearch/params_healthcare.py — Sector-specific params for healthcare (JNJ, UNH, PFE, ABBV, LLY).
 
-Universe: XOM, CVX, OXY, SLB, EOG
-Regime: Commodity-driven, rate-sensitive. Tech params: full-window Sharpe 0.03, OOS 1.47.
-→ OOS is strong; tune to lift full-window while preserving OOS.
+Universe: JNJ, UNH, PFE, ABBV, LLY
+Regime: Defensive, pharma/biotech, mixed growth/value. Start from tech baseline.
 
-Run: poetry run python -m autoresearch.evaluate --params autoresearch.params_energy
+Run: poetry run python -m autoresearch.evaluate --params autoresearch.params_healthcare
 """
 
 STRATEGY_WEIGHTS = {
@@ -18,11 +17,11 @@ STRATEGY_WEIGHTS = {
 
 EMA_SHORT = 5
 EMA_MEDIUM = 13
-EMA_LONG = 40
+EMA_LONG = 34
 ADX_PERIOD = 26
 
 MA_WINDOW = 50
-BOLLINGER_WINDOW = 30
+BOLLINGER_WINDOW = 20
 BOLLINGER_STD = 5.0
 RSI_SHORT = 14
 RSI_LONG = 28
@@ -38,7 +37,7 @@ MOM_3M_WEIGHT = 0.0
 MOM_6M_WEIGHT = 0.0
 MOM_BULLISH = 0.001
 MOM_BEARISH = -0.001
-MOM_CONFIDENCE_SCALE = 28.0
+MOM_CONFIDENCE_SCALE = 15.0
 
 VOL_HIST_WINDOW = 21
 VOL_MA_WINDOW = 63
@@ -52,10 +51,10 @@ HURST_MAX_LAG = 20
 HURST_THRESHOLD = 0.4
 SKEW_THRESHOLD = 1.0
 
-SIGNAL_BULLISH_THRESHOLD = 0.38
+SIGNAL_BULLISH_THRESHOLD = 0.40
 SIGNAL_BEARISH_THRESHOLD = -0.2
 
-RISK_BASE_LIMIT = 0.38
+RISK_BASE_LIMIT = 0.40
 RISK_VOL_BANDS = [(0.15, 1.25), (0.40, 1.00), (0.70, 1.00)]
 RISK_EXTREME_VOL_MULT = 0.50
 RISK_MED_VOL_DECAY = 0.5
@@ -82,9 +81,9 @@ CONFIDENCE_POWER = 1.0
 POSITION_SIZE_FRACTION = 1.00
 MIN_CONFIDENCE_TO_ACT = 20
 
-BACKTEST_TICKERS = ["XOM", "CVX", "OXY", "SLB", "EOG"]
+BACKTEST_TICKERS = ["JNJ", "UNH", "PFE", "ABBV", "LLY"]
 BACKTEST_START = "2025-01-02"
 BACKTEST_END = "2026-03-07"
 BACKTEST_INITIAL_CASH = 100_000
 BACKTEST_MARGIN_REQ = 0.5
-PRICES_PATH = "prices_energy.json"
+PRICES_PATH = "prices_healthcare.json"

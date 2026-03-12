@@ -10,15 +10,16 @@
 
 | Sector | Sharpe | Return | OOS Sharpe | Status |
 |--------|--------|--------|------------|--------|
-| **Tech** | **2.02** | +58.5% | 1.41 | Tuned |
-| **Equipment** | **1.86** | +95.0% | **2.35** | Tuned |
-| **Memory** | **2.44** | +229.6% | — | Baseline (tech params) |
-| Power | 0.04 | +4.0% | — | Needs tuning |
-| Energy | 0.03 | +3.8% | — | Does not generalize |
+| **Memory** | **2.78** | +301% | **2.98** | Tuned |
+| **Tech** | **2.04** | +60% | 1.38 | Tuned |
+| **Equipment** | **1.91** | +99% | **2.39** | Tuned |
+| **Energy** | **0.88** | +24.5% | **1.45** | Tuned |
+| **Healthcare** | **0.39** | +12.2% | **2.71** | Tuned |
+| Power | -1.27 | — | — | Overfit, unusable |
 
-**Infrastructure:** Per-sector params framework (`params_equipment.py`, `params_power.py`, `params_memory.py`), `--params` flag in evaluate.py, PRICES_PATH auto-load, overnight autoresearch loop (`program_equipment.md`, `run_overnight_equipment.sh`).
+**Infrastructure:** Per-sector params (`params_<sector>.py`), `--params` in evaluate.py, PRICES_PATH auto-load, sector programs (`program_<sector>.md`), results logs (`results_<sector>.tsv`).
 
-**Equipment journey:** 1.63 → 1.86 (+14%) via MOM_3M 0.1, signal thresholds (0.28 / -0.15), VOL_Z_BEARISH 1.5, BOLLINGER_WINDOW 30, RISK_EXTREME_VOL_MULT 0.60. OOS 2.09 → 2.35.
+**Recent tuning (2026-03-11):** Tech deeper tuning (no improvement, 2.04 held). Energy: MOM_CONF 28, EMA_LONG 40 → 0.87. Healthcare: new sector (JNJ, UNH, PFE, ABBV, LLY), SIG_BULL 0.40, RISK_BASE 0.40 → 0.39, OOS 2.71.
 
 ---
 
@@ -35,7 +36,8 @@
 | Session 7 | 2026-03-12 | — | — | Cross-asset | tech 2.02 / energy 0.03 |
 | Session 8 | 2026-03-12 | 2 | ~15 | low-vol (saturated) + equip baseline | **equip 1.70** |
 | Session 9 | 2026-03-12 | 5 | ~50 | equip 1.70 | **equip 1.86** |
-| **Total** | | **~52** | **~300** | **-2.31** | **tech 2.02 / equip 1.86 / memory 2.44** |
+| Session 10 | 2026-03-11 | — | ~25 | tech/energy/healthcare | **tech 2.04 / energy 0.88 / healthcare 0.39** |
+| **Total** | | **~52** | **~325** | **-2.31** | **memory 2.78 / tech 2.04 / equip 1.91 / energy 0.88 / healthcare 0.39** |
 
 ---
 
@@ -573,17 +575,17 @@ poetry run python -m autoresearch.evaluate --params autoresearch.params_equipmen
 
 ## What's Next
 
-1. **Equipment overnight autoresearch** — Run full loop on `params_equipment.py`. Baseline to beat: Sharpe 1.86, OOS 2.35. `bash autoresearch/run_overnight_equipment.sh` + point AI at `program_equipment.md`.
+1. **Healthcare deeper tuning** — Baseline 0.39, OOS 2.71. Try MOM_CONF, STRATEGY_WEIGHTS, RISK_EXTREME per memory/energy patterns.
 
-2. **Memory autoresearch** — Optional. Baseline 2.44 with tech params is already excellent. Create `program_memory.md` and tune if desired.
+2. **Memory/Equipment/Energy** — All tuned. Optional further passes.
 
-3. **Power autoresearch** — `params_power.py` exists (Sharpe 0.04). Run autoresearch to improve; mean-reversion regime needs different calibration.
+3. **Power** — OOS ≈ -1.27 for all variants; strong overfitting. No usable config yet.
 
 4. **RSI tuning in bear/sideways regimes** — RSI 30/70, 25/75, 20/80 are tunable. Test when market regime shifts.
 
-5. **Rolling window robustness** — ✅ Done. OOS (second half) Sharpe 1.41 (tech), 2.35 (equipment).
+5. **Rolling window robustness** — ✅ Done. OOS Sharpe: tech 1.38, equipment 2.39, memory 2.98, energy 1.45, healthcare 2.71.
 
-6. **Cross-asset generalization** — ✅ Done. Tech 2.02, Energy 0.03, Equipment 1.86, Memory 2.44, Power 0.04.
+6. **Cross-asset generalization** — ✅ Done. Memory 2.78, Tech 2.04, Equipment 1.91, Energy 0.88, Healthcare 0.39.
 
 7. **LLM agent re-enablement** — ✅ Tested. Technical-only remains best.
 

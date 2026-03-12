@@ -1,0 +1,4 @@
+2026-03-11T18:10	baseline (tech params)	val_sharpe=-0.0442	val_return=+2.71%	OOS=?
+2026-03-11T18:12	SIGNAL_BULLISH_THRESHOLD 0.2→0.36	val_sharpe=0.0914	val_return=?	OOS=?
+2026-03-11T18:14	RISK_BASE_LIMIT 0.30→0.40	val_sharpe=0.2374	val_return=?	OOS=?
+2026-03-11T18:16	SIGNAL_BULLISH_THRESHOLD 0.36→0.40	val_sharpe=0.3864	val_return=+12.19%	OOS=2.71
