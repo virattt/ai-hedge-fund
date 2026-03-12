@@ -42,7 +42,7 @@ poetry run python -m autoresearch.evaluate --params autoresearch.params_memory \
 
 ### Step 5: Compare and decide
 
-**Baseline to beat:** `val_sharpe=2.7601, val_return=+294.73%, OOS=2.99`
+**Baseline to beat:** `val_sharpe=2.7770, val_return=+299.46%, OOS=3.01`
 
 - **If better** → commit and log to results_memory.tsv
 - **If worse or equal** → revert
