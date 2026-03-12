@@ -18,9 +18,9 @@ RULES (for the AI agent):
 STRATEGY_WEIGHTS = {
     "trend": 0.25,
     "mean_reversion": 0.20,
-    "momentum": 0.35,
+    "momentum": 0.45,
     "volatility": 0.10,
-    "stat_arb": 0.10,
+    "stat_arb": 0.00,
 }
 
 # ─────────────────────────────────────────────────────────────
