@@ -14,10 +14,42 @@
 
 ## Backtest Results
 
-Regime scaling simulates holding `(1 - scale)` in cash when bear/sideways. Run:
+Regime scaling simulates holding `(1 - scale)` in cash when bear/sideways.
+The upgraded backtest also includes:
+- execution lag (default 1 day)
+- turnover/slippage cost model
+- hysteresis state machine (confirm + min-hold)
+- optional multi-timeframe Renko confirmation (fast + slow ATR multipliers)
+
+Baseline run:
 
 ```bash
 poetry run python -m autoresearch.backtest_regime --weights oos --renko-ticker NVDA
+```
+
+More realistic / configurable run:
+
+```bash
+poetry run python -m autoresearch.backtest_regime \
+  --weights oos \
+  --renko-ticker NVDA \
+  --execution-lag-days 1 \
+  --slippage-bps 5 \
+  --confirm-days 2 \
+  --min-hold-days 5 \
+  --atr-mult-fast 1.0 \
+  --atr-mult-slow 2.0
+```
+
+Walk-forward parameter search (rolling train/test):
+
+```bash
+poetry run python -m autoresearch.backtest_regime \
+  --weights oos \
+  --renko-ticker NVDA \
+  --walk-forward \
+  --wf-train-days 252 \
+  --wf-test-days 63
 ```
 
 | Variant           | Sharpe | Sortino | Max DD  | Return  |
@@ -43,6 +75,12 @@ Smoother view (fewer bricks, macro):
 
 ```bash
 poetry run python -m autoresearch.renko_bbwas --ticker BTC --atr-mult 2.0
+```
+
+Multi-timeframe BTC confirmation (fast+slow):
+
+```bash
+poetry run python -m autoresearch.renko_bbwas --ticker BTC --atr-mult 1.0 --atr-mult-slow 2.0
 ```
 
 Requires `autoresearch/cache/prices_btc.json`. To refresh (run from project root):

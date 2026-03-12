@@ -10,6 +10,7 @@ from autoresearch.renko_bbwas import (
     compute_atr,
     compute_bbwas,
     renko_regime,
+    renko_regime_mtf,
     renko_trend_score,
 )
 
@@ -119,6 +120,10 @@ class TestComputeBBWAS:
         assert bbwas["bandwidth"] == 0.0
         assert bbwas["squeeze"] is False
 
+    def test_squeeze_quality_bounds(self):
+        bbwas = compute_bbwas(np.array([100.0] * 40), bb_period=10)
+        assert 0.0 <= bbwas["squeeze_quality"] <= 1.0
+
 
 class TestClassifyRegime:
     def test_trending_bull_expanding(self):
@@ -143,6 +148,12 @@ class TestClassifyRegime:
         bbwas = {"squeeze": False, "expanding": False, "bandwidth": 0.05}
         result = classify_regime(0.1, bbwas)
         assert result["regime"] == "neutral"
+
+    def test_confidence_field_present(self):
+        bbwas = {"squeeze": False, "expanding": True, "bandwidth": 0.1}
+        result = classify_regime(0.8, bbwas)
+        assert "confidence" in result
+        assert 0.0 <= result["confidence"] <= 1.0
 
 
 class TestRenkoRegimeIntegration:
@@ -172,3 +183,10 @@ class TestRenkoRegimeIntegration:
     def test_missing_ticker_returns_neutral(self):
         sig = renko_regime("ZZZZZZ_NONEXISTENT")
         assert sig["regime"] == "neutral"
+
+    def test_mtf_signal(self):
+        closes = [100 + i * 2 for i in range(100)]
+        df = _make_ohlc(closes, spread=1.5)
+        sig = renko_regime_mtf("TEST", ohlc_df=df, atr_mult_fast=1.0, atr_mult_slow=2.0)
+        assert "mtf_confirmed" in sig
+        assert "confidence" in sig

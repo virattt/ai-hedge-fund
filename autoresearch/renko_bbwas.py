@@ -102,9 +102,10 @@ def compute_bbwas(
 
     Returns:
         bandwidth: current band width as fraction of midline
-        bandwidth_history: recent bandwidth values
         squeeze: True if bandwidth is below its rolling 25th percentile
         expanding: True if bandwidth is increasing
+        squeeze_threshold: rolling 25th percentile used for squeeze detection
+        squeeze_quality: 0-1, deeper squeeze -> higher quality
         upper: upper band value
         lower: lower band value
         mid: midline (SMA)
@@ -114,6 +115,8 @@ def compute_bbwas(
             "bandwidth": 0.0,
             "squeeze": False,
             "expanding": False,
+            "squeeze_threshold": 0.0,
+            "squeeze_quality": 0.0,
             "upper": 0.0,
             "lower": 0.0,
             "mid": 0.0,
@@ -135,6 +138,10 @@ def compute_bbwas(
     recent_bw = bandwidth.tail(squeeze_window)
     squeeze_threshold = float(recent_bw.quantile(0.25))
     is_squeeze = current_bw <= squeeze_threshold and current_bw > 0
+    squeeze_quality = 0.0
+    if squeeze_threshold > 0 and is_squeeze:
+        # 0 means just at threshold; 1 means very tight compression.
+        squeeze_quality = max(0.0, min(1.0, 1.0 - (current_bw / squeeze_threshold)))
 
     # Expanding: bandwidth increasing over last 3 readings
     if len(bandwidth) >= 4:
@@ -147,6 +154,8 @@ def compute_bbwas(
         "bandwidth": current_bw,
         "squeeze": is_squeeze,
         "expanding": is_expanding,
+        "squeeze_threshold": squeeze_threshold,
+        "squeeze_quality": squeeze_quality,
         "upper": float(upper.iloc[-1]),
         "lower": float(lower.iloc[-1]),
         "mid": float(mid.iloc[-1]),
@@ -178,6 +187,7 @@ def classify_regime(
             "direction": "neutral",
             "energy": "squeeze",
             "scale": 0.5,
+            "confidence": 0.5 + 0.5 * bbwas.get("squeeze_quality", 0.0),
         }
 
     if trend_score >= trend_threshold:
@@ -194,19 +204,71 @@ def classify_regime(
     else:
         energy = "neutral"
 
+    # Confidence combines directional conviction and volatility context.
+    trend_component = min(1.0, abs(trend_score))
+    bw_component = min(1.0, bandwidth / 0.75) if bandwidth > 0 else 0.0
+    confidence = 0.6 * trend_component + 0.4 * bw_component
+
     if direction == "bull" and energy == "expanding":
-        return {"regime": "trending_bull", "direction": "bull", "energy": energy, "scale": 1.0}
+        return {"regime": "trending_bull", "direction": "bull", "energy": energy, "scale": 1.0, "confidence": confidence}
     if direction == "bear" and energy == "expanding":
-        return {"regime": "trending_bear", "direction": "bear", "energy": energy, "scale": 0.35}
+        return {"regime": "trending_bear", "direction": "bear", "energy": energy, "scale": 0.35, "confidence": confidence}
     if direction == "bull" and energy == "contracting":
-        return {"regime": "trending_bull", "direction": "bull", "energy": energy, "scale": 0.75}
+        return {"regime": "trending_bull", "direction": "bull", "energy": energy, "scale": 0.75, "confidence": confidence}
     if direction == "bear" and energy == "contracting":
-        return {"regime": "trending_bear", "direction": "bear", "energy": energy, "scale": 0.5}
+        return {"regime": "trending_bear", "direction": "bear", "energy": energy, "scale": 0.5, "confidence": confidence}
 
     if direction == "neutral":
-        return {"regime": "neutral", "direction": "neutral", "energy": energy, "scale": 0.6}
+        return {"regime": "neutral", "direction": "neutral", "energy": energy, "scale": 0.6, "confidence": confidence}
 
-    return {"regime": "neutral", "direction": direction, "energy": energy, "scale": 0.6}
+    return {"regime": "neutral", "direction": direction, "energy": energy, "scale": 0.6, "confidence": confidence}
+
+
+def combine_renko_timeframes(
+    fast_sig: dict,
+    slow_sig: dict,
+    require_agreement: bool = True,
+) -> dict:
+    """
+    Combine fast and slow Renko signals.
+
+    If require_agreement=True:
+    - matching directional signals -> use the more conservative (lower) scale
+    - disagreement -> neutralized risk posture
+    """
+    fast_dir = fast_sig.get("direction", "neutral")
+    slow_dir = slow_sig.get("direction", "neutral")
+    fast_scale = float(fast_sig.get("scale", 0.6))
+    slow_scale = float(slow_sig.get("scale", 0.6))
+
+    if not require_agreement:
+        merged = dict(fast_sig)
+        merged["scale"] = min(fast_scale, slow_scale)
+        merged["confidence"] = (float(fast_sig.get("confidence", 0.5)) + float(slow_sig.get("confidence", 0.5))) / 2
+        return merged
+
+    if fast_dir == slow_dir and fast_dir in {"bull", "bear"}:
+        merged = dict(fast_sig)
+        merged["scale"] = min(fast_scale, slow_scale)
+        merged["confidence"] = (float(fast_sig.get("confidence", 0.5)) + float(slow_sig.get("confidence", 0.5))) / 2
+        merged["mtf_confirmed"] = True
+        return merged
+
+    # Conflicting or neutral -> reduce risk, keep directional call neutral.
+    return {
+        "regime": "neutral",
+        "direction": "neutral",
+        "energy": "contracting",
+        "scale": min(0.6, max(fast_scale, slow_scale)),
+        "confidence": min(float(fast_sig.get("confidence", 0.5)), float(slow_sig.get("confidence", 0.5))),
+        "brick_trend": fast_sig.get("brick_trend", 0.0),
+        "bandwidth": fast_sig.get("bandwidth", 0.0),
+        "squeeze": bool(fast_sig.get("squeeze", False) or slow_sig.get("squeeze", False)),
+        "n_bricks": fast_sig.get("n_bricks", 0),
+        "brick_size": fast_sig.get("brick_size", 0.0),
+        "ticker": fast_sig.get("ticker", ""),
+        "mtf_confirmed": False,
+    }
 
 
 def load_ohlc_from_cache(
@@ -243,6 +305,7 @@ def renko_regime(
     bb_period: int = 20,
     bb_std: float = 2.0,
     brick_lookback: int = 10,
+    trend_threshold: float = 0.3,
     prices_path: Optional[Path] = None,
     ohlc_df: Optional[pd.DataFrame] = None,
 ) -> dict:
@@ -256,6 +319,7 @@ def renko_regime(
         bb_period: Bollinger Band lookback
         bb_std: Bollinger Band standard deviations
         brick_lookback: Number of recent bricks for trend scoring
+        trend_threshold: Absolute trend score required for directional call
         prices_path: Override cache path
         ohlc_df: Pre-loaded OHLC DataFrame (skips cache load)
 
@@ -289,13 +353,14 @@ def renko_regime(
     trend = renko_trend_score(bricks, lookback=brick_lookback)
     renko_closes = np.array([b["end"] for b in bricks])
     bbwas = compute_bbwas(renko_closes, bb_period=bb_period, bb_std=bb_std)
-    classification = classify_regime(trend, bbwas)
+    classification = classify_regime(trend, bbwas, trend_threshold=trend_threshold)
 
     return {
         **classification,
         "brick_trend": round(trend, 3),
         "bandwidth": round(bbwas["bandwidth"], 4),
         "squeeze": bbwas["squeeze"],
+        "squeeze_quality": round(bbwas.get("squeeze_quality", 0.0), 3),
         "n_bricks": len(bricks),
         "brick_size": round(brick_size, 2),
         "ticker": ticker,
@@ -310,6 +375,22 @@ def renko_regime_multi(
     return {t: renko_regime(t, **kwargs) for t in tickers}
 
 
+def renko_regime_mtf(
+    ticker: str,
+    atr_mult_fast: float = 1.0,
+    atr_mult_slow: float = 2.0,
+    require_agreement: bool = True,
+    **kwargs,
+) -> dict:
+    """Run fast+slow Renko and combine into a single multi-timeframe signal."""
+    fast_sig = renko_regime(ticker, atr_mult=atr_mult_fast, **kwargs)
+    slow_sig = renko_regime(ticker, atr_mult=atr_mult_slow, **kwargs)
+    merged = combine_renko_timeframes(fast_sig, slow_sig, require_agreement=require_agreement)
+    merged["atr_mult_fast"] = atr_mult_fast
+    merged["atr_mult_slow"] = atr_mult_slow
+    return merged
+
+
 def main():
     import argparse
 
@@ -321,6 +402,10 @@ def main():
                         help="ATR multiplier for brick size (higher = smoother, fewer bricks)")
     parser.add_argument("--bb-period", type=int, default=20)
     parser.add_argument("--lookback", type=int, default=10, help="Recent bricks for trend scoring")
+    parser.add_argument("--atr-mult-slow", type=float, default=0.0,
+                        help="Optional slow ATR multiplier for MTF confirmation (e.g. 2.0)")
+    parser.add_argument("--no-mtf-confirm", action="store_true",
+                        help="When using --atr-mult-slow, do not require fast/slow agreement")
     args = parser.parse_args()
 
     if args.all_tickers:
@@ -339,17 +424,66 @@ def main():
     print(f"{'Ticker':>8} {'Regime':>16} {'Dir':>8} {'Energy':>12} {'Scale':>6} {'Trend':>7} {'BW':>7} {'Sqz':>5} {'Bricks':>7}")
     print("-" * 95)
 
+    last_sig = None
     for ticker in tickers:
-        sig = renko_regime(
-            ticker,
-            atr_period=args.atr_period,
-            atr_mult=args.atr_mult,
-            bb_period=args.bb_period,
-            brick_lookback=args.lookback,
-        )
+        if args.atr_mult_slow and args.atr_mult_slow > 0:
+            sig = renko_regime_mtf(
+                ticker,
+                atr_mult_fast=args.atr_mult,
+                atr_mult_slow=args.atr_mult_slow,
+                require_agreement=not args.no_mtf_confirm,
+                atr_period=args.atr_period,
+                bb_period=args.bb_period,
+                brick_lookback=args.lookback,
+            )
+        else:
+            sig = renko_regime(
+                ticker,
+                atr_period=args.atr_period,
+                atr_mult=args.atr_mult,
+                bb_period=args.bb_period,
+                brick_lookback=args.lookback,
+            )
+        last_sig = sig
         sqz = "YES" if sig["squeeze"] else ""
         print(f"{sig['ticker']:>8} {sig['regime']:>16} {sig['direction']:>8} {sig['energy']:>12} "
               f"{sig['scale']:>6.2f} {sig['brick_trend']:>+7.3f} {sig['bandwidth']:>7.4f} {sqz:>5} {sig['n_bricks']:>7}")
+
+    if len(tickers) == 1 and last_sig is not None:
+        print()
+        print(_format_conclusion(last_sig))
+
+
+def _format_conclusion(sig: dict) -> str:
+    """Human-readable conclusion from Renko+BBWAS signal."""
+    regime = sig.get("regime", "neutral")
+    direction = sig.get("direction", "neutral")
+    energy = sig.get("energy", "neutral")
+    scale = sig.get("scale", 0.6)
+    squeeze = sig.get("squeeze", False)
+    confidence = float(sig.get("confidence", 0.5))
+    ticker = sig.get("ticker", "")
+
+    if regime == "squeeze":
+        return (
+            f"Conclusion: {ticker} in squeeze. Bands compressed — big move loading. "
+            f"Scale to {scale:.0%} until direction clears (confidence {confidence:.0%})."
+        )
+    if regime == "trending_bear":
+        return (
+            f"Conclusion: Bearish. Red bricks dominate, bands expanding. "
+            f"Momentum down — scale position to {scale:.0%} (confidence {confidence:.0%})."
+        )
+    if regime == "trending_bull":
+        return (
+            f"Conclusion: Bullish. Green bricks dominate, bands expanding. "
+            f"Momentum up — scale position to {scale:.0%} (confidence {confidence:.0%})."
+        )
+    if direction == "bear" and energy == "contracting":
+        return f"Conclusion: Bearish but energy contracting. Move may be exhausting — scale to {scale:.0%}."
+    if direction == "bull" and energy == "contracting":
+        return f"Conclusion: Bullish but energy contracting. Move may be exhausting — scale to {scale:.0%}."
+    return f"Conclusion: Neutral. Mixed or insufficient conviction — scale to {scale:.0%}."
 
 
 if __name__ == "__main__":
