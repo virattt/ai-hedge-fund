@@ -72,6 +72,13 @@ const LLM_API_KEYS: ApiKey[] = [
     description: 'For GigaChat models (GigaChat-2-Max, etc.)',
     url: 'https://github.com/ai-forever/gigachat',
     placeholder: 'your-gigachat-api-key'
+  },
+  {
+    key: 'MINIMAX_API_KEY',
+    label: 'MiniMax API',
+    description: 'For MiniMax models (MiniMax-M2.5, MiniMax-M2.5-highspeed)',
+    url: 'https://platform.minimax.io/',
+    placeholder: 'your-minimax-api-key'
   }
 ];
 
