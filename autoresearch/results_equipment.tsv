@@ -1,2 +1,3 @@
 2026-03-12T13:34	MOM_3M_WEIGHT 0.0→0.1, MOM_1M 1.0→0.9	val_sharpe=1.7705	val_return=+89.84%	val_max_dd=-17.6%
 2026-03-12T13:36	SIGNAL_BULLISH_THRESHOLD 0.2→0.25 (stricter bull filter)	val_sharpe=1.7875	val_return=+90.78%	val_max_dd=-17.59%
+2026-03-12T13:38	SIG_BULL 0.25→0.28 + SIG_BEAR -0.2→-0.15 + VOL_Z_BEAR 2.0→1.5	val_sharpe=1.8464	val_return=+94.23%	val_max_dd=-17.55%	OOS=2.359

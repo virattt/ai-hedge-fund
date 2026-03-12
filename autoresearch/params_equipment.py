@@ -78,7 +78,7 @@ VOL_MA_WINDOW = 63
 VOL_LOW_REGIME = 0.95
 VOL_HIGH_REGIME = 1.2
 VOL_Z_BULLISH = -0.5
-VOL_Z_BEARISH = 2.0
+VOL_Z_BEARISH = 1.5
 
 # Statistical Arbitrage
 STAT_ARB_ROLLING = 63
@@ -87,8 +87,8 @@ HURST_THRESHOLD = 0.4
 SKEW_THRESHOLD = 1.0
 
 # Final signal classification
-SIGNAL_BULLISH_THRESHOLD = 0.25
-SIGNAL_BEARISH_THRESHOLD = -0.2
+SIGNAL_BULLISH_THRESHOLD = 0.28
+SIGNAL_BEARISH_THRESHOLD = -0.15
 
 # ─────────────────────────────────────────────────────────────
 # 3. RISK MANAGEMENT — Position Sizing
