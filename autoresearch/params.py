@@ -79,8 +79,8 @@ RISK_BASE_LIMIT = 0.30
 RISK_VOL_BANDS = [
     # (max_annualized_vol, multiplier)
     (0.15, 1.25),   # Low vol → modest boost
-    (0.30, 0.90),   # Medium vol → slight reduction
-    (0.50, 0.60),   # High vol → more aggressive reduction
+    (0.40, 1.00),   # Medium vol → no penalty (widen band)
+    (0.70, 0.80),   # High vol → moderate reduction
 ]
 RISK_EXTREME_VOL_MULT = 0.50
 RISK_MED_VOL_DECAY = 0.5
