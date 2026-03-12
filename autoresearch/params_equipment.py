@@ -87,7 +87,7 @@ HURST_THRESHOLD = 0.4
 SKEW_THRESHOLD = 1.0
 
 # Final signal classification
-SIGNAL_BULLISH_THRESHOLD = 0.28
+SIGNAL_BULLISH_THRESHOLD = 0.30
 SIGNAL_BEARISH_THRESHOLD = -0.15
 
 # ─────────────────────────────────────────────────────────────
