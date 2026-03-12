@@ -408,6 +408,36 @@ Improve out-of-sample (second half) Sharpe without hurting full-window performan
 
 ---
 
+## Session 6 — LLM Agent + OOS Tuning (2026-03-12)
+
+### LLM agent re-enablement (reverted)
+
+Tested adding one growth/momentum agent at 0.1–0.2 weight:
+
+| Agent | Weight | Sharpe | Max DD | Result |
+|-------|--------|--------|--------|--------|
+| cathie_wood | 0.1 | 0.10 | -31% | Much worse |
+| stanley_druckenmiller | 0.1 | 0.46 | -30% | Much worse |
+| growth_analyst | 0.1 | 1.84 | -8.3% | Worse |
+| sentiment_analyst | 0.1 | 1.37 | -7.6% | Worse |
+| news_sentiment | 0.1, 0.2 | 2.02 | -8.2% | Neutral (no change) |
+
+**Conclusion:** LLM agents are bearish or neutral on tech. Technical-only (2.02) remains best.
+
+### OOS tuning (reverted)
+
+Tested on second half (`--start 2025-08-01 --end 2026-03-07`):
+
+| Param | Change | OOS Sharpe | Full Sharpe | Result |
+|-------|--------|------------|-------------|--------|
+| MIN_CONFIDENCE_TO_ACT | 20 → 25 | 1.41 | 2.02 | No change |
+| BUY_THRESHOLD | 0.05 → 0.06 | 1.41 | 2.02 | No change |
+| SELL_THRESHOLD | -0.05 → -0.04 | 1.41 | 2.02 | No change |
+
+**Conclusion:** These params have no marginal effect at current calibration.
+
+---
+
 ## What's Next
 
 1. **RSI tuning in bear/sideways regimes** — RSI 30/70, 25/75, 20/80 are now tunable. Test when market regime shifts.
@@ -416,7 +446,7 @@ Improve out-of-sample (second half) Sharpe without hurting full-window performan
 
 3. **Cross-asset generalization** — run the same params on a different universe (e.g., energy, biotech) to test whether these findings are AAPL/NVDA-specific or generalizable.
 
-4. **Selective LLM agent re-enablement** — try adding one growth/momentum agent (e.g. cathie_wood, stanley_druckenmiller) at 0.2 weight to see if any LLM signal adds alpha without the bearish drag.
+4. **Selective LLM agent re-enablement** — ✅ Tested (Session 6). cathie_wood 0.1 → Sharpe 0.10, -31% dd. stanley_druckenmiller 0.1 → 0.46. growth_analyst 0.1 → 1.84. sentiment_analyst 0.1 → 1.37. news_sentiment 0.1/0.2 → 2.02 (neutral, no improvement). **Conclusion:** All LLM agents except news_sentiment hurt; news_sentiment is neutral. Technical-only remains best.
 
 ---
 

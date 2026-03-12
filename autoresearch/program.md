@@ -133,7 +133,9 @@ The strategy is running in Mode 1 (technical-only). The system is now correctly 
 
 **Session 2 tested:** MOM_3M 0.2 (worse), EMA shorter (worse), ADX 18/26/28 (26 best), VOLATILITY_LOOKBACK 40/50 (worse), fundamentals 0.05 (same).
 
-**Still untried:** `RISK_BASE_LIMIT`, low-vol band multiplier, `SELL_THRESHOLD`.
+**Session 6 tested:** cathie/stanley/growth/sentiment/news_sentiment agents — all hurt or neutral. MIN_CONF 25, BUY 0.06, SELL -0.04 — no effect.
+
+**Still untried:** low-vol band multiplier, cross-asset test.
 
 **To get Mode 2 (2.02):** Run `cache_signals.py` first, then `evaluate`. Ensure `signals.json` exists in `autoresearch/cache/`.
 
