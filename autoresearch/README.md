@@ -3,6 +3,18 @@
 > *"Any metric you care about that is reasonably efficient to evaluate can be autoresearched by an agent swarm."*
 > — Andrej Karpathy
 
+**Quick reference:** See [`RUNBOOK.md`](RUNBOOK.md) for reproducibility, price refresh, sector tuning, portfolio backtest, paper trading, and daily automation.
+
+| Task | Command |
+|------|---------|
+| Sector eval | `poetry run python -m autoresearch.evaluate --params autoresearch.params_<sector>` |
+| Portfolio backtest | `poetry run python -m autoresearch.portfolio_backtest --weights oos` |
+| Paper trading (execute) | `poetry run python -m autoresearch.paper_trading --execute` |
+| Daily run | `./autoresearch/run_daily.sh` |
+| Performance report | `poetry run python -m autoresearch.performance_tracker report` |
+| Sector correlation | `poetry run python -m autoresearch.sector_correlation` |
+| Walk-forward validation | `poetry run python -m autoresearch.walk_forward` |
+
 ---
 
 ## Progress Summary (as of Session 8–9)

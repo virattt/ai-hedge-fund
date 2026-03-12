@@ -65,6 +65,34 @@ SECTOR_OOS_SHARPE = {
     "healthcare": 2.71,
 }
 
+# Regime-specific weights (run refresh_oos_weights --regime to update)
+SECTOR_OOS_SHARPE_BULL = {
+    "memory": 3.5,
+    "photonics": 2.8,
+    "tech": 1.8,
+    "equipment": 2.6,
+    "platform": 0.5,
+    "foundry": 1.5,
+    "power_infra": 0.9,
+    "energy": 1.2,
+    "networking": 0.2,
+    "tokenization": 0.8,
+    "healthcare": 2.2,
+}
+SECTOR_OOS_SHARPE_BEAR = {
+    "memory": 2.2,
+    "photonics": 2.0,
+    "tech": 0.8,
+    "equipment": 1.8,
+    "platform": 0.1,
+    "foundry": 0.7,
+    "power_infra": 0.4,
+    "energy": 1.8,
+    "networking": -0.3,
+    "tokenization": 0.2,
+    "healthcare": 3.2,
+}
+
 
 def load_params(module_name: str):
     params_mod = importlib.import_module(module_name)
@@ -144,6 +172,30 @@ def compute_portfolio_metrics(returns: pd.Series) -> dict:
     }
 
 
+def load_benchmark_returns(benchmark_ticker: str = "SPY", start: str | None = None, end: str | None = None) -> pd.Series | None:
+    """Load benchmark daily returns from cache."""
+    import json
+    cache_dir = Path(__file__).resolve().parent / "cache"
+    path = cache_dir / "prices_benchmark.json"
+    if benchmark_ticker != "SPY":
+        path = cache_dir / "prices.json"
+    if not path.exists():
+        return None
+    with open(path) as f:
+        raw = json.load(f)
+    if benchmark_ticker not in raw or not raw[benchmark_ticker]:
+        return None
+    df = pd.DataFrame(raw[benchmark_ticker])
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.set_index("date").sort_index()
+    ret = df["close"].pct_change().dropna()
+    if start:
+        ret = ret.loc[ret.index >= pd.Timestamp(start)]
+    if end:
+        ret = ret.loc[ret.index <= pd.Timestamp(end)]
+    return ret
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--weights", choices=["equal", "sharpe", "oos", "risk_parity", "min_vol"], default="equal",
@@ -153,6 +205,8 @@ def main():
     parser.add_argument("--start", type=str, help="Override BACKTEST_START (OOS window)")
     parser.add_argument("--end", type=str, help="Override BACKTEST_END (OOS window)")
     parser.add_argument("--cost-bps", type=float, default=0, help="Transaction cost in bps (e.g. 10 = 0.1%%)")
+    parser.add_argument("--benchmark", type=str, default="SPY", help="Benchmark ticker for alpha/beta (default SPY)")
+    parser.add_argument("--no-benchmark", action="store_true", help="Disable benchmark comparison")
     args = parser.parse_args()
 
     exclude = {s.strip() for s in args.exclude.split(",") if s.strip()}
@@ -229,6 +283,23 @@ def main():
     print(f"  Sortino:   {metrics['sortino']:.4f}")
     print(f"  Max DD:    {metrics['max_dd']:.2f}%")
     print(f"  Return:   {metrics['total_return_pct']:+.2f}%")
+
+    if args.benchmark and not args.no_benchmark:
+        bench = load_benchmark_returns(args.benchmark, args.start, args.end)
+        if bench is not None and len(portfolio_ret) > 0:
+            common = portfolio_ret.index.intersection(bench.index)
+            if len(common) >= 2:
+                p = portfolio_ret.reindex(common).fillna(0)
+                b = bench.reindex(common).fillna(0)
+                cov = np.cov(p, b)
+                beta = cov[0, 1] / (cov[1, 1] + 1e-12)
+                alpha_ann = (p.mean() - beta * b.mean()) * 252 * 100
+                bench_ret = (1 + b).prod() - 1
+                port_ret_cum = (1 + p).prod() - 1
+                print(f"  vs {args.benchmark}: alpha(ann)={alpha_ann:+.1f}%  beta={beta:.2f}  port={port_ret_cum*100:+.1f}%  bench={bench_ret*100:+.1f}%")
+        else:
+            print(f"  (No {args.benchmark} benchmark in cache. Run refresh_all_prices.sh)")
+
     print()
     print("Weights:", {s: f"{w[s]:.2%}" for s in sorted(w.keys())})
 

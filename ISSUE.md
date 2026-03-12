@@ -123,3 +123,15 @@ This eliminates all the "No headline provided" parsing errors and the wasted ret
 
 **Remaining issue:** OpenAI `429 insufficient_quota` is a billing/credits problem, not a code bug. Top up credits or switch to another provider (e.g., `--provider Groq` or `--provider Ollama`) before re-running the full signal cache.
 
+---
+
+### 429 abort fix applied
+
+**cache_signals.py** now detects `429` or `insufficient_quota` in exceptions and:
+- Aborts immediately (no endless retries)
+- Prints a clear message: "QUOTA EXHAUSTED (429)"
+- Writes `meta.json` with `aborted: "quota_exhausted"` and `has_signals: false`
+- Exits with status 1
+
+Users can run `cache_signals` without spinning on quota errors; the job fails fast and partial cache is preserved.
+

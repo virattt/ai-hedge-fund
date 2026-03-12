@@ -34,7 +34,12 @@ warnings.filterwarnings("ignore", message="invalid value encountered", category=
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-RESULTS_FILE = Path(__file__).resolve().parent / "results.tsv"
+def _results_file(params_module: str | None) -> Path:
+    base = Path(__file__).resolve().parent
+    if params_module and "params_" in params_module:
+        sector = params_module.split("params_")[-1]
+        return base / f"results_{sector}.tsv"
+    return base / "results.tsv"
 
 
 def load_params(module_name: str = "autoresearch.params"):
@@ -78,10 +83,11 @@ def run_evaluation(start=None, end=None, tickers=None, prices_path=None, params_
     return metrics
 
 
-def append_result(metrics: dict, elapsed_ms: int):
+def append_result(metrics: dict, elapsed_ms: int, results_path: Path | None = None):
     """Append one row to results.tsv."""
-    header_needed = not RESULTS_FILE.exists() or RESULTS_FILE.stat().st_size == 0
-    with open(RESULTS_FILE, "a") as f:
+    path = results_path or _results_file(None)
+    header_needed = not path.exists() or path.stat().st_size == 0
+    with open(path, "a") as f:
         if header_needed:
             f.write("timestamp\tsharpe\tsortino\tmax_dd\ttotal_ret\telapsed_ms\n")
         f.write(
@@ -115,7 +121,8 @@ def main():
         sys.exit(1)
 
     elapsed_ms = int((time.time() - t0) * 1000)
-    append_result(metrics, elapsed_ms)
+    results_path = _results_file(args.params)
+    append_result(metrics, elapsed_ms, results_path)
 
     # The single metric line the autoresearch loop parses
     print(f"val_sharpe={metrics['sharpe_ratio']}")

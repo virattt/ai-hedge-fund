@@ -145,6 +145,25 @@ def cache_agent_signals(
             print("\n\nInterrupted — partial cache already saved on disk.")
             break
         except Exception as e:
+            err_str = str(e).lower()
+            if "429" in err_str or "insufficient_quota" in err_str:
+                print("\n\n*** QUOTA EXHAUSTED (429) ***")
+                print("LLM provider quota exhausted. Aborting to avoid endless retries.")
+                print("Top up credits or switch provider (e.g. --provider Groq, --provider OpenRouter).")
+                print("Partial cache saved on disk.")
+                meta = {
+                    "tickers": tickers,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "model": model_name,
+                    "provider": model_provider,
+                    "has_signals": False,
+                    "cached_dates": len(all_signals),
+                    "aborted": "quota_exhausted",
+                }
+                with open(CACHE_DIR / "meta.json", "w") as f:
+                    json.dump(meta, f, indent=2)
+                sys.exit(1)
             print(f"    → ERROR: {e}")
             all_signals[date_str] = {}
             with open(signals_path, "w") as f:

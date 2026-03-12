@@ -8,6 +8,9 @@ cd "$(dirname "$0")/.."
 echo "Refreshing all sector price caches..."
 echo ""
 
+# SPY for regime detection (broad market)
+poetry run python -m autoresearch.cache_signals --tickers SPY --prices-only --prices-path prices_benchmark.json
+
 # Sector tickers from SECTOR_CONFIG in portfolio_backtest.py
 poetry run python -m autoresearch.cache_signals --tickers MU,WDC,STX --prices-only --prices-path prices_memory.json
 poetry run python -m autoresearch.cache_signals --tickers LITE,COHR --prices-only --prices-path prices_photonics.json

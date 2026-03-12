@@ -1,0 +1,18 @@
+{
+  "refresh_prices": true,
+  "dry_run": false,
+  "cost_bps": 10,
+  "slippage_bps": 5,
+  "initial_cash": 100000,
+  "state_path": ".paper_broker_state.json",
+  "slack_webhook_url": "",
+  "email": {
+    "enabled": false,
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 587,
+    "smtp_user": "",
+    "smtp_password_env": "SMTP_PASSWORD",
+    "from_addr": "",
+    "to_addrs": []
+  }
+}

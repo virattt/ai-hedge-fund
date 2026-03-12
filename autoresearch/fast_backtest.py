@@ -447,8 +447,11 @@ class FastBacktestEngine:
                 total_value += positions[t]["long"] * current_prices[t]
                 total_value -= positions[t]["short"] * current_prices[t]
             self.portfolio_values.append({"date": current_date, "value": total_value})
+            self.last_prices = current_prices
 
         self.final_positions = positions
+        if not hasattr(self, "last_prices"):
+            self.last_prices = {}
         return self._compute_metrics()
 
     def _estimate_volatility(self, ticker: str, date_str: str) -> float:

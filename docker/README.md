@@ -191,6 +191,23 @@ You can also specify a `--ollama` flag to run the backtester using local LLMs.
 run.bat --ticker AAPL,MSFT,NVDA --ollama backtest
 ```
 
+#### Autoresearch daily run (paper trading)
+
+For cron-based paper trading:
+
+```bash
+cd docker
+docker compose run autoresearch-daily
+```
+
+By default: no price refresh (`REFRESH_PRICES=0`), dry run (`DRY_RUN=1`). Override for live execution:
+
+```bash
+REFRESH_PRICES=1 DRY_RUN=0 docker compose run autoresearch-daily
+```
+
+Mount `autoresearch/cache` and `autoresearch/logs` for persistence (configured in docker-compose.yml).
+
 ## Contributing
 
 1. Fork the repository
