@@ -1,5 +1,45 @@
 [
   {
+    "display_name": "GLM-5 (Alibaba)",
+    "model_name": "glm-5",
+    "provider": "Alibaba"
+  },
+  {
+    "display_name": "GLM-4.7 (Alibaba)",
+    "model_name": "glm-4.7",
+    "provider": "Alibaba"
+  },
+  {
+    "display_name": "Qwen3-Max (Alibaba)",
+    "model_name": "qwen3-max-2026-01-23",
+    "provider": "Alibaba"
+  },
+  {
+    "display_name": "Qwen3.5-Plus (Alibaba)",
+    "model_name": "qwen3.5-plus",
+    "provider": "Alibaba"
+  },
+  {
+    "display_name": "Qwen3-Coder-Plus (Alibaba)",
+    "model_name": "qwen3-coder-plus",
+    "provider": "Alibaba"
+  },
+  {
+    "display_name": "Qwen3-Coder-Next (Alibaba)",
+    "model_name": "qwen3-coder-next",
+    "provider": "Alibaba"
+  },
+  {
+    "display_name": "MiniMax-M2.5 (Alibaba)",
+    "model_name": "MiniMax-M2.5",
+    "provider": "Alibaba"
+  },
+  {
+    "display_name": "Kimi-K2.5 (Alibaba)",
+    "model_name": "kimi-k2.5",
+    "provider": "Alibaba"
+  },
+  {
     "display_name": "Grok 4",
     "model_name": "grok-4-0709",
     "provider": "xAI"
