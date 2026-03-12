@@ -94,10 +94,10 @@ Each experiment takes ~4-6 seconds. Aim for **50+ experiments per hour**. In an 
 
 ## Current State (read this before your first experiment)
 
-**Best (Session 3, 2026-03-12):**
+**Baseline to beat:** `val_sharpe=2.0221, val_return=+58.33%` (Mode 2, full signal cache restored)
+
 - **Mode 2** (signals.json + technical_analyst only): `val_sharpe=2.0221, val_return=+58.33%`
 - **Mode 1** (no signals): `val_sharpe=1.7945, val_return=+49.11%`
-- Mode 2 wins via 18-agent confidence averaging → higher effective confidence → better position sizing
 
 **What happened in 191 experiments across 2 sessions:**
 The strategy is running in Mode 1 (technical-only). The system is now correctly calibrated for a 14-month AI bull market (Jan 2025 – Mar 2026) on AAPL, NVDA, MSFT, GOOGL, TSLA.
@@ -120,11 +120,11 @@ The strategy is running in Mode 1 (technical-only). The system is now correctly 
 - `CONFIDENCE_POWER` — cancels out in Mode 1 (single agent)
 - `BB_BULLISH`, `BB_BEARISH`, `ZSCORE_BULLISH`, `ZSCORE_BEARISH` — dead since BOLLINGER_STD=5.0 makes condition impossible
 
-**Most promising next moves (in order):**
-1. `MOM_6M_WEIGHT` — currently 0.0, **never tested**. 6-month momentum is the Jegadeesh-Titman factor, one of the most robust return predictors. Try `MOM_1M_WEIGHT=0.7, MOM_6M_WEIGHT=0.3`.
-2. `RISK_MIN_MULT` — currently 0.25 (floor on position sizing). Try 0.10 to allow more aggressive deployment on strong signals even in elevated vol.
+**Most promising next moves to beat 2.02 (in order):**
+1. `MOM_6M_WEIGHT` — currently 0.0, **never tested**. 6-month momentum is the Jegadeesh-Titman factor. Try `MOM_1M_WEIGHT=0.7, MOM_6M_WEIGHT=0.3`.
+2. `RISK_MIN_MULT` — currently 0.25 (floor on position sizing). Try 0.10 to allow more aggressive deployment on strong signals.
 3. `SIGNAL_BULLISH_THRESHOLD` — try 0.22 or 0.23 (slight increase = more selective buys).
-4. **Mode 2** — DONE. `ANALYST_WEIGHTS` with technical_analyst=1.0, all others=0 gives 2.02. LLM agents are bearish on tech; adding them shorts the bull market. The 2.02 comes from 18-agent confidence averaging (even with weight 0, their cached confidence boosts the avg).
+4. `ANALYST_WEIGHTS` — try adding one agent at low weight (e.g. `cathie_wood_agent: 0.2` or `fundamentals_analyst_agent: 0.15`) to see if it adds alpha.
 
 **To get Mode 2 (2.02):** Run `cache_signals.py` first, then `evaluate`. Ensure `signals.json` exists in `autoresearch/cache/`.
 

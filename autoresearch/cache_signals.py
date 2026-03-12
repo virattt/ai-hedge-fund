@@ -197,8 +197,12 @@ def main():
 
     # Phase 2: Cache agent signals (saves incrementally, resumes on restart)
     print("\n--- Phase 2: Caching agent signals (this takes a while) ---")
-    signals_cache = cache_agent_signals(tickers, args.start, args.end, args.model, args.provider)
     signals_path = CACHE_DIR / "signals.json"
+    if signals_path.exists():
+        backup_path = CACHE_DIR / "signals.json.bak"
+        backup_path.write_text(signals_path.read_text())
+        print(f"  Backed up existing signals → {backup_path}")
+    signals_cache = cache_agent_signals(tickers, args.start, args.end, args.model, args.provider)
     print(f"\nSignals saved → {signals_path}")
 
     meta = {
