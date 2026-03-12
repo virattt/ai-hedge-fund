@@ -280,3 +280,43 @@ In Mode 2, `SHORT_THRESHOLD` and `BUY_THRESHOLD` need to account for the 18-agen
 - **The 5 free tickers** (AAPL, GOOGL, MSFT, NVDA, TSLA) are enough for parameter tuning. Add more tickers for validation after finding a strong configuration.
 - **Let it run overnight.** The value compounds. An agent that has run 500 experiments has a much richer picture of the parameter landscape than one that has run 50.
 - **Don't interrupt a good run.** If the trajectory is improving, let it continue. The agent is building intuition you can't replicate by checking in every hour.
+
+---
+
+## Multi-Sector Roadmap
+
+The current autoresearch system is calibrated for **large-cap tech momentum** (AAPL, NVDA, MSFT, GOOGL, TSLA). Cross-asset testing confirms the strategy is **sector-specific**: the same params produce Sharpe 2.02 on tech and Sharpe 0.03 on energy.
+
+The planned portfolio spans multiple behavioral clusters, each requiring its own parameter set:
+
+| Sector | Tickers | Behavioral regime | Key param differences |
+|--------|---------|------------------|-----------------------|
+| **Mega-cap tech** | AAPL, NVDA, MSFT, GOOGL, TSLA | Momentum/trend | Already tuned — Sharpe 2.02 |
+| **Semicon equipment** | AMAT, ASML, LRCX, KLAC, TEL | Long capex cycle, order-book driven | Longer EMA/ADX, slower signals |
+| **Power & infra** | VRT, CEG, EQT | Utility-like, contracted revenue | Mean-reversion more relevant, lower vol bands |
+| **EDA** | SNPS, CDNS | Long-duration compounder, low vol | Wide thresholds, very high MIN_CONFIDENCE |
+| **Memory/storage** | SNDK, WDC, STX | Highly cyclical, volatile | Tighter risk limits, faster signals |
+| **Tokenization rails** | COIN, HOOD, CRCL | Crypto-correlated, high beta | Completely different regime |
+| **Hyperscalers** | META, MSFT, AMZN, GOOGL | Momentum, AI capex driven | Similar to tech but more stable |
+| **Foundry** | TSM | Geopolitical + capex cycle | Unique risk profile |
+
+**The architecture implication:** as the universe expands, `params.py` will need to evolve into **per-universe param sets** — either multiple `params_<sector>.py` files or a params dict keyed by sector. The autoresearch loop can then tune each sector independently.
+
+**When ready to expand:**
+```bash
+# Step 1: Cache prices for new sector
+poetry run python -m autoresearch.cache_signals \
+  --tickers AMAT,ASML,LRCX,KLAC,TEL \
+  --prices-only \
+  --prices-path prices_equipment.json
+
+# Step 2: Baseline check (expect low Sharpe — current params aren't tuned for equipment)
+poetry run python -m autoresearch.evaluate \
+  --tickers AMAT,ASML,LRCX,KLAC,TEL \
+  --prices-path prices_equipment.json
+
+# Step 3: Run autoresearch loop with OOS check pointed at the new sector
+# (requires per-sector params file — see roadmap)
+```
+
+For now, all sectors share the tech-tuned params. The cross-asset infrastructure (`--tickers`, `--prices-path`) is already in place.
