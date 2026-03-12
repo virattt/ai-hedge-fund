@@ -1,0 +1,26 @@
+# Pre-commit hooks for ai-hedge-fund
+# Install: poetry run pre-commit install
+# Run: poetry run pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+        files: ^(src|autoresearch|tests)/
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        files: ^(src|autoresearch|tests)/
+
+# Optional: run autoresearch.evaluate on changed params (slow, enable if desired)
+#  - repo: local
+#    hooks:
+#      - id: params-sharpe-check
+#        name: Check params don't break evaluate
+#        entry: bash -c 'for f; do sector=$(basename "$f" .py | sed "s/params_//"); poetry run python -m autoresearch.evaluate --params autoresearch.params_$sector 2>/dev/null || exit 1; done'
+#        language: system
+#        pass_filenames: true
+#        files: ^autoresearch/params_.*\.py$

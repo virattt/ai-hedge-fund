@@ -90,5 +90,44 @@ services:
     tty: true
     stdin_open: true
 
+  # Health check endpoint (GET /health returns cache freshness, last run, status)
+  health-check:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: ai-hedge-fund
+    volumes:
+      - ../autoresearch/cache:/app/autoresearch/cache
+      - ../autoresearch/logs:/app/autoresearch/logs
+    working_dir: /app
+    command: python -m autoresearch.health_check --port 8765
+    ports:
+      - "8765:8765"
+    environment:
+      PYTHONPATH: /app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8765/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 2
+      start_period: 5s
+
+  # Autoresearch daily run (for cron: docker compose run autoresearch-daily)
+  autoresearch-daily:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: ai-hedge-fund
+    volumes:
+      - ../.env:/app/.env
+      - ../autoresearch/cache:/app/autoresearch/cache
+      - ../autoresearch/logs:/app/autoresearch/logs
+    working_dir: /app
+    command: ./autoresearch/run_daily.sh
+    environment:
+      PYTHONPATH: /app
+      REFRESH_PRICES: "0"
+      DRY_RUN: "1"
+
 volumes:
   ollama_data: 

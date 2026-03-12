@@ -1,4 +1,8 @@
-"""Tastytrade broker adapter: equities and options. Requires tastytrade package."""
+"""Tastytrade broker adapter: equities and options. Requires tastytrade package.
+
+OAuth (recommended, aligned with Dexter): TASTYTRADE_CLIENT_ID, TASTYTRADE_CLIENT_SECRET,
+TASTYTRADE_REFRESH_TOKEN. Get refresh token via: https://my.tastytrade.com/app.html#/manage/api-access/oauth-applications
+"""
 
 import os
 from typing import Any
@@ -15,45 +19,56 @@ from src.execution.models import (
 )
 
 try:
-    from tastytrade import Session
-    from tastytrade.order import Order as TastyOrder
+    from tastytrade import OAuthSession
     from tastytrade.dx import DXLink
     _HAS_TASTY = True
 except ImportError:
     _HAS_TASTY = False
-    Session = None  # type: ignore
-    TastyOrder = None
+    OAuthSession = None  # type: ignore
     DXLink = None
 
 
 class TastytradeBroker(BaseBroker):
     """
-    Implements BaseBroker for Tastytrade (equities + options). Session management
-    via login/token; equity market/limit orders; options require building option
-    symbol from underlying + strike + expiry + type. Requires: pip install tastytrade
+    Implements BaseBroker for Tastytrade (equities + options). Uses OAuth (client_id,
+    client_secret, refresh_token) aligned with Dexter. Requires: poetry install --extras tastytrade
     """
 
     def __init__(
         self,
-        api_key: str | None = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        refresh_token: str | None = None,
         session: Any = None,
+        is_test: bool = False,
     ):
         if not _HAS_TASTY:
             raise RuntimeError(
-                "tastytrade package is required for TastytradeBroker: pip install tastytrade"
+                "tastytrade package is required: poetry install --extras tastytrade"
             )
-        self._api_key = api_key or os.environ.get("TASTYTRADE_API_KEY", "")
+        self._client_id = client_id or os.environ.get("TASTYTRADE_CLIENT_ID", "")
+        self._client_secret = client_secret or os.environ.get("TASTYTRADE_CLIENT_SECRET", "")
+        self._refresh_token = refresh_token or os.environ.get("TASTYTRADE_REFRESH_TOKEN", "")
         self._session = session
         self._dx: Any = None
+        self._is_test = is_test
 
     async def connect(self) -> None:
         if self._session is not None:
             return
-        if not self._api_key:
-            raise ValueError("TASTYTRADE_API_KEY or api_key required for Tastytrade")
-        # Session can be created with token; production would use login flow
-        self._session = Session(self._api_key)
-        self._dx = DXLink(self._session)
+        if not all([self._client_secret, self._refresh_token]):
+            raise ValueError(
+                "TASTYTRADE_CLIENT_SECRET and TASTYTRADE_REFRESH_TOKEN required. "
+                "Create OAuth app at https://my.tastytrade.com/app.html#/manage/api-access/oauth-applications"
+            )
+        self._session = OAuthSession(
+            self._client_secret,
+            self._refresh_token,
+        )
+        try:
+            self._dx = DXLink(self._session)
+        except Exception:
+            self._dx = None
 
     async def disconnect(self) -> None:
         if self._dx:

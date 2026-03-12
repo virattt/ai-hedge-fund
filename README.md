@@ -415,6 +415,15 @@ cd docker
 docker compose up
 ```
 
+**Health check:** A standalone health endpoint reports cache freshness, last run, and performance status:
+
+```bash
+# Run health check service
+docker compose up health-check
+
+# Or one-shot: poetry run python -m autoresearch.health_check --once
+```
+
 See [`docker/README.md`](docker/README.md) for details.
 
 ---
@@ -553,6 +562,8 @@ poetry run python -m autoresearch.cache_signals --model z-ai/glm-4.5-air:free --
 
 **Cache behavior:** `signals.json` resumes automatically (skips already-cached dates). `prices.json` is **overwritten every run** — the script backs up the previous copy to `prices.json.bak` before replacing. Use `--start` and `--end` to match `params.BACKTEST_START` / `BACKTEST_END` (2025-01-02 → 2026-03-07) so the cache covers the full backtest window.
 
+**Quota / 429:** If `cache_signals` hits OpenAI `429 insufficient_quota`, it aborts immediately (no endless retries). Top up credits or switch provider (e.g. `--provider Groq`, `--provider OpenRouter`). Mode 1 (prices-only) is recommended first; full-signal caching is expensive and quota-heavy.
+
 ### First session results
 
 Our first autoresearch session ran **27 experiments in ~7 minutes** of wall-clock compute (zero LLM calls, zero API costs). The AI agent discovered **12 improvements** and reverted 15 failed experiments:
@@ -577,7 +588,42 @@ Backtest window: Jan 2025 – Mar 2026 on AAPL, NVDA, MSFT, GOOGL, TSLA.
 
 Each change was measured in isolation. If the Sharpe dropped, the change was reverted. Every improvement was committed individually so the full history is visible in `git log`.
 
-See [`autoresearch/README.md`](autoresearch/README.md) for the full documentation.
+See [`autoresearch/README.md`](autoresearch/README.md) for the full documentation. For operations and reproducibility, see [`autoresearch/RUNBOOK.md`](autoresearch/RUNBOOK.md).
+
+### Portfolio backtest & paper trading
+
+The autoresearch system supports multi-sector portfolio backtests and paper trading. **Live execution uses [Tastytrade](https://tastytrade.com) only** — aligned with [Dexter](https://github.com/eliza420ai-beep/dexter). No Alpaca or Interactive Brokers.
+
+```bash
+# Portfolio backtest (combines sector strategies)
+poetry run python -m autoresearch.portfolio_backtest --weights oos
+
+# Paper trading — submit orders to PaperBroker
+poetry run python -m autoresearch.paper_trading --execute --state-path .paper_broker_state.json
+
+# Live trading via Tastytrade (requires TASTYTRADE_ORDER_ENABLED=true)
+poetry run python -m autoresearch.paper_trading --execute --live
+
+# Risk controls: halt on drawdown, stop-loss per position
+poetry run python -m autoresearch.paper_trading --execute --max-drawdown-pct 15 --stop-loss-pct 10
+
+# Volatility-based (risk parity) position sizing
+poetry run python -m autoresearch.paper_trading --vol-weight
+
+# Daily automation (cron-friendly)
+./autoresearch/run_daily.sh
+
+# Performance tracking (log portfolio value, rolling Sharpe)
+poetry run python -m autoresearch.performance_tracker log
+poetry run python -m autoresearch.performance_tracker report
+
+# Sector correlation analysis
+poetry run python -m autoresearch.sector_correlation --output autoresearch/logs/sector_corr.csv
+```
+
+**Tastytrade setup:** Set `TASTYTRADE_CLIENT_SECRET`, `TASTYTRADE_REFRESH_TOKEN` in `.env`. Get credentials via [developer.tastytrade.com](https://developer.tastytrade.com/). Dry-run first; live orders require `TASTYTRADE_ORDER_ENABLED=true`.
+
+**Data validation:** Before execution, price caches are validated (staleness, missing days, outliers). Run `poetry run python -m autoresearch.validate_prices` to check manually.
 
 ---
 

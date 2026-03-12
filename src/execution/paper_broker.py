@@ -28,9 +28,11 @@ class PaperBroker(BaseBroker):
         self,
         initial_cash: float = 100_000.0,
         state_path: str | Path = ".paper_broker_state.json",
+        slippage_bps: float = 5.0,
     ):
         self._initial_cash = initial_cash
         self._state_path = Path(state_path)
+        self._slippage_bps = slippage_bps
         self._cash = initial_cash
         self._positions: dict[str, dict] = {}  # ticker -> {quantity, avg_price, ...}
         self._orders: dict[str, dict] = {}  # order_id -> {order, status, filled_qty, fill_price}
@@ -42,10 +44,16 @@ class PaperBroker(BaseBroker):
         self._last_prices[ticker] = price
 
     def get_fill_price(self, order: Order) -> float:
-        """Resolve fill price: limit price if set, else last known price, else 0."""
+        """Resolve fill price: limit price if set, else last known price with slippage, else 0."""
         if order.order_type == OrderType.LIMIT and order.limit_price is not None:
             return order.limit_price
-        return self._last_prices.get(order.ticker, 0.0)
+        base = self._last_prices.get(order.ticker, 0.0)
+        if base <= 0 or self._slippage_bps <= 0:
+            return base
+        adj = self._slippage_bps / 10_000.0
+        if order.side == OrderSide.BUY:
+            return base * (1 + adj)
+        return base * (1 - adj)
 
     def _load(self) -> None:
         if not self._state_path.exists():
