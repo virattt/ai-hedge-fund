@@ -1,10 +1,11 @@
 """
-autoresearch/params_healthcare.py — Sector-specific params for healthcare (JNJ, UNH, PFE, ABBV, LLY).
+autoresearch/params_tokenization.py — Sector-specific params for tokenization (COIN, HOOD, CRCL).
 
-Universe: JNJ, UNH, PFE, ABBV, LLY
-Regime: Defensive, pharma/biotech, mixed growth/value. Start from tech baseline.
+Universe: COIN, HOOD, CRCL (Coinbase, Robinhood, Circle)
+Regime: Crypto infrastructure, high-beta. Start from tech baseline.
+Ref: ikigaistudio "The Fund, Rebalanced" — Tokenization 7%.
 
-Run: poetry run python -m autoresearch.evaluate --params autoresearch.params_healthcare
+Run: poetry run python -m autoresearch.evaluate --params autoresearch.params_tokenization
 """
 
 STRATEGY_WEIGHTS = {
@@ -17,7 +18,7 @@ STRATEGY_WEIGHTS = {
 
 EMA_SHORT = 5
 EMA_MEDIUM = 13
-EMA_LONG = 40
+EMA_LONG = 34
 ADX_PERIOD = 26
 
 MA_WINDOW = 50
@@ -54,7 +55,7 @@ SKEW_THRESHOLD = 1.0
 SIGNAL_BULLISH_THRESHOLD = 0.40
 SIGNAL_BEARISH_THRESHOLD = -0.2
 
-RISK_BASE_LIMIT = 0.40
+RISK_BASE_LIMIT = 0.42
 RISK_VOL_BANDS = [(0.15, 1.25), (0.40, 1.00), (0.70, 1.00)]
 RISK_EXTREME_VOL_MULT = 0.50
 RISK_MED_VOL_DECAY = 0.5
@@ -81,9 +82,9 @@ CONFIDENCE_POWER = 1.0
 POSITION_SIZE_FRACTION = 1.00
 MIN_CONFIDENCE_TO_ACT = 20
 
-BACKTEST_TICKERS = ["JNJ", "UNH", "PFE", "ABBV", "LLY"]
+BACKTEST_TICKERS = ["COIN", "HOOD", "CRCL"]
 BACKTEST_START = "2025-01-02"
 BACKTEST_END = "2026-03-07"
 BACKTEST_INITIAL_CASH = 100_000
 BACKTEST_MARGIN_REQ = 0.5
-PRICES_PATH = "prices_healthcare.json"
+PRICES_PATH = "prices_tokenization.json"

@@ -1,0 +1,2 @@
+2026-03-11	baseline (tech params)	val_sharpe=0.9852	val_return=?	OOS=?
+2026-03-11	RISK_BASE_LIMIT 0.30→0.38	val_sharpe=1.034	val_return=?	OOS=1.22

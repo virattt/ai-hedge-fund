@@ -1,10 +1,11 @@
 """
-autoresearch/params_healthcare.py — Sector-specific params for healthcare (JNJ, UNH, PFE, ABBV, LLY).
+autoresearch/params_networking.py — Sector-specific params for networking (ANET, AVGO, MRVL).
 
-Universe: JNJ, UNH, PFE, ABBV, LLY
-Regime: Defensive, pharma/biotech, mixed growth/value. Start from tech baseline.
+Universe: ANET, AVGO, MRVL (Arista, Broadcom, Marvell)
+Regime: Data center switching, custom AI ASICs, networking. Start from tech baseline.
+Ref: ikigaistudio "The Fund, Rebalanced" — Networking 22%.
 
-Run: poetry run python -m autoresearch.evaluate --params autoresearch.params_healthcare
+Run: poetry run python -m autoresearch.evaluate --params autoresearch.params_networking
 """
 
 STRATEGY_WEIGHTS = {
@@ -51,12 +52,12 @@ HURST_MAX_LAG = 20
 HURST_THRESHOLD = 0.4
 SKEW_THRESHOLD = 1.0
 
-SIGNAL_BULLISH_THRESHOLD = 0.40
+SIGNAL_BULLISH_THRESHOLD = 0.32
 SIGNAL_BEARISH_THRESHOLD = -0.2
 
-RISK_BASE_LIMIT = 0.40
+RISK_BASE_LIMIT = 0.30
 RISK_VOL_BANDS = [(0.15, 1.25), (0.40, 1.00), (0.70, 1.00)]
-RISK_EXTREME_VOL_MULT = 0.50
+RISK_EXTREME_VOL_MULT = 0.60
 RISK_MED_VOL_DECAY = 0.5
 RISK_HIGH_VOL_DECAY = 0.5
 RISK_MIN_MULT = 0.25
@@ -81,9 +82,9 @@ CONFIDENCE_POWER = 1.0
 POSITION_SIZE_FRACTION = 1.00
 MIN_CONFIDENCE_TO_ACT = 20
 
-BACKTEST_TICKERS = ["JNJ", "UNH", "PFE", "ABBV", "LLY"]
+BACKTEST_TICKERS = ["ANET", "AVGO", "MRVL"]
 BACKTEST_START = "2025-01-02"
 BACKTEST_END = "2026-03-07"
 BACKTEST_INITIAL_CASH = 100_000
 BACKTEST_MARGIN_REQ = 0.5
-PRICES_PATH = "prices_healthcare.json"
+PRICES_PATH = "prices_networking.json"

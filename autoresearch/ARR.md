@@ -11,15 +11,22 @@
 | Sector | Sharpe | Return | OOS Sharpe | Status |
 |--------|--------|--------|------------|--------|
 | **Memory** | **2.78** | +301% | **2.98** | Tuned |
+| **Photonics** | **2.24** | — | **2.53** | Tuned (LITE, COHR) |
 | **Tech** | **2.04** | +60% | 1.38 | Tuned |
 | **Equipment** | **1.91** | +99% | **2.39** | Tuned |
+| **Platform** | **1.29** | — | 0.22 | Tuned (MSFT,AMZN,GOOGL,META,ORCL,PLTR) |
+| **Foundry** | **1.03** | — | **1.22** | Tuned (TSM,GFS,UMC) |
+| **Power (VRT,CEG,EQT)** | **1.12** | +40.8% | **0.68** | Tuned |
 | **Energy** | **0.88** | +24.5% | **1.45** | Tuned |
+| **Networking** | **0.67** | +22.7% | -0.09 | Tuned (EMA 40 OOS-aware) |
+| **Tokenization** | **0.58** | +15.6% | **0.54** | Tuned |
 | **Healthcare** | **0.39** | +12.2% | **2.71** | Tuned |
-| Power | -1.27 | — | — | Overfit, unusable |
+| EDA | -0.14 | +0.8% | -1.43 | 3-ticker (SNPS,CDNS,ARM) still negative |
+| Power (VST,CEG,NRG) | -1.27 | — | — | Overfit, deprecated |
 
 **Infrastructure:** Per-sector params (`params_<sector>.py`), `--params` in evaluate.py, PRICES_PATH auto-load, sector programs (`program_<sector>.md`), results logs (`results_<sector>.tsv`).
 
-**Recent tuning (2026-03-11):** Tech deeper tuning (no improvement, 2.04 held). Energy: MOM_CONF 28, EMA_LONG 40 → 0.87. Healthcare: new sector (JNJ, UNH, PFE, ABBV, LLY), SIG_BULL 0.40, RISK_BASE 0.40 → 0.39, OOS 2.71.
+**Recent tuning (2026-03-11):** Added Foundry (TSM, GFS, UMC) RISK 0.38 → 1.03, OOS 1.22. Platform (MSFT, AMZN, GOOGL, META, ORCL, PLTR) SIG 0.36 + RISK 0.38 → 1.29, OOS 0.22. Photonics (LITE, COHR) SIG 0.36 + RISK 0.38 → 2.24, OOS 2.53.
 
 ---
 
@@ -575,21 +582,25 @@ poetry run python -m autoresearch.evaluate --params autoresearch.params_equipmen
 
 ## What's Next
 
-1. **Healthcare deeper tuning** — Baseline 0.39, OOS 2.71. Try MOM_CONF, STRATEGY_WEIGHTS, RISK_EXTREME per memory/energy patterns.
+1. **Foundry / Platform / Photonics** — ✅ Done. Foundry 1.03 (OOS 1.22), Platform 1.29 (OOS 0.22), Photonics 2.24 (OOS 2.53).
 
-2. **Memory/Equipment/Energy** — All tuned. Optional further passes.
+2. **EDA expansion** — ✅ Added ARM (3-ticker). Best -0.14; strategy still negative for design-tool regime.
 
-3. **Power** — OOS ≈ -1.27 for all variants; strong overfitting. No usable config yet.
+3. **Networking OOS** — ✅ EMA_LONG 40 improved OOS -0.11 → -0.09.
 
-4. **RSI tuning in bear/sideways regimes** — RSI 30/70, 25/75, 20/80 are tunable. Test when market regime shifts.
+4. **Memory/Equipment/Energy** — All tuned. Optional further passes.
 
-5. **Rolling window robustness** — ✅ Done. OOS Sharpe: tech 1.38, equipment 2.39, memory 2.98, energy 1.45, healthcare 2.71.
+5. **Platform OOS** — Val 1.29 strong, OOS 0.22. Try OOS-aware tuning (EMA_LONG, RISK_EXTREME).
 
-6. **Cross-asset generalization** — ✅ Done. Memory 2.78, Tech 2.04, Equipment 1.91, Energy 0.88, Healthcare 0.39.
+6. **RSI tuning in bear/sideways regimes** — RSI 30/70, 25/75, 20/80 are tunable. Test when market regime shifts.
 
-7. **LLM agent re-enablement** — ✅ Tested. Technical-only remains best.
+7. **Rolling window robustness** — ✅ Done. OOS Sharpe: memory 2.98, photonics 2.53, equipment 2.39, tech 1.38, energy 1.45, healthcare 2.71, foundry 1.22, tokenization 0.54, power infra 0.68. Platform 0.22, Networking -0.09.
 
-8. **Additional sectors** — EDA (CDNS, SNPS), Tokenization (COIN, HOOD, CRCL), Hyperscalers, Foundry (TSM). Cache prices, baseline, then autoresearch.
+8. **Cross-asset generalization** — ✅ Done. 12 sectors tuned.
+
+9. **LLM agent re-enablement** — ✅ Tested. Technical-only remains best.
+
+10. **Additional sectors** — EDA ✅, Networking ✅, Tokenization ✅, Foundry ✅, Platform ✅, Photonics ✅.
 
 ---
 

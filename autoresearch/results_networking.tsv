@@ -1,0 +1,4 @@
+2026-03-11T19:00	baseline (tech params)	val_sharpe=0.201	val_return=+7.97%	OOS=-0.24
+2026-03-11T19:02	SIGNAL_BULLISH_THRESHOLD 0.2→0.32	val_sharpe=0.632	val_return=?	OOS=-0.11
+2026-03-11T19:04	RISK_EXTREME_VOL_MULT 0.50→0.60	val_sharpe=0.657	val_return=+22.3%	OOS=-0.11
+2026-03-11T19:06	EMA_LONG 34→40 (OOS-aware)	val_sharpe=0.669	val_return=+22.7%	OOS=-0.09

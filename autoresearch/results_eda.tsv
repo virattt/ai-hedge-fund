@@ -1,0 +1,3 @@
+2026-03-11T19:00	baseline (tech params) 2-ticker	val_sharpe=-0.545	val_return=-8.45%	OOS=-1.69
+2026-03-11T19:02	SIG 0.40 RISK 0.40 MOM 26 EMA 50 2-ticker	val_sharpe=-0.088	val_return=+1.8%	OOS=-1.69
+2026-03-11T19:10	+ARM (3-ticker) SIG 0.40 MOM 26	val_sharpe=-0.144	val_return=+0.78%	OOS=-1.43
