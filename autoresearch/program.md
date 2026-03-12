@@ -120,11 +120,15 @@ The strategy is running in Mode 1 (technical-only). The system is now correctly 
 - `CONFIDENCE_POWER` — cancels out in Mode 1 (single agent)
 - `BB_BULLISH`, `BB_BEARISH`, `ZSCORE_BULLISH`, `ZSCORE_BEARISH` — dead since BOLLINGER_STD=5.0 makes condition impossible
 
-**Most promising next moves to beat 2.02 (in order):**
-1. `MOM_6M_WEIGHT` — currently 0.0, **never tested**. 6-month momentum is the Jegadeesh-Titman factor. Try `MOM_1M_WEIGHT=0.7, MOM_6M_WEIGHT=0.3`.
-2. `RISK_MIN_MULT` — currently 0.25 (floor on position sizing). Try 0.10 to allow more aggressive deployment on strong signals.
-3. `SIGNAL_BULLISH_THRESHOLD` — try 0.22 or 0.23 (slight increase = more selective buys).
-4. `ANALYST_WEIGHTS` — try adding one agent at low weight (e.g. `cathie_wood_agent: 0.2` or `fundamentals_analyst_agent: 0.15`) to see if it adds alpha.
+**Tested 2026-03-12 (all reverted — no improvement over 2.02):**
+- `MOM_6M_WEIGHT` 0.3 → Sharpe 1.17 (worse)
+- `RISK_MIN_MULT` 0.10 → same 2.02
+- `SIGNAL_BULLISH_THRESHOLD` 0.22 → 1.93, 0.18 → 1.75 (worse)
+- `cathie_wood_agent` 0.2 → 0.03, -30% dd (much worse)
+- `STRATEGY_WEIGHTS` momentum 0.39 → same
+- `BUY_THRESHOLD` 0.06, `MIN_CONFIDENCE_TO_ACT` 15, `RISK_MAX_MULT` 1.20 → same
+
+**Still untried:** `MOM_3M_WEIGHT`, `EMA` windows, `ADX_PERIOD`, `VOLATILITY_LOOKBACK_DAYS`, `fundamentals_analyst_agent` at 0.05–0.1.
 
 **To get Mode 2 (2.02):** Run `cache_signals.py` first, then `evaluate`. Ensure `signals.json` exists in `autoresearch/cache/`.
 
