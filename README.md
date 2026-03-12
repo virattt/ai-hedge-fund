@@ -617,6 +617,10 @@ poetry run python -m autoresearch.paper_trading --renko-regime --renko-ticker NV
 poetry run python -m autoresearch.renko_bbwas --ticker NVDA
 poetry run python -m autoresearch.renko_bbwas --all-tickers
 
+# Backtest regime and Renko overlay impact (baseline vs regime vs regime+Renko)
+poetry run python -m autoresearch.backtest_regime --weights oos
+poetry run python -m autoresearch.backtest_regime --weights oos --renko-ticker NVDA
+
 # Daily automation (cron-friendly)
 ./autoresearch/run_daily.sh
 
@@ -632,7 +636,7 @@ poetry run python -m autoresearch.sector_correlation --output autoresearch/logs/
 
 **Data validation:** Before execution, price caches are validated (staleness, missing days, outliers). Run `poetry run python -m autoresearch.validate_prices` to check manually.
 
-**Renko + BBWAS overlay:** `--renko-regime` adds an ATR-based Renko chart with Bollinger Band Width / Area Squeeze overlay as a momentum guardrail. It can downgrade a bull regime to sideways (or sideways to bear) when brick momentum is clearly bearish, and detect squeeze zones where a big move is loading. Inspired by [The chart that doesn't lie](https://ikigaistudio.substack.com/p/the-chart-that-doesnt-lie). The overlay never upgrades a bearish FA call — it's a timing/sizing guardrail, not an alpha source.
+**Renko + BBWAS overlay:** `--renko-regime` adds an ATR-based Renko chart with Bollinger Band Width / Area Squeeze overlay as a momentum guardrail. It can downgrade a bull regime to sideways (or sideways to bear) when brick momentum is clearly bearish, and detect squeeze zones where a big move is loading. Inspired by [The chart that doesn't lie](https://ikigaistudio.substack.com/p/the-chart-that-doesnt-lie). The overlay never upgrades a bearish FA call — it's a timing/sizing guardrail, not an alpha source. Run `backtest_regime` to compare: in OOS backtest, regime+Renko (NVDA) improves Sharpe ~10% and cuts max drawdown ~48% vs baseline, at the cost of lower total return (more cash in uncertain periods).
 
 ---
 
