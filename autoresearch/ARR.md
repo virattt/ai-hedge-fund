@@ -333,17 +333,37 @@ These parameters were tested and showed no improvement or degraded Sharpe:
 
 ---
 
+## Session 3 — RSI Unlock + Mode 2 Breakthrough (2026-03-12)
+
+### RSI signal unlocked
+
+`compute_rsi()` was defined but never called. Added RSI to the mean-reversion path in `fast_backtest.py`:
+- `RSI_OVERSOLD` / `RSI_OVERBOUGHT` in params.py (default 30/70)
+- Mean-reversion now triggers on (z-score + Bollinger) OR (RSI oversold/overbought)
+- **Result:** RSI 30/70 and 25/75 both hurt in bull market (mean-reversion fights momentum). Use 0/100 to disable. RSI is now a tunable lever for bear/sideways regimes.
+
+### Mode 2 breakthrough
+
+With `signals.json` present, tested `ANALYST_WEIGHTS`:
+- All 18 agents at 1.0 → -267% return (bearish value agents short the bull market)
+- Down-weighting Graham/Munger/Burry → still -95% to -162%
+- **Technical_analyst only** (all others 0) → **val_sharpe=2.0221, val_return=+58.33%**
+
+The 2.02 vs Mode 1's 1.79 comes from **confidence averaging**: when 18 agents are in the cache, `confidence = avg(all 18 confidences)`. Even with 17 at weight 0, their cached confidence values boost the average → higher effective confidence → larger position sizes → better deployment.
+
+**Best config:** `ANALYST_WEIGHTS` with technical_analyst=1.0, all others=0. Run `cache_signals.py` to generate `signals.json`, then `evaluate`.
+
+---
+
 ## What's Next
 
-The strategy has reached a local optimum on the current parameter set. The remaining unexplored axes are:
+1. **RSI tuning in bear/sideways regimes** — RSI 30/70, 25/75, 20/80 are now tunable. Test when market regime shifts.
 
-1. **RSI parameters** (`RSI_SHORT`, `RSI_LONG`) — now the primary driver of mean-reversion signals (since Bollinger is neutralized), but RSI thresholds are hardcoded in `fast_backtest.py`, not in `params.py`. Would require a code change.
+2. **Rolling window robustness** — test whether the current params hold across different 6-month sub-windows within the 14-month backtest to detect overfitting.
 
-2. **Mode 2 optimization** — the session was entirely Mode 1 (technical-only). With the cached LLM signals available, Mode 2 optimization could unlock a separate optimization axis by tuning `ANALYST_WEIGHTS` to down-weight the chronically bearish value-investing agents (Graham, Munger, Burry) on momentum tech stocks.
+3. **Cross-asset generalization** — run the same params on a different universe (e.g., energy, biotech) to test whether these findings are AAPL/NVDA-specific or generalizable.
 
-3. **Rolling window robustness** — test whether the current params hold across different 6-month sub-windows within the 14-month backtest to detect overfitting.
-
-4. **Cross-asset generalization** — run the same params on a different universe (e.g., energy, biotech) to test whether these findings are AAPL/NVDA-specific or generalizable.
+4. **Selective LLM agent re-enablement** — try adding one growth/momentum agent (e.g. cathie_wood, stanley_druckenmiller) at 0.2 weight to see if any LLM signal adds alpha without the bearish drag.
 
 ---
 

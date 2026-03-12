@@ -151,19 +151,29 @@ def compute_technical_signals(df: pd.DataFrame, params) -> dict:
     else:
         trend_sig, trend_conf = "neutral", 0.5
 
-    # 2. Mean Reversion
+    # 2. Mean Reversion (Z-score + Bollinger + RSI — RSI now live, unlocks mr when Bollinger neutralized)
     ma = close.rolling(params.MA_WINDOW).mean()
     std = close.rolling(params.MA_WINDOW).std()
     z = (close - ma) / std.replace(0, np.nan)
     bb_up, bb_lo = compute_bollinger(close, params.BOLLINGER_WINDOW, params.BOLLINGER_STD)
     bb_range = (bb_up - bb_lo).replace(0, np.nan)
     bb_pos = (close - bb_lo) / bb_range
+    rsi = compute_rsi(close, params.RSI_SHORT)
     z_val = _safe(z.iloc[-1])
     bb_val = _safe(bb_pos.iloc[-1], 0.5)
-    if z_val < params.ZSCORE_BULLISH and bb_val < params.BB_BULLISH:
-        mr_sig, mr_conf = "bullish", min(abs(z_val) / 4, 1.0)
-    elif z_val > params.ZSCORE_BEARISH and bb_val > params.BB_BEARISH:
-        mr_sig, mr_conf = "bearish", min(abs(z_val) / 4, 1.0)
+    rsi_val = _safe(rsi.iloc[-1], 50.0)
+    zbb_bull = z_val < params.ZSCORE_BULLISH and bb_val < params.BB_BULLISH
+    zbb_bear = z_val > params.ZSCORE_BEARISH and bb_val > params.BB_BEARISH
+    rsi_bull = rsi_val < params.RSI_OVERSOLD
+    rsi_bear = rsi_val > params.RSI_OVERBOUGHT
+    if zbb_bull or rsi_bull:
+        conf_zbb = min(abs(z_val) / 4, 1.0) if zbb_bull else 0.0
+        conf_rsi = min((params.RSI_OVERSOLD - rsi_val) / 30, 1.0) if rsi_bull else 0.0
+        mr_sig, mr_conf = "bullish", max(conf_zbb, conf_rsi) or 0.5
+    elif zbb_bear or rsi_bear:
+        conf_zbb = min(abs(z_val) / 4, 1.0) if zbb_bear else 0.0
+        conf_rsi = min((rsi_val - params.RSI_OVERBOUGHT) / 30, 1.0) if rsi_bear else 0.0
+        mr_sig, mr_conf = "bearish", max(conf_zbb, conf_rsi) or 0.5
     else:
         mr_sig, mr_conf = "neutral", 0.5
 

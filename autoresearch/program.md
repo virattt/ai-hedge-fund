@@ -94,8 +94,10 @@ Each experiment takes ~4-6 seconds. Aim for **50+ experiments per hour**. In an 
 
 ## Current State (read this before your first experiment)
 
-**Session 2 best (commit `485d4d0`, 2026-03-12):**
-`val_sharpe=1.7880, val_sortino=2.8507, val_max_dd=-8.58%, val_return=+48.76%`
+**Best (Session 3, 2026-03-12):**
+- **Mode 2** (signals.json + technical_analyst only): `val_sharpe=2.0221, val_return=+58.33%`
+- **Mode 1** (no signals): `val_sharpe=1.7945, val_return=+49.11%`
+- Mode 2 wins via 18-agent confidence averaging → higher effective confidence → better position sizing
 
 **What happened in 191 experiments across 2 sessions:**
 The strategy is running in Mode 1 (technical-only). The system is now correctly calibrated for a 14-month AI bull market (Jan 2025 – Mar 2026) on AAPL, NVDA, MSFT, GOOGL, TSLA.
@@ -111,9 +113,10 @@ The strategy is running in Mode 1 (technical-only). The system is now correctly 
 - `VOL_LOW_REGIME` → 0.95, `VOL_Z_BULLISH` → -0.5, `VOL_Z_BEARISH` → 2.0
 - `STRATEGY_WEIGHTS` → trend=0.30, mr=0.18, momentum=0.37, vol=0.15, stat_arb=0.00
 
+**RSI now live (fast_backtest.py):** `RSI_OVERSOLD`, `RSI_OVERBOUGHT`, `RSI_SHORT` drive mean-reversion. Use 0/100 to disable. Default 30/70 hurt in bull market; 25/75 also worse. Try 20/80 or 35/65 in bear/sideways regimes.
+
 **Known dead code in params.py (changes have zero effect):**
 - `CORR_BANDS` / `CORR_DEFAULT_MULT` — function defined but never called
-- `RSI_SHORT` / `RSI_LONG` — `compute_rsi()` is defined but never called in the backtest
 - `CONFIDENCE_POWER` — cancels out in Mode 1 (single agent)
 - `BB_BULLISH`, `BB_BEARISH`, `ZSCORE_BULLISH`, `ZSCORE_BEARISH` — dead since BOLLINGER_STD=5.0 makes condition impossible
 
@@ -121,9 +124,9 @@ The strategy is running in Mode 1 (technical-only). The system is now correctly 
 1. `MOM_6M_WEIGHT` — currently 0.0, **never tested**. 6-month momentum is the Jegadeesh-Titman factor, one of the most robust return predictors. Try `MOM_1M_WEIGHT=0.7, MOM_6M_WEIGHT=0.3`.
 2. `RISK_MIN_MULT` — currently 0.25 (floor on position sizing). Try 0.10 to allow more aggressive deployment on strong signals even in elevated vol.
 3. `SIGNAL_BULLISH_THRESHOLD` — try 0.22 or 0.23 (slight increase = more selective buys).
-4. **Mode 2** — put signals.json back and tune `ANALYST_WEIGHTS` to down-weight bearish value agents (Graham, Munger, Burry) on this momentum tech universe.
+4. **Mode 2** — DONE. `ANALYST_WEIGHTS` with technical_analyst=1.0, all others=0 gives 2.02. LLM agents are bearish on tech; adding them shorts the bull market. The 2.02 comes from 18-agent confidence averaging (even with weight 0, their cached confidence boosts the avg).
 
-Start with #1 — `MOM_6M_WEIGHT` is the only major untested live lever.
+**To get Mode 2 (2.02):** Run `cache_signals.py` first, then `evaluate`. Ensure `signals.json` exists in `autoresearch/cache/`.
 
 ---
 

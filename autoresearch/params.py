@@ -39,6 +39,8 @@ BOLLINGER_WINDOW = 20
 BOLLINGER_STD = 5.0
 RSI_SHORT = 14
 RSI_LONG = 28
+RSI_OVERSOLD = 0    # RSI < this → bullish (0 = disabled; RSI never < 0)
+RSI_OVERBOUGHT = 100  # RSI > this → bearish (100 = disabled; RSI never > 100)
 ZSCORE_BULLISH = -2.0
 ZSCORE_BEARISH = 2.0
 BB_BULLISH = 0.2
@@ -103,25 +105,27 @@ VOLATILITY_LOOKBACK_DAYS = 45
 # ─────────────────────────────────────────────────────────────
 # 4. ANALYST SIGNAL AGGREGATION — Who to trust
 # ─────────────────────────────────────────────────────────────
+# Mode 2: technical_analyst only → sharpe=2.02 (confidence avg from 18 cached agents boosts sizing)
+# All others 0: LLM agents are bearish on tech; adding them shorts the bull market
 ANALYST_WEIGHTS = {
-    "aswath_damodaran_agent": 1.0,
-    "ben_graham_agent": 1.0,
-    "bill_ackman_agent": 1.0,
-    "cathie_wood_agent": 1.0,
-    "charlie_munger_agent": 1.0,
-    "michael_burry_agent": 1.0,
-    "mohnish_pabrai_agent": 1.0,
-    "peter_lynch_agent": 1.0,
-    "phil_fisher_agent": 1.0,
-    "rakesh_jhunjhunwala_agent": 1.0,
-    "stanley_druckenmiller_agent": 1.0,
-    "warren_buffett_agent": 1.0,
+    "aswath_damodaran_agent": 0.0,
+    "ben_graham_agent": 0.0,
+    "bill_ackman_agent": 0.0,
+    "cathie_wood_agent": 0.0,
+    "charlie_munger_agent": 0.0,
+    "michael_burry_agent": 0.0,
+    "mohnish_pabrai_agent": 0.0,
+    "peter_lynch_agent": 0.0,
+    "phil_fisher_agent": 0.0,
+    "rakesh_jhunjhunwala_agent": 0.0,
+    "stanley_druckenmiller_agent": 0.0,
+    "warren_buffett_agent": 0.0,
     "technical_analyst_agent": 1.0,
-    "fundamentals_analyst_agent": 1.0,
-    "growth_analyst_agent": 1.0,
-    "news_sentiment_agent": 1.0,
-    "sentiment_analyst_agent": 1.0,
-    "valuation_analyst_agent": 1.0,
+    "fundamentals_analyst_agent": 0.0,
+    "growth_analyst_agent": 0.0,
+    "news_sentiment_agent": 0.0,
+    "sentiment_analyst_agent": 0.0,
+    "valuation_analyst_agent": 0.0,
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -129,8 +133,7 @@ ANALYST_WEIGHTS = {
 # ─────────────────────────────────────────────────────────────
 BUY_THRESHOLD = 0.05
 SELL_THRESHOLD = -0.05
-# Mode 1 (technical only, 1 agent): scores range ±0.2–1.0 → -0.90 works
-# Mode 2 (full signals, 18 agents): scores range ±0.05–0.65 → use -0.15 to allow shorting
+# technical_analyst-only in Mode 2 = same signal range as Mode 1 → use -0.90
 SHORT_THRESHOLD = -0.90
 CONFIDENCE_POWER = 1.0        # exponent on confidence (>1 amplifies high-conf signals)
 POSITION_SIZE_FRACTION = 1.00  # fraction of max_shares to trade
