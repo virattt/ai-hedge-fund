@@ -3,7 +3,7 @@ from typing import List, Dict, Any
 
 from app.backend.models.schemas import ErrorResponse
 from app.backend.services.ollama_service import OllamaService
-from src.llm.models import get_models_list
+from llm.models import get_models_list
 
 router = APIRouter(prefix="/language-models")
 

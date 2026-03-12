@@ -1,6 +1,6 @@
 import pytest
 
-from src.backtesting.portfolio import Portfolio
+from backtesting.portfolio import Portfolio
 
 
 @pytest.fixture()

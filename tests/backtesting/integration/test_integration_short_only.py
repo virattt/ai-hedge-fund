@@ -1,4 +1,4 @@
-from src.backtesting.engine import BacktestEngine
+from backtesting.engine import BacktestEngine
 from tests.backtesting.integration.mocks import MockConfigurableAgent
 
 

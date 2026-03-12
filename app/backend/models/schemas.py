@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Dict, Any
-from src.llm.models import ModelProvider
+from llm.models import ModelProvider
 from enum import Enum
 from app.backend.services.graph import extract_base_agent_key
 

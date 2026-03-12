@@ -1,4 +1,4 @@
-from src.backtesting.output import OutputBuilder
+from backtesting.output import OutputBuilder
 
 
 def test_results_builder_builds_rows_and_summary(monkeypatch, portfolio):

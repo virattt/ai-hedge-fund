@@ -10,8 +10,8 @@ from app.backend.services.graph import create_graph, parse_hedge_fund_response, 
 from app.backend.services.portfolio import create_portfolio
 from app.backend.services.backtest_service import BacktestService
 from app.backend.services.api_key_service import ApiKeyService
-from src.utils.progress import progress
-from src.utils.analysts import get_agents_list
+from utils.progress import progress
+from utils.analysts import get_agents_list
 
 router = APIRouter(prefix="/hedge-fund")
 
