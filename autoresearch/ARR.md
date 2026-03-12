@@ -2,7 +2,23 @@
 
 > Autonomous parameter optimization of the AI Hedge Fund trading strategy.
 > Inspired by Andrej Karpathy's autoresearch paradigm: *"programming the program."*
-> The agent modifies one file (`params.py`), measures the result, commits if better, reverts if not.
+> The agent modifies one file (`params.py` or `params_<sector>.py`), measures the result, commits if better, reverts if not.
+
+---
+
+## Executive Summary
+
+| Sector | Sharpe | Return | OOS Sharpe | Status |
+|--------|--------|--------|------------|--------|
+| **Tech** | **2.02** | +58.5% | 1.41 | Tuned |
+| **Equipment** | **1.86** | +95.0% | **2.35** | Tuned |
+| **Memory** | **2.44** | +229.6% | — | Baseline (tech params) |
+| Power | 0.04 | +4.0% | — | Needs tuning |
+| Energy | 0.03 | +3.8% | — | Does not generalize |
+
+**Infrastructure:** Per-sector params framework (`params_equipment.py`, `params_power.py`, `params_memory.py`), `--params` flag in evaluate.py, PRICES_PATH auto-load, overnight autoresearch loop (`program_equipment.md`, `run_overnight_equipment.sh`).
+
+**Equipment journey:** 1.63 → 1.86 (+14%) via MOM_3M 0.1, signal thresholds (0.28 / -0.15), VOL_Z_BEARISH 1.5, BOLLINGER_WINDOW 30, RISK_EXTREME_VOL_MULT 0.60. OOS 2.09 → 2.35.
 
 ---
 
@@ -10,14 +26,16 @@
 
 | Session | Date | Commits | Experiments | Start Sharpe | End Sharpe |
 |---|---|---|---|---|---|
-| Session 1 | 2026-03-10 | ~15 | ~80 | -2.3132 (Mode 2 broken) → 1.0385 (Mode 1 baseline) | **2.2203** (overfit, 6-month window) |
-| Session 2 | 2026-03-12 | 27 | ~110 | 1.0385 (full 14-month window) | **1.7880** |
-| Session 3 | 2026-03-12 | — | — | Mode 2 RSI + analyst weights | **2.0221** |
-| Session 4 | 2026-03-12 | 2 | ~25 | 2.0221 (restored cache) | **2.0358** |
-| Session 5 | 2026-03-12 | 1 | ~5 | 2.0358 (OOS tuning) | **2.0241** |
-| Session 8 | 2026-03-12 | — | ~12 | low-vol band (saturated) | reverted |
-| Session 8 | 2026-03-12 | 2 | ~12 | Equipment baseline 1.63 → ADX 40 + EMA 5/21/55 | **equip 1.7035** |
-| **Total** | | **~47** | **~233** | **-2.3132** | **tech 2.0241 / equip 1.7035** |
+| Session 1 | 2026-03-10 | ~15 | ~80 | -2.31 → 1.04 | **2.22** (overfit) |
+| Session 2 | 2026-03-12 | 27 | ~110 | 1.04 | **1.79** |
+| Session 3 | 2026-03-12 | — | — | Mode 2 RSI | **2.02** |
+| Session 4 | 2026-03-12 | 2 | ~25 | 2.02 | **2.04** |
+| Session 5 | 2026-03-12 | 1 | ~5 | 2.04 | **2.02** (OOS tuning) |
+| Session 6 | 2026-03-12 | — | — | LLM agents | reverted |
+| Session 7 | 2026-03-12 | — | — | Cross-asset | tech 2.02 / energy 0.03 |
+| Session 8 | 2026-03-12 | 2 | ~15 | low-vol (saturated) + equip baseline | **equip 1.70** |
+| Session 9 | 2026-03-12 | 5 | ~50 | equip 1.70 | **equip 1.86** |
+| **Total** | | **~52** | **~300** | **-2.31** | **tech 2.02 / equip 1.86 / memory 2.44** |
 
 ---
 
@@ -462,16 +480,25 @@ Added `cross_asset_check.py` and support for alternate ticker universes:
 
 **Energy:** Does not generalize. Oil/commodity regime differs fundamentally from tech momentum.
 
-**Equipment (Session 8):** Strong generalization from tech params. Key tuning wins:
-- ADX_PERIOD: 26→40 (+3.2% Sharpe)
-- EMA_MEDIUM/LONG: 13/34 → 21/55 (+1.2% Sharpe)
-- RISK_BASE_LIMIT 0.30 (same as tech; reducing hurt, not helped)
-- OOS Sharpe **2.09** — _better_ than full-window, very robust
+**Equipment (Sessions 8–9):** Strong generalization from tech params. Full tuning journey:
 
-Equipment now has a dedicated `params_equipment.py`. Run with:
+| Stage | Change | Sharpe | Return | OOS |
+|-------|--------|--------|--------|-----|
+| Tech params baseline | — | 1.63 | +76.9% | 2.05 |
+| ADX 40, EMA 5/21/55 | Quarterly capex cycle | 1.70 | +81.5% | 2.09 |
+| MOM_3M 0.1 | 3-month momentum for equipment | 1.77 | +89.8% | — |
+| SIGNAL_BULLISH 0.25 | Stricter bull filter | 1.79 | +90.8% | — |
+| SIG 0.28, SIG_BEAR -0.15, VOL_Z 1.5 | Signal + vol regime | **1.85** | +94.2% | **2.36** |
+| BOLLINGER 30, RISK_EXTREME 0.60 | Mean-rev window, vol spike handling | **1.86** | +95.0% | **2.35** |
+
+Equipment now has `params_equipment.py`, `program_equipment.md`, `run_overnight_equipment.sh`. Run with:
 ```bash
 poetry run python -m autoresearch.evaluate --params autoresearch.params_equipment
 ```
+
+**Memory:** Tech params applied to MU, WDC, STX → **Sharpe 2.44, +229.6%**. No tuning needed; tech params generalize extremely well to memory.
+
+**Power:** Tech params → -0.02. Mean-rev bias (RSI 30/70, lower momentum, RISK 0.25) → 0.04. `params_power.py` created; full tuning pending.
 
 ---
 
@@ -496,25 +523,71 @@ poetry run python -m autoresearch.evaluate --params autoresearch.params_equipmen
 | EMA 5/21/55 + ADX 40 | **1.7035** | **+81.5%** | -16.9% |
 | OOS check (H2 2025) | **2.0939** | +59.4% | -16.9% |
 
-**Conclusion:** Equipment generalizes well from tech params (Sharpe 1.63 at baseline vs energy 0.03). Longer EMA and ADX periods reflect the quarterly capex-cycle cadence. The dedicated `params_equipment.py` is now the baseline for future equipment autoresearch.
+**Conclusion:** Equipment generalizes well from tech params (Sharpe 1.63 at baseline vs energy 0.03). Longer EMA and ADX periods reflect the quarterly capex-cycle cadence.
+
+---
+
+## Session 9 — Equipment Tuning + Power/Memory Baselines (2026-03-12)
+
+### Equipment Tuning (1.70 → 1.86)
+
+| Experiment | Val Sharpe | Change |
+|------------|------------|--------|
+| MOM_3M_WEIGHT 0.0→0.1, MOM_1M 1.0→0.9 | 1.7705 | +0.07 |
+| SIGNAL_BULLISH_THRESHOLD 0.2→0.25 | 1.7875 | +0.02 |
+| SIG_BULL 0.28, SIG_BEAR -0.15, VOL_Z_BEARISH 1.5 | 1.8464 | +0.06 |
+| BOLLINGER_WINDOW 20→30 | 1.8475 | +0.00 |
+| RISK_EXTREME_VOL_MULT 0.50→0.60 | 1.8608 | +0.01 |
+| **Both BOLLINGER 30 + RISK_EXTREME 0.60** | **1.8589** | **Final** |
+
+**Rejected:** MOM_6M 0.1/0.15 (worse), more trend weight (worse), BUY/SELL/MIN_CONF changes (no effect), VOL_HIGH_REG 1.3 (neutral).
+
+### Power Baseline (VST, CEG, NRG)
+
+| Config | Sharpe | Return | Max DD |
+|--------|--------|--------|--------|
+| Tech params | -0.02 | +0.9% | -21.5% |
+| params_power (mean-rev bias, RSI 30/70, RISK 0.25) | 0.04 | +4.0% | -16.7% |
+
+**Conclusion:** Power does not generalize from tech. Mean-reversion bias helps slightly. Full autoresearch pending.
+
+### Memory Baseline (MU, WDC, STX)
+
+| Config | Sharpe | Return | Max DD |
+|--------|--------|--------|--------|
+| Tech params | **2.4361** | **+229.6%** | -18.7% |
+
+**Conclusion:** Memory crushes with tech params. No tuning needed yet. `params_memory.py` created for future use.
+
+### Session 9 Key Discoveries
+
+- **MOM_3M matters for equipment** — 3-month momentum captures capex order cycles; 1M-only was leaving alpha on the table.
+- **Stricter signal thresholds help equipment** — SIG_BULL 0.28 and SIG_BEAR -0.15 filter noise; equipment names have sharper moves than tech.
+- **VOL_Z_BEARISH 1.5** — Equipment has vol spikes around earnings; relaxing from 2.0 to 1.5 improves signal quality.
+- **BOLLINGER_WINDOW 30** — Longer lookback for mean-reversion fits equipment's quarterly cadence.
+- **RISK_EXTREME_VOL_MULT 0.60** — Equipment has extreme vol spikes; 0.50 was over-penalizing. 0.60 allows slightly more size in spike regimes.
+- **Memory = tech regime** — MU, WDC, STX are cyclical semicon names; momentum/trend params transfer directly. Highest return of any sector.
+- **Power = different regime** — Utility-like, rate-sensitive. Mean-reversion helps but full tuning needed.
 
 ---
 
 ## What's Next
 
-1. **RSI tuning in bear/sideways regimes** — RSI 30/70, 25/75, 20/80 are now tunable. Test when market regime shifts.
+1. **Equipment overnight autoresearch** — Run full loop on `params_equipment.py`. Baseline to beat: Sharpe 1.86, OOS 2.35. `bash autoresearch/run_overnight_equipment.sh` + point AI at `program_equipment.md`.
 
-2. **Rolling window robustness** — ✅ Done. `poetry run python -m autoresearch.oos_check` — OOS (second half) Sharpe 1.41 vs full 2.02. RISK_BASE_LIMIT 0.30 improves OOS with minimal full-window cost.
+2. **Memory autoresearch** — Optional. Baseline 2.44 with tech params is already excellent. Create `program_memory.md` and tune if desired.
 
-3. **Cross-asset generalization** — ✅ Done (Session 7). `poetry run python -m autoresearch.cross_asset_check`. Tech: Sharpe 2.02, +58.5%. Energy (XOM, CVX, OXY, SLB, EOG): Sharpe 0.03, +3.8%, -17.8% DD. **Strategy is tech-specific** — momentum/trend params tuned for tech don't generalize to energy.
+3. **Power autoresearch** — `params_power.py` exists (Sharpe 0.04). Run autoresearch to improve; mean-reversion regime needs different calibration.
 
-4. **Selective LLM agent re-enablement** — ✅ Tested (Session 6). cathie_wood 0.1 → Sharpe 0.10, -31% dd. stanley_druckenmiller 0.1 → 0.46. growth_analyst 0.1 → 1.84. sentiment_analyst 0.1 → 1.37. news_sentiment 0.1/0.2 → 2.02 (neutral, no improvement). **Conclusion:** All LLM agents except news_sentiment hurt; news_sentiment is neutral. Technical-only remains best.
+4. **RSI tuning in bear/sideways regimes** — RSI 30/70, 25/75, 20/80 are tunable. Test when market regime shifts.
 
-5. **Equipment sector (Session 8)** — ✅ Done. `params_equipment.py` created with ADX 40 + EMA 5/21/55. Sharpe 1.7035, OOS 2.09.
+5. **Rolling window robustness** — ✅ Done. OOS (second half) Sharpe 1.41 (tech), 2.35 (equipment).
 
-6. **Equipment overnight autoresearch** — Run full autoresearch loop on equipment universe with `params_equipment.py` as mutable target.
+6. **Cross-asset generalization** — ✅ Done. Tech 2.02, Energy 0.03, Equipment 1.86, Memory 2.44, Power 0.04.
 
-7. **Additional sectors** — Power/infra (VST, CEG, NRG), EDA (CDNS, SNPS), Memory (MU, WDC, STX). Cache prices, baseline, then autoresearch.
+7. **LLM agent re-enablement** — ✅ Tested. Technical-only remains best.
+
+8. **Additional sectors** — EDA (CDNS, SNPS), Tokenization (COIN, HOOD, CRCL), Hyperscalers, Foundry (TSM). Cache prices, baseline, then autoresearch.
 
 ---
 
