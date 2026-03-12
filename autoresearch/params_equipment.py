@@ -34,8 +34,8 @@ RULES (for the AI agent):
 # Equipment is capex-cycle driven — trend dominates over short-term momentum.
 # Starting from tech-tuned weights; autoresearch will adjust from here.
 STRATEGY_WEIGHTS = {
-    "trend": 0.30,
-    "mean_reversion": 0.18,
+    "trend": 0.32,
+    "mean_reversion": 0.16,
     "momentum": 0.37,
     "volatility": 0.15,
     "stat_arb": 0.00,
