@@ -46,7 +46,7 @@ poetry run python -m autoresearch.evaluate --params autoresearch.params_equipmen
 
 ### Step 5: Compare and decide
 
-**Baseline to beat:** `val_sharpe=1.9062, val_return=+98.34%, OOS=2.39`
+**Baseline to beat:** `val_sharpe=1.9107, val_return=+98.74%, OOS=2.39`
 
 - **If better** → commit and log:
   ```bash
