@@ -95,7 +95,7 @@ SIGNAL_BEARISH_THRESHOLD = -0.15
 # ─────────────────────────────────────────────────────────────
 # Equipment is higher vol than tech (max DD -16.7% vs -8.2% at same RISK_BASE_LIMIT).
 # First experiment: reduce RISK_BASE_LIMIT to tighten drawdown.
-RISK_BASE_LIMIT = 0.30
+RISK_BASE_LIMIT = 0.32
 
 RISK_VOL_BANDS = [
     (0.15, 1.25),
