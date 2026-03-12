@@ -120,7 +120,9 @@ The strategy is running in Mode 1 (technical-only). The system is now correctly 
 - `CONFIDENCE_POWER` — cancels out in Mode 1 (single agent)
 - `BB_BULLISH`, `BB_BEARISH`, `ZSCORE_BULLISH`, `ZSCORE_BEARISH` — dead since BOLLINGER_STD=5.0 makes condition impossible
 
-**Tested 2026-03-12 (all reverted — no improvement over 2.02):**
+**Session 2 (2026-03-12):** ADX_PERIOD 22→26 **improved** to 2.0241 (committed).
+
+**Session 1 (reverted — no improvement over 2.02):**
 - `MOM_6M_WEIGHT` 0.3 → Sharpe 1.17 (worse)
 - `RISK_MIN_MULT` 0.10 → same 2.02
 - `SIGNAL_BULLISH_THRESHOLD` 0.22 → 1.93, 0.18 → 1.75 (worse)
@@ -128,7 +130,9 @@ The strategy is running in Mode 1 (technical-only). The system is now correctly 
 - `STRATEGY_WEIGHTS` momentum 0.39 → same
 - `BUY_THRESHOLD` 0.06, `MIN_CONFIDENCE_TO_ACT` 15, `RISK_MAX_MULT` 1.20 → same
 
-**Still untried:** `MOM_3M_WEIGHT`, `EMA` windows, `ADX_PERIOD`, `VOLATILITY_LOOKBACK_DAYS`, `fundamentals_analyst_agent` at 0.05–0.1.
+**Session 2 tested:** MOM_3M 0.2 (worse), EMA shorter (worse), ADX 18/26/28 (26 best), VOLATILITY_LOOKBACK 40/50 (worse), fundamentals 0.05 (same).
+
+**Still untried:** `RISK_BASE_LIMIT`, low-vol band multiplier, `SELL_THRESHOLD`.
 
 **To get Mode 2 (2.02):** Run `cache_signals.py` first, then `evaluate`. Ensure `signals.json` exists in `autoresearch/cache/`.
 
