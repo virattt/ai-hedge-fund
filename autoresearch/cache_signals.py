@@ -161,6 +161,7 @@ def main():
     parser.add_argument("--model", type=str, default="z-ai/glm-4.5-air")
     parser.add_argument("--provider", type=str, default="OpenRouter")
     parser.add_argument("--prices-only", action="store_true", help="Only cache prices, skip agent signals")
+    parser.add_argument("--prices-path", type=str, default="prices.json", help="Output path for prices (relative to cache dir)")
     args = parser.parse_args()
 
     tickers = [t.strip() for t in args.tickers.split(",")]
@@ -177,9 +178,9 @@ def main():
 
     # Phase 1: Cache prices (OVERWRITES — no resume; backup existing first)
     print("\n--- Phase 1: Caching price data ---")
-    prices_path = CACHE_DIR / "prices.json"
+    prices_path = CACHE_DIR / args.prices_path
     if prices_path.exists():
-        backup_path = CACHE_DIR / "prices.json.bak"
+        backup_path = prices_path.with_suffix(".json.bak")
         backup_path.write_text(prices_path.read_text())
         print(f"  Backed up existing prices → {backup_path}")
     price_cache = cache_prices(tickers, args.start, args.end)

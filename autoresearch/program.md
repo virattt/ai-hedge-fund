@@ -135,7 +135,9 @@ The strategy is running in Mode 1 (technical-only). The system is now correctly 
 
 **Session 6 tested:** cathie/stanley/growth/sentiment/news_sentiment agents — all hurt or neutral. MIN_CONF 25, BUY 0.06, SELL -0.04 — no effect.
 
-**Still untried:** low-vol band multiplier, cross-asset test.
+**Session 7 tested:** Cross-asset (energy) — Sharpe 0.03 vs tech 2.02. Strategy is tech-specific.
+
+**Still untried:** low-vol band multiplier.
 
 **To get Mode 2 (2.02):** Run `cache_signals.py` first, then `evaluate`. Ensure `signals.json` exists in `autoresearch/cache/`.
 

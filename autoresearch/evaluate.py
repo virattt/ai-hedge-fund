@@ -13,6 +13,7 @@ Exit code 0 = success. Non-zero = crash (the AI agent should revert).
 Usage:
     poetry run python -m autoresearch.evaluate
     poetry run python -m autoresearch.evaluate --start 2025-08-01 --end 2026-03-07  # OOS window
+    poetry run python -m autoresearch.evaluate --tickers XOM,CVX,OXY,SLB,EOG --prices-path prices_energy.json  # cross-asset
 """
 
 import argparse
@@ -53,17 +54,19 @@ def make_params_override(base, **overrides):
     return p
 
 
-def run_evaluation(start=None, end=None):
+def run_evaluation(start=None, end=None, tickers=None, prices_path=None):
     params = load_params()
+    overrides = {}
     if start or end:
-        params = make_params_override(
-            params,
-            BACKTEST_START=start or params.BACKTEST_START,
-            BACKTEST_END=end or params.BACKTEST_END,
-        )
+        overrides["BACKTEST_START"] = start or params.BACKTEST_START
+        overrides["BACKTEST_END"] = end or params.BACKTEST_END
+    if tickers:
+        overrides["BACKTEST_TICKERS"] = tickers
+    if overrides:
+        params = make_params_override(params, **overrides)
     from autoresearch.fast_backtest import FastBacktestEngine
 
-    engine = FastBacktestEngine(params)
+    engine = FastBacktestEngine(params, tickers_override=tickers, prices_path_override=prices_path)
     metrics = engine.run()
     return metrics
 
@@ -88,11 +91,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--start", type=str, help="Override BACKTEST_START (e.g. for OOS)")
     parser.add_argument("--end", type=str, help="Override BACKTEST_END (e.g. for OOS)")
+    parser.add_argument("--tickers", type=str, help="Override tickers (e.g. XOM,CVX,OXY,SLB,EOG for cross-asset)")
+    parser.add_argument("--prices-path", type=str, help="Override prices cache (e.g. prices_energy.json)")
     args = parser.parse_args()
+
+    tickers = [t.strip() for t in args.tickers.split(",")] if args.tickers else None
 
     t0 = time.time()
     try:
-        metrics = run_evaluation(start=args.start, end=args.end)
+        metrics = run_evaluation(start=args.start, end=args.end, tickers=tickers, prices_path=args.prices_path)
     except Exception:
         traceback.print_exc()
         print("val_sharpe=FAIL")

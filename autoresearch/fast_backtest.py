@@ -16,6 +16,7 @@ import math
 import sys
 from pathlib import Path
 from typing import Optional
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -28,14 +29,14 @@ sys.path.insert(0, str(PROJECT_ROOT))
 CACHE_DIR = Path(__file__).resolve().parent / "cache"
 
 
-def load_prices_cache() -> dict[str, pd.DataFrame]:
+def load_prices_cache(prices_path: Optional[Path] = None) -> dict[str, pd.DataFrame]:
     """Load cached price data into DataFrames keyed by ticker."""
-    prices_path = CACHE_DIR / "prices.json"
-    if not prices_path.exists():
+    path = prices_path or (CACHE_DIR / "prices.json")
+    if not path.exists():
         raise FileNotFoundError(
-            f"No price cache at {prices_path}. Run: poetry run python -m autoresearch.cache_signals --prices-only"
+            f"No price cache at {path}. Run: poetry run python -m autoresearch.cache_signals --prices-only"
         )
-    with open(prices_path) as f:
+    with open(path) as f:
         raw = json.load(f)
 
     frames = {}
@@ -313,11 +314,15 @@ def deterministic_portfolio_decision(
 # ── Main fast backtest engine ────────────────────────────────
 
 class FastBacktestEngine:
-    def __init__(self, params_module):
+    def __init__(self, params_module, tickers_override=None, prices_path_override=None):
         self.p = params_module
-        self.prices = load_prices_cache()
-        self.signals_cache = load_signals_cache()
-        self.tickers = self.p.BACKTEST_TICKERS
+        prices_path = None
+        if prices_path_override:
+            p = Path(prices_path_override)
+            prices_path = p if p.is_absolute() else CACHE_DIR / p
+        self.prices = load_prices_cache(prices_path)
+        self.signals_cache = load_signals_cache() if not tickers_override else None  # cross-asset = technical-only
+        self.tickers = tickers_override if tickers_override else self.p.BACKTEST_TICKERS
         self.portfolio_values = []
 
     def _get_price_slice(self, ticker: str, end_date: str, lookback_days: int = 200) -> pd.DataFrame:

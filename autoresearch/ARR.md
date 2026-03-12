@@ -438,13 +438,32 @@ Tested on second half (`--start 2025-08-01 --end 2026-03-07`):
 
 ---
 
+## Session 7 — Cross-Asset Generalization (2026-03-12)
+
+### Setup
+
+Added `cross_asset_check.py` and support for alternate ticker universes:
+- `cache_signals --tickers XOM,CVX,OXY,SLB,EOG --prices-only --prices-path prices_energy.json`
+- `evaluate --tickers XOM,CVX,OXY,SLB,EOG --prices-path prices_energy.json`
+
+### Results
+
+| Universe | Tickers | Sharpe | Return | Max DD |
+|----------|---------|--------|--------|--------|
+| Tech | AAPL, NVDA, MSFT, GOOGL, TSLA | 2.02 | +58.5% | -8.2% |
+| Energy | XOM, CVX, OXY, SLB, EOG | 0.03 | +3.8% | -17.8% |
+
+**Conclusion:** Strategy is tech-specific. Same params (momentum/trend weights, ADX, risk limits) produce near-zero alpha on energy. Energy had different regime (oil/commodity cycle) — params would need separate tuning for that universe.
+
+---
+
 ## What's Next
 
 1. **RSI tuning in bear/sideways regimes** — RSI 30/70, 25/75, 20/80 are now tunable. Test when market regime shifts.
 
 2. **Rolling window robustness** — ✅ Done. `poetry run python -m autoresearch.oos_check` — OOS (second half) Sharpe 1.41 vs full 2.02. RISK_BASE_LIMIT 0.30 improves OOS with minimal full-window cost.
 
-3. **Cross-asset generalization** — run the same params on a different universe (e.g., energy, biotech) to test whether these findings are AAPL/NVDA-specific or generalizable.
+3. **Cross-asset generalization** — ✅ Done (Session 7). `poetry run python -m autoresearch.cross_asset_check`. Tech: Sharpe 2.02, +58.5%. Energy (XOM, CVX, OXY, SLB, EOG): Sharpe 0.03, +3.8%, -17.8% DD. **Strategy is tech-specific** — momentum/trend params tuned for tech don't generalize to energy.
 
 4. **Selective LLM agent re-enablement** — ✅ Tested (Session 6). cathie_wood 0.1 → Sharpe 0.10, -31% dd. stanley_druckenmiller 0.1 → 0.46. growth_analyst 0.1 → 1.84. sentiment_analyst 0.1 → 1.37. news_sentiment 0.1/0.2 → 2.02 (neutral, no improvement). **Conclusion:** All LLM agents except news_sentiment hurt; news_sentiment is neutral. Technical-only remains best.
 
