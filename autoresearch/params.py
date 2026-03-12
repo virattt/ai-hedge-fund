@@ -98,7 +98,7 @@ CORR_BANDS = [
 ]
 CORR_DEFAULT_MULT = 1.10
 
-VOLATILITY_LOOKBACK_DAYS = 60
+VOLATILITY_LOOKBACK_DAYS = 45
 
 # ─────────────────────────────────────────────────────────────
 # 4. ANALYST SIGNAL AGGREGATION — Who to trust
