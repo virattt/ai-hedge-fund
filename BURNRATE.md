@@ -1,0 +1,360 @@
+```
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                                                                               ║
+║     ██████╗ ██╗   ██╗██████╗ ███╗   ██╗██████╗  █████╗ ████████╗███████╗       ║
+║     ██╔══██╗██║   ██║██╔══██╗████╗  ██║██╔══██╗██╔══██╗╚══██╔══╝██╔════╝       ║
+║     ██████╔╝██║   ██║██████╔╝██╔██╗ ██║██████╔╝███████║   ██║   █████╗         ║
+║     ██╔══██╗██║   ██║██╔══██╗██║╚██╗██║██╔══██╗██╔══██║   ██║   ██╔══╝         ║
+║     ██████╔╝╚██████╔╝██║  ██║██║ ╚████║██║  ██║██║  ██║   ██║   ███████╗       ║
+║     ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚══════╝       ║
+║                                                                               ║
+║     The benchmark.  No substitute.                                            ║
+║                                                                               ║
+║     From 2-and-20 to run rate.  Precision.  No noise.  Just the signal.       ║
+║                                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+```
+
+# Burn Rate — 2-and-20, the Bench, and What a Real Fund Costs
+
+This page does two things: it explains **2-and-20** in plain terms and why the Bench’s “research for free” story hits; then it lays out the **run rate** for a real fund vehicle—Delaware LLC, tokenized interests, $21M AUM—so the gap between “laptop cost” and “institutional structure” is explicit.
+
+---
+
+## 1. What “2-and-20” Means
+
+**2-and-20** (or “two and twenty”) is the standard fee structure many traditional hedge funds charge:
+
+| Component | Meaning |
+|-----------|--------|
+| **2% management fee** | Every year the fund takes 2% of **assets under management (AUM)**. Paid regardless of performance. |
+| **20% performance fee** | The fund keeps 20% of **profits** (often above a hurdle or benchmark). |
+
+**Example:** On $100M AUM, the management fee alone is $2M per year—to the managers—whether the fund is up or down. On top of that, 20% of any gains goes to the manager. So “2-and-20” is shorthand for: high fees, managers get rich, investors pay heavily.
+
+---
+
+## 2. The Punchline: The Bench vs. the Black Box
+
+The line you see in the wild—
+
+> *“Just AI agents doing the kind of research hedge funds charge 2-and-20 for.”*
+
+—refers to systems like the Bench: 18 specialized agents (value, growth, momentum, technicals, etc.) doing the same style of deep, multi-perspective research that funds have long charged 2-and-20 for.
+
+The punchline:
+
+- **No 2% drag.** No $25K minimums. No advisor wrap fees. Run it on a laptop; the “fee” is compute and API cost.
+- **The expensive Wall Street black box is being replaced by open AI agents.** The research that used to justify 2-and-20 is now available at marginal cost.
+
+This doc does **not** argue you should or shouldn’t run a fund. It states: if you go from “Bench on a laptop” to “actual fund vehicle with investors,” the following run rate is what you are signing up for.
+
+---
+
+## 3. Why This Document Exists
+
+The Bench is the committee. It holds the bar. It does not hold the fund entity.
+
+If you launch a **real fund**—Delaware LLC, accredited investors, custody, audit, compliance—you face fixed and variable costs that have nothing to do with the quality of the research. This section and the rest of the document quantify that: structure, assumptions, cost breakdown, and a build-your-own model so the burn rate is explicit.
+
+---
+
+## 4. Structure: Delaware LLC + Tokenized Interests
+
+Launching a hedge fund as a **Delaware limited liability company** is a common and legally sound choice, including for crypto-native strategies that want flexible governance and onchain tooling.
+
+With **$21M AUM** at or before launch (e.g. via Reg D private placement to accredited investors), a Delaware LLC gives:
+
+- **Pass-through taxation** (partnership election, Form 1065).
+- **Limited liability** for members.
+- **Operational simplicity** compared with a traditional LP/GP setup.
+
+The **fund vehicle** holds investor membership interests. A **separate Delaware LLC** acts as the management company.
+
+To streamline **compliance, onboarding, cap-table management, and secondary transfers**, this structure uses **Fairmint** (fairmint.com), an SEC-registered transfer agent built for onchain equity. Fairmint issues **tokenized LLC membership interests** into investors’ wallets via the **Open Cap Table Protocol (OCP)**. That removes paper cap tables, reduces the need for multiple SPVs, automates KYC/KYB/AML and accreditation, and produces **audit-ready, blockchain-verified** transaction history within U.S. securities law. For a fund managed from Switzerland, Fairmint’s borderless transfer capability is useful; it does **not** replace fund administration (NAV, portfolio accounting, custody).
+
+---
+
+## 5. Key Assumptions
+
+| Assumption | Value | Notes |
+|------------|--------|--------|
+| **Structure** | Delaware LLC fund + separate management LLC | Tokenized interests via Fairmint |
+| **Strategy** | Crypto/DeFi (digital assets, DeFi, tokenized securities) | |
+| **Manager location** | Switzerland | Cross-border tax and potential FINMA considerations |
+| **Investors** | 15–40 accredited at launch | |
+| **Fees** | 2% management + 20% performance | |
+| **Launch year** | 2026 | Mid-range market estimates for $10–50M AUM band |
+| **First year** | 20–40% higher cost | Setup and onboarding front-loaded |
+
+At **$21M AUM**, a **2% management fee** = **$420,000/year** revenue—enough to cover all operating costs with margin left. Performance fees are not included in the cost model below.
+
+---
+
+## 6. Cost Breakdown
+
+### 6.1 Entity Maintenance and Delaware Compliance — $1,000–$2,000/year
+
+- Annual franchise tax: **$300 per LLC** (due June 1).
+- Registered agent: **$150–$300 per entity**.
+- **Two entities** (Fund LLC + Management LLC): **$900–$1,800/year**.
+
+Fairmint’s onchain cap table aligns with Delaware filings and reduces manual updates when investors are added or transferred.
+
+---
+
+### 6.2 Legal, Compliance, and Securities Retainer — $15,000–$33,000/year (ongoing); $25,000–$45,000 first year
+
+- **Base retainer** (PPM maintenance, Form D amendments, SEC monitoring): **$8,000–$15,000**.
+- **Investor docs and transfer-agent work:** Traditionally **$10,000–$25,000**; with Fairmint’s issuance and compliance automation, **$2,000–$8,000** (e.g. operating-agreement customization or Swiss cross-border opinions).
+- **Cross-border / Swiss counsel** (U.S. tax + AIFMD/FINMA): **$5,000–$10,000**.
+- **One-time launch** (Fairmint integration + initial tokenized issuance): **$5,000–$12,000**, included in first-year total.
+
+Without Fairmint, ongoing legal would be roughly **$20,000–$50,000**. The platform’s automation cuts about **25–35%** from this line.
+
+---
+
+### 6.3 Fund Administration and Investor Services — $28,000–$57,000/year
+
+**Hybrid model:** Fairmint for the **investor-facing layer** (onchain cap table, transfers, portfolio visibility); a **crypto-specialist administrator** for NAV, books, reconciliation, and performance reporting.
+
+| Component | Range | Notes |
+|-----------|--------|--------|
+| Traditional admin (NAV, books, reporting, wallet reconciliation) | $18,000–$35,000 | ~0.15–0.20% of $21M or $2.5–3K/month minimums |
+| Fairmint (cap table, KYC, transfers, dashboard) | $5,000–$12,000/year | Replaces an estimated $10K–$30K in legacy transfer-agent/admin work |
+| Crypto extras (Fireblocks/Anchorage, wallet monitoring, DeFi yield) | $5,000–$10,000 | |
+
+This hybrid yields roughly **20–30%** savings versus a traditional-only admin at this AUM, with tokenized infrastructure suited to institutional scaling.
+
+---
+
+### 6.4 Annual Audit and Tax Preparation — $26,000–$45,000/year
+
+- **Financial audit** (Big 4 or crypto specialist): **$18,000–$32,000** (blockchain tracing, ASC 820, custody confirmations).
+- **Tax** (Form 1065 + K-1s, foreign reporting as applicable): **$10,000–$18,000**.
+- **Fairmint:** Onchain, audit-ready transaction history can trim audit fees by **$2,000–$5,000** (capital-account and membership tracing).
+
+First-year audit is often **10–15%** higher for initial setup.
+
+---
+
+### 6.5 Insurance, Custody, Software, and Miscellaneous — $20,000–$42,000/year
+
+| Item | Range |
+|------|--------|
+| D&O / E&O insurance | $8,000–$15,000 |
+| Crypto custody / prime (e.g. Coinbase Prime, Fireblocks) | $5,000–$12,000 |
+| Accounting + crypto tools (e.g. QuickBooks, Cryptio) | $3,000–$6,000 |
+| Blue-sky (minimal under Reg D) | $2,000–$4,000 |
+| Banking, data, cybersecurity | $2,000–$5,000 |
+
+---
+
+### 6.6 Switzerland Cross-Border Overlay — $8,000–$15,000/year
+
+- U.S./Swiss tax coordination and FATCA/CRS reporting.
+- Swiss wealth-management licensing considerations if marketing to local investors.
+- Multi-jurisdictional banking and currency considerations.
+
+Usually handled with U.S. counsel and Swiss input; treated as a predictable annual overlay.
+
+---
+
+## 7. Total Cost Summary
+
+| Scenario | Recurring (Years 2+) | First-Year Total |
+|----------|----------------------|-------------------|
+| **Low** | $58,000 | $85,000 |
+| **Base (most likely)** | ~$85,000 | ~$120,000 |
+| **High** | $119,000 | $165,000 |
+
+**As % of $21M AUM:** 0.28% – 0.40% – 0.57%.
+
+**Buffer after 2% management fee ($420,000):** ~$302,000 – $335,000 – $362,000 (recurring).
+
+Approximate allocation:
+
+- Administration + Fairmint: **~35%**
+- Audit + Tax: **~30%**
+- Legal + Compliance: **~20%**
+- Entity + Insurance + Misc: **~15%**
+
+At $21M AUM, all-in operating cost is **0.28%–0.57%** of assets. The 2% management fee covers it with **$300K+** remaining before any performance fee.
+
+---
+
+## 8. Risks and Optimization
+
+| Risk / lever | Comment |
+|--------------|--------|
+| **Scale threshold** | Below ~$15M AUM, fixed costs bite. $21M is a workable sweet spot where the management fee funds operations with margin. |
+| **Crypto volatility** | Audit and custody can rise with complex DeFi or high turnover. Budget **10–15%** contingency on those lines. |
+| **Regulatory growth** | Above ~$150M AUM, SEC registration adds on the order of **$5K–$10K** (Form ADV, etc.)—manageable. |
+| **Fairmint upside** | Secondary liquidity for tokenized interests could improve stickiness and reduce churn-related admin—not baked into the numbers above. |
+
+---
+
+## 9. Strategy Size to Cover Burn: Wheel (BTC + HYPE on Hypersurface)
+
+One way to **cover the fund's total monthly burn** from trading income is the **wheel strategy**: cash-secured puts on **BTC** (and **HYPE**) on **Hypersurface**, with stablecoin collateral (e.g. USDT0) earning premium and, if assigned, acquiring spot at an effective discount. The math below adds **$210K in annual salaries** to the legal/ops run rate and calculates **how much collateral** the wheel needs to cover the full monthly cost.
+
+### Total Burn Rate (Legal/Ops + Salaries)
+
+The fund doesn't just pay legal and admin. It pays people. Adding **$210,000/year in salaries** ($17,500/month) to the operating costs from §7:
+
+| Component | Low | Base | High |
+|-----------|-----|------|------|
+| Legal / ops (from §7) | $58,000 | ~$85,000 | $119,000 |
+| Salaries | $210,000 | $210,000 | $210,000 |
+| **Total annual burn** | **$268,000** | **~$295,000** | **$329,000** |
+| **Monthly burn** | **~$22,333** | **~$24,583** | **~$27,417** |
+
+This is the number the wheel needs to cover.
+
+### Wheel Strategy Assumptions (BTC + HYPE, Hypersurface)
+
+- **Reference collateral:** $187K in USDT0 securing puts.
+- **Income at that size:** $2,500–$5,000/week → **~$10,000/month (conservative)** or **~$20,000/month (good)**.
+- **Per dollar of collateral:**
+  - Conservative: $10,000 / $187,000 ≈ **5.35% per month**.
+  - Good: $20,000 / $187,000 ≈ **10.7% per month**.
+- **If assigned:** You are long BTC (or HYPE) at an effective cost basis **below** spot (premium reduces cost). Not a loss — acquiring a hard asset at a pre-negotiated price with yield on collateral in the meantime.
+
+### Collateral Required to Cover Full Monthly Burn
+
+*(required collateral) = (monthly burn) ÷ (monthly yield rate)*
+
+| Monthly burn | Conservative (5.35%/mo) | Good (10.7%/mo) |
+|--------------|------------------------|-----------------|
+| **Low** (~$22,333) | **~$417,000** | **~$209,000** |
+| **Base** (~$24,583) | **~$460,000** | **~$230,000** |
+| **High** (~$27,417) | **~$512,000** | **~$256,000** |
+
+Formula: *collateral = monthly burn / yield rate* (e.g. $24,583 / 0.0535 ≈ $460K).
+
+### What This Means in BTC (at ~$70K spot)
+
+| Monthly burn | Conservative collateral | ≈ BTC equivalent | Good collateral | ≈ BTC equivalent |
+|--------------|------------------------|-------------------|-----------------|-------------------|
+| **Low** | ~$417K | **~5.95 BTC** | ~$209K | **~2.98 BTC** |
+| **Base** | ~$460K | **~6.57 BTC** | ~$230K | **~3.29 BTC** |
+| **High** | ~$512K | **~7.31 BTC** | ~$256K | **~3.66 BTC** |
+
+These are not positions to hold — they are the **notional size** the wheel needs to be writing puts against so that premium income covers the full burn (legal + salaries).
+
+### Takeaway
+
+- At **base burn** (~$24,583/month), you need about **$460K** collateral at the conservative yield, or about **$230K** at the good yield.
+- Your current **$187K** size covers roughly **$10K–$20K/month** — enough for the legal/ops burn alone, but not salaries. To cover the full $295K/year burn, scale the wheel to **~$230K–$460K** depending on income conditions.
+- The wheel is **income to pay the burn** — not a replacement for the 2% management fee. It's how the structure becomes self-sustaining from strategy P&L while the Bench does the research and the fund holds the costs.
+- Assignment is not a loss. At $70K BTC with $5K premium on ~2.66 BTC, effective cost basis is ~$68,614 — below spot. The wheel accumulates hard assets at a discount while generating the income stream that funds operations.
+
+---
+
+## 10. Google Sheets Cost Model — Build Guide
+
+The tables below paste into **Google Sheets** for a formula-driven model.
+
+**Setup:** New spreadsheet → name e.g. *“21M Crypto Hedge Fund LLC Cost Model 2026 – Fairmint”* → four sheets: **Assumptions**, **Cost Breakdown**, **Summary Dashboard**, **Sensitivity Analysis**. Paste each table into the matching sheet starting at **A1**. Format: bold headers, currency for $ columns, % for percent, freeze rows 1–3.
+
+---
+
+### Tab 1: Assumptions
+
+| A | B |
+|---|---|
+| **KEY ASSUMPTIONS** | |
+| Target AUM at Launch | $21,000,000 |
+| Management Fee | 2% |
+| Performance Fee | 20% |
+| Number of Investors | 25 |
+| Strategy | Crypto/DeFi |
+| Manager Location | Switzerland |
+| Structure | Delaware LLC Fund + Management LLC + Fairmint |
+| Launch Year | 2026 |
+| First-Year Multiplier | 1.3 |
+
+---
+
+### Tab 2: Cost Breakdown
+
+| Category / Line Item | Low | Base | High |
+|----------------------|-----|------|------|
+| **1. Entity Maintenance** | | | |
+| Franchise Tax (2 LLCs) | $900 | $1,200 | $1,800 |
+| Registered Agent (2 entities) | $300 | $400 | $600 |
+| *Subtotal Entity* | =SUM(B3:B4) | =SUM(C3:C4) | =SUM(D3:D4) |
+| **2. Legal / Compliance** | | | |
+| Base retainer + Form D | $8,000 | $11,500 | $15,000 |
+| Fairmint integration + docs | $2,000 | $5,000 | $8,000 |
+| Swiss cross-border counsel | $5,000 | $7,500 | $10,000 |
+| *Subtotal Legal* | =SUM(B8:B10) | =SUM(C8:C10) | =SUM(D8:D10) |
+| **3. Administration + Fairmint** | | | |
+| Crypto admin (NAV, books, reporting) | $18,000 | $26,500 | $35,000 |
+| Fairmint (cap table, KYC, transfers) | $5,000 | $8,500 | $12,000 |
+| Crypto custody + wallet monitoring | $5,000 | $8,000 | $10,000 |
+| *Subtotal Admin* | =SUM(B14:B16) | =SUM(C14:C16) | =SUM(D14:D16) |
+| **4. Audit + Tax** | | | |
+| Financial audit (crypto specialist) | $18,000 | $25,000 | $32,000 |
+| Tax prep (1065 + K-1s) | $10,000 | $14,000 | $18,000 |
+| *Subtotal Audit/Tax* | =SUM(B20:B21) | =SUM(C20:C21) | =SUM(D20:D21) |
+| **5. Insurance + Misc** | | | |
+| D&O/E&O Insurance | $8,000 | $11,500 | $15,000 |
+| Crypto prime brokerage | $5,000 | $8,500 | $12,000 |
+| Software + blue-sky | $5,000 | $7,000 | $9,000 |
+| *Subtotal Insurance/Misc* | =SUM(B26:B28) | =SUM(C26:C28) | =SUM(D26:D28) |
+| **6. Switzerland Overlay** | $8,000 | $11,500 | $15,000 |
+| **GRAND TOTAL (Recurring)** | =SUM(B6,B11,B17,B22,B29,B31) | =SUM(C6,C11,C17,C22,C29,C31) | =SUM(D6,D11,D17,D22,D29,D31) |
+| **First-Year Total (×1.3)** | =B33*1.3 | =C33*1.3 | =D33*1.3 |
+| **As % of AUM** | =B33/21000000 | =C33/21000000 | =D33/21000000 |
+| **Buffer vs. Management Fee** | =420000−B33 | =420000−C33 | =420000−D33 |
+
+Row numbers (6, 11, 17, 22, 29, 31) assume each Subtotal row is in that position; adjust to match your sheet.
+
+---
+
+### Tab 3: Summary Dashboard
+
+Reference the Cost Breakdown sheet (e.g. `='Cost Breakdown'!C33`).
+
+| A | B |
+|---|---|
+| Recurring Annual Cost (Base) | ='Cost Breakdown'!C33 |
+| First-Year Total | ='Cost Breakdown'!C34 |
+| % of AUM (Base) | ='Cost Breakdown'!C35 |
+| Management Fee Revenue | $420,000 |
+| Buffer After Costs | =420000−'Cost Breakdown'!C33 |
+| Break-Even AUM | ='Cost Breakdown'!C33/0.02 |
+
+Add a column chart: Low/Base/High annual totals from Cost Breakdown row 33.
+
+---
+
+### Tab 4: Sensitivity Analysis
+
+| A | B ($10M) | C ($21M) | D ($50M) |
+|---|----------|----------|----------|
+| AUM Scenario | $10,000,000 | $21,000,000 | $50,000,000 |
+| Total Cost (Base) | ='Cost Breakdown'!C33×0.85 | ='Cost Breakdown'!C33 | ='Cost Breakdown'!C33×1.25 |
+| % of AUM | =B3/B2 | =C3/C2 | =D3/D2 |
+
+Shows how cost scales with AUM; many items are semi-fixed until ~$50M, so $21M is an efficient point.
+
+---
+
+## 11. Conclusion
+
+╭─────────────────────────────────────────────────────────────────────────────────╮
+║  The only measure that matters is beating the bar.                              ║
+║  The Bench does the research.  The fund vehicle pays the burn rate.              ║
+╰─────────────────────────────────────────────────────────────────────────────────╯
+
+A Delaware LLC crypto fund at **$21M AUM** with **Fairmint**-based tokenized membership is cost-efficient and built for compliance and scale. Recurring costs sit in the **$58K–$119K** band (**0.28%–0.57%** of AUM), leaving **$300K+** from the management fee before performance fees.
+
+Fairmint’s onchain setup (no SPVs, automated compliance, instant transfers, audit trail) cuts cost versus legacy structures and positions the fund for secondary liquidity and institutional adoption.
+
+**Recommended next steps:**
+
+1. Build the Google Sheets model above (~10 minutes).
+2. Share with Delaware counsel and a crypto fund administrator for review.
+3. Contact Fairmint (fairmint.com → Contact) for pricing for your AUM and investor count.
