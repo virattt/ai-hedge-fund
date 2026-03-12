@@ -52,6 +52,10 @@ class LLMModel(BaseModel):
         """Check if the model supports JSON mode"""
         if self.is_deepseek() or self.is_gemini():
             return False
+        # Alibaba models require 'json' keyword in prompt for json_mode
+        # Hedge fund prompts don't contain this, so use manual extraction
+        if self.is_alibaba():
+            return False
         # Only certain Ollama models support JSON mode
         if self.is_ollama():
             return "llama3" in self.model_name or "neural-chat" in self.model_name
@@ -71,6 +75,10 @@ class LLMModel(BaseModel):
     def is_ollama(self) -> bool:
         """Check if the model is an Ollama model"""
         return self.provider == ModelProvider.OLLAMA
+
+    def is_alibaba(self) -> bool:
+        """Check if the model is an Alibaba model"""
+        return self.provider == ModelProvider.ALIBABA
 
 
 # Load models from JSON file
@@ -237,11 +245,11 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
             raise ValueError("Azure OpenAI deployment name not found.  Please make sure AZURE_OPENAI_DEPLOYMENT_NAME is set in your .env file.")
         return AzureChatOpenAI(azure_endpoint=azure_endpoint, azure_deployment=azure_deployment_name, api_key=api_key, api_version="2024-10-21")
     elif model_provider == ModelProvider.ALIBABA:
-        # Alibaba uses Anthropic-compatible API endpoint
+        # Alibaba uses OpenAI-compatible API endpoint (better tool support than Anthropic endpoint)
         api_key = (api_keys or {}).get("ALIBABA_API_KEY") or os.getenv("ALIBABA_API_KEY")
         if not api_key:
             print(f"API Key Error: Please make sure ALIBABA_API_KEY is set in your .env file or provided via API keys.")
             raise ValueError("Alibaba API key not found. Please make sure ALIBABA_API_KEY is set in your .env file or provided via API keys.")
-        # Alibaba's Anthropic-compatible endpoint
-        base_url = os.getenv("ALIBABA_ANTHROPIC_BASE_URL", "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic")
-        return ChatAnthropic(model=model_name, api_key=api_key, base_url=base_url)
+        # Alibaba's OpenAI-compatible endpoint (better compatibility)
+        base_url = os.getenv("ALIBABA_OPENAI_BASE_URL", "https://coding-intl.dashscope.aliyuncs.com/v1")
+        return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
