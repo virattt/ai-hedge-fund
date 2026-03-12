@@ -1,3 +1,22 @@
+```
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                                                                               ║
+║     ██████╗ ███████╗███╗   ██╗██╗  ██╗ ██████╗     ██████╗ ██████╗ ██╗      ██╗║
+║     ██╔══██╗██╔════╝████╗  ██║██║ ██╔╝██╔═══██╗    ██╔══██╗██╔══██╗██║      ██║║
+║     ██████╔╝█████╗  ██╔██╗ ██║█████╔╝ ██║   ██║    ██████╔╝██████╔╝██║█████╗██║║
+║     ██╔══██╗██╔══╝  ██║╚██╗██║██╔═██╗ ██║   ██║    ██╔══██╗██╔══██╗██║╚════╝██║║
+║     ██║  ██║███████╗██║ ╚████║██║  ██╗╚██████╔╝    ██████╔╝██║  ██║██║      ██║║
+║     ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═╝  ╚═╝ ╚═════╝    ╚═════╝ ╚═╝  ╚═╝╚═╝      ╚═╝║
+║                                                                               ║
+║     Precision.  No noise.  Just the signal.                                  ║
+║                                                                               ║
+║     "The chart doesn't lie. It never has."                                    ║
+║                                                                               ║
+║     Simple.  Powerful.  Different.                                             ║
+║                                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+```
+
 # Renko + BBWAS Overlay
 
 ## TL;DR — [The Chart That Doesn't Lie](https://ikigaistudio.substack.com/p/the-chart-that-doesnt-lie)
@@ -8,11 +27,11 @@
 
 **Together:** Renko shows directional conviction; BBWAS shows energy conditions. When both align — clean brick run + expanding bands — you get high-quality confluence. When they diverge — bricks one way, bandwidth contracting — the move may be running out of fuel.
 
-> *"The chart doesn't lie. It never has."*
-
 ---
 
 ## Backtest Results
+
+> *The only measure that matters is beating it.*
 
 Regime scaling simulates holding `(1 - scale)` in cash when bear/sideways.
 The upgraded backtest also includes:

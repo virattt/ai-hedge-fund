@@ -1,12 +1,36 @@
-# AI Hedge Fund
+```
+═══════════════════════════════════════════════════════════════════════════════
+║                                                                              ║
+║     █████╗ ██╗    ██╗  ██╗███████╗██████╗  ██████╗ ███████╗███████╗           ║
+║    ██╔══██╗██║    ██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔════╝           ║
+║    ███████║██║ █╗ ███████║█████╗  ██║  ██║██║  ███╗█████╗  █████╗             ║
+║    ██╔══██║██║███╗██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██╔══╝             ║
+║    ██║  ██║╚███╔██╗██║  ██║███████╗██████╔╝╚██████╔╝███████╗███████╗           ║
+║    ╚═╝  ╚═╝ ╚══╝╚═╝╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝╚══════╝           ║
+║                                                                              ║
+║     ██╗  ██╗███████╗██████╗  ██████╗ ███████╗███████╗                           ║
+║     ██║  ██║██╔════╝██╔══██╗██╔═══██╗██╔════╝██╔════╝                           ║
+║     ███████║█████╗  ██║  ██║██║   ██║█████╗  █████╗                              ║
+║     ██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██╔══╝                              ║
+║     ██║  ██║███████╗██████╔╝╚██████╔╝███████╗███████╗                              ║
+║     ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝╚══════╝                              ║
+║                                                                              ║
+║     The benchmark.  No substitute.                                             ║
+║                                                                              ║
+║     "The only measure that matters is beating it."                            ║
+║                                                                              ║
+║     Simple.  Powerful.  Different.                                            ║
+║                                                                              ║
+═══════════════════════════════════════════════════════════════════════════════
+```
 
 Someone just open sourced an AI hedge fund with 18 agents that think like Wall Street legends.
 
 Warren Buffett. Charlie Munger. Michael Burry. Cathie Wood. Bill Ackman. Ben Graham. Aswath Damodaran. All running on your laptop.
 
-It is called AI Hedge Fund. You give it stock tickers. Eighteen AI agents analyze the company from every angle, then vote on whether to buy, sell, or hold.
+You give it stock tickers. Eighteen AI agents analyze the company from every angle, then vote on whether to buy, sell, or hold.
 
-Not a toy. Not a dashboard. A full multi-agent investment research system.
+**Not a toy. Not a dashboard.** A full multi-agent investment research system.
 
 No Bloomberg Terminal. No $25K brokerage minimums. No financial advisor fees. Just AI agents doing the kind of research hedge funds charge 2-and-20 for.
 
@@ -31,6 +55,8 @@ No Bloomberg Terminal. No $25K brokerage minimums. No financial advisor fees. Ju
 6. You get a `BUY`, `SELL`, or `HOLD` decision with full reasoning from the committee
 
 ## Why It Feels Different
+
+**Precision. No noise. Just the signal.**
 
 Turn on `--show-reasoning` and you can watch each agent explain its logic step by step. The Buffett agent breaks down the moat. The Burry agent flags hidden downside. The Cathie agent makes the disruption case. They do not just generate answers. They debate them.
 
@@ -469,6 +495,8 @@ The portfolio builder isn't just a stock screener — it's a **position-aware de
 ---
 
 ## Autoresearch — Autonomous Parameter Optimization
+
+> *Precision. No noise. Just the signal.*
 
 Inspired by [Karpathy's autoresearch](https://github.com/karpathy/autoresearch) and its [Apple Silicon MLX port](https://github.com/trevin-creator/autoresearch-mlx).
 

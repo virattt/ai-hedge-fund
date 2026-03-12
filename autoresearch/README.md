@@ -1,7 +1,24 @@
-# Autoresearch — Autonomous AI Parameter Optimization
+```
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                                                                               ║
+║     █████╗ ██╗   ██╗████████╗ ██████╗ ██████╗ ███████╗███████╗██████╗  ██████╗ ██╗  ██╗║
+║    ██╔══██╗██║   ██║╚══██╔══╝██╔═══██╗██╔══██╗██╔════╝██╔════╝██╔══██╗██╔═══██╗██║  ██║║
+║    ███████║██║   ██║   ██║   ██║   ██║██████╔╝█████╗  ███████╗██████╔╝██║   ██║███████║║
+║    ██╔══██║██║   ██║   ██║   ██║   ██║██╔══██╗██╔══╝  ╚════██║██╔══██╗██║   ██║██╔══██║║
+║    ██║  ██║╚██████╔╝   ██║   ╚██████╔╝██║  ██║███████╗███████║██║  ██║╚██████╔╝██║  ██║║
+║    ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝║
+║                                                                               ║
+║     The benchmark.  No substitute.                                            ║
+║                                                                               ║
+║     "Any metric you care about that is reasonably efficient to evaluate       ║
+║      can be autoresearched by an agent swarm." — Andrej Karpathy             ║
+║                                                                               ║
+║     Simple.  Powerful.  Different.                                            ║
+║                                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+```
 
-> *"Any metric you care about that is reasonably efficient to evaluate can be autoresearched by an agent swarm."*
-> — Andrej Karpathy
+# Autoresearch — Autonomous AI Parameter Optimization
 
 **Quick reference:** See [`RUNBOOK.md`](RUNBOOK.md) for reproducibility, price refresh, sector tuning, portfolio backtest, paper trading, and daily automation.
 
@@ -32,6 +49,8 @@
 ---
 
 ## The Insight
+
+**Precision. No noise. Just the signal.**
 
 Karpathy let an AI agent optimize his neural net training code for 2 days. It ran 700 experiments autonomously. Found 20 improvements he'd missed after months of manual tuning. 11% performance gain.
 
@@ -71,6 +90,8 @@ SOUL.md (your convictions)
 
 ## This System
 
+> *The only measure that matters is beating it.*
+
 Inspired by [Karpathy's autoresearch](https://github.com/karpathy/autoresearch) and its [Apple Silicon MLX port](https://github.com/trevin-creator/autoresearch-mlx).
 
 An autonomous loop that lets an AI agent run hundreds of experiments to optimize the AI Hedge Fund's trading parameters — technical indicators, strategy weights, risk limits, analyst trust, and portfolio construction rules — while you sleep.
@@ -78,33 +99,33 @@ An autonomous loop that lets an AI agent run hundreds of experiments to optimize
 The metric is **Sharpe ratio**. The agent tunes `params.py`. Everything else is fixed.
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  Step 0: CACHE (one-time, ~30 sec for prices only)  │
-│  Download price data for your tickers.               │
-│  Optionally cache full agent signals (~30 min).      │
-└────────────────────┬────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────┐
-│  AUTORESEARCH LOOP (overnight, autonomous)           │
-│                                                      │
-│  1. AI reads program.md                              │
-│  2. AI reads results.tsv (prior experiments)         │
-│  3. AI forms a hypothesis                            │
-│  4. AI modifies params.py (one change at a time)     │
-│  5. Run: poetry run python -m autoresearch.evaluate  │
-│     → loads cached data                              │
-│     → recomputes technical signals with new params   │
-│     → runs fast deterministic backtest               │
-│     → outputs val_sharpe=X.XXXX                      │
-│  6. If better → git commit (keep)                    │
-│     If worse  → git checkout (revert)                │
-│  7. Repeat                                           │
-│                                                      │
-│  ~5-15 seconds per experiment                        │
-│  ~300+ experiments per hour                          │
-│  ~2000+ experiments overnight                        │
-│  Zero LLM calls during backtest. Zero API calls.     │
-└──────────────────────────────────────────────────────┘
+╔═════════════════════════════════════════════════════╗
+║  Step 0: CACHE (one-time, ~30 sec for prices only)  ║
+║  Download price data for your tickers.               ║
+║  Optionally cache full agent signals (~30 min).      ║
+╚════════════════════╦════════════════════════════════╝
+                      ║
+╔═════════════════════╩════════════════════════════════╗
+║  AUTORESEARCH LOOP (overnight, autonomous)           ║
+║                                                      ║
+║  1. AI reads program.md                              ║
+║  2. AI reads results.tsv (prior experiments)        ║
+║  3. AI forms a hypothesis                            ║
+║  4. AI modifies params.py (one change at a time)     ║
+║  5. Run: poetry run python -m autoresearch.evaluate  ║
+║     → loads cached data                              ║
+║     → recomputes technical signals with new params   ║
+║     → runs fast deterministic backtest              ║
+║     → outputs val_sharpe=X.XXXX                      ║
+║  6. If better → git commit (keep)                    ║
+║     If worse  → git checkout (revert)                ║
+║  7. Repeat                                           ║
+║                                                      ║
+║  ~5-15 seconds per experiment                        ║
+║  ~300+ experiments per hour                          ║
+║  ~2000+ experiments overnight                         ║
+║  Zero LLM calls during backtest. Zero API calls.     ║
+╚══════════════════════════════════════════════════════╝
 ```
 
 The agent doesn't just enumerate possibilities — it reads its own history, builds intuition about the parameter landscape, and directs exploration accordingly. That's the difference between a grid search and a research agent.
