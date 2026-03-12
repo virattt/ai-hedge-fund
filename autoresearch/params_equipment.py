@@ -48,7 +48,7 @@ STRATEGY_WEIGHTS = {
 # Trend — equipment cycles are quarterly, not weekly
 EMA_SHORT = 5
 EMA_MEDIUM = 21
-EMA_LONG = 50
+EMA_LONG = 48
 ADX_PERIOD = 40
 
 # Mean Reversion
