@@ -5,6 +5,7 @@ from langchain_deepseek import ChatDeepSeek
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_xai import ChatXAI
+from langchain_mistralai import ChatMistralAI
 from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from langchain_openai import ChatOpenAI
 from langchain_gigachat import GigaChat
@@ -135,7 +136,7 @@ def get_models_list():
     ]
 
 
-def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | None:
+def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | ChatMistralAI | None:
     if model_provider == ModelProvider.GROQ:
         api_key = (api_keys or {}).get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
         if not api_key:
@@ -206,6 +207,12 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
             print(f"API Key Error: Please make sure XAI_API_KEY is set in your .env file or provided via API keys.")
             raise ValueError("xAI API key not found. Please make sure XAI_API_KEY is set in your .env file or provided via API keys.")
         return ChatXAI(model=model_name, api_key=api_key)
+    elif model_provider == ModelProvider.MISTRAL:
+        api_key = (api_keys or {}).get("MISTRAL_API_KEY") or os.getenv("MISTRAL_API_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure MISTRAL_API_KEY is set in your .env file or provided via API keys.")
+            raise ValueError("Mistral API key not found. Please make sure MISTRAL_API_KEY is set in your .env file or provided via API keys.")
+        return ChatMistralAI(model=model_name, api_key=api_key)
     elif model_provider == ModelProvider.GIGACHAT:
         if os.getenv("GIGACHAT_USER") or os.getenv("GIGACHAT_PASSWORD"):
             return GigaChat(model=model_name)
