@@ -1,10 +1,16 @@
 import sys
+from pathlib import Path
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
 from colorama import Fore, Style, init
 import questionary
+
+from src._entrypoint import ensure_project_root_on_path
 from src.agents.portfolio_manager import portfolio_management_agent
 from src.agents.risk_manager import risk_management_agent
 from src.graph.state import AgentState
@@ -20,6 +26,8 @@ import argparse
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import json
+
+ensure_project_root_on_path(__file__)
 
 # Load environment variables from .env file
 load_dotenv()
