@@ -55,7 +55,7 @@ def make_params_override(base, **overrides):
     return p
 
 
-def run_evaluation(start=None, end=None, tickers=None, prices_path=None, params_module=None):
+def run_evaluation(start=None, end=None, tickers=None, prices_path=None, params_module=None, cost_bps=0):
     params = load_params(params_module or "autoresearch.params")
     overrides = {}
     if start or end:
@@ -63,6 +63,8 @@ def run_evaluation(start=None, end=None, tickers=None, prices_path=None, params_
         overrides["BACKTEST_END"] = end or params.BACKTEST_END
     if tickers:
         overrides["BACKTEST_TICKERS"] = tickers
+    if cost_bps != 0:
+        overrides["TRANSACTION_COST_BPS"] = cost_bps
     if overrides:
         params = make_params_override(params, **overrides)
 
@@ -99,13 +101,14 @@ def main():
     parser.add_argument("--tickers", type=str, help="Override tickers (e.g. XOM,CVX,OXY,SLB,EOG for cross-asset)")
     parser.add_argument("--prices-path", type=str, help="Override prices cache (e.g. prices_energy.json)")
     parser.add_argument("--params", type=str, help="Params module to load (e.g. autoresearch.params_equipment)")
+    parser.add_argument("--cost-bps", type=float, default=0, help="Transaction cost in bps (e.g. 10 = 0.1%%)")
     args = parser.parse_args()
 
     tickers = [t.strip() for t in args.tickers.split(",")] if args.tickers else None
 
     t0 = time.time()
     try:
-        metrics = run_evaluation(start=args.start, end=args.end, tickers=tickers, prices_path=args.prices_path, params_module=args.params)
+        metrics = run_evaluation(start=args.start, end=args.end, tickers=tickers, prices_path=args.prices_path, params_module=args.params, cost_bps=args.cost_bps)
     except Exception:
         traceback.print_exc()
         print("val_sharpe=FAIL")

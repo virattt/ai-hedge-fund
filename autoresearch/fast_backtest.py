@@ -438,7 +438,8 @@ class FastBacktestEngine:
                 # Execute trade
                 action = decision["action"]
                 qty = decision["quantity"]
-                cash, positions = self._execute(t, action, qty, current_prices[t], cash, positions, margin_req)
+                cost_bps = getattr(self.p, "TRANSACTION_COST_BPS", 0)
+                cash, positions = self._execute(t, action, qty, current_prices[t], cash, positions, margin_req, cost_bps)
 
             # Record portfolio value
             total_value = cash
@@ -447,6 +448,7 @@ class FastBacktestEngine:
                 total_value -= positions[t]["short"] * current_prices[t]
             self.portfolio_values.append({"date": current_date, "value": total_value})
 
+        self.final_positions = positions
         return self._compute_metrics()
 
     def _estimate_volatility(self, ticker: str, date_str: str) -> float:
@@ -459,12 +461,14 @@ class FastBacktestEngine:
         daily_vol = returns.tail(self.p.VOLATILITY_LOOKBACK_DAYS).std()
         return float(daily_vol * np.sqrt(252)) if not np.isnan(daily_vol) else 0.25
 
-    def _execute(self, ticker, action, qty, price, cash, positions, margin_req) -> tuple:
+    def _execute(self, ticker, action, qty, price, cash, positions, margin_req, cost_bps: float = 0) -> tuple:
         if qty <= 0:
             return cash, positions
+        cost_mult = 1.0 + (cost_bps / 10000.0)  # buy: pay more
+        cost_mult_inv = 1.0 - (cost_bps / 10000.0)  # sell: receive less
         pos = positions[ticker]
         if action == "buy":
-            cost = qty * price
+            cost = qty * price * cost_mult
             if cost <= cash:
                 old = pos["long"]
                 old_cb = pos["long_cost_basis"]
@@ -474,9 +478,9 @@ class FastBacktestEngine:
                 pos["long"] = new_total
                 cash -= cost
             else:
-                max_q = int(cash / price) if price > 0 else 0
+                max_q = int(cash / (price * cost_mult)) if price > 0 else 0
                 if max_q > 0:
-                    cost = max_q * price
+                    cost = max_q * price * cost_mult
                     old = pos["long"]
                     old_cb = pos["long_cost_basis"]
                     new_total = old + max_q
@@ -487,20 +491,20 @@ class FastBacktestEngine:
         elif action == "sell":
             qty = min(qty, pos["long"])
             if qty > 0:
-                cash += qty * price
+                cash += qty * price * cost_mult_inv
                 pos["long"] -= qty
                 if pos["long"] == 0:
                     pos["long_cost_basis"] = 0.0
         elif action == "short":
-            proceeds = qty * price
-            margin_needed = proceeds * margin_req
+            proceeds = qty * price * cost_mult_inv
+            margin_needed = qty * price * margin_req
             if margin_needed <= cash:
                 pos["short"] += qty
                 cash += proceeds - margin_needed
         elif action == "cover":
             qty = min(qty, pos["short"])
             if qty > 0:
-                cost = qty * price
+                cost = qty * price * cost_mult
                 cash -= cost
                 pos["short"] -= qty
         return cash, positions

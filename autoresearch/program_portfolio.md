@@ -31,3 +31,8 @@ poetry run python -m autoresearch.portfolio_backtest --weights oos --start 2025-
 | OOS | 2.84 | +101.2% | -9.0% | **3.31** | **+69.4%** |
 
 **Takeaway:** OOS-weighted portfolio achieves Sharpe 2.84 in-sample, **3.31 OOS** — diversification improves OOS robustness.
+
+**Additional options:**
+- `--weights risk_parity` — inverse volatility
+- `--weights min_vol` — minimum variance
+- `--cost-bps 10` — 10bps transaction cost

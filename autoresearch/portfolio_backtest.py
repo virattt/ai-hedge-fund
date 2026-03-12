@@ -72,7 +72,7 @@ def load_params(module_name: str):
     return params_mod
 
 
-def run_sector_backtest(params_module: str, prices_path: str, start=None, end=None):
+def run_sector_backtest(params_module: str, prices_path: str, start=None, end=None, cost_bps=0):
     """Run one sector backtest. Returns (portfolio_values list, metrics dict)."""
     from autoresearch.fast_backtest import FastBacktestEngine
 
@@ -85,6 +85,8 @@ def run_sector_backtest(params_module: str, prices_path: str, start=None, end=No
         overrides["BACKTEST_START"] = start
     if end:
         overrides["BACKTEST_END"] = end
+    if cost_bps != 0:
+        overrides["TRANSACTION_COST_BPS"] = cost_bps
 
     if overrides:
         import types
@@ -98,7 +100,7 @@ def run_sector_backtest(params_module: str, prices_path: str, start=None, end=No
 
     engine = FastBacktestEngine(params, prices_path_override=str(full_path))
     metrics = engine.run()
-    return engine.portfolio_values, metrics
+    return engine.portfolio_values, metrics, engine
 
 
 def portfolio_values_to_returns(pv: list) -> pd.Series:
@@ -144,12 +146,13 @@ def compute_portfolio_metrics(returns: pd.Series) -> dict:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--weights", choices=["equal", "sharpe", "oos"], default="equal",
-                        help="Allocation: equal, sharpe-weighted, or OOS-weighted")
+    parser.add_argument("--weights", choices=["equal", "sharpe", "oos", "risk_parity", "min_vol"], default="equal",
+                        help="Allocation: equal, sharpe, oos, risk_parity (inv vol), min_vol")
     parser.add_argument("--exclude", type=str, default="",
                         help="Comma-separated sectors to exclude (e.g. networking,eda)")
     parser.add_argument("--start", type=str, help="Override BACKTEST_START (OOS window)")
     parser.add_argument("--end", type=str, help="Override BACKTEST_END (OOS window)")
+    parser.add_argument("--cost-bps", type=float, default=0, help="Transaction cost in bps (e.g. 10 = 0.1%%)")
     args = parser.parse_args()
 
     exclude = {s.strip() for s in args.exclude.split(",") if s.strip()}
@@ -164,7 +167,7 @@ def main():
     for sector in sectors:
         mod, path = SECTOR_CONFIG[sector]
         try:
-            pv, metrics = run_sector_backtest(mod, path, start=args.start, end=args.end)
+            pv, metrics, _ = run_sector_backtest(mod, path, start=args.start, end=args.end, cost_bps=args.cost_bps)
             ret = portfolio_values_to_returns(pv)
             returns_by_sector[sector] = ret
             metrics_by_sector[sector] = metrics
@@ -188,10 +191,30 @@ def main():
         sharpes = {s: max(SECTOR_SHARPE.get(s, 0), 0.01) for s in returns_by_sector}
         total = sum(sharpes.values())
         w = {s: sharpes[s] / total for s in returns_by_sector}
-    else:  # oos
+    elif args.weights == "oos":
         oos = {s: max(SECTOR_OOS_SHARPE.get(s, 0), 0.01) for s in returns_by_sector}
         total = sum(oos.values())
         w = {s: oos[s] / total for s in returns_by_sector}
+    elif args.weights == "risk_parity":
+        vols = aligned.std()
+        inv_vol = {s: 1.0 / max(vols[s], 1e-8) for s in returns_by_sector if s in vols.index}
+        total = sum(inv_vol.values())
+        w = {s: inv_vol[s] / total for s in inv_vol}
+    elif args.weights == "min_vol":
+        cov = aligned.cov().fillna(0)
+        sectors_list = list(aligned.columns)
+        n = len(sectors_list)
+        try:
+            inv_cov = np.linalg.inv(cov.values + np.eye(n) * 1e-4)
+            ones = np.ones(n)
+            w_vec = inv_cov @ ones
+            w_vec = np.maximum(w_vec, 0)
+            w_vec = w_vec / w_vec.sum()
+            w = {sectors_list[i]: float(w_vec[i]) for i in range(n)}
+        except Exception:
+            w = {s: 1.0 / len(returns_by_sector) for s in returns_by_sector}
+    else:
+        w = {s: 1.0 / len(returns_by_sector) for s in returns_by_sector}
 
     # Portfolio returns
     portfolio_ret = pd.Series(0.0, index=aligned.index)

@@ -27,7 +27,7 @@
 
 **Infrastructure:** Per-sector params (`params_<sector>.py`), `--params` in evaluate.py, PRICES_PATH auto-load, sector programs (`program_<sector>.md`), results logs (`results_<sector>.tsv`). **Portfolio backtest:** `portfolio_backtest.py` combines sector returns; OOS-weighted Sharpe 2.84 val, **3.31 OOS**.
 
-**Recent tuning (2026-03-11):** Platform OOS: EMA 40, RISK_EXT 0.60, SIG 0.32 → val 1.21, OOS 0.33. Photonics RISK_EXT 0.60 → 2.26. Portfolio backtest: OOS-weighted 11 sectors → Sharpe 2.84 val, **3.31 OOS**, +69.4% return.
+**Recent tuning (2026-03-11):** Platform OOS: EMA 40, RISK_EXT 0.60, SIG 0.32 → val 1.21, OOS 0.33. Photonics RISK_EXT 0.60 → 2.26. Portfolio backtest: OOS-weighted 11 sectors → Sharpe 2.84 val, **3.31 OOS**, +69.4% return. Added: RUNBOOK, transaction costs (--cost-bps), risk_parity/min_vol weights, regime.py, paper_trading.py, refresh_all_prices.sh.
 
 ---
 
