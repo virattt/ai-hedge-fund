@@ -90,7 +90,42 @@ Read the output. Compare `val_sharpe` with the previous best.
 
 ### Experiment budget
 
-Aim for **5-10 experiments per hour**. Each takes ~5-15 seconds to run. In an overnight session (8 hours), that's 40-80 experiments — enough to find significant improvements.
+Each experiment takes ~4-6 seconds. Aim for **50+ experiments per hour**. In an overnight session (8 hours), that's 400+ experiments.
+
+## Current State (read this before your first experiment)
+
+**Session 2 best (commit `485d4d0`, 2026-03-12):**
+`val_sharpe=1.7880, val_sortino=2.8507, val_max_dd=-8.58%, val_return=+48.76%`
+
+**What happened in 191 experiments across 2 sessions:**
+The strategy is running in Mode 1 (technical-only). The system is now correctly calibrated for a 14-month AI bull market (Jan 2025 – Mar 2026) on AAPL, NVDA, MSFT, GOOGL, TSLA.
+
+**What's already been optimized (do not re-test):**
+- `BOLLINGER_STD` → 5.0 (neutralizes Bollinger, lets RSI drive mean-reversion)
+- `MOM_BULLISH/BEARISH` → ±0.001
+- `RISK_BASE_LIMIT` → 0.30
+- `RISK_VOL_BANDS` → flat 1.0 for medium/high vol (no tech penalty)
+- `ADX_PERIOD` → 22 (≈1 calendar month, sweet spot)
+- `stat_arb` weight → 0.00 (noise for correlated tech names)
+- `POSITION_SIZE_FRACTION` → 1.00 (full deployment)
+- `VOL_LOW_REGIME` → 0.95, `VOL_Z_BULLISH` → -0.5, `VOL_Z_BEARISH` → 2.0
+- `STRATEGY_WEIGHTS` → trend=0.30, mr=0.18, momentum=0.37, vol=0.15, stat_arb=0.00
+
+**Known dead code in params.py (changes have zero effect):**
+- `CORR_BANDS` / `CORR_DEFAULT_MULT` — function defined but never called
+- `RSI_SHORT` / `RSI_LONG` — `compute_rsi()` is defined but never called in the backtest
+- `CONFIDENCE_POWER` — cancels out in Mode 1 (single agent)
+- `BB_BULLISH`, `BB_BEARISH`, `ZSCORE_BULLISH`, `ZSCORE_BEARISH` — dead since BOLLINGER_STD=5.0 makes condition impossible
+
+**Most promising next moves (in order):**
+1. `MOM_6M_WEIGHT` — currently 0.0, **never tested**. 6-month momentum is the Jegadeesh-Titman factor, one of the most robust return predictors. Try `MOM_1M_WEIGHT=0.7, MOM_6M_WEIGHT=0.3`.
+2. `RISK_MIN_MULT` — currently 0.25 (floor on position sizing). Try 0.10 to allow more aggressive deployment on strong signals even in elevated vol.
+3. `SIGNAL_BULLISH_THRESHOLD` — try 0.22 or 0.23 (slight increase = more selective buys).
+4. **Mode 2** — put signals.json back and tune `ANALYST_WEIGHTS` to down-weight bearish value agents (Graham, Munger, Burry) on this momentum tech universe.
+
+Start with #1 — `MOM_6M_WEIGHT` is the only major untested live lever.
+
+---
 
 ## Important Rules
 

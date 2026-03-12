@@ -1,10 +1,55 @@
 # Autoresearch — Autonomous AI Parameter Optimization
 
+> *"Any metric you care about that is reasonably efficient to evaluate can be autoresearched by an agent swarm."*
+> — Andrej Karpathy
+
+---
+
+## The Insight
+
+Karpathy let an AI agent optimize his neural net training code for 2 days. It ran 700 experiments autonomously. Found 20 improvements he'd missed after months of manual tuning. 11% performance gain.
+
+The agent found bugs. Tuned hyperparameters. Discovered missing regularization. Planned its own experiments based on prior results.
+
+What did Karpathy do? He wrote `program.md`.
+
+He described the task, the evaluation metric, and the rules. The agent did the rest.
+
+This is the key reframe: **you're not writing code anymore, you're programming the program.** The human's job is to define what "better" means and make it fast to measure. The agent's job is to find it.
+
+That's what this system does — for trading strategy optimization.
+
+---
+
+## Where This Lives
+
+This system is the research engine underneath **[Dexter](https://github.com/eliza420ai-beep/dexter)** — a thesis-driven portfolio that lives in your terminal.
+
+The full loop works like this:
+
+```
+SOUL.md (your convictions)
+  → Dexter reads thesis, builds sleeves (80% BTC / 10% stocks / 10% on-chain)
+  → AI Hedge Fund runs 18 analyst agents against the same names
+      → challenges conviction before it gets trusted
+      → pokes holes in the thesis
+  → Autoresearch sharpens both overnight
+      → tunes the AI Hedge Fund's technical parameters (this repo)
+      → improves Dexter's own reasoning via MLX on Apple Silicon
+  → Repeat
+```
+
+**SOUL.md is the origin.** It defines the thesis — the AI infrastructure supply chain, the conviction tiers, the regime overlay. Everything downstream serves that thesis or challenges it. The AI Hedge Fund is the second-opinion engine: 18 agents that don't know your thesis and don't care — they just run the numbers. Autoresearch is what makes both systems sharper over time without human intervention.
+
+---
+
+## This System
+
 Inspired by [Karpathy's autoresearch](https://github.com/karpathy/autoresearch) and its [Apple Silicon MLX port](https://github.com/trevin-creator/autoresearch-mlx).
 
-An autonomous loop that lets an AI agent run hundreds of experiments to optimize the hedge fund's trading parameters — technical indicators, strategy weights, risk limits, analyst trust, and portfolio construction rules — while you sleep.
+An autonomous loop that lets an AI agent run hundreds of experiments to optimize the AI Hedge Fund's trading parameters — technical indicators, strategy weights, risk limits, analyst trust, and portfolio construction rules — while you sleep.
 
-## How It Works
+The metric is **Sharpe ratio**. The agent tunes `params.py`. Everything else is fixed.
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -17,22 +62,28 @@ An autonomous loop that lets an AI agent run hundreds of experiments to optimize
 │  AUTORESEARCH LOOP (overnight, autonomous)           │
 │                                                      │
 │  1. AI reads program.md                              │
-│  2. AI modifies params.py (one knob at a time)       │
-│  3. Run: poetry run python -m autoresearch.evaluate  │
+│  2. AI reads results.tsv (prior experiments)         │
+│  3. AI forms a hypothesis                            │
+│  4. AI modifies params.py (one change at a time)     │
+│  5. Run: poetry run python -m autoresearch.evaluate  │
 │     → loads cached data                              │
 │     → recomputes technical signals with new params   │
 │     → runs fast deterministic backtest               │
 │     → outputs val_sharpe=X.XXXX                      │
-│  4. If better → git commit (keep)                    │
+│  6. If better → git commit (keep)                    │
 │     If worse  → git checkout (revert)                │
-│  5. Repeat                                           │
+│  7. Repeat                                           │
 │                                                      │
 │  ~5-15 seconds per experiment                        │
 │  ~300+ experiments per hour                          │
 │  ~2000+ experiments overnight                        │
-│  Zero LLM calls. Zero API calls. Free.               │
+│  Zero LLM calls during backtest. Zero API calls.     │
 └──────────────────────────────────────────────────────┘
 ```
+
+The agent doesn't just enumerate possibilities — it reads its own history, builds intuition about the parameter landscape, and directs exploration accordingly. That's the difference between a grid search and a research agent.
+
+---
 
 ## Quick Start
 
@@ -50,7 +101,7 @@ poetry run python -m autoresearch.cache_signals --prices-only \
 poetry run python -m autoresearch.evaluate
 ```
 
-You should see output like:
+**Mode 1 (prices-only cache, no `signals.json`):**
 ```
 val_sharpe=0.4523
 val_sortino=0.6789
@@ -59,19 +110,26 @@ val_return=8.56
 elapsed_ms=3200
 ```
 
+**Mode 2 (full signal cache present):** scores will differ because 18 agents are averaged.
+If you see `val_sharpe=0.0, val_sortino=-15.87, val_return=0.0` — the system held cash the entire backtest. See [Diagnosing Zero Returns](#diagnosing-zero-returns).
+
 ### 3. Start the autonomous loop
 
-Point Claude Code (or any AI coding agent) at `autoresearch/program.md` and let it run.
+Point Claude Code (or any AI coding agent) at `autoresearch/program.md` and give it one instruction:
 
 ```
 Open program.md and follow the instructions. Run experiments until I tell you to stop.
 ```
+
+That's it. Come back in the morning.
 
 Or run experiments manually:
 1. Edit `autoresearch/params.py`
 2. Run `poetry run python -m autoresearch.evaluate`
 3. If Sharpe improved, commit. If not, revert.
 4. Repeat.
+
+---
 
 ## Files
 
@@ -85,18 +143,22 @@ Or run experiments manually:
 | `results.tsv` | Running experiment log | Appended automatically |
 | `cache/` | Cached price data + signals | Generated by cache_signals.py |
 
+The human-defined constraint: the agent may only touch `params.py`. Everything else is the evaluation harness — fixed, trusted, deterministic. This separation is what makes the loop trustworthy.
+
+---
+
 ## Two Modes
 
 ### Mode 1: Technical-Only (free, instant)
 
 Only needs cached price data. The autoresearch loop tunes:
 - Technical indicator parameters (EMA windows, RSI periods, etc.)
-- Strategy weights (trend vs momentum vs mean reversion etc.)
-- Signal thresholds
-- Risk parameters
-- Portfolio decision rules
+- Strategy weights (trend vs momentum vs mean reversion vs volatility)
+- Signal classification thresholds
+- Risk parameters (volatility bands, correlation multipliers, position limits)
+- Portfolio decision rules (buy/sell/short thresholds, confidence gates)
 
-This is sufficient to find significant improvements and runs completely free.
+This is sufficient to find significant improvements and runs completely free. Start here.
 
 ### Mode 2: Full-Signal (needs one LLM run)
 
@@ -110,8 +172,9 @@ poetry run python -m autoresearch.cache_signals \
 ```
 
 This caches all 18 analyst signals (Buffett, Munger, etc.) for every business day.
-The autoresearch loop can then ALSO tune analyst trust weights — discovering
-which agents to listen to more.
+The autoresearch loop can then also tune analyst trust weights — discovering which agents add alpha and which add noise.
+
+---
 
 ## What Gets Tuned
 
@@ -124,27 +187,88 @@ which agents to listen to more.
 | Portfolio rules | Buy/sell/short thresholds, position size fraction, min confidence | Trade generation |
 | Analyst weights | Per-agent trust levels (18 agents) | Who to listen to (Mode 2 only) |
 
-## The Autoresearch-MLX Connection
+---
 
-This system follows the same design principles as [autoresearch-mlx](https://github.com/trevin-creator/autoresearch-mlx):
+## Why This Works
 
-| autoresearch-mlx | ai-hedge-fund autoresearch |
-|---|---|
-| `train.py` (single mutable file) | `params.py` |
-| `val_bpb` (metric) | `val_sharpe` (Sharpe ratio) |
-| 5-min training on Apple Silicon | 5-15 sec backtest (pure Python) |
-| Neural net hyperparameters | Trading strategy parameters |
-| Keep/revert via git | Keep/revert via git |
-| ~8 experiments/hour | ~300 experiments/hour |
+The standard objection to automated optimization is overfitting. A grid search will find parameters that look great in-sample and fall apart out-of-sample.
 
-The key difference: instead of training a neural network, we're optimizing a
-multi-agent trading system. The metric is financial performance (Sharpe ratio)
-instead of language model quality (bits per byte).
+This system avoids it through:
+
+1. **One change at a time.** Clean attribution. The agent knows what caused each improvement.
+2. **Hypothesis-driven search.** The agent reads results, builds intuition, and directs exploration — it's not randomly sampling the space.
+3. **Git as a ratchet.** Every improvement is committed. Every regression is reverted. The system can only move forward.
+4. **Human-defined evaluation.** You choose the backtest window, the tickers, the metric. The agent can't game a metric it doesn't control.
+
+The analogy to neural net training holds: a well-designed evaluation harness that's fast to run is the prerequisite. Once you have that, autoresearch is just letting the agent do the rest.
+
+---
+
+## The autoresearch-MLX Connection
+
+This system follows the same design principles as [autoresearch-mlx](https://github.com/trevin-creator/autoresearch-mlx). MLX is applied twice in the full stack:
+
+1. **Here** — optimizing the AI Hedge Fund's technical trading parameters (this repo)
+2. **In Dexter** — sharpening Dexter's own reasoning: conviction scoring, theta strike selection, quarterly audit quality — running short 5-minute experiments on Apple Silicon, no GPU, no cloud, no bill
+
+| autoresearch-mlx | ai-hedge-fund autoresearch | Dexter autoresearch |
+|---|---|---|
+| `train.py` (single mutable file) | `params.py` | Dexter's reasoning modules |
+| `val_bpb` (bits per byte) | `val_sharpe` (Sharpe ratio) | BTC/SPY/GLD benchmark delta |
+| 5-min training on Apple Silicon | 5-15 sec backtest (pure Python) | 5-min MLX run on Apple Silicon |
+| Neural net hyperparameters | Trading strategy parameters | Conviction scoring + options logic |
+| Keep/revert via git | Keep/revert via git | Keep/revert via git |
+| ~8 experiments/hour | ~300 experiments/hour | ~8-12 experiments/hour |
+
+The structure is identical across all three. **The autoresearch loop is domain-agnostic.** What changes is the evaluation harness and the mutable file — not the loop itself.
+
+That's the infrastructure point: the same pattern that improved Karpathy's neural net training applies to trading parameter tuning, which applies to thesis-driven portfolio reasoning. One loop. Any metric that's fast to evaluate.
+
+---
+
+## Diagnosing Zero Returns
+
+If you see `val_sharpe=0.0, val_sortino=-15.87, val_return=0.0`, the portfolio held 100% cash. `val_sortino = -√252 = -15.874` is the mathematical fingerprint: every daily return was exactly 0.0 (cash earns nothing; the risk-free rate creates constant negative excess; standard deviation is 0 → Sharpe undefined → 0; sortino = -√252 exactly).
+
+**Why it happens in Mode 2 (full signal cache):**
+
+`signals.json` contains 18 LLM agents. The backtest aggregates all 18 with equal weight. In Mode 2:
+
+- Weighted scores typically range **-0.65 to +0.10** (LLM agents tend to be net bearish on tech)
+- `BUY_THRESHOLD = 0.05` — occasionally crossed, but barely
+- `SHORT_THRESHOLD` default was `-0.90` — impossible to reach with 18-agent averaging (max bearish is ~-0.65)
+- Result: never buys (not bullish enough), never shorts (not bearish enough), never sells (no positions)
+
+**Fix already applied in `params.py`:** `SHORT_THRESHOLD` is now `-0.15`, matching the actual range of Mode 2 aggregate scores. Re-run to verify:
+
+```bash
+poetry run python -m autoresearch.evaluate
+```
+
+**To test Mode 1 (technical only) instead:**
+
+```bash
+# Move the signals cache out of the way
+mv autoresearch/cache/signals.json autoresearch/cache/signals.json.bak
+poetry run python -m autoresearch.evaluate
+# Restore when done
+mv autoresearch/cache/signals.json.bak autoresearch/cache/signals.json
+```
+
+Mode 1 uses only the recomputed technical indicators (1 agent, scores ±0.2–1.0), which are well-calibrated for the default thresholds. This is the recommended starting point.
+
+**The deeper issue:**
+
+In Mode 2, `SHORT_THRESHOLD` and `BUY_THRESHOLD` need to account for the 18-agent averaging. Scores are ~18× more compressed than in Mode 1. This is exactly what autoresearch should find — but only once the system can actually execute trades to measure. The `-0.15` fix unblocks it.
+
+---
 
 ## Tips
 
 - **Start with prices-only mode.** It's free and fast. Run 100+ experiments before investing in the full signal cache.
 - **Use descriptive commit messages.** After an overnight run, you want to trace which changes helped most.
-- **Check `results.tsv` periodically.** It shows the trajectory of improvements.
-- **Change the backtest window** in params.py to test robustness. A strategy that only works on one period is likely overfit.
-- **The 5 free tickers** (AAPL, GOOGL, MSFT, NVDA, TSLA) are enough for parameter tuning. Add more tickers later for validation.
+- **Check `results.tsv` periodically.** It shows the trajectory of improvements — both where you've been and where to look next.
+- **Change the backtest window** in `params.py` to test robustness. A strategy that only works on one period is likely overfit.
+- **The 5 free tickers** (AAPL, GOOGL, MSFT, NVDA, TSLA) are enough for parameter tuning. Add more tickers for validation after finding a strong configuration.
+- **Let it run overnight.** The value compounds. An agent that has run 500 experiments has a much richer picture of the parameter landscape than one that has run 50.
+- **Don't interrupt a good run.** If the trajectory is improving, let it continue. The agent is building intuition you can't replicate by checking in every hour.

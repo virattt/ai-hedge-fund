@@ -193,6 +193,7 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
             model=model_name,
             openai_api_key=api_key,
             openai_api_base="https://openrouter.ai/api/v1",
+            request_timeout=120,
             model_kwargs={
                 "extra_headers": {
                     "HTTP-Referer": site_url,

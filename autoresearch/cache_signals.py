@@ -71,9 +71,22 @@ def cache_agent_signals(
     model_name: str = "gpt-4.1",
     model_provider: str = "OpenAI",
 ) -> dict:
-    """Run the full agent pipeline for each business day and cache signals."""
+    """Run the full agent pipeline for each business day and cache signals.
+
+    Saves incrementally after every day so partial progress survives crashes.
+    On restart, already-cached dates are skipped automatically.
+    """
     dates = pd.date_range(start_date, end_date, freq="B")
-    all_signals = {}
+    signals_path = CACHE_DIR / "signals.json"
+
+    # Resume from existing partial cache if available
+    if signals_path.exists():
+        with open(signals_path) as f:
+            all_signals = json.load(f)
+        print(f"  Resuming from existing cache ({len(all_signals)} dates already done)")
+    else:
+        all_signals = {}
+
     initial_cash = 100_000
 
     portfolio = {
@@ -89,6 +102,10 @@ def cache_agent_signals(
         date_str = current_date.strftime("%Y-%m-%d")
         lookback_start = (current_date - relativedelta(months=1)).strftime("%Y-%m-%d")
         if lookback_start == date_str:
+            continue
+
+        if date_str in all_signals:
+            print(f"  [{i+1}/{total}] {date_str} — already cached, skipping")
             continue
 
         print(f"\n[{i+1}/{total}] Running agents for {date_str}...")
@@ -120,12 +137,18 @@ def cache_agent_signals(
             all_signals[date_str] = date_signals
             print(f"    → Cached signals from {len(date_signals)} agents")
 
+            # Incremental save after every day
+            with open(signals_path, "w") as f:
+                json.dump(all_signals, f, indent=2)
+
         except KeyboardInterrupt:
-            print("\n\nInterrupted — saving partial cache...")
+            print("\n\nInterrupted — partial cache already saved on disk.")
             break
         except Exception as e:
             print(f"    → ERROR: {e}")
             all_signals[date_str] = {}
+            with open(signals_path, "w") as f:
+                json.dump(all_signals, f, indent=2)
 
     return all_signals
 
@@ -168,12 +191,10 @@ def main():
         print("Done.")
         return
 
-    # Phase 2: Cache agent signals
+    # Phase 2: Cache agent signals (saves incrementally, resumes on restart)
     print("\n--- Phase 2: Caching agent signals (this takes a while) ---")
     signals_cache = cache_agent_signals(tickers, args.start, args.end, args.model, args.provider)
     signals_path = CACHE_DIR / "signals.json"
-    with open(signals_path, "w") as f:
-        json.dump(signals_cache, f, indent=2)
     print(f"\nSignals saved → {signals_path}")
 
     meta = {
