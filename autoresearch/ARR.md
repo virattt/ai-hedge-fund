@@ -23,10 +23,11 @@
 | **Healthcare** | **0.39** | +12.2% | **2.71** | Tuned |
 | EDA | -0.14 | +0.8% | -1.43 | 3-ticker (SNPS,CDNS,ARM) still negative |
 | Power (VST,CEG,NRG) | -1.27 | — | — | Overfit, deprecated |
+| **Portfolio (OOS-weighted)** | **2.84** | **+101%** | **3.31** | 11 sectors, Max DD -9% |
 
-**Infrastructure:** Per-sector params (`params_<sector>.py`), `--params` in evaluate.py, PRICES_PATH auto-load, sector programs (`program_<sector>.md`), results logs (`results_<sector>.tsv`).
+**Infrastructure:** Per-sector params (`params_<sector>.py`), `--params` in evaluate.py, PRICES_PATH auto-load, sector programs (`program_<sector>.md`), results logs (`results_<sector>.tsv`). **Portfolio backtest:** `portfolio_backtest.py` combines sector returns; OOS-weighted Sharpe 2.84 val, **3.31 OOS**.
 
-**Recent tuning (2026-03-11):** Platform OOS: EMA 40, RISK_EXT 0.60, SIG 0.32 → val 1.21, OOS 0.33. Photonics RISK_EXT 0.60 → 2.26. Networking rescue attempts (SIG 0.28, RISK 0.38) no improvement; OOS -0.09.
+**Recent tuning (2026-03-11):** Platform OOS: EMA 40, RISK_EXT 0.60, SIG 0.32 → val 1.21, OOS 0.33. Photonics RISK_EXT 0.60 → 2.26. Portfolio backtest: OOS-weighted 11 sectors → Sharpe 2.84 val, **3.31 OOS**, +69.4% return.
 
 ---
 
@@ -596,7 +597,7 @@ poetry run python -m autoresearch.evaluate --params autoresearch.params_equipmen
 
 7. **Rolling window robustness** — ✅ Done. OOS Sharpe: memory 2.98, photonics 2.53, equipment 2.39, tech 1.38, energy 1.45, healthcare 2.71, foundry 1.22, tokenization 0.54, power infra 0.68, platform 0.33. Networking -0.09.
 
-8. **Cross-asset generalization** — ✅ Done. 12 sectors tuned.
+8. **Cross-asset generalization** — ✅ Done. 12 sectors tuned. Portfolio backtest: OOS-weighted Sharpe 2.84 val, 3.31 OOS.
 
 9. **LLM agent re-enablement** — ✅ Tested. Technical-only remains best.
 
