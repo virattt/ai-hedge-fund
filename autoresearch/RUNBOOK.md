@@ -1,3 +1,22 @@
+```
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                                                                               ║
+║     ██████╗ ██╗   ██╗███╗   ██╗██████╗  ██████╗  ██████╗ ██╗  ██╗             ║
+║     ██╔══██╗██║   ██║████╗  ██║██╔══██╗██╔═══██╗██╔═══██╗██║ ██╔╝             ║
+║     ██████╔╝██║   ██║██╔██╗ ██║██║  ██║██║   ██║██║   ██║█████╔╝              ║
+║     ██╔══██╗██║   ██║██║╚██╗██║██║  ██║██║   ██║██║   ██║██╔═██╗              ║
+║     ██║  ██║╚██████╔╝██║ ╚████║██████╔╝╚██████╔╝╚██████╔╝██║  ██╗             ║
+║     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═════╝  ╚═════╝  ╚═════╝ ╚═╝  ╚═╝             ║
+║                                                                               ║
+║     Precision.  No noise.  Just the signal.                                  ║
+║                                                                               ║
+║     Reproducibility & operations.  The only measure that matters.            ║
+║                                                                               ║
+║     Simple.  Powerful.  Different.                                            ║
+║                                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+```
+
 # Autoresearch Runbook — Reproducibility & Operations
 
 ## Quick Reference
@@ -23,6 +42,8 @@
 ---
 
 ## 1. Full Reproducibility (from scratch)
+
+> *The benchmark. No substitute.*
 
 ```bash
 # 1. Install
@@ -254,6 +275,10 @@ poetry run python -m autoresearch.walk_forward --output autoresearch/logs/walk_f
 ---
 
 ## 7. File Layout
+
+╭─────────────────────────────────────────────────────────────────────────────────╮
+║  One mutable file per sector.  Everything else is the harness.                   ║
+╰─────────────────────────────────────────────────────────────────────────────────╯
 
 | File | Purpose |
 |------|---------|

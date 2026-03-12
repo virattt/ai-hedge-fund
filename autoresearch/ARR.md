@@ -1,3 +1,23 @@
+```
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                                                                               ║
+║     █████╗ ████████╗ ██████╗ ██████╗     ███████╗███████╗██████╗  ██████╗ ██╗  ██╗║
+║    ██╔══██╗╚══██╔══╝██╔═══██╗██╔══██╗    ██╔════╝██╔════╝██╔══██╗██╔═══██╗██║  ██║║
+║    ███████║   ██║   ██║   ██║██████╔╝    ███████╗█████╗  ██████╔╝██║   ██║███████║║
+║    ██╔══██║   ██║   ██║   ██║██╔══██╗    ╚════██║██╔══╝  ██╔══██╗██║   ██║██╔══██║║
+║    ██║  ██║   ██║   ╚██████╔╝██║  ██║    ███████║███████╗██║  ██║╚██████╔╝██║  ██║║
+║    ╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝    ╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝║
+║                                                                               ║
+║     The benchmark.  No substitute.                                            ║
+║                                                                               ║
+║     "Any metric you care about that is reasonably efficient to evaluate       ║
+║      can be autoresearched by an agent swarm." — Andrej Karpathy              ║
+║                                                                               ║
+║     Simple.  Powerful.  Different.                                            ║
+║                                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+```
+
 # AutoResearch Results — ARR.md
 
 > Autonomous parameter optimization of the AI Hedge Fund trading strategy.
@@ -50,6 +70,8 @@
 ---
 
 ## The Setup
+
+> *Precision. No noise. Just the signal.*
 
 ### What is being optimized
 
@@ -607,9 +629,9 @@ poetry run python -m autoresearch.evaluate --params autoresearch.params_equipmen
 
 ## The Method (Why This Works)
 
-This is Karpathy's autoresearch paradigm applied to trading:
+> *The only measure that matters is beating it.*
 
-> *"Any metric you care about that is reasonably efficient to evaluate can be autoresearched by an agent swarm."*
+This is Karpathy's autoresearch paradigm applied to trading:
 
 The key properties that make this tractable:
 

@@ -1,4 +1,25 @@
+```
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                                                                               ║
+║     ███████╗ ██████╗ ██╗   ██╗██╗      ██████╗ ██╗   ██╗███████╗██╗  ██╗       ║
+║     ██╔════╝██╔═══██╗██║   ██║██║     ██╔═══██╗██║   ██║██╔════╝██║  ██║       ║
+║     ███████╗██║   ██║██║   ██║██║     ██║   ██║██║   ██║███████╗███████║       ║
+║     ╚════██║██║   ██║██║   ██║██║     ██║   ██║██║   ██║╚════██║██╔══██║       ║
+║     ███████║╚██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝███████║██║  ██║       ║
+║     ╚══════╝ ╚═════╝  ╚═════╝ ╚══════╝ ╚═════╝  ╚═════╝ ╚══════╝╚═╝  ╚═╝       ║
+║                                                                               ║
+║     The benchmark.  No substitute.                                            ║
+║                                                                               ║
+║     "The only measure that matters is beating it."                            ║
+║                                                                               ║
+║     Simple.  Powerful.  Different.                                            ║
+║                                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+```
+
 # Structural Thesis: AI Infrastructure
+
+> *The benchmark. No substitute.*
 
 The AI infrastructure supply chain represents the largest capital deployment cycle since postwar industrial expansion. Every analysis and sizing decision should be contextualized against this thesis.
 
@@ -26,8 +47,14 @@ The AI infrastructure supply chain represents the largest capital deployment cyc
 
 ## Regime Overlay
 
+> *Precision. No noise. Just the signal.*
+
 - **Trending-bull** — Full position sizes; growth and thematic can run.
 - **Mean-reverting** — Reduce growth/thematic; keep core; tighten stops.
 - **Capitulation** — Core only at reduced size; add hedges; avoid new growth/thematic.
 
 Use this thesis to place each ticker in a layer and tier, and to align recommendations with regime and catalyst.
+
+╭─────────────────────────────────────────────────────────────────────────────────╮
+║  Layer + tier + regime + catalyst.  The only measure that matters.             ║
+╰─────────────────────────────────────────────────────────────────────────────────╯
