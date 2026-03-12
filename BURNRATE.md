@@ -17,7 +17,44 @@
 
 # Burn Rate — 2-and-20, the Bench, and What a Real Fund Costs
 
-This page does two things: it explains **2-and-20** in plain terms and why the Bench’s “research for free” story hits; then it lays out the **run rate** for a real fund vehicle—Delaware LLC, tokenized interests, $21M AUM—so the gap between “laptop cost” and “institutional structure” is explicit.
+## TLDR — The Quant Business Plan in One Table
+
+This is a business plan that runs the numbers, not one that tells a story and hopes the math works out later. Every line below is derived from the cost model in this document.
+
+```
+╔════════════════════════════════════════════════════════════════════════════════╗
+║  REVENUE                                                                        ║
+║    AUM at launch                          $21,000,000                            ║
+║    Management fee (2%)                       $420,000 / year                     ║
+║    Performance fee (20%)                     variable  (not in base model)        ║
+║                                                                                  ║
+║  BURN (ANNUAL)                             Low        Base       High            ║
+║    Legal / ops / admin / audit              $58,000    $85,000    $119,000        ║
+║    Salaries                                $210,000   $210,000    $210,000        ║
+║    ──────────────────────────────────────────────────────────────              ║
+║    Total burn                              $268,000   $295,000    $329,000        ║
+║    Monthly burn                             $22,333    $24,583     $27,417        ║
+║                                                                                  ║
+║  MARGIN (management fee − burn)                                                  ║
+║    Annual buffer                           $152,000   $125,000     $91,000        ║
+║    Buffer as % of revenue                    36.2%      29.8%       21.7%         ║
+║                                                                                  ║
+║  SELF-FUNDING VIA WHEEL (Hypersurface, BTC + HYPE puts)                          ║
+║    Observed yield on $187K collateral       5.35%/mo   —          10.7%/mo        ║
+║    Collateral to cover base burn ($24.6K)   $460,000   —          $230,000        ║
+║    ≈ BTC equivalent at $70K spot            6.57 BTC   —          3.29 BTC        ║
+║                                                                                  ║
+║  BREAK-EVEN AUM (burn ÷ 0.02)             $13.4M     $14.75M     $16.45M         ║
+║                                                                                  ║
+║  VERDICT                                                                         ║
+║    At $21M AUM the fund is cash-flow positive from day one.                      ║
+║    The wheel strategy at $230K–$460K collateral can independently                ║
+║    cover the entire monthly burn from premium income alone.                       ║
+║    The management fee is margin, not survival.                                   ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+```
+
+The rest of this document shows the work: what 2-and-20 means, why the Bench replaces the research those fees paid for, the Delaware LLC structure, a six-part cost breakdown, the wheel strategy sizing, and a paste-into-Sheets model so you can stress-test every assumption yourself.
 
 ---
 
