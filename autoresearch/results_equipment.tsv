@@ -6,3 +6,4 @@
 2026-03-12T13:58	MOM_CONFIDENCE_SCALE 15→18	val_sharpe=1.8731	val_return=+95.78%	OOS=2.36
 2026-03-12T14:01	VOL_LOW_REGIME 0.95→0.90 (tighter low-vol)	val_sharpe=1.8745	val_return=+95.86%	OOS=2.36
 2026-03-12T14:01	VOL_HIGH_REGIME 1.2→1.25	val_sharpe=1.8747	val_return=+95.88%	OOS=2.36
+2026-03-12T14:03	EMA_LONG 55→50	val_sharpe=1.8748	val_return=+95.89%	OOS=2.36
