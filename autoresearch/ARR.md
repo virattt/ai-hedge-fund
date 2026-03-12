@@ -454,7 +454,9 @@ Added `cross_asset_check.py` and support for alternate ticker universes:
 |----------|---------|--------|--------|--------|-----------|
 | Tech | AAPL, NVDA, MSFT, GOOGL, TSLA | 2.02 | +58.5% | -8.2% | 1.41 |
 | Energy | XOM, CVX, OXY, SLB, EOG | 0.03 | +3.8% | -17.8% | n/a |
-| Equipment | AMAT, ASML, LRCX, KLAC, TEL | **1.7035** | +81.5% | -16.9% | **2.09** |
+| Equipment | AMAT, ASML, LRCX, KLAC, TEL | **1.8589** | +95.0% | -17.5% | **2.35** |
+| Memory | MU, WDC, STX | **2.4361** | +229.6% | -18.7% | — |
+| Power | VST, CEG, NRG | -0.02 → 0.04 | +0.9% → +4.0% | -21.5% | — |
 
 **Tech:** Fully tuned, baseline to beat. `params.py` (RISK_BASE_LIMIT 0.30, ADX 26, EMA 5/13/34, Sharpe 2.02).
 

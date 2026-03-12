@@ -46,7 +46,7 @@ poetry run python -m autoresearch.evaluate --params autoresearch.params_equipmen
 
 ### Step 5: Compare and decide
 
-**Baseline to beat:** `val_sharpe=1.7035, val_return=+81.51%`
+**Baseline to beat:** `val_sharpe=1.8589, val_return=+94.96%, OOS=2.35`
 
 - **If better** → commit and log:
   ```bash
@@ -65,8 +65,8 @@ poetry run python -m autoresearch.evaluate --params autoresearch.params_equipmen
 
 ## Current State (read before first experiment)
 
-**Baseline:** `val_sharpe=1.7035, val_return=+81.51%, val_max_dd=-16.93%`
-**OOS (H2 2025):** `val_sharpe=2.0939, val_return=+59.42%` ← strong, don't hurt this
+**Baseline:** `val_sharpe=1.8589, val_return=+94.96%, val_max_dd=-17.53%`
+**OOS (H2 2025):** `val_sharpe=2.3545, val_return=+71.5%` ← strong, don't hurt this
 
 ### What's already been optimized (do NOT re-test)
 - `ADX_PERIOD` → 40 (quarterly capex cycle; 26=baseline, 40=best)
@@ -74,12 +74,14 @@ poetry run python -m autoresearch.evaluate --params autoresearch.params_equipmen
 - `RISK_BASE_LIMIT` → 0.30 (reducing to 0.22 or 0.26 hurts Sharpe)
 - `STRATEGY_WEIGHTS` → trend=0.30, mr=0.18, momentum=0.37, vol=0.15 (tech weights = best; more trend=worse)
 - `EMA_SHORT` → 5 (unchanged from tech, optimal)
+- `BOLLINGER_WINDOW` → 30 (vs 20, +0.01)
+- `RISK_EXTREME_VOL_MULT` → 0.60 (vs 0.50, +0.01)
 
 ### Still untried (priority order)
 1. **MOM_3M_WEIGHT** — try 0.1, 0.2 (equipment has longer momentum cycles than tech)
 2. **MOM_6M_WEIGHT** — try 0.1, 0.2 (6-month capex order cycle)
 3. **MOM_CONFIDENCE_SCALE** — try 12.0, 18.0, 20.0
-4. **BOLLINGER_WINDOW** — try 30, 40 (longer look for equipment)
+4. **BOLLINGER_WINDOW** — 30 done; try 35, 40
 5. **VOL_HIST_WINDOW** — try 30, 42 (equipment vol is chunkier)
 6. **VOL_MA_WINDOW** — try 90, 126 (quarterly averaging)
 7. **CORR_BANDS** — equipment names are highly correlated; try tightening (0.70→0.5 multiplier for high correlation)

@@ -291,11 +291,11 @@ The planned portfolio spans multiple behavioral clusters, each requiring its own
 
 | Sector | Tickers | Behavioral regime | Key param differences |
 |--------|---------|------------------|-----------------------|
-| **Mega-cap tech** | AAPL, NVDA, MSFT, GOOGL, TSLA | Momentum/trend | Already tuned — Sharpe 2.02 |
-| **Semicon equipment** | AMAT, ASML, LRCX, KLAC, TEL | Long capex cycle, order-book driven | Longer EMA/ADX, slower signals |
-| **Power & infra** | VRT, CEG, EQT | Utility-like, contracted revenue | Mean-reversion more relevant, lower vol bands |
+| **Mega-cap tech** | AAPL, NVDA, MSFT, GOOGL, TSLA | Momentum/trend | Tuned — Sharpe 2.02 |
+| **Semicon equipment** | AMAT, ASML, LRCX, KLAC, TEL | Long capex cycle, order-book driven | **Tuned — Sharpe 1.86, OOS 2.35** |
+| **Memory/storage** | MU, WDC, STX | Highly cyclical, volatile | **Baseline 2.44** (tech params generalize!) |
+| **Power & infra** | VST, CEG, NRG | Utility-like, rate-sensitive | Baseline -0.02 → needs tuning |
 | **EDA** | SNPS, CDNS | Long-duration compounder, low vol | Wide thresholds, very high MIN_CONFIDENCE |
-| **Memory/storage** | SNDK, WDC, STX | Highly cyclical, volatile | Tighter risk limits, faster signals |
 | **Tokenization rails** | COIN, HOOD, CRCL | Crypto-correlated, high beta | Completely different regime |
 | **Hyperscalers** | META, MSFT, AMZN, GOOGL | Momentum, AI capex driven | Similar to tech but more stable |
 | **Foundry** | TSM | Geopolitical + capex cycle | Unique risk profile |
@@ -319,4 +319,19 @@ poetry run python -m autoresearch.evaluate \
 # (requires per-sector params file — see roadmap)
 ```
 
-For now, all sectors share the tech-tuned params. The cross-asset infrastructure (`--tickers`, `--prices-path`) is already in place.
+**Overnight autoresearch (equipment):**
+
+```bash
+# 1. Read the program
+cat autoresearch/program_equipment.md
+
+# 2. Run the loop (or point an AI agent at program_equipment.md)
+bash autoresearch/run_overnight_equipment.sh   # prints instructions
+
+# 3. Each experiment
+poetry run python -m autoresearch.evaluate --params autoresearch.params_equipment
+# If better → git add autoresearch/params_equipment.py autoresearch/results_equipment.tsv && git commit -m "autoresearch[equip]: ..."
+# If worse  → git checkout autoresearch/params_equipment.py
+```
+
+Equipment baseline to beat: **Sharpe 1.86, OOS 2.35**. Power and memory have `params_power.py` and `params_memory.py`; run with `--params autoresearch.params_power` or `--params autoresearch.params_memory`.
