@@ -46,7 +46,7 @@ poetry run python -m autoresearch.evaluate --params autoresearch.params_equipmen
 
 ### Step 5: Compare and decide
 
-**Baseline to beat:** `val_sharpe=1.8589, val_return=+94.96%, OOS=2.35`
+**Baseline to beat:** `val_sharpe=1.8781, val_return=+96.21%, OOS=2.37`
 
 - **If better** → commit and log:
   ```bash
@@ -65,8 +65,8 @@ poetry run python -m autoresearch.evaluate --params autoresearch.params_equipmen
 
 ## Current State (read before first experiment)
 
-**Baseline:** `val_sharpe=1.8589, val_return=+94.96%, val_max_dd=-17.53%`
-**OOS (H2 2025):** `val_sharpe=2.3545, val_return=+71.5%` ← strong, don't hurt this
+**Baseline:** `val_sharpe=1.8781, val_return=+96.21%, val_max_dd=-17.5%`
+**OOS (H2 2025):** `val_sharpe=2.3679, val_return=+72%` ← strong, don't hurt this
 
 ### What's already been optimized (do NOT re-test)
 - `ADX_PERIOD` → 40 (quarterly capex cycle; 26=baseline, 40=best)
@@ -76,6 +76,11 @@ poetry run python -m autoresearch.evaluate --params autoresearch.params_equipmen
 - `EMA_SHORT` → 5 (unchanged from tech, optimal)
 - `BOLLINGER_WINDOW` → 30 (vs 20, +0.01)
 - `RISK_EXTREME_VOL_MULT` → 0.60 (vs 0.50, +0.01)
+- `MOM_CONFIDENCE_SCALE` → 18 (vs 15, +0.01)
+- `VOL_LOW_REGIME` → 0.90 (vs 0.95)
+- `VOL_HIGH_REGIME` → 1.25 (vs 1.2)
+- `EMA_LONG` → 50 (vs 55)
+- `STRATEGY_WEIGHTS` → trend 0.32, mr 0.16 (vs 0.30, 0.18)
 
 ### Still untried (priority order)
 1. **MOM_3M_WEIGHT** — try 0.1, 0.2 (equipment has longer momentum cycles than tech)
