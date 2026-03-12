@@ -94,7 +94,7 @@ Each experiment takes ~4-6 seconds. Aim for **50+ experiments per hour**. In an 
 
 ## Current State (read this before your first experiment)
 
-**Baseline to beat:** `val_sharpe=2.0221, val_return=+58.33%` (Mode 2, full signal cache restored)
+**Baseline to beat:** `val_sharpe=2.0358, val_return=+59.97%` (ADX 26, RISK_BASE_LIMIT 0.32)
 
 - **Mode 2** (signals.json + technical_analyst only): `val_sharpe=2.0221, val_return=+58.33%`
 - **Mode 1** (no signals): `val_sharpe=1.7945, val_return=+49.11%`
