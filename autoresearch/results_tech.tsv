@@ -1,0 +1,2 @@
+2026-03-11T17:30	baseline (params.py)	val_sharpe=2.0241	val_return=+58.49%	OOS=1.41
+2026-03-11T17:35	RISK_BASE_LIMIT 0.30→0.32	val_sharpe=2.0358	val_return=+59.97%	OOS=1.38
