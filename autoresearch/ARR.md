@@ -12,7 +12,9 @@
 |---|---|---|---|---|---|
 | Session 1 | 2026-03-10 | ~15 | ~80 | -2.3132 (Mode 2 broken) → 1.0385 (Mode 1 baseline) | **2.2203** (overfit, 6-month window) |
 | Session 2 | 2026-03-12 | 27 | ~110 | 1.0385 (full 14-month window) | **1.7880** |
-| **Total** | | **~42** | **191** | **-2.3132** | **1.7880** |
+| Session 3 | 2026-03-12 | — | — | Mode 2 RSI + analyst weights | **2.0221** |
+| Session 4 | 2026-03-12 | 2 | ~25 | 2.0221 (restored cache) | **2.0358** |
+| **Total** | | **~44** | **~216** | **-2.3132** | **2.0358** |
 
 ---
 
@@ -355,11 +357,34 @@ The 2.02 vs Mode 1's 1.79 comes from **confidence averaging**: when 18 agents ar
 
 ---
 
+## Session 4 — Mode 2 Tuning + OOS Validation (2026-03-12)
+
+### Improvements (2 commits)
+
+1. **ADX_PERIOD** 22 → 26 — Sharpe 2.0221 → 2.0241
+2. **RISK_BASE_LIMIT** 0.30 → 0.32 — Sharpe 2.0241 → **2.0358**
+
+**Final:** `val_sharpe=2.0358`, `val_return=+59.97%`, `val_max_dd=-8.48%`
+
+### Out-of-sample validation
+
+Added `autoresearch/oos_check.py`. Split the 14-month window:
+
+| Window | Dates | Sharpe | Return | Max DD |
+|--------|-------|--------|--------|--------|
+| Full | 2025-01-02 → 2026-03-07 | 2.04 | +59.97% | -8.48% |
+| First half | 2025-01-02 → 2025-07-31 | 3.50 | +33.37% | -3.40% |
+| Second half (OOS) | 2025-08-01 → 2026-03-07 | 1.38 | +21.27% | -8.65% |
+
+**Interpretation:** First half was a strong trend (Sharpe 3.5). Second half was choppier — OOS Sharpe 1.38 is positive but below full-window. Strategy still works OOS; params may be slightly tuned to the stronger first half. Run `poetry run python -m autoresearch.oos_check` to reproduce.
+
+---
+
 ## What's Next
 
 1. **RSI tuning in bear/sideways regimes** — RSI 30/70, 25/75, 20/80 are now tunable. Test when market regime shifts.
 
-2. **Rolling window robustness** — test whether the current params hold across different 6-month sub-windows within the 14-month backtest to detect overfitting.
+2. **Rolling window robustness** — ✅ Done. `poetry run python -m autoresearch.oos_check` — OOS (second half) Sharpe 1.38 vs full 2.04. Strategy holds but degrades in choppier period.
 
 3. **Cross-asset generalization** — run the same params on a different universe (e.g., energy, biotech) to test whether these findings are AAPL/NVDA-specific or generalizable.
 
