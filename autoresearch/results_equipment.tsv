@@ -2,3 +2,4 @@
 2026-03-12T13:36	SIGNAL_BULLISH_THRESHOLD 0.2→0.25 (stricter bull filter)	val_sharpe=1.7875	val_return=+90.78%	val_max_dd=-17.59%
 2026-03-12T13:38	SIG_BULL 0.25→0.28 + SIG_BEAR -0.2→-0.15 + VOL_Z_BEAR 2.0→1.5	val_sharpe=1.8464	val_return=+94.23%	val_max_dd=-17.55%	OOS=2.359
 2026-03-12T13:42	BOLLINGER_WINDOW 20→30 + RISK_EXTREME_VOL_MULT 0.60	val_sharpe=1.8589	val_return=+94.96%	OOS=2.35
+2026-03-12T13:57	MA_WINDOW 50→63 (quarterly lookback)	val_sharpe=1.8606	val_return=+95.06%	OOS=2.359
