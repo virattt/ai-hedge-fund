@@ -183,6 +183,30 @@ We use [Financial Datasets](https://www.financialdatasets.ai/) as the primary pa
 
 Their pricing is per-request (e.g. `/prices` ≈ $0.01, `/financials` ≈ $0.10), but they explicitly allow us to **save responses and avoid repeat calls**, which is exactly what our cache layer is for.
 
+#### 6.0 Why we’re building on top of Financial Datasets
+
+From the [official introduction](https://docs.financialdatasets.ai/introduction), Financial Datasets is positioned as *“institutional-grade stock market infrastructure for AI”* with:
+
+- **17,000+ active and delisted US tickers**  
+- **30+ years of history**  
+- Primary-source ingestion (filings processed within seconds of publication)  
+- Consistent, machine-first JSON schemas across endpoints  
+- Section-level access to full **SEC filings** and structured **financial statements**, plus insider trades and institutional holdings.
+
+This lines up almost perfectly with what the AI Hedge Fund and Dexter stack need:
+
+- **Breadth**: enough tickers and history to stress-test strategies across regimes and across names, not just FAANG + a few semis.
+- **Depth**: decades of fundamentals and filings for real factor work (valuation, quality, profitability, leverage) instead of just price-only factors.
+- **Provenance**: primary-source data with clear provenance is critical when we’re using the data to drive automated decisions.
+- **LLM-friendly design**: structured JSON + filing sections is exactly what our agents want when they synthesize fundamentals, risks, and narratives.
+
+Because Financial Datasets already does the hard work (real-time ingestion, normalization, and schema design), **our job reduces to**:
+
+1. Pull once via the API into `autoresearch/cache/` (with clear cost bounds).
+2. Build higher-level logic on top: autoresearch loops, factor models, agent prompts, regime detectors, portfolio/risk rules.
+
+That is why we invest heavily in the `DATA.md` + `cache_*` tooling: the more we lean on this infrastructure, the more our edge comes from **how** we reason over the data, not from reinventing the data plumbing itself.
+
 #### 6.1 Pulling more price history (depth)
 
 Use `cache_signals.py` with a longer `--start` for each universe:
