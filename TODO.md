@@ -264,3 +264,38 @@ This file tracks the concrete work to turn the new data layer, factor overlays, 
       - Fetches and saves results.
       - Optionally calls `second_opinion_report` to print the disagreement view.
 
+- **Milestone hardening completed (run-path stability)**
+  - Fixed graph-construction failures from UI-only nodes:
+    - `app/backend/services/graph.py` now ignores edges that do not connect registered runtime nodes (analysts/portfolio manager), preventing errors like:
+      - `Found edge starting at unknown node 'stock-analyzer-node_...'`.
+  - Fixed second-opinion portfolio payload shape mismatch:
+    - `app/backend/routes/second_opinion.py` now uses `create_portfolio(...)` to build canonical `positions` dicts, fixing:
+      - `'list' object has no attribute 'keys'`.
+  - Fixed persisted-result normalization bug:
+    - `app/backend/routes/second_opinion.py` now handles both:
+      - full final graph state (`messages` + `data`), and
+      - flattened `{decisions, analyst_signals}` outputs.
+    - This resolved `COMPLETE` runs with `decisions=null` / `analyst_signals=null`.
+  - Validation evidence:
+    - Run `10` reached `COMPLETE` but still had null decisions/signals (pre-fix).
+    - Run `11` reached `COMPLETE` with populated decisions/signals and non-empty agreement output.
+
+- **Huge milestone completed: full-sleeve loop + narrative output**
+  - Added full-sleeve drafts for both portfolios:
+    - `portfolio_draft_tastytrade_full.json`
+    - `portfolio_draft_hyperliquid_full.json`
+  - Upgraded `scripts/dexter_second_opinion_client.py` with live polling progress for long runs:
+    - prints elapsed time + poll count + current status while waiting.
+    - `--hide-progress` keeps old quiet behavior when needed.
+  - Upgraded `scripts/second_opinion_to_substack_outline.py` for publishing workflow:
+    - `--voice bench` (default) for The Bench brand voice.
+    - `--final-draft` for near-publishable prose output.
+    - `--publish-pack` to generate all assets in one shot:
+      - `substack_outline_run_<id>.md`
+      - `substack_draft_run_<id>.md`
+      - `substack_note_run_<id>.md`
+      - `x_thread_run_<id>.txt`
+  - Validation evidence:
+    - Full tastytrade sleeve run produced hard-disagree output across all 15 names.
+    - Publish-pack generated all four content assets for the same run in `second_opinion_runs/`.
+

@@ -1,0 +1,27 @@
+{
+  "sleeve": "tastytrade",
+  "params_profile": "tastytrade_factors_on",
+  "assets": [
+    { "symbol": "ASML", "target_weight_pct": 8.0 },
+    { "symbol": "AMAT", "target_weight_pct": 8.0 },
+    { "symbol": "KLAC", "target_weight_pct": 8.0 },
+    { "symbol": "LRCX", "target_weight_pct": 8.0 },
+    { "symbol": "SNPS", "target_weight_pct": 8.0 },
+    { "symbol": "CDNS", "target_weight_pct": 8.0 },
+    { "symbol": "ANET", "target_weight_pct": 8.0 },
+    { "symbol": "AVGO", "target_weight_pct": 8.0 },
+    { "symbol": "VRT", "target_weight_pct": 8.0 },
+    { "symbol": "MRVL", "target_weight_pct": 5.0 },
+    { "symbol": "CEG", "target_weight_pct": 5.0 },
+    { "symbol": "EQT", "target_weight_pct": 5.0 },
+    { "symbol": "WDC", "target_weight_pct": 5.0 },
+    { "symbol": "STX", "target_weight_pct": 5.0 },
+    { "symbol": "LITE", "target_weight_pct": 3.0 }
+  ],
+  "graph_nodes": [],
+  "graph_edges": [],
+  "margin_requirement": 0.5,
+  "portfolio_positions": [],
+  "model_name": "gpt-4.1",
+  "model_provider": "openai"
+}

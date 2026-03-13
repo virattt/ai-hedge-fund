@@ -23,8 +23,24 @@ from autoresearch.params import *  # noqa: F401,F403
 # Sleeve-specific overrides
 # ─────────────────────────────────────────────────────────────
 
-# Start by experimenting on the core choke points; expand as desired.
-BACKTEST_TICKERS = ["ASML", "AMAT"]
+# Full tastytrade sleeve universe from SOUL.md
+BACKTEST_TICKERS = [
+    "ASML",
+    "AMAT",
+    "KLAC",
+    "LRCX",
+    "SNPS",
+    "CDNS",
+    "ANET",
+    "AVGO",
+    "VRT",
+    "MRVL",
+    "CEG",
+    "EQT",
+    "WDC",
+    "STX",
+    "LITE",
+]
 
 # Use the tastytrade sleeve caches for fundamentals/events.
 FACTOR_CACHE_PREFIX = "tastytrade_sleeve_long"

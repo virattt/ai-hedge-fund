@@ -87,23 +87,33 @@ def create_graph(graph_nodes: list, graph_edges: list) -> StateGraph:
     direct_to_portfolio_managers = {}  # Map analyst ID to portfolio manager ID for direct connections
     
     for edge in graph_edges:
-        # Only consider edges between agent nodes (not from stock tickers)
-        if edge.source in agent_ids_set and edge.target in agent_ids_set:
-            source_base_key = extract_base_agent_key(edge.source)
-            target_base_key = extract_base_agent_key(edge.target)
-            
-            nodes_with_incoming_edges.add(edge.target)
-            nodes_with_outgoing_edges.add(edge.source)
-            
-            # Check if this is a direct connection from analyst to portfolio manager
-            if (source_base_key in ANALYST_CONFIG and 
-                source_base_key != "portfolio_manager" and 
-                target_base_key == "portfolio_manager"):
-                # Don't add direct edge to portfolio manager - we'll route through risk manager
-                direct_to_portfolio_managers[edge.source] = edge.target
-            else:
-                # Add edge between agent nodes (but not direct to portfolio managers)
-                graph.add_edge(edge.source, edge.target)
+        # Only consider edges between *registered graph nodes* (analysts or portfolio manager).
+        # Stock input nodes may exist in the UI graph and should be ignored here.
+        source_base_key = extract_base_agent_key(edge.source)
+        target_base_key = extract_base_agent_key(edge.target)
+        source_is_registered = source_base_key in ANALYST_CONFIG or source_base_key == "portfolio_manager"
+        target_is_registered = target_base_key in ANALYST_CONFIG or target_base_key == "portfolio_manager"
+
+        if not (
+            edge.source in agent_ids_set
+            and edge.target in agent_ids_set
+            and source_is_registered
+            and target_is_registered
+        ):
+            continue
+
+        nodes_with_incoming_edges.add(edge.target)
+        nodes_with_outgoing_edges.add(edge.source)
+
+        # Check if this is a direct connection from analyst to portfolio manager
+        if (source_base_key in ANALYST_CONFIG and
+            source_base_key != "portfolio_manager" and
+            target_base_key == "portfolio_manager"):
+            # Don't add direct edge to portfolio manager - we'll route through risk manager
+            direct_to_portfolio_managers[edge.source] = edge.target
+        else:
+            # Add edge between agent nodes (but not direct to portfolio managers)
+            graph.add_edge(edge.source, edge.target)
     
     # Connect start_node to nodes that don't have incoming edges from other agents
     for agent_id in agent_ids:

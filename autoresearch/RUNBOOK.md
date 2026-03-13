@@ -230,7 +230,7 @@ Logs go to `autoresearch/logs/performance.csv` and `autoresearch/logs/daily_YYYY
 
 ## 6f. Sleeve-Level Factor Experiments (Current Results Snapshot)
 
-These are small, two-name sandboxes to sanity-check the factor overlays. Treat them as *illustrative*, not final production configs.
+These started as small, two-name sandboxes to sanity-check the factor overlays. Treat them as *illustrative*, not final production configs; full-sleeve results are summarized below for context.
 
 - **Tastytrade AI infra sleeve — ASML, AMAT**
   - Baseline (technical only, `autoresearch.params`):
@@ -252,6 +252,23 @@ These are small, two-name sandboxes to sanity-check the factor overlays. Treat t
       ```
     - Metrics: Sharpe ≈ **0.68**, Sortino ≈ **0.95**, Max DD ≈ **‑15.1%**, Return ≈ **+21.4%**
 
+  - **Full sleeve (all tastytrade names from SOUL.md)**
+    - Baseline (technical only, `autoresearch.params`):
+      ```bash
+      poetry run python -m autoresearch.evaluate \
+        --params autoresearch.params \
+        --prices-path prices_tastytrade_sleeve_long.json \
+        --tickers ASML,AMAT,KLAC,LRCX,SNPS,CDNS,ANET,AVGO,VRT,MRVL,CEG,EQT,WDC,STX,LITE
+      ```
+      - Metrics: Sharpe ≈ **1.67**, Sortino ≈ **2.49**, Max DD ≈ **‑25.8%**, Return ≈ **+114.8%**
+    - First-wave factors ON (`autoresearch.params_tastytrade_sleeve`, `FACTOR_CACHE_PREFIX="tastytrade_sleeve_long"`):
+      ```bash
+      poetry run python -m autoresearch.evaluate \
+        --params autoresearch.params_tastytrade_sleeve \
+        --prices-path prices_tastytrade_sleeve_long.json
+      ```
+      - Metrics: Sharpe ≈ **1.67**, Sortino ≈ **2.43**, Max DD ≈ **‑23.1%**, Return ≈ **+102.4%**
+
 - **Hyperliquid HIP-3 sleeve — NVDA, MSFT**
   - Baseline (technical only, `autoresearch.params`):
     - Command:
@@ -272,7 +289,27 @@ These are small, two-name sandboxes to sanity-check the factor overlays. Treat t
       ```
     - Metrics: Sharpe ≈ **‑0.51**, Sortino ≈ **‑0.68**, Max DD ≈ **‑6.4%**, Return ≈ **+1.8%**
 
-**Interpretation:** on these tiny sandboxes, the first-wave factors behave as *conservative overlays* (lower or similar returns with somewhat tamer drawdowns). Scaling this to full sleeve universes is the next step; these snapshots are here so you (and future experiments) have concrete reference points.
+  - **Full sleeve (all HIP-3 equity names from SOUL.md)**
+    - Baseline (technical only, `autoresearch.params`):
+      ```bash
+      poetry run python -m autoresearch.evaluate \
+        --params autoresearch.params \
+        --prices-path prices_hl_hip3_sleeve_long.json \
+        --tickers NVDA,TSM,MSFT,AMZN,GOOGL,META,PLTR,ORCL,MU,COIN,HOOD,TSLA,AAPL,RTX,GLD,SLV
+      ```
+      - Metrics: Sharpe ≈ **1.70**, Sortino ≈ **2.29**, Max DD ≈ **‑22.5%**, Return ≈ **+84.2%**
+    - First-wave factors ON (`autoresearch.params_hl_hip3_sleeve`, `FACTOR_CACHE_PREFIX="hl_hip3_sleeve_long"`):
+      ```bash
+      poetry run python -m autoresearch.evaluate \
+        --params autoresearch.params_hl_hip3_sleeve \
+        --prices-path prices_hl_hip3_sleeve_long.json
+      ```
+      - Metrics: Sharpe ≈ **2.07**, Sortino ≈ **2.72**, Max DD ≈ **‑18.2%**, Return ≈ **+94.3%**
+
+**Interpretation:** on the tiny sandboxes, first-wave factors behave as *conservative overlays* (lower or similar returns with somewhat tamer drawdowns). On the full sleeves, they currently look:
+
+- **Tastytrade:** roughly unchanged Sharpe/Sortino with slightly better worst drawdown at the cost of some upside (risk profile changes, but not obviously “better” yet).
+- **Hyperliquid HIP-3:** higher Sharpe/Sortino and shallower drawdowns with higher total return — a strong early signal that factors may be worth keeping for this sleeve, pending more OOS and walk-forward checks.
 
 ---
 

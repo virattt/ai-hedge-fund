@@ -18,6 +18,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# Default technical indicators to tweak for sector params (e.g. equipment, tech).
 TWEAKABLE = [
     ("RSI_OVERSOLD", 25, 35, 1),
     ("RSI_OVERBOUGHT", 65, 80, 1),
@@ -26,6 +27,24 @@ TWEAKABLE = [
     ("EMA_MEDIUM", 15, 30, 1),
     ("EMA_LONG", 40, 60, 1),
 ]
+
+# Sleeve-specific knobs: only factor/tier-related parameters, not core technicals.
+SLEEVE_TWEAKABLE = {
+    # Tastytrade AI infra sleeve (params_tastytrade_sleeve.py)
+    "tastytrade_sleeve": [
+        ("MIN_VALUE_SCORE", 0.0, 0.6, 0.05),
+        ("MIN_QUALITY_SCORE", 0.0, 0.6, 0.05),
+        ("INSIDER_NET_SELL_THRESHOLD", -0.2, 0.2, 0.05),
+        ("INSIDER_SIZE_MULTIPLIER", 0.4, 1.0, 0.05),
+    ],
+    # Hyperliquid HIP-3 equity sleeve (params_hl_hip3_sleeve.py)
+    "hl_hip3_sleeve": [
+        ("MIN_VALUE_SCORE", 0.0, 0.6, 0.05),
+        ("MIN_QUALITY_SCORE", 0.0, 0.6, 0.05),
+        ("INSIDER_NET_SELL_THRESHOLD", -0.2, 0.2, 0.05),
+        ("INSIDER_SIZE_MULTIPLIER", 0.4, 1.0, 0.05),
+    ],
+}
 
 
 def get_param_value(mod, name: str):
@@ -81,6 +100,7 @@ def main():
         return 1
 
     mod = importlib.import_module(f"autoresearch.params_{sector}")
+    tweakables = SLEEVE_TWEAKABLE.get(sector, TWEAKABLE)
     baseline = run_eval(sector, oos=args.oos)
     if baseline is None:
         print("Baseline eval failed.")
@@ -92,7 +112,7 @@ def main():
 
     best = baseline
     for i in range(args.iterations):
-        tweak = random.choice(TWEAKABLE)
+        tweak = random.choice(tweakables)
         name, lo, hi, step = tweak
         val = get_param_value(mod, name)
         if val is None:

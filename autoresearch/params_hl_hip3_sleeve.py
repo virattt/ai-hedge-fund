@@ -23,9 +23,30 @@ from autoresearch.params import *  # noqa: F401,F403
 # Sleeve-specific overrides
 # ─────────────────────────────────────────────────────────────
 
-# Start by experimenting on a small, representative subset; expand as desired.
-# TODO: replace placeholders with your preferred HIP-3 core names.
-BACKTEST_TICKERS = ["NVDA", "MSFT"]
+# Full Hyperliquid HIP-3 equity sleeve from SOUL.md (A/B/C tiers).
+BACKTEST_TICKERS = [
+    # Core AI compute / platform winners
+    "NVDA",
+    "TSM",
+    "MSFT",
+    "AMZN",
+    "GOOGL",
+    "META",
+    "PLTR",
+    "ORCL",
+    "MU",
+    # Financial rails / brokerage beta
+    "COIN",
+    "HOOD",
+    # Higher-beta optionality
+    "TSLA",
+    # Durable consumer / edge AI
+    "AAPL",
+    # Small diversifiers / ballast
+    "RTX",
+    "GLD",
+    "SLV",
+]
 
 # Use the Hyperliquid HIP-3 sleeve caches for fundamentals/events.
 FACTOR_CACHE_PREFIX = "hl_hip3_sleeve_long"

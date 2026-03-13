@@ -1,16 +1,17 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
-from typing import Optional
 import asyncio
-from datetime import datetime
 
-from app.backend.database import get_db
+from app.backend.database import get_db, SessionLocal
 from app.backend.database.models import HedgeFundFlowRun
 from app.backend.models.schemas import (
     ErrorResponse,
     HedgeFundRequest,
+    FlowRunStatus,
 )
-from app.backend.services.graph import create_graph, run_graph
+from app.backend.services.graph import create_graph, run_graph, parse_hedge_fund_response
+from app.backend.services.portfolio import create_portfolio
 from app.backend.repositories.flow_run_repository import FlowRunRepository
 
 
@@ -38,20 +39,26 @@ def _create_flow_run_for_second_opinion(db: Session, request_data: dict) -> Hedg
     return flow_run
 
 
-async def _execute_second_opinion_run(flow_run_id: int, request_data: dict, db: Session) -> None:
+async def _execute_second_opinion_run(flow_run_id: int, request_data: dict) -> None:
     """
     Background worker: builds graph from request_data, runs it once, and stores
     the result JSON into HedgeFundFlowRun.results.
     """
+    db = SessionLocal()
     repo = FlowRunRepository(db)
-    flow_run = repo.get_flow_run_by_id(flow_run_id)
-    if not flow_run:
-        return
-
-    # Update status to IN_PROGRESS
-    repo.update_flow_run(run_id=flow_run_id, status=None, results=None, error_message=None)
-
     try:
+        flow_run = repo.get_flow_run_by_id(flow_run_id)
+        if not flow_run:
+            return
+
+        # Mark run as started so polling clients can observe progress.
+        repo.update_flow_run(
+            run_id=flow_run_id,
+            status=FlowRunStatus.IN_PROGRESS,
+            results=None,
+            error_message=None,
+        )
+
         hedge_req = HedgeFundRequest(**request_data)
         graph = create_graph(
             graph_nodes=hedge_req.graph_nodes,
@@ -59,16 +66,18 @@ async def _execute_second_opinion_run(flow_run_id: int, request_data: dict, db: 
         )
         graph = graph.compile()
 
-        portfolio = {
-            "initial_cash": hedge_req.initial_cash,
-            "margin_requirement": hedge_req.margin_requirement,
-            "positions": [
-                p.model_dump() for p in (hedge_req.portfolio_positions or [])
-            ],
-        }
+        # Keep portfolio shape consistent with the main hedge-fund flow:
+        # positions must be a dict keyed by ticker (not a list).
+        portfolio = create_portfolio(
+            hedge_req.initial_cash,
+            hedge_req.margin_requirement,
+            hedge_req.tickers,
+            hedge_req.portfolio_positions,
+        )
 
-        # Run synchronously in the background task thread
-        result = run_graph(
+        # Run graph work in a worker thread so we don't block the event loop.
+        result = await asyncio.to_thread(
+            run_graph,
             graph=graph,
             portfolio=portfolio,
             tickers=hedge_req.tickers,
@@ -79,20 +88,52 @@ async def _execute_second_opinion_run(flow_run_id: int, request_data: dict, db: 
             request=hedge_req,
         )
 
-        # Store the raw result payload on the run
+        # `run_graph` currently returns the full final state dict from graph.invoke(...)
+        # while some callers expect a flattened {"decisions", "analyst_signals"} shape.
+        # Normalize both shapes here to keep API output stable.
+        if isinstance(result, dict) and "messages" in result and "data" in result:
+            messages = result.get("messages") or []
+            last_content = messages[-1].content if messages else None
+            extracted_decisions = parse_hedge_fund_response(last_content) if last_content else None
+            extracted_signals = (result.get("data") or {}).get("analyst_signals")
+        else:
+            extracted_decisions = result.get("decisions") if isinstance(result, dict) else None
+            extracted_signals = result.get("analyst_signals") if isinstance(result, dict) else None
+
+        # Store a JSON-serializable subset of the result on the run
+        safe_results = jsonable_encoder(
+            {
+                "decisions": extracted_decisions,
+                "analyst_signals": extracted_signals,
+                "meta": {
+                    "start_date": hedge_req.get_start_date(),
+                    "end_date": hedge_req.end_date,
+                    "tickers": hedge_req.tickers,
+                    "sleeve": request_data.get("sleeve"),
+                    "params_profile": request_data.get("params_profile"),
+                },
+            }
+        )
+
         repo.update_flow_run(
             run_id=flow_run_id,
-            status=None,
-            results=result,
+            status=FlowRunStatus.COMPLETE,
+            results=safe_results,
             error_message=None,
         )
     except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         repo.update_flow_run(
             run_id=flow_run_id,
-            status=None,
+            status=FlowRunStatus.ERROR,
             results=None,
             error_message=str(e),
         )
+    finally:
+        db.close()
 
 
 @router.post(
@@ -116,8 +157,8 @@ async def submit_second_opinion_run(
         payload = request.model_dump()
         flow_run = _create_flow_run_for_second_opinion(db, payload)
 
-        # Schedule execution
-        background_tasks.add_task(_execute_second_opinion_run, flow_run.id, payload, db)
+        # Detach execution so the submit endpoint can return immediately.
+        asyncio.create_task(_execute_second_opinion_run(flow_run.id, payload))
 
         return {
             "run_id": flow_run.id,

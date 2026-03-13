@@ -45,10 +45,19 @@ def main() -> int:
     draft = json.loads(draft_path.read_text())
     result = json.loads(result_path.read_text())
 
-    assets = {a["symbol"]: a for a in draft.get("assets", [])}
-    decisions = (result.get("results") or {}).get("decisions", {})
+    sleeve = draft.get("sleeve")
+    params_profile = draft.get("params_profile")
 
-    summaries = summarize_second_opinion(decisions, sleeve=draft.get("sleeve"))
+    print("=== Second-opinion context ===")
+    print(f"  Sleeve         : {sleeve or '-'}")
+    print(f"  Params profile : {params_profile or '-'}")
+
+    assets = {a["symbol"]: a for a in draft.get("assets", [])}
+    raw_results = result.get("results") or {}
+    raw_decisions = raw_results.get("decisions") if isinstance(raw_results, dict) else {}
+    decisions = raw_decisions if isinstance(raw_decisions, dict) else {}
+
+    summaries = summarize_second_opinion(decisions, sleeve=sleeve)
 
     strong_agree = []
     mild_disagree = []

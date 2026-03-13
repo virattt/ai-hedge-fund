@@ -70,8 +70,55 @@ In our workflow, [Dexter](https://github.com/eliza420ai-beep/dexter) is the prim
 
 - **One-time data capex, infinite backtests**: we use [Financial Datasets](https://financialdatasets.ai/) + a local cache layer so we pay for price/fundamental/macro/crypto data **once**, then run thousands of experiments purely on JSON files under `autoresearch/cache/`.
 - **Broad, deep coverage for Dexter sleeves**: helper scripts (`cache_signals.py`, `cache_fundamentals.py`, `cache_events.py`, `cache_macro.py`, `cache_crypto.py`) pull multi-year history for the tastytrade and Hyperliquid sleeves (and challengers) ticker-by-ticker.
-- **Richer signals, same harness**: beyond prices and committee signals, you can cache financial metrics, insider trades, news, and rate regimes, then plug them into backtests and agents without touching external APIs again. See `DATA.md` for the exact commands, plus `validate_cache.py` for a pre-flight coverage check.
-- **Fundamentals and tiers as overlays, not rewrites**: `autoresearch/factors.py` and `autoresearch/tiers.py` let you layer simple value/quality/insider filters and SOUL.md tier/sleeve rules on top of the existing fast backtester and paper trader, so you can test whether fundamentals and the two-sleeve conviction framework actually improve Sharpe/OOS.
+- **Richer signals, same harness**: beyond prices and committee signals, you can cache financial metrics, insider trades, news, and rate regimes, then plug them into backtests and agents without touching external APIs again. See `DATA.md` for the exact commands, plus `validate_cache.py` for a pre-flight coverage check on `prices_*.json`, fundamentals, events, macro, and crypto.
+- **Fundamentals and tiers as overlays, not rewrites**: `autoresearch/factors.py` and `autoresearch/tiers.py` let you *modulate* the existing system instead of replacing it: value/quality/insider signals become filters and sizing multipliers, and SOUL.md tier/sleeve rules become regime-aware position scale factors in `fast_backtest.py` and `paper_trading.py`.
+
+#### How to actually use fundamentals & tiers
+
+- **Why**: the goal is to test the *thesis-level rules* from `SOUL.md` (“A-tier infra names can run bigger”, “don’t push size into obvious net sellers”, etc.) against hard numbers:
+  - Does respecting cheapness/quality/insider flows and conviction tiers **improve Sharpe and drawdowns at the sleeve level**, or does it just clip upside?
+- **How (pattern)**:
+  1. **Fill caches once** for a sleeve using the `cache_*` scripts and sanity-check them with:
+     ```bash
+     poetry run python -m autoresearch.validate_cache \
+       --universes tastytrade_sleeve_long,hl_hip3_sleeve_long \
+       --start 2018-01-01 \
+       --end 2026-03-07
+     ```
+  2. **Pick a params module**:
+     - Global baseline: `autoresearch.params` (no sleeve-specific factors by default).
+     - Tastytrade factors: `autoresearch.params_tastytrade_sleeve` (`FACTOR_CACHE_PREFIX="tastytrade_sleeve_long"`).
+     - Hyperliquid factors: `autoresearch.params_hl_hip3_sleeve` (`FACTOR_CACHE_PREFIX="hl_hip3_sleeve_long"`).
+  3. **Run paired backtests** on the same tickers and prices, with and without factors:
+     - Tastytrade example (ASML, AMAT):
+       ```bash
+       # Baseline (technical only)
+       poetry run python -m autoresearch.evaluate \
+         --params autoresearch.params \
+         --prices-path prices_tastytrade_sleeve_long.json \
+         --tickers ASML,AMAT
+
+       # First-wave factors ON
+       poetry run python -m autoresearch.evaluate \
+         --params autoresearch.params_tastytrade_sleeve \
+         --prices-path prices_tastytrade_sleeve_long.json \
+         --tickers ASML,AMAT
+       ```
+     - Hyperliquid example (NVDA, MSFT):
+       ```bash
+       # Baseline (technical only)
+       poetry run python -m autoresearch.evaluate \
+         --params autoresearch.params \
+         --prices-path prices_hl_hip3_sleeve_long.json \
+         --tickers NVDA,MSFT
+
+       # First-wave factors ON
+       poetry run python -m autoresearch.evaluate \
+         --params autoresearch.params_hl_hip3_sleeve \
+         --prices-path prices_hl_hip3_sleeve_long.json \
+         --tickers NVDA,MSFT
+       ```
+  4. **Compare the four numbers the loop cares about** — `sharpe_ratio`, `sortino_ratio`, `max_drawdown`, `total_return_pct` — and decide whether the factor configuration is worth promoting to full-sleeve params. Current reference runs and interpretations live in `autoresearch/RUNBOOK.md`.
 
 ---
 
@@ -102,25 +149,101 @@ In our workflow, [Dexter](https://github.com/eliza420ai-beep/dexter) is the prim
 
 ## Why This Exists
 
-Most retail investors read compelling investment theses — like "AI infrastructure is the biggest capex cycle since postwar" — but lack the tools to systematically evaluate positions, size them for risk, and stress-test the portfolio. This project bridges that gap.
+Most retail investors read compelling theses — like "AI infrastructure is the biggest capex cycle since postwar" — but lack a system that can:
 
-The system takes a list of tickers, runs them through 18 specialized AI analyst agents (each modeled after a real-world investing legend or quantitative discipline), aggregates their signals through a risk manager, and produces position-level trading decisions with confidence scores and reasoning.
+- Ingest **institutional-grade data**,
+- Express that data as a **thesis-driven portfolio**,
+- Run a **real committee** against it,
+- **Backtest** the behavior over decades, and
+- Learn from the results in a tight **autonomous loop**.
 
-That matters even more in a thesis-driven stack. As described in [The Researcher Who Thinks](https://ikigaistudio.substack.com/p/the-researcher-who-thinks), Dexter is built to start from identity and thesis, not from ticker trivia. As described in [The Fund](https://ikigaistudio.substack.com/p/the-fund), that thesis currently expresses itself through two sleeves with zero overlap. This repo exists to be the adversarial committee around that process: a structured second opinion on the names, sizing, and regime assumptions coming out of Dexter.
+This repo exists to wire those pieces together around Dexter and the AI Hedge Fund.
 
-### The Four Layers
+### The Big Picture Loop
 
-**Layer 1 — AI-Powered Equity Analysis (Core)**
-The foundation. 18 analyst agents analyze stocks across fundamentals, technicals, valuation, sentiment, and growth — then a risk manager and portfolio manager synthesize everything into buy/sell/hold decisions with position sizing. This works today.
+1. **Data → World Model (Financial Datasets)**
+   - All prices, fundamentals, insider trades, macro, and crypto come from [Financial Datasets](https://docs.financialdatasets.ai/data-provenance) — a primary-source provider (SEC EDGAR, exchanges, direct publisher feeds).
+   - We pay the data capex once, then cache it locally:
+     - `src/tools/api.py` via `DataRouter` for single-run analysis.
+     - `autoresearch/cache_*.py` + `autoresearch/cache/` + `DATA.md` for backtestable JSON universes.
+     - `autoresearch/validate_cache.py` as the pre-flight check.
 
-**Layer 2 — Autoresearch (Autonomous Parameter Optimization)**
-The system has dozens of tunable parameters — indicator windows, strategy weights, risk bands, agent trust levels, buy/sell thresholds. An AI agent runs hundreds of automated experiments to find better settings, the same way Karpathy's autoresearch found 20 improvements to a neural network in 2 days unattended. See [Autoresearch](#autoresearch--autonomous-parameter-optimization) for details.
+2. **Dexter → Thesis & Sleeves (SOUL.md)**
+   - [Dexter](https://github.com/eliza420ai-beep/dexter) reads `SOUL.md` and constructs two non-overlapping sleeves:
+     - **Tastytrade sleeve** — AI infrastructure bottlenecks (equipment, EDA, networking, power, storage/optics satellites).
+     - **Hyperliquid stock sleeve** — concentrated AI platforms, financial rails, and ballast.
+   - For each sleeve Dexter emits a `PortfolioDraft`:
+     - `sleeve`, `params_profile` (baseline vs factors-on),
+     - `assets` with `symbol` + `target_weight_pct`,
+     - `graph_nodes` / `graph_edges` that define the analyst graph to run.
 
-**Layer 3 — Hyperliquid Integration (Crypto Perpetuals)**
-Equities alone can't express every thesis. Hyperliquid provides access to crypto perpetual futures with on-chain transparency, deep liquidity, and up to 50x leverage. See [Hyperliquid Integration](#hyperliquid-integration) for details.
+3. **AI Hedge Fund → Structured Second Opinion**
+   - AIHF is the adversarial committee: 18 analyst agents + risk + portfolio manager.
+   - Dexter calls AIHF over HTTP:
+     - `POST /api/v1/second-opinion/runs` with the sleeve draft.
+     - Polls `GET /api/v1/second-opinion/runs/{run_id}` and fetches `/result` when complete.
+   - The backend runs the graph with the right params module (e.g. `params_tastytrade_sleeve.py`, `params_hl_hip3_sleeve.py`) and returns:
+     - Per-ticker **decisions** (BUY/SELL/SHORT/COVER/HOLD + confidence).
+     - Per-ticker **analyst_signals** (how each agent voted).
+   - `autoresearch/second_opinion_report.py` then compares AIHF vs Dexter’s weights and buckets names into:
+     - **Strong agree** (thesis and committee aligned),
+     - **Mild disagree**,
+     - **Hard disagree** (high-weight positions where the committee hates the idea).
 
-**Layer 4 — Tastytrade Daily Options (Experimental)**
-An experimental module for generating income and expressing short-duration views through daily (0DTE) and short-dated options. See [Tastytrade Daily Options](#tastytrade-daily-options-experimental) for details.
+4. **Autoresearch → Parameter Search & Factor Tuning**
+   - The system has dozens of knobs (indicator windows, strategy weights, risk bands, factor thresholds, tier multipliers).
+   - **Autoresearch** turns this into an overnight search problem:
+     - Uses cached prices and (optionally) cached signals — no LLM calls in the loop.
+     - Modifies **one param at a time** in the relevant module (e.g. `params_tastytrade_sleeve.py`, `params_hl_hip3_sleeve.py`, sector `params_*.py`).
+     - Runs `autoresearch.evaluate` and measures:
+       - `sharpe_ratio`, `sortino_ratio`, `max_drawdown`, `total_return_pct`.
+     - Keeps or reverts the change based on Sharpe and risk rules.
+   - For sleeves we keep the search focused on **factor + tier knobs**:
+     - `MIN_VALUE_SCORE`, `MIN_QUALITY_SCORE`,
+     - `INSIDER_NET_SELL_THRESHOLD`, `INSIDER_SIZE_MULTIPLIER`,
+     - regime/tier multipliers from `autoresearch/tiers.py`.
+   - Result: instead of arguing “should we respect fundamentals/tiers?”, we can say:
+     - “On this sleeve, with this universe and data, fundamentals + tiers **improved/worsened** Sharpe and drawdowns by X.”
+
+5. **Execution → Today Manual, Tomorrow Automated**
+   - Today, execution is manual:
+     - We read AIHF’s stance and place trades on Tastytrade + Hyperliquid ourselves.
+   - Over time, we hook the Hyperliquid sleeve into [`agent-cli`](https://github.com/eliza420ai-beep/agent-cli):
+     - AIHF produces **targets and constraints**.
+     - `agent-cli` handles **actual trading behavior** (MM, directional strategies, risk, guardrails) on HL perps.
+   - The goal is to reuse a well-tested execution stack instead of reinventing order routing and risk from scratch.
+
+6. **Narrative & Thesis Feedback (Substack + SOUL.md)**
+   - Each sleeve rebalance produces:
+     - A Substack-style **investment memo**:
+       - What Dexter proposed, where AIHF disagreed, and what we actually executed.
+     - Concrete charts/tables from:
+       - Backtests (`autoresearch.evaluate`),
+       - Sleeve factor experiments,
+       - Second-opinion disagreement buckets.
+   - Those outcomes are then fed back into `SOUL.md`:
+     - Promote/demote names between Tier A/B/C.
+     - Tighten sleeve membership rules (“this belongs in tastytrade, not Hyperliquid”).
+     - Adjust regime-aware sizing heuristics.
+   - Over time, `SOUL.md` becomes a **living spec** for the fund, informed by data, backtests, and real-world outcomes.
+
+```mermaid
+flowchart LR
+    data[\"FinancialDatasets<br/>+ local caches\"]
+    dexter[DexterSleeves]
+    aihf[AIHedgeFund]
+    autoLoop[Autoresearch]
+    execLayer[ExecutionLayer]
+    narrative[\"Substack<br/>+ SOUL.md\"]
+
+    data --> dexter
+    dexter --> aihf
+    aihf --> autoLoop
+    autoLoop --> aihf
+    aihf --> execLayer
+    execLayer --> narrative
+    narrative --> dexter
+```
 
 ---
 
@@ -301,6 +424,33 @@ Create `~/.ai-hedge-fund/` for config shared between this repo and [Dexter](http
 ---
 
 ## Usage
+
+### Known Good Test (2-minute smoke test)
+
+Use this to verify the Dexter -> AIHF async second-opinion path is healthy on your machine.
+
+```bash
+# Terminal 1: start backend
+poetry run uvicorn app.backend.main:app --reload
+
+# Terminal 2: run second-opinion client against a known draft + flow
+poetry run python scripts/dexter_second_opinion_client.py \
+  --draft /Users/macbookpro16/Documents/stocks/ai-hedge-fund/portfolio_draft_tastytrade.json \
+  --flow-id 1 \
+  --base-url http://localhost:8000 \
+  --output-dir ./second_opinion_runs \
+  --params-profile tastytrade_factors_on \
+  --run-report
+```
+
+Expected result:
+
+- Client prints a `run_id` and ends with `final status: COMPLETE`.
+- A new file appears at `second_opinion_runs/second_opinion_run_result_<run_id>.json`.
+- The JSON contains non-null `results.decisions` and `results.analyst_signals`.
+- The printed report shows agreement buckets (not all `(none)` for the current tastytrade draft).
+
+If you want to mirror this workflow in Dexter docs, use the ready-to-copy handoff in `DEXTER_INTEGRATION.md`.
 
 ### CLI
 
@@ -485,6 +635,197 @@ In practice this now happens two ways:
   - Poll `GET /api/v1/second-opinion/runs/{run_id}` until status is COMPLETE.
   - Fetch the final payload via `GET /api/v1/second-opinion/runs/{run_id}/result`.
   - Optionally shell out to `scripts/dexter_second_opinion_client.py` and `autoresearch/second_opinion_report.py` to bucket names into **strong agree / mild disagree / hard disagree** vs Dexter’s sleeve weights before writing the Substack essay.
+
+### How to read "why" when the committee is very bearish
+
+When you see a wall of `SHORT` decisions, read it in this order:
+
+1. **Portfolio-manager stance** (`results.decisions`)  
+   This is the final committee output per ticker (`action`, `confidence`, `reasoning`).
+2. **Analyst disagreement map** (`results.analyst_signals`)  
+   This shows which specialist agents were bearish/bullish and with what confidence.
+3. **Reason clusters, not single quotes**  
+   Look for repeating motifs across names (valuation stretched, margin pressure, weak momentum, insider distribution, etc.).
+
+Quick extractor for one run result:
+
+```bash
+poetry run python - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("second_opinion_runs/second_opinion_run_result_14.json")
+run = json.loads(path.read_text())
+res = run.get("results") or {}
+decisions = res.get("decisions") or {}
+signals = res.get("analyst_signals") or {}
+
+print("== Final committee decisions ==")
+for t, d in decisions.items():
+    print(f"{t}: {d.get('action')} conf={d.get('confidence')} | {d.get('reasoning')}")
+
+print("\n== Top bearish agents per ticker ==")
+for t in decisions.keys():
+    rows = []
+    for agent, payload in signals.items():
+        s = payload.get(t)
+        if not isinstance(s, dict):
+            continue
+        if str(s.get("signal", "")).lower() == "bearish":
+            rows.append((float(s.get("confidence", 0.0)), agent))
+    rows.sort(reverse=True)
+    top = ", ".join([f"{a}({c:.0f})" for c, a in rows[:5]]) or "none"
+    print(f"{t}: {top}")
+PY
+```
+
+This gives you the "committee vote anatomy" you need for narrative writing.
+
+### Close the loop: turn second-opinion into a Substack-ready essay
+
+Use this exact workflow after each sleeve run:
+
+1. **Generate disagreement buckets**
+   ```bash
+   poetry run python scripts/dexter_second_opinion_client.py \
+     --draft /absolute/path/to/portfolio_draft_tastytrade_full.json \
+     --flow-id 1 \
+     --base-url http://localhost:8000 \
+     --output-dir ./second_opinion_runs \
+     --params-profile tastytrade_factors_on \
+     --run-report
+   ```
+2. **Extract "why" evidence** from `results.decisions` + `results.analyst_signals` (snippet above).
+3. **Write the memo in 5 blocks**:
+   - Thesis context (what Dexter intended the sleeve to do)
+   - Committee verdict (agree / mild disagree / hard disagree table)
+   - Bear-case evidence (repeating reason clusters and confidence)
+   - Portfolio action (what gets resized, deferred, or replaced)
+   - Next experiment (what to test in backtest/autoresearch before next rebalance)
+4. **Feed back into `SOUL.md` and params**:
+   - Promote/demote names by tier.
+   - Adjust sleeve weights or regime multipliers.
+   - Re-run the sleeve and compare deltas.
+
+You can auto-generate a first Substack outline from a run JSON:
+
+```bash
+poetry run python scripts/second_opinion_to_substack_outline.py \
+  --run-result second_opinion_runs/second_opinion_run_result_14.json \
+  --portfolio-draft portfolio_draft_tastytrade_full.json
+```
+
+This writes a markdown draft like:
+
+- `second_opinion_runs/substack_outline_run_14.md`
+- Use `--voice bench` (default) for "The Bench" brand tone, or `--voice neutral` for plain technical language.
+
+For a near-publishable long-form memo (not just an outline):
+
+```bash
+poetry run python scripts/second_opinion_to_substack_outline.py \
+  --run-result second_opinion_runs/second_opinion_run_result_14.json \
+  --portfolio-draft portfolio_draft_tastytrade_full.json \
+  --voice bench \
+  --final-draft
+```
+
+Default output in this mode:
+
+- `second_opinion_runs/substack_draft_run_14.md`
+
+### Milestone: Dexter -> AIHF async loop is now stable
+
+The full second-opinion path now works end-to-end from a Dexter-style draft:
+
+1. Load graph from a saved flow (`--flow-id`).
+2. Submit async run (`POST /api/v1/second-opinion/runs`).
+3. Poll run status until `COMPLETE`.
+4. Fetch persisted result.
+5. Generate disagreement buckets for narrative output.
+
+Recent hard failures are fixed:
+
+- **Unknown graph node edges** from UI-only nodes are ignored during graph wiring.
+- **Portfolio shape mismatch** (`'list' object has no attribute 'keys'`) is fixed by using the canonical `create_portfolio(...)` builder in the second-opinion worker.
+- **Result extraction mismatch** (`COMPLETE` with null decisions/signals) is fixed by normalizing both result shapes:
+  - full LangGraph final state (`messages` + `data`), and
+  - flattened `{decisions, analyst_signals}` payloads.
+
+Working command:
+
+```bash
+poetry run python scripts/dexter_second_opinion_client.py \
+  --draft /Users/macbookpro16/Documents/stocks/ai-hedge-fund/portfolio_draft_tastytrade.json \
+  --flow-id 1 \
+  --base-url http://localhost:8000 \
+  --output-dir ./second_opinion_runs \
+  --params-profile tastytrade_factors_on \
+  --run-report
+```
+
+Expected outcome now:
+
+- Run finishes with `status=COMPLETE`.
+- Result JSON includes non-null `results.decisions` and `results.analyst_signals`.
+- Report prints populated buckets (for the current tastytrade draft: strong-agree BUYs on ASML, AMAT, KLAC, LRCX).
+
+### Milestone: Full-sleeve + publishing loop is live
+
+We can now run the full loop (research -> committee -> narrative assets) on complete sleeve portfolios, not just mini smoke tests.
+
+- **Full-sleeve drafts are in place**
+  - `portfolio_draft_tastytrade_full.json`
+  - `portfolio_draft_hyperliquid_full.json`
+- **Second-opinion runner supports long jobs better**
+  - `scripts/dexter_second_opinion_client.py` now prints per-poll progress (`elapsed`, poll count, status), with `--hide-progress` available for quiet mode.
+- **Narrative generation is now multi-format**
+  - `scripts/second_opinion_to_substack_outline.py` supports:
+    - `--voice bench` (brand-aligned "The Bench" voice) or `--voice neutral`
+    - `--final-draft` for near-publishable long-form markdown
+    - `--publish-pack` to emit all assets at once:
+      - `substack_outline_run_<id>.md`
+      - `substack_draft_run_<id>.md`
+      - `substack_note_run_<id>.md`
+      - `x_thread_run_<id>.txt`
+- **Validated on full tastytrade sleeve**
+  - Full-sleeve run completed and generated publish-ready assets under `second_opinion_runs/`.
+
+### Operator Cheat-Sheet (3-command loop)
+
+Run this sequence when you want to go from sleeve draft -> committee verdict -> publish assets fast.
+
+1) **Run full-sleeve second opinion**
+
+```bash
+poetry run python scripts/dexter_second_opinion_client.py \
+  --draft /Users/macbookpro16/Documents/stocks/ai-hedge-fund/portfolio_draft_tastytrade_full.json \
+  --flow-id 1 \
+  --base-url http://localhost:8000 \
+  --output-dir ./second_opinion_runs \
+  --params-profile tastytrade_factors_on \
+  --run-report
+```
+
+2) **Generate full publish pack**
+
+```bash
+poetry run python scripts/second_opinion_to_substack_outline.py \
+  --run-result second_opinion_runs/second_opinion_run_result_<RUN_ID>.json \
+  --portfolio-draft portfolio_draft_tastytrade_full.json \
+  --voice bench \
+  --publish-pack
+```
+
+3) **Publish checklist**
+
+- Open and edit:
+  - `second_opinion_runs/substack_draft_run_<RUN_ID>.md`
+  - `second_opinion_runs/substack_note_run_<RUN_ID>.md`
+  - `second_opinion_runs/x_thread_run_<RUN_ID>.txt`
+- Verify narrative matches latest weights/positions.
+- Add final execution decisions and next experiment.
+- Publish long-form + note + thread.
 
 ---
 

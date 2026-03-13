@@ -1,0 +1,28 @@
+{
+  "sleeve": "hyperliquid",
+  "params_profile": "hl_hip3_factors_on",
+  "assets": [
+    { "symbol": "NVDA", "target_weight_pct": 8.0 },
+    { "symbol": "TSM", "target_weight_pct": 8.0 },
+    { "symbol": "MSFT", "target_weight_pct": 8.0 },
+    { "symbol": "AMZN", "target_weight_pct": 8.0 },
+    { "symbol": "GOOGL", "target_weight_pct": 8.0 },
+    { "symbol": "META", "target_weight_pct": 8.0 },
+    { "symbol": "PLTR", "target_weight_pct": 5.0 },
+    { "symbol": "ORCL", "target_weight_pct": 5.0 },
+    { "symbol": "MU", "target_weight_pct": 5.0 },
+    { "symbol": "COIN", "target_weight_pct": 5.0 },
+    { "symbol": "HOOD", "target_weight_pct": 5.0 },
+    { "symbol": "AAPL", "target_weight_pct": 5.0 },
+    { "symbol": "TSLA", "target_weight_pct": 3.0 },
+    { "symbol": "RTX", "target_weight_pct": 3.0 },
+    { "symbol": "GLD", "target_weight_pct": 3.0 },
+    { "symbol": "SLV", "target_weight_pct": 3.0 }
+  ],
+  "graph_nodes": [],
+  "graph_edges": [],
+  "margin_requirement": 0.5,
+  "portfolio_positions": [],
+  "model_name": "gpt-4.1",
+  "model_provider": "openai"
+}

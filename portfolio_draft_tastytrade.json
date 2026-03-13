@@ -1,0 +1,17 @@
+{
+  "sleeve": "tastytrade",
+  "params_profile": "tastytrade_factors_on",
+  "assets": [
+    { "symbol": "ASML", "target_weight_pct": 8.0 },
+    { "symbol": "AMAT", "target_weight_pct": 6.0 },
+    { "symbol": "KLAC", "target_weight_pct": 5.0 },
+    { "symbol": "LRCX", "target_weight_pct": 5.0 }
+  ],
+  "graph_nodes": [],
+  "graph_edges": [],
+  "margin_requirement": 0.5,
+  "portfolio_positions": [],
+  "model_name": "gpt-4.1",
+  "model_provider": "openai"
+}
+

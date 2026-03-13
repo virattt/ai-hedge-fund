@@ -60,6 +60,12 @@ class ErrorResponse(BaseModel):
 # Base class for shared fields between HedgeFundRequest and BacktestRequest
 class BaseHedgeFundRequest(BaseModel):
     tickers: List[str]
+    # Optional high-level metadata about how this request should be interpreted.
+    # `sleeve` describes which sleeve (tastytrade, hl_hip3, etc.) the draft belongs to.
+    # `params_profile` lets callers (e.g. Dexter) hint which params config to use,
+    # such as "tastytrade_baseline" vs "tastytrade_factors_on".
+    sleeve: Optional[str] = None
+    params_profile: Optional[str] = None
     graph_nodes: List[GraphNode]
     graph_edges: List[GraphEdge]
     agent_models: Optional[List[AgentModelConfig]] = None
