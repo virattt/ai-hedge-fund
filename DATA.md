@@ -80,6 +80,30 @@ poetry run python -m autoresearch.cache_signals \
 
 These JSON files live in `autoresearch/cache/` and are gitignored. `RUNBOOK.md` has the full sector list and a `refresh_all_prices.sh` helper to update everything in one shot.
 
+#### 3.1.1 Naming conventions for sleeves and universes
+
+For anything related to Dexter sleeves we standardize cache filenames so
+backtests and validation tooling can treat universes consistently:
+
+- **Tastytrade AI infra sleeve**
+  - Short window: `prices_tastytrade_sleeve.json`
+  - Deep history: `prices_tastytrade_sleeve_long.json`
+- **Hyperliquid HIP-3 equity sleeve**
+  - Short window: `prices_hl_hip3_sleeve.json`
+  - Deep history: `prices_hl_hip3_sleeve_long.json`
+- **Fundamentals / events for any universe `X`**
+  - `financial_metrics_X.json`
+  - `insider_trades_X.json`
+  - `news_X.json`
+- **Macro / crypto (shared)**
+  - `macro_rates.json`
+  - `crypto_prices_<universe>.json` (e.g. `crypto_prices_core_crypto.json`)
+
+The `autoresearch/validate_cache.py` helper understands this pattern and will
+look for `prices_<universe>.json`, `financial_metrics_<universe>.json`,
+`insider_trades_<universe>.json`, `news_<universe>.json`, plus the shared macro
+and crypto caches when you validate coverage for a universe.
+
 #### 3.2 Tastytrade sleeve (Dexter) tickers
 
 To cache prices for the **tastytrade AI infra sleeve** Dexter defines, you can either:

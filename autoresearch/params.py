@@ -147,3 +147,28 @@ BACKTEST_START = "2025-01-02"
 BACKTEST_END = "2026-03-07"
 BACKTEST_INITIAL_CASH = 100_000
 BACKTEST_MARGIN_REQ = 0.5
+
+# ─────────────────────────────────────────────────────────────
+# 7. FUNDAMENTAL / EVENT FILTERS — Optional overlays
+# ─────────────────────────────────────────────────────────────
+
+# If set, factor helpers will look for:
+#   financial_metrics_<FACTOR_CACHE_PREFIX>.json
+#   insider_trades_<FACTOR_CACHE_PREFIX>.json
+#   news_<FACTOR_CACHE_PREFIX>.json
+FACTOR_CACHE_PREFIX = None  # e.g. "tastytrade_sleeve_long"
+
+# Toggles for first-wave factors (disabled by default so the AI can turn them on explicitly)
+USE_VALUE_FILTER = False
+USE_QUALITY_FILTER = False
+USE_INSIDER_FILTER = False
+
+# Thresholds are expressed in 0–1 factor space (see factors.py for mapping)
+MIN_VALUE_SCORE = 0.0   # require at least this value score (0–1)
+MIN_QUALITY_SCORE = 0.0  # require at least this quality score (0–1)
+
+# Insider net selling: if net shares over the lookback window are below this,
+# down-weight position by INSIDER_SIZE_MULTIPLIER instead of hard-banning.
+INSIDER_NET_SELL_THRESHOLD = 0.0
+INSIDER_SIZE_MULTIPLIER = 0.5
+

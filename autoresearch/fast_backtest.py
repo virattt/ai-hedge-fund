@@ -16,7 +16,6 @@ import math
 import sys
 from pathlib import Path
 from typing import Optional
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -324,6 +323,16 @@ class FastBacktestEngine:
         self.signals_cache = load_signals_cache() if not tickers_override else None  # cross-asset = technical-only
         self.tickers = tickers_override if tickers_override else self.p.BACKTEST_TICKERS
         self.portfolio_values = []
+        # Optional fundamentals/events overlay
+        self._factor_prefix = getattr(self.p, "FACTOR_CACHE_PREFIX", None)
+        if self._factor_prefix:
+            try:
+                from autoresearch import factors as _fund_factors  # type: ignore
+            except Exception:
+                _fund_factors = None
+            self._factors = _fund_factors
+        else:
+            self._factors = None
 
     def _get_price_slice(self, ticker: str, end_date: str, lookback_days: int = 200) -> pd.DataFrame:
         df = self.prices.get(ticker)
@@ -416,10 +425,30 @@ class FastBacktestEngine:
                 weighted_score = w_sum / w_total if w_total > 0 else 0.0
                 confidence = (avg_conf / n_signals * 100) if n_signals > 0 else 0.0
 
+                # Optional fundamentals / events overlay: filters + sizing multipliers
+                size_mult = 1.0
+                if self._factors and self._factor_prefix:
+                    try:
+                        snapshot = self._factors.compute_factor_snapshot(
+                            ticker=t,
+                            date_str=date_str,
+                            prefix=self._factor_prefix,
+                        )
+                        allowed, size_mult = self._factors.apply_fundamental_rules(
+                            snapshot,
+                            self.p,
+                        )
+                        if not allowed:
+                            # Skip making any new decision for this ticker on this date
+                            continue
+                    except Exception:
+                        # If factor logic crashes, fall back to pure technicals
+                        size_mult = 1.0
+
                 # Risk management: compute position limits
                 ann_vol = self._estimate_volatility(t, date_str)
                 vol_limit = compute_vol_adjusted_limit(ann_vol, self.p)
-                position_limit = total_value * vol_limit
+                position_limit = total_value * vol_limit * size_mult
                 current_pos_value = abs(positions[t]["long"] - positions[t]["short"]) * current_prices[t]
                 remaining_limit = max(0, position_limit - current_pos_value)
                 max_shares = int(min(remaining_limit, cash) / current_prices[t]) if current_prices[t] > 0 else 0
