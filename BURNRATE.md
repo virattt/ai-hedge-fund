@@ -54,11 +54,18 @@ This is a business plan that runs the numbers, not one that tells a story and ho
 ║    Wheel collateral (base, good yield)          —       ~$178,000       —          ║
 ║    Savings vs. fund                             —       $66,500/yr      —          ║
 ║                                                                                  ║
+║  MINIMUM VIABLE (LLC + Fairmint, no salaries)                                    ║
+║    Ops-only burn                               $14,450    $27,000     $44,600     ║
+║    Monthly                                      $1,204     $2,250      $3,717     ║
+║    Wheel collateral (base, good yield)              —      ~$21,000         —       ║
+║    Wheel collateral (base, conservative)            —      ~$42,000         —       ║
+║    $187K covers base ops cost                    4×–9× over                        ║
+║                                                                                  ║
 ║  VERDICT                                                                         ║
 ║    Fund: cash-flow positive at $21M AUM from day one.                            ║
-║    Simple LLC: $187K collateral already covers base burn at good yield.           ║
-║    The wheel at $178K–$460K covers the monthly burn from premium alone.           ║
-║    The management fee is margin, not survival.                                   ║
+║    Simple LLC + salaries: $187K covers base burn at good yield.                   ║
+║    Minimum viable (no salaries): ~$21K covers all ops at good yield.              ║
+║    $187K wheel generates 4×–9× the ops-only cost. The rest is margin.              ║
 ╚════════════════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -350,11 +357,47 @@ Same yield assumptions (5.35%/mo conservative, 10.7%/mo good):
 | **Base** (~$19,042) | **~$356,000** | **~$178,000** |
 | **High** (~$20,217) | **~$378,000** | **~$189,000** |
 
-### What This Means
+### What This Means (with salaries)
 
 - At **base burn** (~$19K/month), the wheel needs **~$356K** (conservative) or **~$178K** (good) in collateral. Your current **$187K** is right at the good-yield threshold — meaning on a good month, $187K already covers the entire simple-LLC burn including salaries.
 - The gap between "fund" and "simple LLC" is **~$5,500/month**. That's the price of investor infrastructure. If the plan is to trade your own capital and pay a team, the simple LLC is the correct vehicle until outside capital becomes worth the compliance overhead.
 - **When to upgrade:** If you want to take outside money, the fund structure from §4–§8 kicks in. Until then, the simple LLC lets you run the same wheel strategy, hold BTC, and pay salaries with a burn rate that's **23% lower** than the fund.
+
+---
+
+### Minimum Viable Capital: LLC + Fairmint, No Salaries
+
+Strip it to the bone. No team salary — just the entity, Fairmint for onchain cap-table readiness, and the minimum legal/ops to keep the LLC compliant and trading. This is the floor: **how much wheel capital does the strategy itself need to be self-sustaining?**
+
+| Line item | Low | Base | High |
+|-----------|-----|------|------|
+| Entity maintenance (1 LLC) | $450 | $500 | $600 |
+| Legal (operating agreement, tax counsel) | $3,000 | $5,000 | $8,000 |
+| Tax preparation | $2,000 | $3,000 | $5,000 |
+| Crypto custody | $2,000 | $4,000 | $8,000 |
+| Accounting / bookkeeping | $1,000 | $2,000 | $3,000 |
+| Fairmint (cap table, KYC, transfers) | $5,000 | $8,500 | $12,000 |
+| Insurance (optional) | $0 | $2,000 | $5,000 |
+| Banking / misc | $1,000 | $2,000 | $3,000 |
+| **Total annual ops** | **$14,450** | **$27,000** | **$44,600** |
+| **Monthly ops** | **~$1,204** | **~$2,250** | **~$3,717** |
+
+#### Wheel Collateral to Cover Ops-Only Burn
+
+| Monthly ops | Conservative (5.35%/mo) | Good (10.7%/mo) |
+|-------------|------------------------|-----------------|
+| **Low** (~$1,204) | **~$22,500** | **~$11,300** |
+| **Base** (~$2,250) | **~$42,100** | **~$21,000** |
+| **High** (~$3,717) | **~$69,500** | **~$34,700** |
+
+#### The Punchline
+
+- At **base ops** ($27K/year, $2,250/month), the wheel needs just **~$42K** (conservative) or **~$21K** (good) in collateral to pay every bill the LLC generates.
+- That's **~0.6 BTC** (good) to **~0.6 BTC** at $70K spot on the low end — or roughly **0.3 BTC to 1.0 BTC** worth of collateral across the full range.
+- **$187K** in a wheel at these yields generates **$10K–$20K/month** — covering the $2,250/month ops cost **4× to 9× over**. The surplus is retained earnings, BTC accumulation, or future salary capacity.
+- Fairmint adds **$5K–$12K/year** to the bare LLC but keeps the cap table onchain and investor-ready from day one. When you do bring in outside capital, the infrastructure is already live — no retrofit, no paper migration.
+
+This is the minimum viable fund infrastructure: a Delaware LLC, Fairmint, and **~$21K–$42K** in wheel collateral. Everything above that is margin.
 
 ---
 
