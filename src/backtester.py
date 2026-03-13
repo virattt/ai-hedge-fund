@@ -60,6 +60,7 @@ if __name__ == "__main__":
         model_provider=inputs.model_provider,
         selected_analysts=inputs.selected_analysts,
         initial_margin_requirement=inputs.margin_requirement,
+        generate_charts=True,  # Enable chart generation by default
     )
 
     # Run the backtest with graceful exit handling
