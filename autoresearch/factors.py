@@ -230,19 +230,20 @@ def apply_fundamental_rules(
     mult = 1.0
     allowed = True
 
-    # Value filter
+    # Value filter: penalize expensive names via sizing, but don't hard-ban.
     use_value = getattr(params, "USE_VALUE_FILTER", False)
     min_value = getattr(params, "MIN_VALUE_SCORE", 0.0)
     if use_value and snapshot.value_score is not None:
         if snapshot.value_score < min_value:
-            allowed = False
+            # Down-weight instead of outright blocking the name.
+            mult *= getattr(params, "INSIDER_SIZE_MULTIPLIER", 0.5)
 
-    # Quality filter
+    # Quality filter: penalize low-quality names via sizing, but don't hard-ban.
     use_quality = getattr(params, "USE_QUALITY_FILTER", False)
     min_quality = getattr(params, "MIN_QUALITY_SCORE", 0.0)
     if use_quality and snapshot.quality_score is not None:
         if snapshot.quality_score < min_quality:
-            allowed = False
+            mult *= getattr(params, "INSIDER_SIZE_MULTIPLIER", 0.5)
 
     # Insider filter: down-weight persistent net sellers
     use_insider = getattr(params, "USE_INSIDER_FILTER", False)

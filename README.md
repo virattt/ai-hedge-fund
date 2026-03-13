@@ -70,7 +70,8 @@ In our workflow, [Dexter](https://github.com/eliza420ai-beep/dexter) is the prim
 
 - **One-time data capex, infinite backtests**: we use [Financial Datasets](https://financialdatasets.ai/) + a local cache layer so we pay for price/fundamental/macro/crypto data **once**, then run thousands of experiments purely on JSON files under `autoresearch/cache/`.
 - **Broad, deep coverage for Dexter sleeves**: helper scripts (`cache_signals.py`, `cache_fundamentals.py`, `cache_events.py`, `cache_macro.py`, `cache_crypto.py`) pull multi-year history for the tastytrade and Hyperliquid sleeves (and challengers) ticker-by-ticker.
-- **Richer signals, same harness**: beyond prices and committee signals, you can cache financial metrics, insider trades, news, and rate regimes, then plug them into backtests and agents without touching external APIs again. See `DATA.md` for the exact commands.
+- **Richer signals, same harness**: beyond prices and committee signals, you can cache financial metrics, insider trades, news, and rate regimes, then plug them into backtests and agents without touching external APIs again. See `DATA.md` for the exact commands, plus `validate_cache.py` for a pre-flight coverage check.
+- **Fundamentals and tiers as overlays, not rewrites**: `autoresearch/factors.py` and `autoresearch/tiers.py` let you layer simple value/quality/insider filters and SOUL.md tier/sleeve rules on top of the existing fast backtester and paper trader, so you can test whether fundamentals and the two-sleeve conviction framework actually improve Sharpe/OOS.
 
 ---
 
@@ -475,6 +476,15 @@ For the two-sleeve architecture described in [The Fund](https://ikigaistudio.sub
 2. Run those names through AI Hedge Fund as a second opinion (CLI or FastAPI).
 3. Compare committee consensus against thesis conviction.
 4. Use the risk manager and portfolio manager to pressure-test sizing before anything becomes portfolio truth.
+
+In practice this now happens two ways:
+
+- **Interactive runs**: call `src/main.py` directly for ad-hoc second opinions on any ticker list (e.g. “excluded names only”, “tastytrade + challengers”).
+- **Async job API from Dexter**: Dexter can POST a sleeve PortfolioDraft to:
+  - `POST /api/v1/second-opinion/runs` → create a persisted run (reuses `HedgeFundFlowRun`).
+  - Poll `GET /api/v1/second-opinion/runs/{run_id}` until status is COMPLETE.
+  - Fetch the final payload via `GET /api/v1/second-opinion/runs/{run_id}/result`.
+  - Optionally shell out to `scripts/dexter_second_opinion_client.py` and `autoresearch/second_opinion_report.py` to bucket names into **strong agree / mild disagree / hard disagree** vs Dexter’s sleeve weights before writing the Substack essay.
 
 ---
 

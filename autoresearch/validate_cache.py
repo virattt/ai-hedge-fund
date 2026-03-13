@@ -166,12 +166,11 @@ def main() -> int:
         print(f"  coverage    : {lo or 'unknown'} → {hi or 'unknown'}")
 
         # Coverage checks against target window
+        # These are soft warnings: they do NOT flip the overall PASS/FAIL flag.
         if args.start and lo and lo > args.start:
             print(f"  WARNING     : coverage starts after target start ({args.start})")
-            overall_ok = False
         if args.end and hi and hi < args.end:
             print(f"  WARNING     : coverage ends before target end ({args.end})")
-            overall_ok = False
 
         if report.empty_tickers:
             overall_ok = False

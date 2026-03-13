@@ -30,11 +30,18 @@ FD_BASE_URL = "https://api.financialdatasets.ai"
 
 
 def fetch_crypto_prices(symbol: str, start_date: str, end_date: str) -> list[dict]:
-    """Fetch crypto OHLCV for a symbol."""
+    """
+    Fetch crypto OHLCV for a symbol.
+
+    Per Financial Datasets docs, the crypto prices endpoint expects a `ticker`
+    parameter such as BTC-USD, ETH-USD rather than a bare symbol. We map
+    BTC → BTC-USD, ETH → ETH-USD, etc., by appending \"-USD\".
+    """
     api_key = os.environ.get("FINANCIAL_DATASETS_API_KEY", "")
     headers = {"X-API-KEY": api_key} if api_key else {}
+    ticker = f"{symbol.upper()}-USD"
     url = (
-        f"{FD_BASE_URL}/crypto/prices/?symbol={symbol}"
+        f"{FD_BASE_URL}/crypto/prices/?ticker={ticker}"
         f"&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
     )
     print(f"  GET {url}")

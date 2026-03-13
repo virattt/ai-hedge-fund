@@ -26,6 +26,7 @@ from autoresearch.portfolio_backtest import (
     SECTOR_OOS_SHARPE_BEAR,
     run_sector_backtest,
 )
+from autoresearch.tiers import get_ticker_meta, TIER_BASE_MULTIPLIER, REGIME_TIER_MULTIPLIER
 from autoresearch.regime import get_regime_for_paper_trading, regime_scale
 from autoresearch.risk_controls import should_halt_for_drawdown, scale_for_drawdown, apply_stop_loss
 
@@ -191,7 +192,14 @@ def main():
             long_qty = pos.get("long", 0)
             short_qty = pos.get("short", 0)
             if long_qty > 0:
+                # Base scale from sector weight, regime, and tier.
                 scale = (args.initial_cash * w) / 100_000.0 * regime_scale_factor
+                meta = get_ticker_meta(ticker)
+                if meta is not None:
+                    tier_mult = TIER_BASE_MULTIPLIER.get(meta.tier, 1.0)
+                    regime_mults = REGIME_TIER_MULTIPLIER.get(regime or "bull", {})
+                    regime_tier_mult = regime_mults.get(meta.tier, 1.0)
+                    scale *= tier_mult * regime_tier_mult
                 qty = max(0, int(long_qty * scale))
                 if qty > 0:
                     target_positions[ticker] = target_positions.get(ticker, 0) + qty
