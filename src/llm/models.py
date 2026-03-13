@@ -6,7 +6,6 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_xai import ChatXAI
 from langchain_openai import ChatOpenAI, AzureChatOpenAI
-from langchain_openai import ChatOpenAI
 from langchain_gigachat import GigaChat
 from langchain_ollama import ChatOllama
 from enum import Enum
