@@ -17,7 +17,7 @@
 
 ## Autoresearch full-signal cache fails with sentiment parsing + OpenAI quota errors
 
-### Summary
+### Summary (Status: **Resolved**)
 
 Running the optional **full 18‑agent signal cache** via `autoresearch.cache_signals` appears to:
 
@@ -151,4 +151,6 @@ This eliminates all the "No headline provided" parsing errors and the wasted ret
 - Exits with status 1
 
 Users can run `cache_signals` without spinning on quota errors; the job fails fast and partial cache is preserved.
+
+With these fixes in place, the **full-signal cache is stable** as long as the selected provider has sufficient quota. Mode 1 (prices-only) and the new fundamentals/events/macro/crypto caches described in `DATA.md` are unaffected by OpenAI limits and are the recommended baseline.
 

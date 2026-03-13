@@ -66,6 +66,12 @@ In our workflow, [Dexter](https://github.com/eliza420ai-beep/dexter) is the prim
 
 > **Disclaimer** — This project is for **educational and research purposes only**. Not financial advice. No guarantees. Options and leveraged perpetuals carry substantial risk of loss. See [full disclaimer](#disclaimer).
 
+### Data Layer TL;DR (New)
+
+- **One-time data capex, infinite backtests**: we use [Financial Datasets](https://financialdatasets.ai/) + a local cache layer so we pay for price/fundamental/macro/crypto data **once**, then run thousands of experiments purely on JSON files under `autoresearch/cache/`.
+- **Broad, deep coverage for Dexter sleeves**: helper scripts (`cache_signals.py`, `cache_fundamentals.py`, `cache_events.py`, `cache_macro.py`, `cache_crypto.py`) pull multi-year history for the tastytrade and Hyperliquid sleeves (and challengers) ticker-by-ticker.
+- **Richer signals, same harness**: beyond prices and committee signals, you can cache financial metrics, insider trades, news, and rate regimes, then plug them into backtests and agents without touching external APIs again. See `DATA.md` for the exact commands.
+
 ---
 
 ## Table of Contents
