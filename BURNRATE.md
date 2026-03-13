@@ -46,10 +46,18 @@ This is a business plan that runs the numbers, not one that tells a story and ho
 ║                                                                                  ║
 ║  BREAK-EVEN AUM (burn ÷ 0.02)             $13.4M     $14.75M     $16.45M         ║
 ║                                                                                  ║
+║  SIMPLE LLC ALTERNATIVE (no outside investors)                                   ║
+║    Ops burn (no fund infra)                  $9,450     $18,500     $32,600       ║
+║    + Salaries                               $210,000   $210,000    $210,000       ║
+║    Total burn                               $219,450   $228,500    $242,600       ║
+║    Monthly burn                              $18,288    $19,042     $20,217       ║
+║    Wheel collateral (base, good yield)          —       ~$178,000       —          ║
+║    Savings vs. fund                             —       $66,500/yr      —          ║
+║                                                                                  ║
 ║  VERDICT                                                                         ║
-║    At $21M AUM the fund is cash-flow positive from day one.                      ║
-║    The wheel strategy at $230K–$460K collateral can independently                ║
-║    cover the entire monthly burn from premium income alone.                       ║
+║    Fund: cash-flow positive at $21M AUM from day one.                            ║
+║    Simple LLC: $187K collateral already covers base burn at good yield.           ║
+║    The wheel at $178K–$460K covers the monthly burn from premium alone.           ║
 ║    The management fee is margin, not survival.                                   ║
 ╚════════════════════════════════════════════════════════════════════════════════╝
 ```
@@ -288,7 +296,69 @@ These are not positions to hold — they are the **notional size** the wheel nee
 
 ---
 
-## 10. Google Sheets Cost Model — Build Guide
+## 10. Alternative: Simple Trading LLC (No Outside Investors)
+
+What if you skip the hedge fund entirely? A **simple Delaware LLC** that writes covered calls and cash-secured puts for cashflow, holds BTC, and pays its team — but takes **no outside investor capital** — is a fundamentally different structure. Most of the fund-grade costs disappear because there are no investors to report to, no securities to register, and no auditor to satisfy.
+
+### What Goes Away
+
+| Fund cost (from §6) | Why it disappears |
+|----------------------|-------------------|
+| Fund administration ($28K–$57K) | No NAV, no investor reporting, no capital calls |
+| Fairmint / transfer agent ($5K–$12K) | No tokenized membership interests, no cap table |
+| PPM, Form D, securities compliance ($8K–$15K) | No securities offering — no investors |
+| Investor K-1s (bulk of tax prep) | Single- or few-member LLC — one return, no K-1 distribution |
+| Financial audit ($18K–$32K) | No institutional investors demanding audited statements |
+| Swiss cross-border investor overlay ($8K–$15K) | No marketing to investors — just managing your own capital |
+| D&O/E&O insurance ($8K–$15K) | Optional at much lower premium — no fiduciary duty to LPs |
+
+### What Remains
+
+| Line item | Low | Base | High | Notes |
+|-----------|-----|------|------|-------|
+| Entity maintenance (1 LLC) | $450 | $500 | $600 | Franchise tax + registered agent |
+| Legal (operating agreement, tax counsel) | $3,000 | $5,000 | $8,000 | Annual review, no PPM or Form D |
+| Tax preparation (Form 1065 or Sched C) | $2,000 | $3,000 | $5,000 | No investor K-1s |
+| Crypto custody (Coinbase Prime, etc.) | $2,000 | $4,000 | $8,000 | AUM-tiered; smaller at prop scale |
+| Accounting / bookkeeping software | $1,000 | $2,000 | $3,000 | QuickBooks + crypto tracker |
+| Insurance (optional) | $0 | $2,000 | $5,000 | E&O optional without LPs |
+| Banking / misc | $1,000 | $2,000 | $3,000 | |
+| **Subtotal ops** | **$9,450** | **$18,500** | **$32,600** | |
+| Salaries | $210,000 | $210,000 | $210,000 | Same team |
+| **Total annual burn** | **$219,450** | **$228,500** | **$242,600** | |
+| **Monthly burn** | **~$18,288** | **~$19,042** | **~$20,217** | |
+
+### Side-by-Side: Fund vs. Simple LLC
+
+| | Hedge Fund (§9) | Simple Trading LLC |
+|---|---|---|
+| Annual ops (base) | ~$85,000 | ~$18,500 |
+| + Salaries | $210,000 | $210,000 |
+| **Total burn (base)** | **~$295,000** | **~$228,500** |
+| **Monthly burn** | **~$24,583** | **~$19,042** |
+| Savings vs. fund | — | **~$66,500/year (~$5,542/month)** |
+
+The simple LLC cuts **~$66K/year** in overhead — almost entirely by removing investor-facing infrastructure.
+
+### Wheel Collateral to Cover Simple-LLC Burn
+
+Same yield assumptions (5.35%/mo conservative, 10.7%/mo good):
+
+| Monthly burn | Conservative (5.35%/mo) | Good (10.7%/mo) |
+|--------------|------------------------|-----------------|
+| **Low** (~$18,288) | **~$342,000** | **~$171,000** |
+| **Base** (~$19,042) | **~$356,000** | **~$178,000** |
+| **High** (~$20,217) | **~$378,000** | **~$189,000** |
+
+### What This Means
+
+- At **base burn** (~$19K/month), the wheel needs **~$356K** (conservative) or **~$178K** (good) in collateral. Your current **$187K** is right at the good-yield threshold — meaning on a good month, $187K already covers the entire simple-LLC burn including salaries.
+- The gap between "fund" and "simple LLC" is **~$5,500/month**. That's the price of investor infrastructure. If the plan is to trade your own capital and pay a team, the simple LLC is the correct vehicle until outside capital becomes worth the compliance overhead.
+- **When to upgrade:** If you want to take outside money, the fund structure from §4–§8 kicks in. Until then, the simple LLC lets you run the same wheel strategy, hold BTC, and pay salaries with a burn rate that's **23% lower** than the fund.
+
+---
+
+## 11. Google Sheets Cost Model — Build Guide
 
 The tables below paste into **Google Sheets** for a formula-driven model.
 
@@ -379,7 +449,7 @@ Shows how cost scales with AUM; many items are semi-fixed until ~$50M, so $21M i
 
 ---
 
-## 11. Conclusion
+## 12. Conclusion
 
 ╭─────────────────────────────────────────────────────────────────────────────────╮
 ║  The only measure that matters is beating the bar.                              ║
