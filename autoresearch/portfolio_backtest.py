@@ -100,7 +100,14 @@ def load_params(module_name: str):
     return params_mod
 
 
-def run_sector_backtest(params_module: str, prices_path: str, start=None, end=None, cost_bps=0):
+def run_sector_backtest(
+    params_module: str,
+    prices_path: str,
+    start=None,
+    end=None,
+    cost_bps=0,
+    wm_enabled: bool | None = None,
+):
     """Run one sector backtest. Returns (portfolio_values list, metrics dict)."""
     from autoresearch.fast_backtest import FastBacktestEngine
 
@@ -115,6 +122,8 @@ def run_sector_backtest(params_module: str, prices_path: str, start=None, end=No
         overrides["BACKTEST_END"] = end
     if cost_bps != 0:
         overrides["TRANSACTION_COST_BPS"] = cost_bps
+    if wm_enabled is not None:
+        overrides["USE_WM_FILTER"] = bool(wm_enabled)
 
     if overrides:
         import types

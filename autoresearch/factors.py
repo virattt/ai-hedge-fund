@@ -12,7 +12,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -255,4 +255,39 @@ def apply_fundamental_rules(
 
     return allowed, mult
 
+
+def apply_worldmonitor_overlay(
+    wm_snapshot: dict[str, Any] | None,
+    params,
+) -> tuple[bool, float]:
+    """
+    Optional macro/geopolitical sizing overlay from a normalized WM snapshot.
+
+    This helper is a scaffold and is not wired into execution paths yet.
+    Returns:
+        (allowed, size_multiplier)
+    """
+    use_wm = getattr(params, "USE_WM_FILTER", False)
+    if not use_wm or not wm_snapshot:
+        return True, 1.0
+
+    mult = 1.0
+    allowed = True
+
+    regime = wm_snapshot.get("wm_macro_regime")
+    if regime == "risk_off":
+        mult *= float(getattr(params, "WM_RISK_OFF_SCALE", 0.8))
+
+    country_risk = wm_snapshot.get("wm_country_risk") or {}
+    cap = float(getattr(params, "WM_COUNTRY_RISK_CAP", 85.0))
+    if isinstance(country_risk, dict) and country_risk:
+        max_risk = max(
+            (float(v) for v in country_risk.values() if isinstance(v, (int, float))),
+            default=0.0,
+        )
+        if max_risk >= cap:
+            # Keep this soft in scaffold phase: no hard ban, only scale down.
+            mult *= 0.9
+
+    return allowed, mult
 

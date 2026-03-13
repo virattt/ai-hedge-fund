@@ -10,6 +10,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from autoresearch.cache_worldmonitor import format_worldmonitor_status_line
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = Path(__file__).resolve().parent / "daily_config.json"
 
@@ -31,6 +33,12 @@ def main():
     refresh = os.environ.get("REFRESH_PRICES")
     if refresh is None:
         refresh = "1" if cfg.get("refresh_prices", True) else "0"
+    refresh_worldmonitor = os.environ.get("REFRESH_WORLDMONITOR")
+    if refresh_worldmonitor is None:
+        refresh_worldmonitor = "1" if cfg.get("refresh_worldmonitor", False) else "0"
+    wm_filter = os.environ.get("WM_FILTER")
+    if wm_filter is None:
+        wm_filter = "1" if cfg.get("wm_filter", False) else "0"
     dry_run = os.environ.get("DRY_RUN", "0")
     if dry_run == "0" and cfg.get("dry_run"):
         dry_run = "1"
@@ -49,12 +57,18 @@ def main():
 
         if refresh == "1":
             run(["./autoresearch/refresh_all_prices.sh"]) or log.write("Price refresh failed (check API key)\n")
+        if refresh_worldmonitor == "1":
+            rc = run(["poetry", "run", "python", "-m", "autoresearch.cache_worldmonitor_signals"])
+            if rc != 0:
+                log.write("World Monitor refresh failed (check endpoint/network)\n")
 
         execute_flag = [] if dry_run == "1" else ["--execute"]
+        wm_filter_flag = ["--wm-filter"] if wm_filter == "1" else []
         run([
             "poetry", "run", "python", "-m", "autoresearch.paper_trading",
             "--date", date,
             *execute_flag,
+            *wm_filter_flag,
             "--state-path", state_path,
             "--initial-cash", str(initial_cash),
             "--cost-bps", str(cost_bps),
@@ -88,7 +102,11 @@ def main():
         orders = str(content.count("FILLED"))
     except Exception:
         pass
-    summary = f"Daily run {date}: total=${total}, orders={orders}"
+    wm_status = format_worldmonitor_status_line(
+        enabled=(wm_filter == "1"),
+        prefix="WM",
+    )
+    summary = f"Daily run {date}: total=${total}, orders={orders}, {wm_status}"
 
     # Send via send_daily_alert (Slack + email from config)
     subprocess.run(

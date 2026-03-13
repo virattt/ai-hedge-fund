@@ -163,3 +163,11 @@ BACKTEST_MARGIN_REQ = 0.5
 
 # Sector-specific cache path — evaluate.py reads this automatically when --params is used
 PRICES_PATH = "prices_equipment.json"
+
+# ─────────────────────────────────────────────────────────────
+# 7. WORLD MONITOR OVERLAY — Macro/Geopolitical (Scaffold, OFF by default)
+# ─────────────────────────────────────────────────────────────
+USE_WM_FILTER = False
+WM_RISK_OFF_SCALE = 0.80
+WM_COUNTRY_RISK_CAP = 85.0
+WM_MAX_STALENESS_MINUTES = 180

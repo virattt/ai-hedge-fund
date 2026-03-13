@@ -323,9 +323,12 @@ class FastBacktestEngine:
         self.signals_cache = load_signals_cache() if not tickers_override else None  # cross-asset = technical-only
         self.tickers = tickers_override if tickers_override else self.p.BACKTEST_TICKERS
         self.portfolio_values = []
-        # Optional fundamentals/events overlay
+        self._use_wm_filter = bool(getattr(self.p, "USE_WM_FILTER", False))
+        self._wm_snapshot = None
+
+        # Optional fundamentals/events/world-monitor overlay
         self._factor_prefix = getattr(self.p, "FACTOR_CACHE_PREFIX", None)
-        if self._factor_prefix:
+        if self._factor_prefix or self._use_wm_filter:
             try:
                 from autoresearch import factors as _fund_factors  # type: ignore
             except Exception:
@@ -333,6 +336,21 @@ class FastBacktestEngine:
             self._factors = _fund_factors
         else:
             self._factors = None
+
+        if self._use_wm_filter:
+            try:
+                from autoresearch.cache_worldmonitor import (
+                    is_snapshot_stale as _is_snapshot_stale,
+                    load_worldmonitor_snapshot as _load_worldmonitor_snapshot,
+                )
+
+                wm_snapshot = _load_worldmonitor_snapshot()
+                max_age_mins = int(getattr(self.p, "WM_MAX_STALENESS_MINUTES", 180))
+                if wm_snapshot and not _is_snapshot_stale(wm_snapshot, max_age_mins):
+                    self._wm_snapshot = wm_snapshot
+            except Exception:
+                # Fail-open: if WM cache is unavailable/parsing fails, keep strategy running.
+                self._wm_snapshot = None
 
     def _get_price_slice(self, ticker: str, end_date: str, lookback_days: int = 200) -> pd.DataFrame:
         df = self.prices.get(ticker)
@@ -444,6 +462,20 @@ class FastBacktestEngine:
                     except Exception:
                         # If factor logic crashes, fall back to pure technicals
                         size_mult = 1.0
+
+                # Optional World Monitor overlay (cache-backed)
+                if self._factors and self._use_wm_filter and self._wm_snapshot:
+                    try:
+                        allowed_wm, wm_mult = self._factors.apply_worldmonitor_overlay(
+                            self._wm_snapshot,
+                            self.p,
+                        )
+                        size_mult *= wm_mult
+                        if not allowed_wm:
+                            continue
+                    except Exception:
+                        # Fail-open to avoid dropping trades on transient mapping issues.
+                        pass
 
                 # Risk management: compute position limits
                 ann_vol = self._estimate_volatility(t, date_str)

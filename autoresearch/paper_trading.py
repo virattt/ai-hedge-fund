@@ -29,6 +29,12 @@ from autoresearch.portfolio_backtest import (
 from autoresearch.tiers import get_ticker_meta, TIER_BASE_MULTIPLIER, REGIME_TIER_MULTIPLIER
 from autoresearch.regime import get_regime_for_paper_trading, regime_scale
 from autoresearch.risk_controls import should_halt_for_drawdown, scale_for_drawdown, apply_stop_loss
+from autoresearch.cache_worldmonitor import format_worldmonitor_status_line
+
+
+def _format_worldmonitor_status_line(enabled: bool) -> str:
+    """Return a concise audit line for WM snapshot state."""
+    return format_worldmonitor_status_line(enabled=enabled, prefix="  World Monitor:")
 
 
 def _get_broker(live: bool, state_path: str, initial_cash: float, slippage_bps: float):
@@ -112,6 +118,11 @@ def main():
     parser.add_argument("--slippage-bps", type=float, default=5.0, help="Paper only: simulated slippage in bps")
     parser.add_argument("--max-drawdown-pct", type=float, default=0, help="Halt if portfolio DD exceeds this %% (e.g. 15)")
     parser.add_argument("--stop-loss-pct", type=float, default=0, help="Trim position if unrealized loss exceeds this %% (e.g. 10)")
+    parser.add_argument(
+        "--wm-filter",
+        action="store_true",
+        help="Enable World Monitor overlay in sector backtests (requires cached WM snapshot)",
+    )
     args = parser.parse_args()
 
     date = args.date
@@ -123,6 +134,7 @@ def main():
         lookback_start = date
     print(f"Paper trading run for {date}")
     print("-" * 50)
+    print(_format_worldmonitor_status_line(enabled=args.wm_filter))
 
     if args.execute:
         from autoresearch.validate_prices import validate_prices
@@ -164,7 +176,14 @@ def main():
 
     for sector, (mod, path) in SECTOR_CONFIG.items():
         try:
-            pv, metrics, engine = run_sector_backtest(mod, path, start=lookback_start, end=lookback_end, cost_bps=args.cost_bps)
+            pv, metrics, engine = run_sector_backtest(
+                mod,
+                path,
+                start=lookback_start,
+                end=lookback_end,
+                cost_bps=args.cost_bps,
+                wm_enabled=True if args.wm_filter else None,
+            )
             sector_positions[sector] = getattr(engine, "final_positions", {})
             sector_engines[sector] = engine
             for t, p in getattr(engine, "last_prices", {}).items():

@@ -172,3 +172,17 @@ MIN_QUALITY_SCORE = 0.0  # require at least this quality score (0–1)
 INSIDER_NET_SELL_THRESHOLD = 0.0
 INSIDER_SIZE_MULTIPLIER = 0.5
 
+# ─────────────────────────────────────────────────────────────
+# 8. WORLD MONITOR OVERLAY — Macro/Geopolitical (Scaffold, OFF by default)
+# ─────────────────────────────────────────────────────────────
+USE_WM_FILTER = False
+
+# If regime is risk_off, multiply sizing by this value (0-1).
+WM_RISK_OFF_SCALE = 0.80
+
+# If any key country risk exceeds this score (0-100), optionally cap risk.
+WM_COUNTRY_RISK_CAP = 85.0
+
+# Maximum accepted staleness for cached World Monitor snapshot.
+WM_MAX_STALENESS_MINUTES = 180
+
