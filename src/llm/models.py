@@ -6,7 +6,6 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_xai import ChatXAI
 from langchain_openai import ChatOpenAI, AzureChatOpenAI
-from langchain_openai import ChatOpenAI
 from langchain_gigachat import GigaChat
 from langchain_ollama import ChatOllama
 from enum import Enum
@@ -262,3 +261,8 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
             print(f"API Key Error: Please make sure MINIMAX_API_KEY is set in your .env file or provided via API keys.")
             raise ValueError("MiniMax API key not found. Please make sure MINIMAX_API_KEY is set in your .env file or provided via API keys.")
         return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
+    else:
+        raise ValueError(
+            f"Unsupported model provider: {model_provider}. "
+            f"Supported providers: {', '.join(p.value for p in ModelProvider)}"
+        )
