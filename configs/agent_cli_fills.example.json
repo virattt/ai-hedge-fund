@@ -1,0 +1,20 @@
+{
+  "fills": [
+    {
+      "fill_id": "f-coin-001",
+      "instrument": "COIN",
+      "side": "sell",
+      "filled_size": 26,
+      "price": 220.5,
+      "timestamp": "2026-03-13T16:05:00Z"
+    },
+    {
+      "fill_id": "f-msft-001",
+      "instrument": "MSFT",
+      "side": "buy",
+      "filled_size": 15,
+      "price": 431.1,
+      "timestamp": "2026-03-13T16:05:04Z"
+    }
+  ]
+}

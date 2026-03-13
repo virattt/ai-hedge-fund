@@ -1031,6 +1031,135 @@ poetry run python -m autoresearch.sector_correlation --output autoresearch/logs/
 
 [Hyperliquid](https://hyperliquid.xyz) is a high-performance L1 blockchain purpose-built for on-chain perpetual futures trading. We chose it for on-chain transparency, deep liquidity, and API-first design.
 
+### AIHF -> agent-cli handoff scaffold (new)
+
+To avoid premature direct order routing from AIHF, we now support a safe bridge that:
+
+1. Converts second-opinion output into a typed handoff JSON.
+2. Applies symbol mapping and confidence filters.
+3. Defaults to dry-run and only executes agent-cli when explicitly requested.
+
+```bash
+poetry run python scripts/aihf_agent_cli_bridge.py \
+  --run-result second_opinion_runs/second_opinion_run_result_14.json \
+  --portfolio-draft portfolio_draft_hyperliquid_full.json \
+  --symbol-map configs/agent_cli_symbol_map.example.json \
+  --strict-symbol-map
+```
+
+The command writes:
+
+- `second_opinion_runs/agent_cli_handoff_run_<run_id>.json`
+
+and prints the dry-run agent-cli invocation with `AIHF_HANDOFF_PATH` injected.
+
+To execute an agent-cli command for real, pass `--execute-agent-cli`. For safety, execution requires both `--symbol-map` and `--strict-symbol-map`.
+
+### Phase 2: handoff -> concrete `hl` commands (new)
+
+Once the handoff JSON exists, build a command plan from intents:
+
+```bash
+poetry run python scripts/agent_cli_handoff_executor.py \
+  --handoff second_opinion_runs/agent_cli_handoff_run_15.json \
+  --append-flags "--mock" \
+  --sizing-mode hybrid
+```
+
+Outputs:
+
+- `second_opinion_runs/agent_cli_exec_plan_run_<run_id>.json`
+- `second_opinion_runs/agent_cli_exec_plan_run_<run_id>.sh`
+
+By default this is dry-run only and prints commands.  
+To execute commands, pass `--execute`. If you remove `--mock`, you must also pass `--i-understand-live-risk`.
+
+Phase 3 adds netting and portfolio constraints:
+
+```bash
+poetry run python scripts/agent_cli_handoff_executor.py \
+  --handoff second_opinion_runs/agent_cli_handoff_run_15.json \
+  --reference-prices configs/agent_cli_reference_prices.example.json \
+  --current-positions configs/agent_cli_current_positions.example.json \
+  --max-gross-notional-usd 120000 \
+  --max-net-notional-usd 70000 \
+  --append-flags="--mock"
+```
+
+This will:
+
+- net each intent against current position (send only delta orders),
+- compute projected post-trade positions, and
+- enforce gross/net notional caps while building the command plan.
+
+### Phase 4: reconcile fills into persistent position state (new)
+
+After commands execute, reconcile fills so the next run nets against fresh positions:
+
+```bash
+poetry run python scripts/agent_cli_reconcile_fills.py \
+  --fills configs/agent_cli_fills.example.json \
+  --positions second_opinion_runs/agent_cli_positions_snapshot.json \
+  --journal second_opinion_runs/agent_cli_fills_journal.jsonl \
+  --fill-index second_opinion_runs/agent_cli_fill_index.json
+```
+
+What it does:
+
+- updates position snapshot quantities,
+- appends an immutable reconciliation journal row per applied fill,
+- enforces idempotency using processed fill IDs (safe to rerun same file).
+
+### One-command pipeline (new)
+
+Run phases 1 -> 3 in one command (dry-run by default):
+
+```bash
+poetry run python scripts/agent_cli_pipeline.py \
+  --run-result second_opinion_runs/second_opinion_run_result_15.json \
+  --portfolio-draft portfolio_draft_hyperliquid_full.json \
+  --symbol-map configs/agent_cli_symbol_map.example.json \
+  --strict-symbol-map \
+  --reference-prices configs/agent_cli_reference_prices.example.json \
+  --current-positions configs/agent_cli_current_positions.example.json \
+  --max-gross-notional-usd 120000 \
+  --max-net-notional-usd 70000 \
+  --append-flags="--mock"
+```
+
+To include phase 4, pass `--fills`:
+
+```bash
+poetry run python scripts/agent_cli_pipeline.py \
+  --run-result second_opinion_runs/second_opinion_run_result_15.json \
+  --portfolio-draft portfolio_draft_hyperliquid_full.json \
+  --symbol-map configs/agent_cli_symbol_map.example.json \
+  --strict-symbol-map \
+  --reference-prices configs/agent_cli_reference_prices.example.json \
+  --current-positions second_opinion_runs/agent_cli_positions_snapshot.json \
+  --append-flags="--mock" \
+  --fills configs/agent_cli_fills.example.json
+```
+
+If you prefer one-liners, use Make targets:
+
+```bash
+# Phases 1-3 (dry-run)
+make hl-pipeline
+
+# Phases 1-4 (dry-run + fill reconcile)
+make hl-pipeline-with-fills
+
+# Execute plan commands (requires live-risk ack downstream)
+make hl-pipeline-execute
+```
+
+Override defaults on invocation:
+
+```bash
+make hl-pipeline RUN_RESULT=second_opinion_runs/second_opinion_run_result_14.json MAX_GROSS=100000 MAX_NET=50000
+```
+
 | Scenario | Equity Action | Hyperliquid Action |
 |----------|--------------|-------------------|
 | Capitulation regime detected | Reduce equity exposure 20% | Open BTC/ETH short perp as portfolio hedge |
