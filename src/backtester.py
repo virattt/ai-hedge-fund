@@ -2,10 +2,10 @@ import sys
 
 from colorama import Fore, Style
 
-from .main import run_hedge_fund
-from .backtesting.engine import BacktestEngine
-from .backtesting.types import PerformanceMetrics
-from .cli.input import (
+from main import run_hedge_fund
+from backtesting.engine import BacktestEngine
+from backtesting.types import PerformanceMetrics
+from cli.input import (
     parse_cli_inputs,
 )
 
