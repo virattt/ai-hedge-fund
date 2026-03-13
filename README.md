@@ -229,12 +229,12 @@ This repo exists to wire those pieces together around Dexter and the AI Hedge Fu
 
 ```mermaid
 flowchart LR
-    data[\"FinancialDatasets<br/>+ local caches\"]
+    data["FinancialDatasets + local caches"]
     dexter[DexterSleeves]
     aihf[AIHedgeFund]
     autoLoop[Autoresearch]
     execLayer[ExecutionLayer]
-    narrative[\"Substack<br/>+ SOUL.md\"]
+    narrative["Substack + SOUL.md"]
 
     data --> dexter
     dexter --> aihf
