@@ -40,9 +40,10 @@ This is a business plan that runs the numbers, not one that tells a story and ho
 ║    Buffer as % of revenue                    36.2%      29.8%       21.7%         ║
 ║                                                                                  ║
 ║  SELF-FUNDING VIA WHEEL (Hypersurface, BTC + HYPE puts)                          ║
-║    Observed yield on $187K collateral       5.35%/mo   —          10.7%/mo        ║
-║    Collateral to cover base burn ($24.6K)   $460,000   —          $230,000        ║
-║    ≈ BTC equivalent at $70K spot            6.57 BTC   —          3.29 BTC        ║
+║    Planning rate (conservative)              50% APR    =          4.17%/mo        ║
+║    Proven rate (this week)                  113% APR    =          ~9.5%/mo         ║
+║    Collateral to cover base burn ($24.6K)   $590,000   (50% APR)  $295,000         ║
+║    ≈ BTC equivalent at $70K spot            8.43 BTC              4.21 BTC         ║
 ║                                                                                  ║
 ║  BREAK-EVEN AUM (burn ÷ 0.02)             $13.4M     $14.75M     $16.45M         ║
 ║                                                                                  ║
@@ -51,21 +52,20 @@ This is a business plan that runs the numbers, not one that tells a story and ho
 ║    + Salaries                               $210,000   $210,000    $210,000       ║
 ║    Total burn                               $219,450   $228,500    $242,600       ║
 ║    Monthly burn                              $18,288    $19,042     $20,217       ║
-║    Wheel collateral (base, good yield)          —       ~$178,000       —          ║
+║    Wheel collateral (base, 50% APR)               —       ~$457,000       —          ║
 ║    Savings vs. fund                             —       $66,500/yr      —          ║
 ║                                                                                  ║
 ║  MINIMUM VIABLE (LLC + Fairmint, no salaries)                                    ║
 ║    Ops-only burn                               $14,450    $27,000     $44,600     ║
 ║    Monthly                                      $1,204     $2,250      $3,717     ║
-║    Wheel collateral (base, good yield)              —      ~$21,000         —       ║
-║    Wheel collateral (base, conservative)            —      ~$42,000         —       ║
-║    $187K covers base ops cost                    4×–9× over                        ║
+║    Wheel collateral (base, 50% APR)                —      ~$54,000         —       ║
+║    Wheel collateral (base, 100% APR)               —      ~$27,000         —       ║
 ║                                                                                  ║
 ║  VERDICT                                                                         ║
 ║    Fund: cash-flow positive at $21M AUM from day one.                            ║
-║    Simple LLC + salaries: $187K covers base burn at good yield.                   ║
-║    Minimum viable (no salaries): ~$21K covers all ops at good yield.              ║
-║    $187K wheel generates 4×–9× the ops-only cost. The rest is margin.              ║
+║    Simple LLC + salaries: ~$457K (50% APR) or ~$229K (100% APR).                 ║
+║    Minimum viable (no salaries): ~$54K at 50% APR covers all ops.                ║
+║    Planning at 50% APR gives cushion. 100%+ APR is proven upside.                ║
 ╚════════════════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -265,41 +265,43 @@ This is the number the wheel needs to cover.
 
 ### Wheel Strategy Assumptions (BTC + HYPE, Hypersurface)
 
-- **Reference collateral:** $187K in USDT0 securing puts.
-- **Income at that size:** $2,500–$5,000/week → **~$10,000/month (conservative)** or **~$20,000/month (good)**.
-- **Per dollar of collateral:**
-  - Conservative: $10,000 / $187,000 ≈ **5.35% per month**.
-  - Good: $20,000 / $187,000 ≈ **10.7% per month**.
+The yield rates below are derived from **APR**, not from a fixed dollar example. We plan at **50% APR** (conservative) to give the strategy cushion for weeks with lower premiums, while noting that **100%+ APR is proven** — e.g. the $70,500-strike BTC secured put expiring 3/20/26 printed at **113.86% APR** on Hypersurface this week.
+
+| Rate | APR | Monthly yield | Basis |
+|------|-----|---------------|-------|
+| **Conservative (planning rate)** | **50%** | **4.17%/mo** | Half the proven rate — cushion for consistency |
+| **Proven (this week)** | **113.86%** | **~9.5%/mo** | Actual fill on BTC secured put, $70,500 strike, 3/20/26 exp |
+
 - **If assigned:** You are long BTC (or HYPE) at an effective cost basis **below** spot (premium reduces cost). Not a loss — acquiring a hard asset at a pre-negotiated price with yield on collateral in the meantime.
 
 ### Collateral Required to Cover Full Monthly Burn
 
 *(required collateral) = (monthly burn) ÷ (monthly yield rate)*
 
-| Monthly burn | Conservative (5.35%/mo) | Good (10.7%/mo) |
-|--------------|------------------------|-----------------|
-| **Low** (~$22,333) | **~$417,000** | **~$209,000** |
-| **Base** (~$24,583) | **~$460,000** | **~$230,000** |
-| **High** (~$27,417) | **~$512,000** | **~$256,000** |
+| Monthly burn | 50% APR (4.17%/mo) | 100% APR (8.33%/mo) |
+|--------------|--------------------|-----------------------|
+| **Low** (~$22,333) | **~$536,000** | **~$268,000** |
+| **Base** (~$24,583) | **~$590,000** | **~$295,000** |
+| **High** (~$27,417) | **~$658,000** | **~$329,000** |
 
-Formula: *collateral = monthly burn / yield rate* (e.g. $24,583 / 0.0535 ≈ $460K).
+Formula: *collateral = monthly burn / monthly yield* (e.g. $24,583 / 0.0417 ≈ $590K).
 
 ### What This Means in BTC (at ~$70K spot)
 
-| Monthly burn | Conservative collateral | ≈ BTC equivalent | Good collateral | ≈ BTC equivalent |
-|--------------|------------------------|-------------------|-----------------|-------------------|
-| **Low** | ~$417K | **~5.95 BTC** | ~$209K | **~2.98 BTC** |
-| **Base** | ~$460K | **~6.57 BTC** | ~$230K | **~3.29 BTC** |
-| **High** | ~$512K | **~7.31 BTC** | ~$256K | **~3.66 BTC** |
+| Monthly burn | 50% APR collateral | ≈ BTC equivalent | 100% APR collateral | ≈ BTC equivalent |
+|--------------|--------------------|--------------------|----------------------|--------------------|
+| **Low** | ~$536K | **~7.66 BTC** | ~$268K | **~3.83 BTC** |
+| **Base** | ~$590K | **~8.43 BTC** | ~$295K | **~4.21 BTC** |
+| **High** | ~$658K | **~9.40 BTC** | ~$329K | **~4.70 BTC** |
 
-These are not positions to hold — they are the **notional size** the wheel needs to be writing puts against so that premium income covers the full burn (legal + salaries).
+These are the **notional size** the wheel needs to be writing puts against so that premium income covers the full burn (legal + salaries).
 
 ### Takeaway
 
-- At **base burn** (~$24,583/month), you need about **$460K** collateral at the conservative yield, or about **$230K** at the good yield.
-- Your current **$187K** size covers roughly **$10K–$20K/month** — enough for the legal/ops burn alone, but not salaries. To cover the full $295K/year burn, scale the wheel to **~$230K–$460K** depending on income conditions.
+- At **base burn** (~$24,583/month), you need about **$590K** collateral at the 50% APR planning rate, or about **$295K** if the wheel runs closer to the proven 100%+ APR.
+- Planning at **50% APR** means you can underperform the proven rate by half and still cover every bill. Weeks that print 100%+ APR build surplus and accelerate BTC accumulation.
 - The wheel is **income to pay the burn** — not a replacement for the 2% management fee. It's how the structure becomes self-sustaining from strategy P&L while the Bench does the research and the fund holds the costs.
-- Assignment is not a loss. At $70K BTC with $5K premium on ~2.66 BTC, effective cost basis is ~$68,614 — below spot. The wheel accumulates hard assets at a discount while generating the income stream that funds operations.
+- Assignment is not a loss. Premium reduces effective cost basis below spot. The wheel accumulates hard assets at a discount while generating the income stream that funds operations.
 
 ---
 
@@ -349,17 +351,17 @@ The simple LLC cuts **~$66K/year** in overhead — almost entirely by removing i
 
 ### Wheel Collateral to Cover Simple-LLC Burn
 
-Same yield assumptions (5.35%/mo conservative, 10.7%/mo good):
+Same APR-based yield assumptions (50% APR = 4.17%/mo, 100% APR = 8.33%/mo):
 
-| Monthly burn | Conservative (5.35%/mo) | Good (10.7%/mo) |
-|--------------|------------------------|-----------------|
-| **Low** (~$18,288) | **~$342,000** | **~$171,000** |
-| **Base** (~$19,042) | **~$356,000** | **~$178,000** |
-| **High** (~$20,217) | **~$378,000** | **~$189,000** |
+| Monthly burn | 50% APR (4.17%/mo) | 100% APR (8.33%/mo) |
+|--------------|--------------------|-----------------------|
+| **Low** (~$18,288) | **~$439,000** | **~$219,000** |
+| **Base** (~$19,042) | **~$457,000** | **~$229,000** |
+| **High** (~$20,217) | **~$485,000** | **~$243,000** |
 
 ### What This Means (with salaries)
 
-- At **base burn** (~$19K/month), the wheel needs **~$356K** (conservative) or **~$178K** (good) in collateral. Your current **$187K** is right at the good-yield threshold — meaning on a good month, $187K already covers the entire simple-LLC burn including salaries.
+- At **base burn** (~$19K/month), the wheel needs **~$457K** at the 50% APR planning rate, or **~$229K** if it runs closer to the proven 100%+ APR.
 - The gap between "fund" and "simple LLC" is **~$5,500/month**. That's the price of investor infrastructure. If the plan is to trade your own capital and pay a team, the simple LLC is the correct vehicle until outside capital becomes worth the compliance overhead.
 - **When to upgrade:** If you want to take outside money, the fund structure from §4–§8 kicks in. Until then, the simple LLC lets you run the same wheel strategy, hold BTC, and pay salaries with a burn rate that's **23% lower** than the fund.
 
@@ -384,20 +386,20 @@ Strip it to the bone. No team salary — just the entity, Fairmint for onchain c
 
 #### Wheel Collateral to Cover Ops-Only Burn
 
-| Monthly ops | Conservative (5.35%/mo) | Good (10.7%/mo) |
-|-------------|------------------------|-----------------|
-| **Low** (~$1,204) | **~$22,500** | **~$11,300** |
-| **Base** (~$2,250) | **~$42,100** | **~$21,000** |
-| **High** (~$3,717) | **~$69,500** | **~$34,700** |
+| Monthly ops | 50% APR (4.17%/mo) | 100% APR (8.33%/mo) |
+|-------------|--------------------|-----------------------|
+| **Low** (~$1,204) | **~$28,900** | **~$14,400** |
+| **Base** (~$2,250) | **~$54,000** | **~$27,000** |
+| **High** (~$3,717) | **~$89,200** | **~$44,600** |
 
 #### The Punchline
 
-- At **base ops** ($27K/year, $2,250/month), the wheel needs just **~$42K** (conservative) or **~$21K** (good) in collateral to pay every bill the LLC generates.
-- That's **~0.6 BTC** (good) to **~0.6 BTC** at $70K spot on the low end — or roughly **0.3 BTC to 1.0 BTC** worth of collateral across the full range.
-- **$187K** in a wheel at these yields generates **$10K–$20K/month** — covering the $2,250/month ops cost **4× to 9× over**. The surplus is retained earnings, BTC accumulation, or future salary capacity.
+- At **base ops** ($27K/year, $2,250/month), the wheel needs **~$54K** at 50% APR or **~$27K** at the proven 100% APR to pay every bill the LLC generates.
+- That's **~0.39 BTC** (100% APR) to **~0.77 BTC** (50% APR) at $70K spot — less than 1 BTC worth of collateral to keep the entire structure running.
+- Planning at 50% APR means you can underperform the proven rate by half and still cover ops. Weeks that print 100%+ APR (like the 113.86% BTC put this week) build surplus for BTC accumulation or future salary capacity.
 - Fairmint adds **$5K–$12K/year** to the bare LLC but keeps the cap table onchain and investor-ready from day one. When you do bring in outside capital, the infrastructure is already live — no retrofit, no paper migration.
 
-This is the minimum viable fund infrastructure: a Delaware LLC, Fairmint, and **~$21K–$42K** in wheel collateral. Everything above that is margin.
+This is the minimum viable fund infrastructure: a Delaware LLC, Fairmint, and **~$54K** in wheel collateral at 50% APR. Everything above that is margin.
 
 ---
 
