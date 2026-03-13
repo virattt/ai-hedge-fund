@@ -19,6 +19,8 @@ from src.agents.rakesh_jhunjhunwala import rakesh_jhunjhunwala_agent
 from src.agents.mohnish_pabrai import mohnish_pabrai_agent
 from src.agents.news_sentiment import news_sentiment_agent
 from src.agents.growth_agent import growth_analyst_agent
+from src.agents.joel_greenblatt import joel_greenblatt_agent
+
 
 # Define analyst configuration - single source of truth
 ANALYST_CONFIG = {
@@ -166,6 +168,15 @@ ANALYST_CONFIG = {
         "type": "analyst",
         "order": 16,
     },
+    "joel_greenblatt": {
+        "display_name": "Joel Greenblatt",
+        "description": "The Magic Formula Investor",
+        "investing_style": "Uses the Magic Formula to find good businesses (high ROC) at bargain prices (high Earnings Yield).",
+        "agent_func": joel_greenblatt_agent,
+        "type": "analyst",
+        "order": 17,
+    },
+
 }
 
 # Derive ANALYST_ORDER from ANALYST_CONFIG for backwards compatibility
