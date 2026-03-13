@@ -28,7 +28,7 @@ def print_trading_output(result: dict) -> None:
 
     # Print decisions for each ticker
     for ticker, decision in decisions.items():
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}Analysis for {Fore.CYAN}{ticker}{Style.RESET_ALL}")
+        print(f"\n{Fore.WHITE}{Style.BRIGHT}股票分析 {Fore.CYAN}{ticker}{Style.RESET_ALL}")
         print(f"{Fore.WHITE}{Style.BRIGHT}{'=' * 50}{Style.RESET_ALL}")
 
         # Prepare analyst signals table for this ticker
@@ -98,11 +98,11 @@ def print_trading_output(result: dict) -> None:
         # Sort the signals according to the predefined order
         table_data = sort_agent_signals(table_data)
 
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}AGENT ANALYSIS:{Style.RESET_ALL} [{Fore.CYAN}{ticker}{Style.RESET_ALL}]")
+        print(f"\n{Fore.WHITE}{Style.BRIGHT}代理分析：{Style.RESET_ALL}[{Fore.CYAN}{ticker}{Style.RESET_ALL}]")
         print(
             tabulate(
                 table_data,
-                headers=[f"{Fore.WHITE}Agent", "Signal", "Confidence", "Reasoning"],
+                headers=[f"{Fore.WHITE}代理", "信号", "置信度", "推理"],
                 tablefmt="grid",
                 colalign=("left", "center", "right", "left"),
             )
@@ -138,21 +138,30 @@ def print_trading_output(result: dict) -> None:
             if current_line:
                 wrapped_reasoning += current_line
 
+        # 翻译操作类型
+        action_cn = {
+            "BUY": "买入",
+            "SELL": "卖出",
+            "HOLD": "持有",
+            "COVER": "平仓",
+            "SHORT": "做空",
+        }.get(action, action)
+
         decision_data = [
-            ["Action", f"{action_color}{action}{Style.RESET_ALL}"],
-            ["Quantity", f"{action_color}{decision.get('quantity')}{Style.RESET_ALL}"],
+            ["操作", f"{action_color}{action_cn}{Style.RESET_ALL}"],
+            ["数量", f"{action_color}{decision.get('quantity')}{Style.RESET_ALL}"],
             [
-                "Confidence",
+                "置信度",
                 f"{Fore.WHITE}{decision.get('confidence'):.1f}%{Style.RESET_ALL}",
             ],
-            ["Reasoning", f"{Fore.WHITE}{wrapped_reasoning}{Style.RESET_ALL}"],
+            ["推理", f"{Fore.WHITE}{wrapped_reasoning}{Style.RESET_ALL}"],
         ]
-        
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}TRADING DECISION:{Style.RESET_ALL} [{Fore.CYAN}{ticker}{Style.RESET_ALL}]")
+
+        print(f"\n{Fore.WHITE}{Style.BRIGHT}交易决策：{Style.RESET_ALL}[{Fore.CYAN}{ticker}{Style.RESET_ALL}]")
         print(tabulate(decision_data, tablefmt="grid", colalign=("left", "left")))
 
     # Print Portfolio Summary
-    print(f"\n{Fore.WHITE}{Style.BRIGHT}PORTFOLIO SUMMARY:{Style.RESET_ALL}")
+    print(f"\n{Fore.WHITE}{Style.BRIGHT}投资组合摘要：{Style.RESET_ALL}")
     portfolio_data = []
     
     # Extract portfolio manager reasoning (common for all tickers)
@@ -188,10 +197,19 @@ def print_trading_output(result: dict) -> None:
                     elif signal == "NEUTRAL":
                         neutral_count += 1
 
+        # 翻译操作类型
+        action_cn = {
+            "BUY": "买入",
+            "SELL": "卖出",
+            "HOLD": "持有",
+            "COVER": "平仓",
+            "SHORT": "做空",
+        }.get(action, action)
+
         portfolio_data.append(
             [
                 f"{Fore.CYAN}{ticker}{Style.RESET_ALL}",
-                f"{action_color}{action}{Style.RESET_ALL}",
+                f"{action_color}{action_cn}{Style.RESET_ALL}",
                 f"{action_color}{decision.get('quantity')}{Style.RESET_ALL}",
                 f"{Fore.WHITE}{decision.get('confidence'):.1f}%{Style.RESET_ALL}",
                 f"{Fore.GREEN}{bullish_count}{Style.RESET_ALL}",
@@ -201,13 +219,13 @@ def print_trading_output(result: dict) -> None:
         )
 
     headers = [
-        f"{Fore.WHITE}Ticker",
-        f"{Fore.WHITE}Action",
-        f"{Fore.WHITE}Quantity",
-        f"{Fore.WHITE}Confidence",
-        f"{Fore.WHITE}Bullish",
-        f"{Fore.WHITE}Bearish",
-        f"{Fore.WHITE}Neutral",
+        f"{Fore.WHITE}股票代码",
+        f"{Fore.WHITE}操作",
+        f"{Fore.WHITE}数量",
+        f"{Fore.WHITE}置信度",
+        f"{Fore.WHITE}看涨",
+        f"{Fore.WHITE}看跌",
+        f"{Fore.WHITE}中性",
     ]
     
     # Print the portfolio summary table
@@ -249,8 +267,8 @@ def print_trading_output(result: dict) -> None:
                     current_line = word
         if current_line:
             wrapped_reasoning += current_line
-            
-        print(f"\n{Fore.WHITE}{Style.BRIGHT}Portfolio Strategy:{Style.RESET_ALL}")
+
+        print(f"\n{Fore.WHITE}{Style.BRIGHT}投资组合策略：{Style.RESET_ALL}")
         print(f"{Fore.CYAN}{wrapped_reasoning}{Style.RESET_ALL}")
 
 

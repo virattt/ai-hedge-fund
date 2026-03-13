@@ -31,6 +31,8 @@ class ModelProvider(str, Enum):
     GIGACHAT = "GigaChat"
     AZURE_OPENAI = "Azure OpenAI"
     XAI = "xAI"
+    MEITUAN = "Meituan"  # 美团 AIGC 平台
+    MINIMAX = "MiniMax"  # MiniMax 模型
 
 
 class LLMModel(BaseModel):
@@ -71,6 +73,14 @@ class LLMModel(BaseModel):
     def is_ollama(self) -> bool:
         """Check if the model is an Ollama model"""
         return self.provider == ModelProvider.OLLAMA
+
+    def is_meituan(self) -> bool:
+        """Check if the model is a Meituan AIGC model"""
+        return self.provider == ModelProvider.MEITUAN
+
+    def is_minimax(self) -> bool:
+        """Check if the model is a MiniMax model"""
+        return self.provider == ModelProvider.MINIMAX
 
 
 # Load models from JSON file
@@ -236,3 +246,19 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
             print(f"Azure Deployment Name Error: Please make sure AZURE_OPENAI_DEPLOYMENT_NAME is set in your .env file.")
             raise ValueError("Azure OpenAI deployment name not found.  Please make sure AZURE_OPENAI_DEPLOYMENT_NAME is set in your .env file.")
         return AzureChatOpenAI(azure_endpoint=azure_endpoint, azure_deployment=azure_deployment_name, api_key=api_key, api_version="2024-10-21")
+    elif model_provider == ModelProvider.MEITUAN:
+        # 美团 AIGC 平台 (OpenAI 兼容)
+        api_key = (api_keys or {}).get("MEITUAN_API_KEY") or os.getenv("MEITUAN_API_KEY")
+        base_url = os.getenv("MEITUAN_API_BASE", "https://aigc.sankuai.com/v1/openai/native")
+        if not api_key:
+            print(f"API Key Error: Please make sure MEITUAN_API_KEY is set in your .env file or provided via API keys.")
+            raise ValueError("Meituan API key not found. Please make sure MEITUAN_API_KEY is set in your .env file or provided via API keys.")
+        return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
+    elif model_provider == ModelProvider.MINIMAX:
+        # MiniMax (美团 AIGC 平台，OpenAI 兼容)
+        api_key = (api_keys or {}).get("MINIMAX_API_KEY") or os.getenv("MINIMAX_API_KEY") or os.getenv("MEITUAN_API_KEY")
+        base_url = os.getenv("MINIMAX_API_BASE", os.getenv("MEITUAN_API_BASE", "https://aigc.sankuai.com/v1/openai/native"))
+        if not api_key:
+            print(f"API Key Error: Please make sure MINIMAX_API_KEY is set in your .env file or provided via API keys.")
+            raise ValueError("MiniMax API key not found. Please make sure MINIMAX_API_KEY is set in your .env file or provided via API keys.")
+        return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)

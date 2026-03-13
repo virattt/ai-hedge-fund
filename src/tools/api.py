@@ -26,35 +26,58 @@ _cache = get_cache()
 def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: dict = None, max_retries: int = 3) -> requests.Response:
     """
     Make an API request with rate limiting handling and moderate backoff.
-    
+
     Args:
         url: The URL to request
         headers: Headers to include in the request
         method: HTTP method (GET or POST)
         json_data: JSON data for POST requests
         max_retries: Maximum number of retries (default: 3)
-    
+
     Returns:
         requests.Response: The response object
-    
+
     Raises:
-        Exception: If the request fails with a non-429 error
+        Exception: If the request fails after all retries
     """
+    last_exception = None
+
     for attempt in range(max_retries + 1):  # +1 for initial attempt
-        if method.upper() == "POST":
-            response = requests.post(url, headers=headers, json=json_data)
-        else:
-            response = requests.get(url, headers=headers)
-        
-        if response.status_code == 429 and attempt < max_retries:
-            # Linear backoff: 60s, 90s, 120s, 150s...
-            delay = 60 + (30 * attempt)
-            print(f"Rate limited (429). Attempt {attempt + 1}/{max_retries + 1}. Waiting {delay}s before retrying...")
-            time.sleep(delay)
-            continue
-        
-        # Return the response (whether success, other errors, or final 429)
-        return response
+        try:
+            if method.upper() == "POST":
+                response = requests.post(url, headers=headers, json=json_data, timeout=30)
+            else:
+                response = requests.get(url, headers=headers, timeout=30)
+
+            if response.status_code == 429 and attempt < max_retries:
+                # Linear backoff: 60s, 90s, 120s, 150s...
+                delay = 60 + (30 * attempt)
+                print(f"Rate limited (429). Attempt {attempt + 1}/{max_retries + 1}. Waiting {delay}s before retrying...")
+                time.sleep(delay)
+                continue
+
+            # Return the response (whether success or other errors)
+            return response
+
+        except (requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+                requests.exceptions.ChunkedEncodingError) as e:
+            last_exception = e
+            if attempt < max_retries:
+                # Exponential backoff for connection errors: 2s, 4s, 8s
+                delay = 2 ** (attempt + 1)
+                print(f"Connection error: {type(e).__name__}. Attempt {attempt + 1}/{max_retries + 1}. Retrying in {delay}s...")
+                time.sleep(delay)
+                continue
+            else:
+                # Last attempt failed, raise the exception
+                print(f"Connection error after {max_retries + 1} attempts: {type(e).__name__}")
+                raise
+
+    # Should not reach here, but just in case
+    if last_exception:
+        raise last_exception
+    raise Exception("Unexpected error in _make_api_request")
 
 
 def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> list[Price]:

@@ -142,6 +142,30 @@ if __name__ == "__main__":
     tickers = inputs.tickers
     selected_analysts = inputs.selected_analysts
 
+    # 初始化数据库（如果配置了数据库）
+    db_service = None
+    session_id = None
+    try:
+        from src.database.connection import test_connection, init_db
+        from src.database.service import get_db_service
+
+        if test_connection():
+            init_db()
+            db_service = get_db_service()
+            # 创建交易会话
+            session_id = db_service.create_trading_session(
+                tickers=tickers,
+                start_date=inputs.start_date,
+                end_date=inputs.end_date,
+                model_name=inputs.model_name,
+                model_provider=inputs.model_provider,
+                initial_cash=inputs.initial_cash,
+                margin_requirement=inputs.margin_requirement,
+            )
+    except Exception as e:
+        print(f"⚠️  数据库初始化失败（将继续运行但不保存到数据库）: {e}")
+        db_service = None
+
     # Construct portfolio here
     portfolio = {
         "cash": inputs.initial_cash,
@@ -166,14 +190,40 @@ if __name__ == "__main__":
         },
     }
 
-    result = run_hedge_fund(
-        tickers=tickers,
-        start_date=inputs.start_date,
-        end_date=inputs.end_date,
-        portfolio=portfolio,
-        show_reasoning=inputs.show_reasoning,
-        selected_analysts=inputs.selected_analysts,
-        model_name=inputs.model_name,
-        model_provider=inputs.model_provider,
-    )
-    print_trading_output(result)
+    try:
+        result = run_hedge_fund(
+            tickers=tickers,
+            start_date=inputs.start_date,
+            end_date=inputs.end_date,
+            portfolio=portfolio,
+            show_reasoning=inputs.show_reasoning,
+            selected_analysts=inputs.selected_analysts,
+            model_name=inputs.model_name,
+            model_provider=inputs.model_provider,
+        )
+
+        # 保存到数据库
+        if db_service and session_id:
+            try:
+                db_service.save_trading_decisions(
+                    session_id=session_id,
+                    decisions=result["decisions"],
+                    analyst_signals=result["analyst_signals"],
+                    current_prices=result.get("current_prices", {}),
+                )
+                db_service.complete_session(session_id, status="COMPLETED")
+            except Exception as e:
+                print(f"⚠️  保存到数据库失败: {e}")
+                if session_id:
+                    db_service.complete_session(session_id, status="ERROR", error_message=str(e))
+
+        print_trading_output(result)
+
+    except Exception as e:
+        print(f"\n❌ 运行失败: {e}")
+        if db_service and session_id:
+            db_service.complete_session(session_id, status="ERROR", error_message=str(e))
+        raise
+    finally:
+        if db_service:
+            db_service.close()

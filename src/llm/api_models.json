@@ -1,5 +1,25 @@
 [
   {
+    "display_name": "MiniMax-M2.5 (美团)",
+    "model_name": "MiniMax-M2.5",
+    "provider": "MiniMax"
+  },
+  {
+    "display_name": "GLM-5 (美团)",
+    "model_name": "glm-5",
+    "provider": "Meituan"
+  },
+  {
+    "display_name": "DeepSeek V3 (美团)",
+    "model_name": "deepseek-chat",
+    "provider": "Meituan"
+  },
+  {
+    "display_name": "Qwen-Plus (美团)",
+    "model_name": "qwen-plus",
+    "provider": "Meituan"
+  },
+  {
     "display_name": "Grok 4",
     "model_name": "grok-4-0709",
     "provider": "xAI"
