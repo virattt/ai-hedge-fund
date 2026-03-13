@@ -6,6 +6,8 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
+
 from src.data.cache import get_cache
 from src.data.models import (
     CompanyNews,
