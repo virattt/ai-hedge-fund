@@ -8,12 +8,77 @@
 ║     ██║███████║███████║╚██████╔╝███████╗                                      ║
 ║     ╚═╝╚══════╝╚══════╝ ╚═════╝ ╚══════╝                                      ║
 ║                                                                               ║
-║     Precision.  No noise.  Just the signal.                                  ║
+║     Precision.  No noise.  Just the signal.                                   ║
 ║                                                                               ║
-║     Known issues.  Fixes applied.  Documented.                                 ║
+║     Known issues.  Fixes applied.  Runbook recorded.                          ║
 ║                                                                               ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 ```
+
+## Fork Sync Strategy (Upstream vs Our Fork)
+
+### Summary
+
+This project is a fork of `virattt/ai-hedge-fund`. GitHub shows us as “N commits ahead, M commits behind” and occasionally offers a scary **“Discard X commits”** button. We never want to discard our work; instead, we treat the upstream repo as the source of truth and **regularly merge/rebase `upstream/main` into our own `main` (and feature branches)**.
+
+### Recommended workflow
+
+#### 1. Add upstream remote (one-time)
+
+From the repo root:
+
+```bash
+git remote add upstream https://github.com/virattt/ai-hedge-fund.git   # or SSH URL
+git fetch upstream
+```
+
+Now:
+
+- `origin/main` = our fork on GitHub  
+- `upstream/main` = original repository
+
+#### 2. Keep `main` aligned with upstream
+
+On a regular basis:
+
+```bash
+git checkout main
+git fetch upstream
+git merge upstream/main        # or: git rebase upstream/main
+```
+
+- If there are **no conflicts**, `main` fast-forwards and we’re no longer “behind” upstream.
+- If there **are conflicts**, resolve them locally in the files Git reports, run tests, then commit the merge.
+
+> **Never** use the “Discard X commits” button on GitHub to sync. That would throw away our local work. Always sync via `merge`/`rebase` from `upstream/main`.
+
+#### 3. Do new work on feature branches
+
+For non-trivial changes:
+
+```bash
+git checkout main
+git pull upstream main          # ensure main is fresh
+git checkout -b feature/my-change
+# ... edits, commits ...
+```
+
+When upstream moves:
+
+```bash
+git fetch upstream
+git rebase upstream/main        # from feature branch
+```
+
+Resolve any conflicts once, then:
+
+```bash
+git push origin feature/my-change  # add --force-with-lease if rebased
+```
+
+We can then open PRs from our feature branches into our own `main` (or upstream if contributing back) with clean, linear history.
+
+---
 
 ## Autoresearch full-signal cache fails with sentiment parsing + OpenAI quota errors
 
