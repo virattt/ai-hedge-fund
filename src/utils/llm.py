@@ -64,8 +64,10 @@ def call_llm(
             # For non-JSON support models, we need to extract and parse the JSON manually
             if model_info and not model_info.has_json_mode():
                 parsed_result = extract_json_from_response(result.content)
-                if parsed_result:
+                if parsed_result is not None:
                     return pydantic_model(**parsed_result)
+
+                raise ValueError("Failed to parse JSON response from model output")
             else:
                 return result
 
@@ -107,15 +109,39 @@ def create_default_response(model_class: type[BaseModel]) -> BaseModel:
 
 
 def extract_json_from_response(content: str) -> dict | None:
-    """Extracts JSON from markdown-formatted response."""
+    """Extracts JSON from model responses (raw JSON, fenced blocks, or embedded snippets)."""
     try:
-        json_start = content.find("```json")
-        if json_start != -1:
-            json_text = content[json_start + 7 :]  # Skip past ```json
-            json_end = json_text.find("```")
-            if json_end != -1:
-                json_text = json_text[:json_end].strip()
-                return json.loads(json_text)
+        text = content if isinstance(content, str) else str(content)
+        text = text.strip()
+
+        # 1) Raw JSON response (common with some providers)
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+    except Exception:
+        pass
+
+    try:
+        text = content if isinstance(content, str) else str(content)
+
+        # 2) JSON fenced code blocks
+        for marker in ("```json", "```"):
+            json_start = text.find(marker)
+            if json_start != -1:
+                json_text = text[json_start + len(marker) :]
+                json_end = json_text.find("```")
+                if json_end != -1:
+                    parsed = json.loads(json_text[:json_end].strip())
+                    if isinstance(parsed, dict):
+                        return parsed
+
+        # 3) Embedded JSON object in surrounding text
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            parsed = json.loads(text[start : end + 1])
+            if isinstance(parsed, dict):
+                return parsed
     except Exception as e:
         print(f"Error extracting JSON from response: {e}")
     return None
