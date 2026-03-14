@@ -32,14 +32,23 @@ def mock_akshare_price_data():
 
 @pytest.fixture
 def mock_akshare_financial_data():
-    """模拟AkShare返回的财务数据"""
+    """模拟AkShare返回的财务分析指标数据"""
     return pd.DataFrame([
         {
+            "报告期": "2023-12-31",
+            "市盈率": 20.0,
+            "市净率": 2.5,
+            "总市值": 4000000000.0,
+            "营业收入": 8000000000.0,
+            "净利润": 800000000.0
+        },
+        {
             "报告期": "2024-03-31",
-            "每股收益": 1.5,
-            "净资产收益率": 15.0,
-            "市盈率": 20.5,
-            "市净率": 3.2
+            "市盈率": 25.5,
+            "市净率": 3.2,
+            "总市值": 5000000000.0,
+            "营业收入": 10000000000.0,
+            "净利润": 1000000000.0
         }
     ])
 
@@ -174,25 +183,26 @@ def test_get_company_news_limit(mock_parse):
 
 # ============== Step 12: 测试 get_financial_metrics ==============
 
-@patch('akshare.stock_financial_abstract')
+@patch('akshare.stock_financial_analysis_indicator')
 def test_get_financial_metrics(mock_financial, mock_akshare_financial_data):
-    """测试获取A股财务指标"""
+    """测试获取A股财务指标（使用正确的接口）"""
     mock_financial.return_value = mock_akshare_financial_data
 
     adapter = CNStockAdapter()
     metrics = adapter.get_financial_metrics("600000.SH", "2024-03-31")
 
-    # 验证返回的财务指标
-    assert metrics["eps"] == 1.5
-    assert metrics["roe"] == 15.0
-    assert metrics["pe_ratio"] == 20.5
+    # 验证返回的财务指标（5个字段）
+    assert metrics["pe_ratio"] == 25.5
     assert metrics["pb_ratio"] == 3.2
+    assert metrics["market_cap"] == 5000000000.0
+    assert metrics["revenue"] == 10000000000.0
+    assert metrics["net_profit"] == 1000000000.0
 
     # 验证API调用参数
     mock_financial.assert_called_once_with(symbol="600000")
 
 
-@patch('akshare.stock_financial_abstract')
+@patch('akshare.stock_financial_analysis_indicator')
 def test_get_financial_metrics_empty_data(mock_financial):
     """测试财务数据为空的情况"""
     mock_financial.return_value = pd.DataFrame()
@@ -204,7 +214,7 @@ def test_get_financial_metrics_empty_data(mock_financial):
     assert metrics == {}
 
 
-@patch('akshare.stock_financial_abstract')
+@patch('akshare.stock_financial_analysis_indicator')
 def test_get_financial_metrics_exception(mock_financial):
     """测试财务数据获取异常"""
     mock_financial.side_effect = Exception("API Error")
@@ -216,13 +226,14 @@ def test_get_financial_metrics_exception(mock_financial):
     assert metrics == {}
 
 
-@patch('akshare.stock_financial_abstract')
+@patch('akshare.stock_financial_analysis_indicator')
 def test_get_financial_metrics_missing_fields(mock_financial):
     """测试财务数据缺少某些字段"""
     # 只包含部分字段
     partial_data = pd.DataFrame([{
         "报告期": "2024-03-31",
-        "每股收益": 1.5
+        "市盈率": 25.5,
+        "总市值": 5000000000.0
     }])
     mock_financial.return_value = partial_data
 
@@ -230,7 +241,8 @@ def test_get_financial_metrics_missing_fields(mock_financial):
     metrics = adapter.get_financial_metrics("600000.SH", "2024-03-31")
 
     # 应该返回有值的字段为实际值，缺失字段为0
-    assert metrics["eps"] == 1.5
-    assert metrics["roe"] == 0
-    assert metrics["pe_ratio"] == 0
+    assert metrics["pe_ratio"] == 25.5
     assert metrics["pb_ratio"] == 0
+    assert metrics["market_cap"] == 5000000000.0
+    assert metrics["revenue"] == 0
+    assert metrics["net_profit"] == 0

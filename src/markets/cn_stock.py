@@ -135,7 +135,7 @@ class CNStockAdapter(MarketAdapter):
             end_date: 截止日期，格式 "YYYY-MM-DD"
 
         Returns:
-            Dict: 财务指标字典，包含 eps、roe、pe_ratio、pb_ratio
+            Dict: 财务指标字典，包含 pe_ratio、pb_ratio、market_cap、revenue、net_profit
 
         Raises:
             ValueError: ticker格式不支持
@@ -149,22 +149,23 @@ class CNStockAdapter(MarketAdapter):
         symbol = ticker.split('.')[0]
 
         try:
-            # 使用AkShare获取财务摘要数据
-            df = ak.stock_financial_abstract(symbol=symbol)
+            # 使用AkShare财务分析指标接口
+            df = ak.stock_financial_analysis_indicator(symbol=symbol)
 
             # 如果没有数据，返回空字典
             if df.empty:
                 return {}
 
-            # 获取最新一期数据
-            latest = df.iloc[0]
+            # 获取最新一期数据（最后一行）
+            latest = df.iloc[-1]
 
             # 转换为标准格式，使用get方法处理缺失字段
             return {
-                "eps": float(latest.get("每股收益", 0)),
-                "roe": float(latest.get("净资产收益率", 0)),
                 "pe_ratio": float(latest.get("市盈率", 0)),
-                "pb_ratio": float(latest.get("市净率", 0))
+                "pb_ratio": float(latest.get("市净率", 0)),
+                "market_cap": float(latest.get("总市值", 0)),
+                "revenue": float(latest.get("营业收入", 0)),
+                "net_profit": float(latest.get("净利润", 0))
             }
 
         except Exception as e:
