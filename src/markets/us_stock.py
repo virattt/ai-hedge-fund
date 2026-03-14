@@ -40,8 +40,40 @@ class USStockAdapter(MarketAdapter):
         # 美股ticker必须是纯大写字母
         return ticker.isupper() and ticker.isalpha()
 
-    def get_prices(self, ticker: str, start_date: str, end_date: str):
-        return []
+    def get_prices(self, ticker: str, start_date: str, end_date: str) -> List[Dict]:
+        """
+        获取美股历史价格数据
+
+        直接调用现有的 api.get_prices() 函数，并将 Pydantic 模型转换为字典。
+
+        Args:
+            ticker: 股票代码（如 AAPL）
+            start_date: 开始日期（YYYY-MM-DD）
+            end_date: 结束日期（YYYY-MM-DD）
+
+        Returns:
+            List[Dict]: 价格数据列表，包含 date, open, high, low, close, volume
+        """
+        # 调用现有API获取Price对象列表
+        prices = api.get_prices(
+            ticker=ticker,
+            start_date=start_date,
+            end_date=end_date
+        )
+
+        # 转换为MarketAdapter期望的字典格式
+        result = []
+        for price in prices:
+            result.append({
+                "date": price.time,  # Price模型使用time字段存储日期
+                "open": price.open,
+                "high": price.high,
+                "low": price.low,
+                "close": price.close,
+                "volume": price.volume
+            })
+
+        return result
 
     def get_company_news(self, ticker: str, end_date: str, limit: int):
         return []
