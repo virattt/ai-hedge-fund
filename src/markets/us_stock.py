@@ -87,7 +87,7 @@ class USStockAdapter(MarketAdapter):
             limit: 返回新闻条数限制
 
         Returns:
-            List[Dict]: 新闻列表，包含 title, url, published_date, summary, source, sentiment
+            List[Dict]: 新闻列表，包含 title, published, source, link, sentiment
         """
         # 调用现有API获取CompanyNews对象列表
         news_list = api.get_company_news(
@@ -101,10 +101,9 @@ class USStockAdapter(MarketAdapter):
         for news in news_list:
             result.append({
                 "title": news.title,
-                "url": news.url,
-                "published_date": news.date,  # CompanyNews使用date字段
-                "summary": "",  # CompanyNews模型没有summary字段
+                "published": news.date,  # CompanyNews的date字段映射到published
                 "source": news.source,
+                "link": news.url,  # CompanyNews的url字段映射到link
                 "sentiment": news.sentiment
             })
 

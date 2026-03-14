@@ -188,8 +188,8 @@ def test_get_company_news(mock_api_news, mock_api_company_news):
     # 验证返回格式（应该转换为字典）
     assert len(news) == 2
     assert news[0]["title"] == "Test News 1"
-    assert news[0]["url"] == "http://example.com/1"
-    assert news[0]["published_date"] == "2024-01-01T10:00:00Z"
+    assert news[0]["link"] == "http://example.com/1"
+    assert news[0]["published"] == "2024-01-01T10:00:00Z"
     assert news[0]["source"] == "Bloomberg"
     assert news[0]["sentiment"] == "positive"
 
