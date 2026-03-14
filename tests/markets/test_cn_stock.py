@@ -178,21 +178,71 @@ def test_convert_news_to_standard_google():
 
 # ============== Step 9: 测试 get_company_news ==============
 
-@patch('feedparser.parse')
-def test_get_company_news(mock_parse, mock_feedparser_data):
-    """测试获取A股相关新闻"""
-    mock_parse.return_value = mock_feedparser_data
+@patch('akshare.stock_news_em')
+def test_get_company_news_eastmoney(mock_news_em):
+    """测试获取新闻（东方财富主要来源）"""
+    mock_news_em.return_value = pd.DataFrame([
+        {
+            "新闻标题": "测试新闻1",
+            "新闻链接": "http://example.com/1",
+            "发布时间": "2024-01-01 10:00:00",
+            "新闻内容": "摘要1"
+        },
+        {
+            "新闻标题": "测试新闻2",
+            "新闻链接": "http://example.com/2",
+            "发布时间": "2024-01-01 11:00:00",
+            "新闻内容": "摘要2"
+        }
+    ])
 
     adapter = CNStockAdapter()
     news = adapter.get_company_news("600000.SH", "2024-01-01", limit=5)
 
     # 验证返回数据结构
-    assert len(news) == 1
+    assert len(news) == 2
     assert news[0]["title"] == "测试新闻1"
-    assert news[0]["link"] == "http://example.com/1"
-    assert news[0]["published"] == "Mon, 01 Jan 2024 00:00:00 GMT"
-    assert news[0]["source"] == "Google News"
+    assert news[0]["url"] == "http://example.com/1"
+    assert news[0]["source"] == "eastmoney"
+    assert "T" in news[0]["published_date"]  # ISO格式包含T
+    assert news[0]["published_date"] == "2024-01-01T10:00:00Z"
     assert news[0]["sentiment"] is None
+
+    # 验证API调用参数
+    mock_news_em.assert_called_once_with(symbol="600000")
+
+
+@patch('src.markets.cn_stock.feedparser.parse')
+@patch('src.markets.cn_stock.ak.stock_news_em')
+def test_get_company_news_fallback_to_google(mock_news_em, mock_parse):
+    """测试新闻获取降级到Google News"""
+    # 东方财富失败
+    mock_news_em.side_effect = Exception("API Error")
+
+    # Google News成功 - 使用类型对象而不是MagicMock
+    class MockEntry:
+        def __init__(self):
+            self.title = "测试新闻2"
+            self.link = "http://example.com/2"
+            self.published = "Mon, 01 Jan 2024 10:00:00 GMT"
+            self.summary = "摘要2"
+
+        def get(self, key, default=''):
+            return getattr(self, key, default)
+
+    mock_feed = MagicMock()
+    mock_feed.entries = [MockEntry()]
+    mock_parse.return_value = mock_feed
+
+    adapter = CNStockAdapter()
+    news = adapter.get_company_news("600000.SH", "2024-01-01", limit=5)
+
+    # 验证降级到Google News
+    assert len(news) == 1
+    assert news[0]["title"] == "测试新闻2"
+    assert news[0]["url"] == "http://example.com/2"
+    assert news[0]["source"] == "google"
+    assert news[0]["published_date"] == "2024-01-01T10:00:00Z"
 
     # 验证RSS URL包含正确的股票代码
     mock_parse.assert_called_once()
@@ -201,28 +251,28 @@ def test_get_company_news(mock_parse, mock_feedparser_data):
     assert "股票" in call_url
 
 
-@patch('feedparser.parse')
-def test_get_company_news_limit(mock_parse):
+@patch('akshare.stock_news_em')
+def test_get_company_news_limit(mock_news_em):
     """测试新闻数量限制"""
     # 创建多条新闻
-    mock_entries = []
+    news_data = []
     for i in range(10):
-        entry = MagicMock()
-        entry.title = f"新闻{i}"
-        entry.link = f"http://example.com/{i}"
-        entry.published = "Mon, 01 Jan 2024 00:00:00 GMT"
-        entry.summary = f"摘要{i}"
-        mock_entries.append(entry)
+        news_data.append({
+            "新闻标题": f"新闻{i}",
+            "新闻链接": f"http://example.com/{i}",
+            "发布时间": f"2024-01-01 1{i}:00:00",
+            "新闻内容": f"摘要{i}"
+        })
 
-    mock_feed = MagicMock()
-    mock_feed.entries = mock_entries
-    mock_parse.return_value = mock_feed
+    mock_news_em.return_value = pd.DataFrame(news_data)
 
     adapter = CNStockAdapter()
     news = adapter.get_company_news("600000.SH", "2024-01-01", limit=3)
 
     # 应该只返回前3条
     assert len(news) == 3
+    assert news[0]["title"] == "新闻0"
+    assert news[2]["title"] == "新闻2"
 
 
 # ============== Step 12: 测试 get_financial_metrics ==============
