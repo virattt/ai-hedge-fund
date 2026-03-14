@@ -25,6 +25,53 @@ from src.data.models import (
 # Global cache instance
 _cache = get_cache()
 
+# Global market router instance - 延迟初始化以避免循环依赖
+_market_router = None
+
+
+def _get_market_router():
+    """
+    获取市场路由器实例（延迟初始化）
+
+    延迟导入避免循环依赖：
+    api.py -> router.py -> us_stock.py -> api.py
+
+    Returns:
+        MarketRouter: 路由器实例
+    """
+    global _market_router
+    if _market_router is None:
+        from src.markets.router import MarketRouter
+        _market_router = MarketRouter()
+    return _market_router
+
+
+def _is_us_stock(ticker: str) -> bool:
+    """
+    判断ticker是否为美股
+
+    美股ticker特征：
+    - 纯字母（如AAPL, MSFT）
+    - 不包含点号或等号
+
+    非美股ticker特征：
+    - A股: 600000.SH, 000001.SZ
+    - 港股: 0700.HK
+    - 商品: GC=F, CL=F
+
+    Args:
+        ticker: 股票/商品代码
+
+    Returns:
+        bool: 如果是美股返回True，否则False
+    """
+    # 包含点号或等号的都不是美股
+    if '.' in ticker or '=' in ticker:
+        return False
+
+    # 纯字母的是美股
+    return ticker.isalpha()
+
 
 def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: dict = None, max_retries: int = 3) -> requests.Response:
     """
@@ -84,39 +131,78 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
 
 
 def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> list[Price]:
-    """Fetch price data from cache or API."""
+    """
+    获取股票历史价格数据（支持多市场）
+
+    支持的市场：
+    - 美股: AAPL, MSFT, GOOGL
+    - A股: 600000.SH, 000001.SZ
+    - 港股: 0700.HK, 9988.HK
+    - 商品期货: GC=F, CL=F
+
+    Args:
+        ticker: 股票/商品代码
+        start_date: 开始日期（YYYY-MM-DD）
+        end_date: 结束日期（YYYY-MM-DD）
+        api_key: API密钥（可选）
+
+    Returns:
+        list[Price]: 价格数据列表（Pydantic模型）
+    """
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date}_{end_date}"
-    
+
     # Check cache first - simple exact match
     if cached_data := _cache.get_prices(cache_key):
         return [Price(**price) for price in cached_data]
 
-    # If not in cache, fetch from API
-    headers = {}
-    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
-        headers["X-API-KEY"] = financial_api_key
+    # 判断是否为美股 - 美股使用原始API，其他市场使用MarketRouter
+    if _is_us_stock(ticker):
+        # 美股：使用原始 financialdatasets API（保持向后兼容）
+        headers = {}
+        financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+        if financial_api_key:
+            headers["X-API-KEY"] = financial_api_key
 
-    url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
-    response = _make_api_request(url, headers)
-    if response.status_code != 200:
-        return []
+        url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
+        response = _make_api_request(url, headers)
+        if response.status_code != 200:
+            return []
 
-    # Parse response with Pydantic model
-    try:
-        price_response = PriceResponse(**response.json())
-        prices = price_response.prices
-    except Exception as e:
-        logger.warning("Failed to parse price response for %s: %s", ticker, e)
-        return []
+        # Parse response with Pydantic model
+        try:
+            price_response = PriceResponse(**response.json())
+            prices = price_response.prices
+        except Exception as e:
+            logger.warning("Failed to parse price response for %s: %s", ticker, e)
+            return []
 
-    if not prices:
-        return []
+        if not prices:
+            return []
 
-    # Cache the results using the comprehensive cache key
-    _cache.set_prices(cache_key, [p.model_dump() for p in prices])
-    return prices
+        # Cache the results using the comprehensive cache key
+        _cache.set_prices(cache_key, [p.model_dump() for p in prices])
+        return prices
+    else:
+        # 非美股：使用 MarketRouter（支持A股、港股、商品等）
+        try:
+            price_dicts = _get_market_router().get_prices(ticker, start_date, end_date)
+
+            # 将字典转换为 Pydantic 模型以保持接口一致性
+            prices = [Price(**price_dict) for price_dict in price_dicts]
+
+            if prices:
+                # Cache the results
+                _cache.set_prices(cache_key, [p.model_dump() for p in prices])
+
+            return prices
+        except ValueError as e:
+            # 未找到支持该ticker的适配器
+            logger.warning("MarketRouter error for %s: %s", ticker, e)
+            return []
+        except Exception as e:
+            logger.warning("Failed to fetch prices via MarketRouter for %s: %s", ticker, e)
+            return []
 
 
 def get_financial_metrics(
@@ -126,39 +212,83 @@ def get_financial_metrics(
     limit: int = 10,
     api_key: str = None,
 ) -> list[FinancialMetrics]:
-    """Fetch financial metrics from cache or API."""
+    """
+    获取财务指标（支持多市场）
+
+    支持的市场：
+    - 美股: AAPL, MSFT, GOOGL
+    - A股: 600000.SH, 000001.SZ
+    - 港股: 0700.HK, 9988.HK
+    - 商品期货: 不支持财务指标
+
+    Args:
+        ticker: 股票代码
+        end_date: 截止日期（YYYY-MM-DD）
+        period: 报告期（ttm, quarterly等）
+        limit: 最大返回数量
+        api_key: API密钥（可选）
+
+    Returns:
+        list[FinancialMetrics]: 财务指标列表（Pydantic模型）
+    """
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{period}_{end_date}_{limit}"
-    
+
     # Check cache first - simple exact match
     if cached_data := _cache.get_financial_metrics(cache_key):
         return [FinancialMetrics(**metric) for metric in cached_data]
 
-    # If not in cache, fetch from API
-    headers = {}
-    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
-        headers["X-API-KEY"] = financial_api_key
+    # 判断是否为美股
+    if _is_us_stock(ticker):
+        # 美股：使用原始 financialdatasets API（保持向后兼容）
+        headers = {}
+        financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+        if financial_api_key:
+            headers["X-API-KEY"] = financial_api_key
 
-    url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
-    response = _make_api_request(url, headers)
-    if response.status_code != 200:
-        return []
+        url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
+        response = _make_api_request(url, headers)
+        if response.status_code != 200:
+            return []
 
-    # Parse response with Pydantic model
-    try:
-        metrics_response = FinancialMetricsResponse(**response.json())
-        financial_metrics = metrics_response.financial_metrics
-    except Exception as e:
-        logger.warning("Failed to parse financial metrics response for %s: %s", ticker, e)
-        return []
+        # Parse response with Pydantic model
+        try:
+            metrics_response = FinancialMetricsResponse(**response.json())
+            financial_metrics = metrics_response.financial_metrics
+        except Exception as e:
+            logger.warning("Failed to parse financial metrics response for %s: %s", ticker, e)
+            return []
 
-    if not financial_metrics:
-        return []
+        if not financial_metrics:
+            return []
 
-    # Cache the results as dicts using the comprehensive cache key
-    _cache.set_financial_metrics(cache_key, [m.model_dump() for m in financial_metrics])
-    return financial_metrics
+        # Cache the results as dicts using the comprehensive cache key
+        _cache.set_financial_metrics(cache_key, [m.model_dump() for m in financial_metrics])
+        return financial_metrics
+    else:
+        # 非美股：使用 MarketRouter
+        try:
+            metrics_dict = _get_market_router().get_financial_metrics(ticker, end_date)
+
+            if not metrics_dict:
+                return []
+
+            # 将字典转换为 Pydantic 模型
+            # 注意：需要确保字段匹配
+            metric = FinancialMetrics(**metrics_dict)
+            metrics = [metric]
+
+            # Cache the results
+            _cache.set_financial_metrics(cache_key, [m.model_dump() for m in metrics])
+
+            return metrics
+        except ValueError as e:
+            # 未找到支持该ticker的适配器
+            logger.warning("MarketRouter error for %s: %s", ticker, e)
+            return []
+        except Exception as e:
+            logger.warning("Failed to fetch financial metrics via MarketRouter for %s: %s", ticker, e)
+            return []
 
 
 def search_line_items(
@@ -276,63 +406,105 @@ def get_company_news(
     limit: int = 1000,
     api_key: str = None,
 ) -> list[CompanyNews]:
-    """Fetch company news from cache or API."""
+    """
+    获取公司新闻（支持多市场）
+
+    支持的市场：
+    - 美股: AAPL, MSFT, GOOGL
+    - A股: 600000.SH, 000001.SZ
+    - 港股: 0700.HK, 9988.HK
+    - 商品期货: 不支持新闻
+
+    Args:
+        ticker: 股票代码
+        end_date: 截止日期（YYYY-MM-DD）
+        start_date: 开始日期（可选，YYYY-MM-DD）
+        limit: 最大返回数量
+        api_key: API密钥（可选）
+
+    Returns:
+        list[CompanyNews]: 新闻列表（Pydantic模型）
+    """
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
-    
+
     # Check cache first - simple exact match
     if cached_data := _cache.get_company_news(cache_key):
         return [CompanyNews(**news) for news in cached_data]
 
-    # If not in cache, fetch from API
-    headers = {}
-    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
-        headers["X-API-KEY"] = financial_api_key
+    # 判断是否为美股
+    if _is_us_stock(ticker):
+        # 美股：使用原始 financialdatasets API（保持向后兼容）
+        headers = {}
+        financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+        if financial_api_key:
+            headers["X-API-KEY"] = financial_api_key
 
-    all_news = []
-    current_end_date = end_date
+        all_news = []
+        current_end_date = end_date
 
-    while True:
-        url = f"https://api.financialdatasets.ai/news/?ticker={ticker}&end_date={current_end_date}"
-        if start_date:
-            url += f"&start_date={start_date}"
-        url += f"&limit={limit}"
+        while True:
+            url = f"https://api.financialdatasets.ai/news/?ticker={ticker}&end_date={current_end_date}"
+            if start_date:
+                url += f"&start_date={start_date}"
+            url += f"&limit={limit}"
 
-        response = _make_api_request(url, headers)
-        if response.status_code != 200:
-            break
+            response = _make_api_request(url, headers)
+            if response.status_code != 200:
+                break
 
+            try:
+                data = response.json()
+                response_model = CompanyNewsResponse(**data)
+                company_news = response_model.news
+            except Exception as e:
+                logger.warning("Failed to parse company news response for %s: %s", ticker, e)
+                break
+
+            if not company_news:
+                break
+
+            all_news.extend(company_news)
+
+            # Only continue pagination if we have a start_date and got a full page
+            if not start_date or len(company_news) < limit:
+                break
+
+            # Update end_date to the oldest date from current batch for next iteration
+            current_end_date = min(news.date for news in company_news).split("T")[0]
+
+            # If we've reached or passed the start_date, we can stop
+            if current_end_date <= start_date:
+                break
+
+        if not all_news:
+            return []
+
+        # Cache the results using the comprehensive cache key
+        _cache.set_company_news(cache_key, [news.model_dump() for news in all_news])
+        return all_news
+    else:
+        # 非美股：使用 MarketRouter
         try:
-            data = response.json()
-            response_model = CompanyNewsResponse(**data)
-            company_news = response_model.news
+            news_dicts = _get_market_router().get_company_news(ticker, end_date, limit)
+
+            if not news_dicts:
+                return []
+
+            # 将字典转换为 Pydantic 模型
+            news_list = [CompanyNews(**news_dict) for news_dict in news_dicts]
+
+            # Cache the results
+            _cache.set_company_news(cache_key, [news.model_dump() for news in news_list])
+
+            return news_list
+        except ValueError as e:
+            # 未找到支持该ticker的适配器
+            logger.warning("MarketRouter error for %s: %s", ticker, e)
+            return []
         except Exception as e:
-            logger.warning("Failed to parse company news response for %s: %s", ticker, e)
-            break
-
-        if not company_news:
-            break
-
-        all_news.extend(company_news)
-
-        # Only continue pagination if we have a start_date and got a full page
-        if not start_date or len(company_news) < limit:
-            break
-
-        # Update end_date to the oldest date from current batch for next iteration
-        current_end_date = min(news.date for news in company_news).split("T")[0]
-
-        # If we've reached or passed the start_date, we can stop
-        if current_end_date <= start_date:
-            break
-
-    if not all_news:
-        return []
-
-    # Cache the results using the comprehensive cache key
-    _cache.set_company_news(cache_key, [news.model_dump() for news in all_news])
-    return all_news
+            logger.warning("Failed to fetch company news via MarketRouter for %s: %s", ticker, e)
+            return []
 
 
 def get_market_cap(
