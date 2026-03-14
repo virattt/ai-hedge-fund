@@ -101,7 +101,7 @@ function LayoutContent({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden relative bg-background">
+    <div className="flex h-full w-full overflow-hidden relative bg-background flex-1">
       {/* VSCode-style Top Bar */}
       <TopBar
         isLeftCollapsed={isLeftCollapsed}
@@ -181,7 +181,7 @@ function LayoutContent({ children }: { children: ReactNode }) {
 }
 
 interface LayoutProps {
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 export function Layout({ children }: LayoutProps) {
