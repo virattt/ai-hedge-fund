@@ -27,7 +27,7 @@ class HKStockAdapter(MarketAdapter):
         Returns:
             bool: True表示支持港股格式，False表示不支持
         """
-        return ticker.endswith('.HK')
+        return ticker.endswith(".HK")
 
     def get_prices(self, ticker: str, start_date: str, end_date: str) -> List[Dict]:
         """
@@ -55,14 +55,16 @@ class HKStockAdapter(MarketAdapter):
 
             result = []
             for date_idx, row in df.iterrows():
-                result.append({
-                    "date": date_idx.strftime("%Y-%m-%d"),
-                    "open": float(row['Open']),
-                    "close": float(row['Close']),
-                    "high": float(row['High']),
-                    "low": float(row['Low']),
-                    "volume": int(row['Volume'])
-                })
+                result.append(
+                    {
+                        "date": date_idx.strftime("%Y-%m-%d"),
+                        "open": float(row["Open"]),
+                        "close": float(row["Close"]),
+                        "high": float(row["High"]),
+                        "low": float(row["Low"]),
+                        "volume": int(row["Volume"]),
+                    }
+                )
 
             return result
         except Exception as e:
@@ -87,23 +89,25 @@ class HKStockAdapter(MarketAdapter):
 
         try:
             stock = yf.Ticker(ticker)
-            news_list = stock.news if hasattr(stock, 'news') else []
+            news_list = stock.news if hasattr(stock, "news") else []
 
             result = []
             for news_item in news_list[:limit]:
                 # 转换时间戳为ISO格式
                 published = ""
-                if 'providerPublishTime' in news_item:
-                    dt = datetime.fromtimestamp(news_item['providerPublishTime'])
+                if "providerPublishTime" in news_item:
+                    dt = datetime.fromtimestamp(news_item["providerPublishTime"])
                     published = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-                result.append({
-                    "title": news_item.get('title', ''),
-                    "published": published,
-                    "source": news_item.get('publisher', 'yfinance'),
-                    "link": news_item.get('link', ''),
-                    "sentiment": None
-                })
+                result.append(
+                    {
+                        "title": news_item.get("title", ""),
+                        "published": published,
+                        "source": news_item.get("publisher", "yfinance"),
+                        "link": news_item.get("link", ""),
+                        "sentiment": None,
+                    }
+                )
 
             return result
         except Exception:
@@ -127,11 +131,11 @@ class HKStockAdapter(MarketAdapter):
             info = stock.info
 
             return {
-                "pe_ratio": float(info.get('trailingPE', 0) or 0),
-                "pb_ratio": float(info.get('priceToBook', 0) or 0),
-                "market_cap": float(info.get('marketCap', 0) or 0),
-                "revenue": float(info.get('totalRevenue', 0) or 0),
-                "net_profit": float(info.get('netIncomeToCommon', 0) or 0)
+                "pe_ratio": float(info.get("trailingPE", 0) or 0),
+                "pb_ratio": float(info.get("priceToBook", 0) or 0),
+                "market_cap": float(info.get("marketCap", 0) or 0),
+                "revenue": float(info.get("totalRevenue", 0) or 0),
+                "net_profit": float(info.get("netIncomeToCommon", 0) or 0),
             }
         except Exception:
             return {}
