@@ -52,6 +52,10 @@ def mock_feedparser_data():
     mock_entry.link = "http://example.com/1"
     mock_entry.published = "Mon, 01 Jan 2024 00:00:00 GMT"
     mock_entry.summary = "新闻摘要1"
+    mock_entry.get = MagicMock(side_effect=lambda k, default='': {
+        'published': 'Mon, 01 Jan 2024 00:00:00 GMT',
+        'summary': '新闻摘要1'
+    }.get(k, default))
 
     mock_feed = MagicMock()
     mock_feed.entries = [mock_entry]
