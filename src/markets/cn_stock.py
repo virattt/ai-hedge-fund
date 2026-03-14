@@ -81,6 +81,58 @@ class CNStockAdapter(MarketAdapter):
         except Exception as e:
             raise Exception(f"获取{ticker}价格数据失败: {str(e)}")
 
+    def _convert_news_to_standard(self, news_item: Dict, source: str) -> Dict:
+        """
+        将不同来源的新闻转换为标准格式
+
+        Args:
+            news_item: 原始新闻数据
+            source: 数据源（"eastmoney" 或 "google"）
+
+        Returns:
+            Dict: 标准格式的新闻字典
+        """
+        from dateutil import parser as date_parser
+
+        if source == "eastmoney":
+            # 东方财富格式转换
+            published = news_item.get("发布时间", "")
+            if published:
+                try:
+                    dt = date_parser.parse(published)
+                    published = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+                except Exception:
+                    published = ""
+
+            return {
+                "title": news_item.get("新闻标题", ""),
+                "url": news_item.get("新闻链接", ""),
+                "published_date": published,
+                "summary": news_item.get("新闻内容", ""),
+                "source": "eastmoney",
+                "sentiment": None
+            }
+        elif source == "google":
+            # Google News RSS格式转换
+            published = news_item.get("published", "")
+            if published:
+                try:
+                    dt = date_parser.parse(published)
+                    published = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+                except Exception:
+                    published = ""
+
+            return {
+                "title": news_item.get("title", ""),
+                "url": news_item.get("link", ""),
+                "published_date": published,
+                "summary": news_item.get("summary", ""),
+                "source": "google",
+                "sentiment": None
+            }
+        else:
+            return {}
+
     def get_company_news(self, ticker: str, end_date: str, limit: int) -> List[Dict]:
         """
         获取A股相关新闻（通过Google News RSS）

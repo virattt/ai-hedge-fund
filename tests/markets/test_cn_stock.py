@@ -132,6 +132,50 @@ def test_get_prices_deep_market(mock_hist, mock_akshare_price_data):
     assert call_args["symbol"] == "000001"
 
 
+# ============== 测试 _convert_news_to_standard ==============
+
+def test_convert_news_to_standard_eastmoney():
+    """测试东方财富新闻格式转换"""
+    adapter = CNStockAdapter()
+
+    eastmoney_news = {
+        "新闻标题": "测试新闻",
+        "新闻链接": "http://example.com",
+        "发布时间": "2024-01-01 10:30:00",
+        "新闻内容": "新闻摘要"
+    }
+
+    result = adapter._convert_news_to_standard(eastmoney_news, source="eastmoney")
+
+    assert result["title"] == "测试新闻"
+    assert result["url"] == "http://example.com"
+    assert result["published_date"] == "2024-01-01T10:30:00Z"
+    assert result["summary"] == "新闻摘要"
+    assert result["source"] == "eastmoney"
+    assert result["sentiment"] is None
+
+
+def test_convert_news_to_standard_google():
+    """测试Google News格式转换"""
+    adapter = CNStockAdapter()
+
+    google_entry = {
+        "title": "测试新闻",
+        "link": "http://example.com",
+        "published": "Mon, 01 Jan 2024 10:30:00 GMT",
+        "summary": "新闻摘要"
+    }
+
+    result = adapter._convert_news_to_standard(google_entry, source="google")
+
+    assert result["title"] == "测试新闻"
+    assert result["url"] == "http://example.com"
+    assert result["published_date"] == "2024-01-01T10:30:00Z"
+    assert result["summary"] == "新闻摘要"
+    assert result["source"] == "google"
+    assert result["sentiment"] is None
+
+
 # ============== Step 9: 测试 get_company_news ==============
 
 @patch('feedparser.parse')
