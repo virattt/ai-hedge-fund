@@ -44,7 +44,40 @@ def mock_api_financial_metrics():
             price_to_earnings_ratio=25.5,
             price_to_book_ratio=3.2,
             price_to_sales_ratio=7.5,
-            enterprise_value_to_ebitda_ratio=18.2
+            enterprise_value_to_ebitda_ratio=18.2,
+            enterprise_value_to_revenue_ratio=None,
+            free_cash_flow_yield=None,
+            peg_ratio=None,
+            gross_margin=None,
+            operating_margin=None,
+            net_margin=None,
+            return_on_equity=None,
+            return_on_assets=None,
+            return_on_invested_capital=None,
+            asset_turnover=None,
+            inventory_turnover=None,
+            receivables_turnover=None,
+            days_sales_outstanding=None,
+            operating_cycle=None,
+            working_capital_turnover=None,
+            current_ratio=None,
+            quick_ratio=None,
+            cash_ratio=None,
+            operating_cash_flow_ratio=None,
+            debt_to_equity=None,
+            debt_to_assets=None,
+            interest_coverage=None,
+            revenue_growth=None,
+            earnings_growth=None,
+            book_value_growth=None,
+            earnings_per_share_growth=None,
+            free_cash_flow_growth=None,
+            operating_income_growth=None,
+            ebitda_growth=None,
+            payout_ratio=None,
+            earnings_per_share=None,
+            book_value_per_share=None,
+            free_cash_flow_per_share=None
         )
     ]
 
@@ -226,7 +259,7 @@ def test_get_financial_metrics_empty_result(mock_api_metrics):
 @patch('src.markets.us_stock.api.get_financial_metrics')
 def test_get_financial_metrics_missing_fields(mock_api_metrics):
     """测试财务指标字段缺失"""
-    # 创建缺少部分字段的metrics
+    # 创建缺少部分字段的metrics（pb_ratio为None）
     incomplete_metrics = [
         FinancialMetrics(
             ticker="AAPL",
@@ -236,9 +269,42 @@ def test_get_financial_metrics_missing_fields(mock_api_metrics):
             market_cap=5000000000.0,
             enterprise_value=None,
             price_to_earnings_ratio=25.5,
-            price_to_book_ratio=None,
+            price_to_book_ratio=None,  # 这个字段为None
             price_to_sales_ratio=None,
-            enterprise_value_to_ebitda_ratio=None
+            enterprise_value_to_ebitda_ratio=None,
+            enterprise_value_to_revenue_ratio=None,
+            free_cash_flow_yield=None,
+            peg_ratio=None,
+            gross_margin=None,
+            operating_margin=None,
+            net_margin=None,
+            return_on_equity=None,
+            return_on_assets=None,
+            return_on_invested_capital=None,
+            asset_turnover=None,
+            inventory_turnover=None,
+            receivables_turnover=None,
+            days_sales_outstanding=None,
+            operating_cycle=None,
+            working_capital_turnover=None,
+            current_ratio=None,
+            quick_ratio=None,
+            cash_ratio=None,
+            operating_cash_flow_ratio=None,
+            debt_to_equity=None,
+            debt_to_assets=None,
+            interest_coverage=None,
+            revenue_growth=None,
+            earnings_growth=None,
+            book_value_growth=None,
+            earnings_per_share_growth=None,
+            free_cash_flow_growth=None,
+            operating_income_growth=None,
+            ebitda_growth=None,
+            payout_ratio=None,
+            earnings_per_share=None,
+            book_value_per_share=None,
+            free_cash_flow_per_share=None
         )
     ]
     mock_api_metrics.return_value = incomplete_metrics
@@ -246,7 +312,7 @@ def test_get_financial_metrics_missing_fields(mock_api_metrics):
     adapter = USStockAdapter()
     metrics = adapter.get_financial_metrics("AAPL", "2024-03-31")
 
-    # 缺失字段应该为0或None
+    # 缺失字段应该为0
     assert metrics["pe_ratio"] == 25.5
-    assert metrics["pb_ratio"] == 0  # 或者None，取决于实现
+    assert metrics["pb_ratio"] == 0  # None被转换为0
     assert metrics["market_cap"] == 5000000000.0

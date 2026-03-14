@@ -110,5 +110,43 @@ class USStockAdapter(MarketAdapter):
 
         return result
 
-    def get_financial_metrics(self, ticker: str, end_date: str):
-        return {}
+    def get_financial_metrics(self, ticker: str, end_date: str) -> Dict:
+        """
+        获取美股财务指标
+
+        直接调用现有的 api.get_financial_metrics() 函数，并将 Pydantic 模型转换为字典。
+
+        注意：API返回的字段与MarketAdapter期望的字段有差异，需要映射：
+        - price_to_earnings_ratio -> pe_ratio
+        - price_to_book_ratio -> pb_ratio
+        - market_cap -> market_cap
+        - revenue和net_profit需要通过search_line_items单独获取（此处暂不实现）
+
+        Args:
+            ticker: 股票代码（如 AAPL）
+            end_date: 截止日期（YYYY-MM-DD）
+
+        Returns:
+            Dict: 财务指标字典
+        """
+        # 调用现有API获取FinancialMetrics对象列表
+        metrics_list = api.get_financial_metrics(
+            ticker=ticker,
+            end_date=end_date
+        )
+
+        # 如果没有数据，返回空字典
+        if not metrics_list:
+            return {}
+
+        # 取第一个（最新的）指标
+        metrics = metrics_list[0]
+
+        # 转换为MarketAdapter期望的字典格式
+        return {
+            "pe_ratio": metrics.price_to_earnings_ratio or 0,
+            "pb_ratio": metrics.price_to_book_ratio or 0,
+            "market_cap": metrics.market_cap or 0,
+            "revenue": 0,  # API中的FinancialMetrics没有revenue字段，需要单独查询
+            "net_profit": 0  # API中的FinancialMetrics没有net_profit字段，需要单独查询
+        }
