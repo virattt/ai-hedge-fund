@@ -45,6 +45,16 @@
     "provider": "Google"
   },
   {
+    "display_name": "Gemini 2.5 Pro (OpenRouter)",
+    "model_name": "google/gemini-2.5-pro",
+    "provider": "OpenRouter"
+  },
+  {
+    "display_name": "Gemini 2.5 Flash (OpenRouter)",
+    "model_name": "google/gemini-2.5-flash",
+    "provider": "OpenRouter"
+  },
+  {
     "display_name": "GLM-4.5 Air",
     "model_name": "z-ai/glm-4.5-air",
     "provider": "OpenRouter"
@@ -68,5 +78,10 @@
     "display_name": "Azure Open AI Deployment",
     "model_name": "",
     "provider": "Azure OpenAI"
+  },
+  {
+    "display_name": "Custom OpenRouter Model",
+    "model_name": "-",
+    "provider": "OpenRouter"
   }
 ]
