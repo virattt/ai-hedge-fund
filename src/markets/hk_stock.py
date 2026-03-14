@@ -68,8 +68,46 @@ class HKStockAdapter(MarketAdapter):
         except Exception as e:
             raise Exception(f"获取{ticker}价格数据失败: {str(e)}")
 
-    def get_company_news(self, ticker: str, end_date: str, limit: int):
-        return []
+    def get_company_news(self, ticker: str, end_date: str, limit: int) -> List[Dict]:
+        """
+        获取港股相关新闻
+
+        使用yfinance的news API获取新闻数据。
+
+        Args:
+            ticker: 股票代码（如 0700.HK）
+            end_date: 截止日期（YYYY-MM-DD）
+            limit: 返回新闻条数限制
+
+        Returns:
+            List[Dict]: 新闻列表，包含 title, published, source, link, sentiment
+        """
+        if not self.supports_ticker(ticker):
+            raise ValueError(f"不支持的ticker格式: {ticker}")
+
+        try:
+            stock = yf.Ticker(ticker)
+            news_list = stock.news if hasattr(stock, 'news') else []
+
+            result = []
+            for news_item in news_list[:limit]:
+                # 转换时间戳为ISO格式
+                published = ""
+                if 'providerPublishTime' in news_item:
+                    dt = datetime.fromtimestamp(news_item['providerPublishTime'])
+                    published = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+                result.append({
+                    "title": news_item.get('title', ''),
+                    "published": published,
+                    "source": news_item.get('publisher', 'yfinance'),
+                    "link": news_item.get('link', ''),
+                    "sentiment": None
+                })
+
+            return result
+        except Exception:
+            return []
 
     def get_financial_metrics(self, ticker: str, end_date: str):
         return {}
