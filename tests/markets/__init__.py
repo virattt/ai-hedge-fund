@@ -1,1 +1,1 @@
-"""市场适配器测试包"""
+"""Tests for market adapters."""

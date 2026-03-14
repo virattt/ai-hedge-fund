@@ -1,122 +1,250 @@
-"""
-市场数据适配器基类
-
-定义所有市场适配器必须实现的统一接口
-"""
+"""Base class for market adapters."""
 from abc import ABC, abstractmethod
 from typing import List, Dict, Optional
+import logging
+
+from src.markets.sources.base import DataSource
+from src.data.validation import DataValidator
+from src.data.models import Price
+
+logger = logging.getLogger(__name__)
 
 
 class MarketAdapter(ABC):
-    """
-    市场数据适配器抽象基类
+    """Base class for market-specific adapters."""
 
-    所有市场适配器（美股、A股、港股、商品）都必须继承此类
-    并实现所有抽象方法，以提供统一的数据访问接口
-    """
-
-    @abstractmethod
-    def supports_ticker(self, ticker: str) -> bool:
+    def __init__(
+        self,
+        market: str,
+        data_sources: List[DataSource],
+        validator: Optional[DataValidator] = None,
+    ):
         """
-        检查此适配器是否支持给定的ticker格式
+        Initialize market adapter.
 
         Args:
-            ticker: 股票/商品代码，如 "AAPL", "600000.SH", "0700.HK", "GC=F"
+            market: Market identifier (e.g., 'CN', 'HK', 'US')
+            data_sources: List of data sources to use (in priority order)
+            validator: Data validator instance
+        """
+        self.market = market
+        self.data_sources = data_sources
+        self.validator = validator or DataValidator()
+        self.logger = logging.getLogger(f"{__name__}.{market}")
+
+        # Filter sources that support this market
+        self.active_sources = [
+            source for source in data_sources if source.supports_market(market)
+        ]
+
+        if not self.active_sources:
+            self.logger.warning(f"No data sources available for market {market}")
+        else:
+            source_names = [s.name for s in self.active_sources]
+            self.logger.info(f"Initialized {market} adapter with sources: {source_names}")
+
+    @abstractmethod
+    def normalize_ticker(self, ticker: str) -> str:
+        """
+        Normalize ticker symbol for this market.
+
+        Args:
+            ticker: Raw ticker symbol
 
         Returns:
-            bool: True表示支持，False表示不支持
-
-        Examples:
-            >>> adapter.supports_ticker("600000.SH")
-            True
-            >>> adapter.supports_ticker("AAPL")
-            False
+            Normalized ticker symbol
         """
         pass
 
-    @abstractmethod
     def get_prices(
-        self,
-        ticker: str,
-        start_date: str,
-        end_date: str
-    ) -> List[Dict]:
+        self, ticker: str, start_date: str, end_date: str
+    ) -> List[Price]:
         """
-        获取历史价格数据
+        Get price data with multi-source validation.
 
         Args:
-            ticker: 股票/商品代码
-            start_date: 开始日期，格式 "YYYY-MM-DD"
-            end_date: 结束日期，格式 "YYYY-MM-DD"
+            ticker: Stock ticker
+            start_date: Start date in YYYY-MM-DD format
+            end_date: End date in YYYY-MM-DD format
 
         Returns:
-            List[Dict]: 价格数据列表，每个字典包含:
-                - date: str, 日期 "YYYY-MM-DD"
-                - open: float, 开盘价
-                - high: float, 最高价
-                - low: float, 最低价
-                - close: float, 收盘价
-                - volume: int, 成交量
-
-        Raises:
-            ValueError: ticker格式不支持
-            Exception: 数据获取失败
+            List of validated Price objects
         """
-        pass
+        ticker = self.normalize_ticker(ticker)
 
-    @abstractmethod
-    def get_company_news(
-        self,
-        ticker: str,
-        end_date: str,
-        limit: int
-    ) -> List[Dict]:
-        """
-        获取公司/商品相关新闻
+        if not self.active_sources:
+            self.logger.error(f"No data sources available for {ticker}")
+            return []
 
-        Args:
-            ticker: 股票/商品代码
-            end_date: 截止日期，格式 "YYYY-MM-DD"
-            limit: 最大新闻数量
+        # Collect data from all sources
+        source_data = {}
 
-        Returns:
-            List[Dict]: 新闻列表，每个字典包含:
-                - title: str, 新闻标题
-                - published: str, 发布时间 ISO格式
-                - source: str, 新闻来源
-                - link: str, 新闻链接（可选）
-                - sentiment: Optional[str], 情绪 (None表示未分析)
+        for source in self.active_sources:
+            try:
+                prices = source.get_prices(ticker, start_date, end_date)
+                if prices:
+                    source_data[source.name] = prices
+                    self.logger.debug(
+                        f"Got {len(prices)} prices from {source.name} for {ticker}"
+                    )
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to get prices from {source.name} for {ticker}: {e}"
+                )
 
-        Raises:
-            ValueError: ticker格式不支持
-            Exception: 数据获取失败
-        """
-        pass
+        if not source_data:
+            self.logger.warning(f"No price data available from any source for {ticker}")
+            return []
 
-    @abstractmethod
+        # Validate and merge data
+        try:
+            validated_prices = self.validator.cross_validate_prices(source_data)
+
+            # Convert to Price objects
+            price_objects = []
+            for price_dict in validated_prices:
+                try:
+                    # Remove validation metadata before creating Price object
+                    clean_dict = {
+                        "open": price_dict["open"],
+                        "close": price_dict["close"],
+                        "high": price_dict["high"],
+                        "low": price_dict["low"],
+                        "volume": price_dict["volume"],
+                        "time": price_dict["time"],
+                    }
+                    price_objects.append(Price(**clean_dict))
+                except Exception as e:
+                    self.logger.warning(f"Failed to create Price object: {e}")
+
+            self.logger.info(
+                f"Retrieved {len(price_objects)} validated prices for {ticker}"
+            )
+            return price_objects
+
+        except Exception as e:
+            self.logger.error(f"Failed to validate prices for {ticker}: {e}")
+            # Fallback to first available source
+            if source_data:
+                first_source = list(source_data.values())[0]
+                self.logger.warning(
+                    f"Using fallback data from first source ({len(first_source)} records)"
+                )
+                return [Price(**p) for p in first_source]
+            return []
+
     def get_financial_metrics(
-        self,
-        ticker: str,
-        end_date: str
-    ) -> Dict:
+        self, ticker: str, end_date: str, period: str = "ttm", limit: int = 10
+    ) -> Optional[Dict]:
         """
-        获取财务指标
+        Get financial metrics with multi-source validation.
 
         Args:
-            ticker: 股票代码
-            end_date: 截止日期，格式 "YYYY-MM-DD"
+            ticker: Stock ticker
+            end_date: End date in YYYY-MM-DD format
+            period: Period type (ttm, quarterly, annual)
+            limit: Number of periods to fetch
 
         Returns:
-            Dict: 财务指标字典，可能包含:
-                - pe_ratio: float, 市盈率
-                - pb_ratio: float, 市净率
-                - market_cap: float, 市值
-                - revenue: float, 营收
-                - net_profit: float, 净利润
-                注意：商品期货返回空字典{}
-
-        Raises:
-            ValueError: ticker格式不支持
-            Exception: 数据获取失败
+            Dictionary with validated financial metrics
         """
-        pass
+        ticker = self.normalize_ticker(ticker)
+
+        if not self.active_sources:
+            self.logger.error(f"No data sources available for {ticker}")
+            return None
+
+        # Collect data from all sources
+        source_data = {}
+
+        for source in self.active_sources:
+            try:
+                metrics = source.get_financial_metrics(ticker, end_date, period, limit)
+                if metrics:
+                    source_data[source.name] = metrics
+                    self.logger.debug(f"Got financial metrics from {source.name} for {ticker}")
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to get financial metrics from {source.name} for {ticker}: {e}"
+                )
+
+        if not source_data:
+            self.logger.warning(
+                f"No financial metrics available from any source for {ticker}"
+            )
+            return None
+
+        # Validate and merge data
+        try:
+            validated_metrics = self.validator.validate_financial_metrics(source_data)
+            if validated_metrics:
+                self.logger.info(
+                    f"Retrieved validated financial metrics for {ticker} "
+                    f"(confidence: {validated_metrics.get('confidence', 0):.2f})"
+                )
+            return validated_metrics
+
+        except Exception as e:
+            self.logger.error(f"Failed to validate financial metrics for {ticker}: {e}")
+            # Fallback to first available source
+            if source_data:
+                first_metrics = list(source_data.values())[0]
+                self.logger.warning(f"Using fallback financial metrics from first source")
+                return first_metrics
+            return None
+
+    def get_company_news(
+        self, ticker: str, end_date: str, start_date: Optional[str] = None, limit: int = 100
+    ) -> List[Dict]:
+        """
+        Get company news with multi-source validation.
+
+        Args:
+            ticker: Stock ticker
+            end_date: End date in YYYY-MM-DD format
+            start_date: Start date in YYYY-MM-DD format (optional)
+            limit: Maximum number of news items
+
+        Returns:
+            List of validated news items
+        """
+        ticker = self.normalize_ticker(ticker)
+
+        if not self.active_sources:
+            self.logger.error(f"No data sources available for {ticker}")
+            return []
+
+        # Collect data from all sources
+        source_data = {}
+
+        for source in self.active_sources:
+            try:
+                news = source.get_company_news(ticker, end_date, start_date, limit)
+                if news:
+                    source_data[source.name] = news
+                    self.logger.debug(f"Got {len(news)} news items from {source.name} for {ticker}")
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to get news from {source.name} for {ticker}: {e}"
+                )
+
+        if not source_data:
+            self.logger.warning(f"No news available from any source for {ticker}")
+            return []
+
+        # Validate and merge data
+        try:
+            validated_news = self.validator.validate_news(source_data)
+            self.logger.info(f"Retrieved {len(validated_news)} validated news items for {ticker}")
+            return validated_news[:limit]
+
+        except Exception as e:
+            self.logger.error(f"Failed to validate news for {ticker}: {e}")
+            # Fallback to first available source
+            if source_data:
+                first_news = list(source_data.values())[0]
+                self.logger.warning(
+                    f"Using fallback news from first source ({len(first_news)} items)"
+                )
+                return first_news[:limit]
+            return []
