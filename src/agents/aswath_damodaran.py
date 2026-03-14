@@ -396,7 +396,9 @@ def generate_damodaran_output(
                   "signal": "bullish" | "bearish" | "neutral",
                   "confidence": float (0-100),
                   "reasoning": "string"
-                }}""",
+                }}
+
+                IMPORTANT: Write the reasoning in Chinese (中文).""",
             ),
         ]
     )

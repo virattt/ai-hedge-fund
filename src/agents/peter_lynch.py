@@ -474,6 +474,8 @@ def generate_lynch_output(
                   "confidence": 0 to 100,
                   "reasoning": "string"
                 }}
+
+                IMPORTANT: Write the reasoning in Chinese (中文).
                 """,
             ),
             (

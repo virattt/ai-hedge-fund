@@ -339,6 +339,8 @@ def generate_pabrai_output(
             "confidence": float (0-100),
             "reasoning": "string with Pabrai-style analysis focusing on downside protection, FCF yield, and doubling potential"
           }}
+
+          IMPORTANT: Write the reasoning in Chinese (中文).
           """,
         ),
     ])

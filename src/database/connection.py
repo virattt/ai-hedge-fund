@@ -11,7 +11,7 @@ load_dotenv()
 # Database configuration from environment variables
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "3306")
-DB_NAME = os.getenv("DB_NAME", "stock-picker")
+DB_NAME = os.getenv("DB_NAME", "hedge-fund")
 DB_USER = os.getenv("DB_USER", "root")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
@@ -52,8 +52,9 @@ def init_db():
 def test_connection():
     """Test database connection"""
     try:
+        from sqlalchemy import text
         db = SessionLocal()
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         db.close()
         print(f"✅ 数据库连接成功：{DB_HOST}:{DB_PORT}/{DB_NAME}")
         return True

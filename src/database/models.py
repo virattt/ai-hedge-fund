@@ -35,7 +35,7 @@ class TradingSession(Base):
     # 索引
     __table_args__ = (
         Index('idx_session_date', 'created_at'),
-        Index('idx_session_tickers', 'tickers', mysql_length=100),
+        # Note: JSON columns cannot be indexed directly in MySQL
     )
 
 

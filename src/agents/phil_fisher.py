@@ -580,6 +580,8 @@ def generate_fisher_output(
                 "confidence": float (0-100),
                 "reasoning": "string"
               }}
+
+              IMPORTANT: Write the reasoning in Chinese (中文).
               """,
             ),
         ]

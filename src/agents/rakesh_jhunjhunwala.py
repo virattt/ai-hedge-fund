@@ -688,6 +688,8 @@ def generate_jhunjhunwala_output(
                   "confidence": float between 0 and 100,
                   "reasoning": "string"
                 }}
+
+                IMPORTANT: Write the reasoning in Chinese (中文).
                 """,
             ),
         ]
