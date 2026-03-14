@@ -197,9 +197,8 @@ def test_get_financial_metrics_missing_fields(mock_ticker_class):
 @patch('src.markets.hk_stock.yf.Ticker')
 def test_get_financial_metrics_exception(mock_ticker_class):
     """测试财务数据获取异常"""
-    mock = MagicMock()
-    mock.info = MagicMock(side_effect=Exception("API Error"))
-    mock_ticker_class.return_value = mock
+    # 让Ticker构造函数抛出异常
+    mock_ticker_class.side_effect = Exception("API Error")
 
     adapter = HKStockAdapter()
     metrics = adapter.get_financial_metrics("0700.HK", "2024-03-31")

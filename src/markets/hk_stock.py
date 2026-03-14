@@ -109,5 +109,29 @@ class HKStockAdapter(MarketAdapter):
         except Exception:
             return []
 
-    def get_financial_metrics(self, ticker: str, end_date: str):
-        return {}
+    def get_financial_metrics(self, ticker: str, end_date: str) -> Dict:
+        """
+        获取港股财务指标
+
+        使用yfinance的info API获取财务数据。
+
+        Args:
+            ticker: 股票代码（如 0700.HK）
+            end_date: 截止日期（YYYY-MM-DD）
+
+        Returns:
+            Dict: 财务指标字典，包含 pe_ratio, pb_ratio, market_cap, revenue, net_profit
+        """
+        try:
+            stock = yf.Ticker(ticker)
+            info = stock.info
+
+            return {
+                "pe_ratio": float(info.get('trailingPE', 0) or 0),
+                "pb_ratio": float(info.get('priceToBook', 0) or 0),
+                "market_cap": float(info.get('marketCap', 0) or 0),
+                "revenue": float(info.get('totalRevenue', 0) or 0),
+                "net_profit": float(info.get('netIncomeToCommon', 0) or 0)
+            }
+        except Exception:
+            return {}
