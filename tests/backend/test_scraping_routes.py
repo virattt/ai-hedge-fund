@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, Engine
 from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator
+from unittest.mock import MagicMock, patch
 
 from app.backend.database.connection import Base, get_db
 from app.backend.database.models import ScrapeResult, ScrapingWebsite
@@ -248,3 +249,72 @@ def test_get_result_detail_returns_full_content(client: TestClient, test_db: Ses
     assert data["content"] == full_content
     assert data["id"] == result.id
     assert data["website_id"] == website.id
+
+
+# ---------------------------------------------------------------------------
+# 500-error exception handler branch tests
+# ---------------------------------------------------------------------------
+
+
+def test_create_website_returns_500_on_unexpected_exception(client: TestClient) -> None:
+    """POST /scraping/websites returns 500 when the repository raises unexpectedly."""
+    with patch("app.backend.routes.scraping.ScrapingRepository") as mock_repo_cls:
+        mock_repo_cls.return_value.create_website.side_effect = RuntimeError("db exploded")
+        response = client.post("/scraping/websites", json={"url": "https://example.com", "name": "Test"})
+    assert response.status_code == 500
+
+
+def test_list_websites_returns_500_on_unexpected_exception(client: TestClient) -> None:
+    """GET /scraping/websites returns 500 when the repository raises unexpectedly."""
+    with patch("app.backend.routes.scraping.ScrapingRepository") as mock_repo_cls:
+        mock_repo_cls.return_value.get_all_websites.side_effect = RuntimeError("db exploded")
+        response = client.get("/scraping/websites")
+    assert response.status_code == 500
+
+
+def test_get_website_returns_500_on_unexpected_exception(client: TestClient) -> None:
+    """GET /scraping/websites/{id} returns 500 when the repository raises unexpectedly."""
+    with patch("app.backend.routes.scraping.ScrapingRepository") as mock_repo_cls:
+        mock_repo_cls.return_value.get_website_by_id.side_effect = RuntimeError("db exploded")
+        response = client.get("/scraping/websites/1")
+    assert response.status_code == 500
+
+
+def test_update_website_returns_500_on_unexpected_exception(client: TestClient) -> None:
+    """PUT /scraping/websites/{id} returns 500 when the repository raises unexpectedly."""
+    with patch("app.backend.routes.scraping.ScrapingRepository") as mock_repo_cls:
+        mock_repo_cls.return_value.get_website_by_id.side_effect = RuntimeError("db exploded")
+        response = client.put("/scraping/websites/1", json={"name": "Updated"})
+    assert response.status_code == 500
+
+
+def test_delete_website_returns_500_on_unexpected_exception(client: TestClient) -> None:
+    """DELETE /scraping/websites/{id} returns 500 when the repository raises unexpectedly."""
+    with patch("app.backend.routes.scraping.ScrapingRepository") as mock_repo_cls:
+        mock_repo_cls.return_value.delete_website.side_effect = RuntimeError("db exploded")
+        response = client.delete("/scraping/websites/1")
+    assert response.status_code == 500
+
+
+def test_trigger_scrape_returns_500_on_unexpected_exception(client: TestClient) -> None:
+    """POST /scraping/websites/{id}/scrape returns 500 when the repository raises unexpectedly."""
+    with patch("app.backend.routes.scraping.ScrapingRepository") as mock_repo_cls:
+        mock_repo_cls.return_value.get_website_by_id.side_effect = RuntimeError("db exploded")
+        response = client.post("/scraping/websites/1/scrape")
+    assert response.status_code == 500
+
+
+def test_get_website_results_returns_500_on_unexpected_exception(client: TestClient) -> None:
+    """GET /scraping/websites/{id}/results returns 500 when repository raises unexpectedly."""
+    with patch("app.backend.routes.scraping.ScrapingRepository") as mock_repo_cls:
+        mock_repo_cls.return_value.get_website_by_id.side_effect = RuntimeError("db exploded")
+        response = client.get("/scraping/websites/1/results")
+    assert response.status_code == 500
+
+
+def test_get_result_detail_returns_500_on_unexpected_exception(client: TestClient) -> None:
+    """GET /scraping/results/{id} returns 500 when the repository raises unexpectedly."""
+    with patch("app.backend.routes.scraping.ScrapingRepository") as mock_repo_cls:
+        mock_repo_cls.return_value.get_result_by_id.side_effect = RuntimeError("db exploded")
+        response = client.get("/scraping/results/1")
+    assert response.status_code == 500

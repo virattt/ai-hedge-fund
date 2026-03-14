@@ -9,6 +9,7 @@ from app.backend.models.schemas import (
     ErrorResponse,
     ScrapeResultDetailResponse,
     ScrapeResultResponse,
+    ScrapeStatus,
     WebsiteCreateRequest,
     WebsiteResponse,
     WebsiteUpdateRequest,
@@ -70,7 +71,7 @@ async def create_website(request: WebsiteCreateRequest, db: Session = Depends(ge
             name=request.name,
             scrape_interval_minutes=request.scrape_interval_minutes,
         )
-        return WebsiteResponse.from_orm(website)
+        return WebsiteResponse.model_validate(website)
     except Exception as e:
         logger.exception("Failed to create website")
         raise HTTPException(status_code=500, detail=f"Failed to create website: {str(e)}") from e
@@ -88,7 +89,7 @@ async def list_websites(db: Session = Depends(get_db)) -> list[WebsiteResponse]:
     try:
         repo = ScrapingRepository(db)
         websites = repo.get_all_websites()
-        return [WebsiteResponse.from_orm(w) for w in websites]
+        return [WebsiteResponse.model_validate(w) for w in websites]
     except Exception as e:
         logger.exception("Failed to list websites")
         raise HTTPException(status_code=500, detail=f"Failed to list websites: {str(e)}") from e
@@ -109,7 +110,7 @@ async def get_website(website_id: int, db: Session = Depends(get_db)) -> Website
         website = repo.get_website_by_id(website_id)
         if not website:
             raise HTTPException(status_code=404, detail="Website not found")
-        return WebsiteResponse.from_orm(website)
+        return WebsiteResponse.model_validate(website)
     except HTTPException:
         raise
     except Exception as e:
@@ -140,7 +141,7 @@ async def update_website(website_id: int, request: WebsiteUpdateRequest, db: Ses
         )
         if not website:
             raise HTTPException(status_code=404, detail="Website not found")
-        return WebsiteResponse.from_orm(website)
+        return WebsiteResponse.model_validate(website)
     except HTTPException:
         raise
     except Exception as e:
@@ -196,9 +197,9 @@ async def trigger_scrape(
         website = repo.get_website_by_id(website_id)
         if not website:
             raise HTTPException(status_code=404, detail="Website not found")
-        if website.scrape_status == "in_progress":
+        if website.scrape_status == ScrapeStatus.IN_PROGRESS:
             raise HTTPException(status_code=409, detail="A scrape is already in progress for this website")
-        repo.update_website_status(website_id, "in_progress")
+        repo.update_website_status(website_id, ScrapeStatus.IN_PROGRESS)
         bg.add_task(scraping_service.execute_scrape, website_id)
         logger.info("trigger_scrape: enqueued background scrape for website %d", website_id)
         return {"message": "Scrape task accepted", "website_id": website_id}

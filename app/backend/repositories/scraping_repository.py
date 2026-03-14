@@ -1,9 +1,14 @@
 """Repository for scraping website and scrape-result database operations."""
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.backend.database.models import ScrapeResult, ScrapingWebsite
+from app.backend.models.schemas import ScrapeResultStatus, ScrapeStatus
+
+# Sentinel used to distinguish "not provided" from "explicitly set to None".
+_UNSET: Any = object()
 
 
 class ScrapingRepository:
@@ -67,20 +72,21 @@ class ScrapingRepository:
         self,
         website_id: int,
         name: str | None = None,
-        scrape_interval_minutes: int | None = None,
+        scrape_interval_minutes: int | None = _UNSET,
         is_active: bool | None = None,
     ) -> ScrapingWebsite | None:
         """Partially update a website with the provided fields.
 
-        Only non-None arguments are applied. Returns the updated website,
-        or None if not found.
+        Uses the ``_UNSET`` sentinel to distinguish "not provided" (leave
+        unchanged) from ``None`` (clear the field). Returns the updated
+        website, or None if not found.
         """
         website = self.get_website_by_id(website_id)
         if not website:
             return None
         if name is not None:
             website.name = name
-        if scrape_interval_minutes is not None:
+        if scrape_interval_minutes is not _UNSET:
             website.scrape_interval_minutes = scrape_interval_minutes
         if is_active is not None:
             website.is_active = is_active
@@ -175,7 +181,7 @@ class ScrapingRepository:
             .filter(
                 ScrapingWebsite.scrape_interval_minutes.isnot(None),
                 ScrapingWebsite.is_active == True,  # noqa: E712
-                ScrapingWebsite.scrape_status != "in_progress",
+                ScrapingWebsite.scrape_status != ScrapeStatus.IN_PROGRESS,
             )
             .all()
         )
@@ -231,11 +237,11 @@ class ScrapingRepository:
         """
         stuck = (
             self.db.query(ScrapingWebsite)
-            .filter(ScrapingWebsite.scrape_status == "in_progress")
+            .filter(ScrapingWebsite.scrape_status == ScrapeStatus.IN_PROGRESS)
             .all()
         )
         for website in stuck:
-            website.scrape_status = "idle"
+            website.scrape_status = ScrapeStatus.IDLE
         if stuck:
             self.db.commit()
         return len(stuck)

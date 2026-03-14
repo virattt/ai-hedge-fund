@@ -81,7 +81,7 @@ class ScrapingService {
 
   async updateWebsite(id: number, request: WebsiteUpdateRequest): Promise<Website> {
     const response = await fetch(`${this.baseUrl}/websites/${id}`, {
-      method: 'PATCH',
+      method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
       },

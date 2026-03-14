@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from crawl4ai import AsyncWebCrawler
 
 from app.backend.database.connection import SessionLocal
+from app.backend.models.schemas import ScrapeResultStatus, ScrapeStatus
 from app.backend.repositories.scraping_repository import ScrapingRepository
 
 logger = logging.getLogger(__name__)
@@ -52,11 +53,11 @@ async def execute_scrape(website_id: int) -> None:
                 logger.warning("execute_scrape: website %d not found; skipping", website_id)
                 return
 
-            if website.scrape_status == "in_progress":
+            if website.scrape_status == ScrapeStatus.IN_PROGRESS:
                 logger.info("execute_scrape: website %d already in_progress; skipping", website_id)
                 return
 
-            repo.update_website_status(website_id, "in_progress")
+            repo.update_website_status(website_id, ScrapeStatus.IN_PROGRESS)
             logger.info("execute_scrape: starting scrape for website %d (%s)", website_id, website.url)
 
             content: str | None = None
@@ -96,11 +97,11 @@ async def execute_scrape(website_id: int) -> None:
                     website_id=website_id,
                     content=content,
                     content_length=content_length,
-                    status="success",
+                    status=ScrapeResultStatus.SUCCESS,
                 )
                 repo.update_website_status(
                     website_id,
-                    "idle",
+                    ScrapeStatus.IDLE,
                     last_scraped_at=datetime.now(timezone.utc),
                 )
                 repo.cleanup_old_results(website_id, keep=MAX_RESULTS_PER_WEBSITE)
@@ -109,12 +110,12 @@ async def execute_scrape(website_id: int) -> None:
                     website_id=website_id,
                     content=None,
                     content_length=0,
-                    status="error",
+                    status=ScrapeResultStatus.ERROR,
                     error_message=error_message,
                 )
                 repo.update_website_status(
                     website_id,
-                    "error",
+                    ScrapeStatus.ERROR,
                     last_error=error_message,
                 )
         finally:

@@ -1,3 +1,4 @@
+import React, { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -12,7 +13,6 @@ import {
 import { useToastManager } from '@/hooks/use-toast-manager';
 import { scrapingService, ScrapeResult, ScrapeResultDetail, Website } from '@/services/scraping-api';
 import { ChevronDown, ChevronRight, FileText } from 'lucide-react';
-import { useEffect, useState } from 'react';
 
 interface ScrapeResultsPanelProps {
   selectedWebsite: Website | null;
@@ -126,7 +126,7 @@ export function ScrapeResultsPanel({ selectedWebsite }: ScrapeResultsPanelProps)
         </TableHeader>
         <TableBody>
           {results.map(result => (
-            <>
+            <React.Fragment key={result.id}>
               <TableRow
                 key={result.id}
                 className="cursor-pointer hover:bg-accent/50"
@@ -194,7 +194,7 @@ export function ScrapeResultsPanel({ selectedWebsite }: ScrapeResultsPanelProps)
                   </TableCell>
                 </TableRow>
               )}
-            </>
+            </React.Fragment>
           ))}
         </TableBody>
       </Table>
