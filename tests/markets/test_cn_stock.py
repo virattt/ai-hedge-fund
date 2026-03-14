@@ -148,9 +148,8 @@ def test_convert_news_to_standard_eastmoney():
     result = adapter._convert_news_to_standard(eastmoney_news, source="eastmoney")
 
     assert result["title"] == "测试新闻"
-    assert result["url"] == "http://example.com"
-    assert result["published_date"] == "2024-01-01T10:30:00Z"
-    assert result["summary"] == "新闻摘要"
+    assert result["link"] == "http://example.com"
+    assert result["published"] == "2024-01-01T10:30:00Z"
     assert result["source"] == "eastmoney"
     assert result["sentiment"] is None
 
@@ -169,9 +168,8 @@ def test_convert_news_to_standard_google():
     result = adapter._convert_news_to_standard(google_entry, source="google")
 
     assert result["title"] == "测试新闻"
-    assert result["url"] == "http://example.com"
-    assert result["published_date"] == "2024-01-01T10:30:00Z"
-    assert result["summary"] == "新闻摘要"
+    assert result["link"] == "http://example.com"
+    assert result["published"] == "2024-01-01T10:30:00Z"
     assert result["source"] == "google"
     assert result["sentiment"] is None
 
@@ -202,10 +200,10 @@ def test_get_company_news_eastmoney(mock_news_em):
     # 验证返回数据结构
     assert len(news) == 2
     assert news[0]["title"] == "测试新闻1"
-    assert news[0]["url"] == "http://example.com/1"
+    assert news[0]["link"] == "http://example.com/1"
     assert news[0]["source"] == "eastmoney"
-    assert "T" in news[0]["published_date"]  # ISO格式包含T
-    assert news[0]["published_date"] == "2024-01-01T10:00:00Z"
+    assert "T" in news[0]["published"]  # ISO格式包含T
+    assert news[0]["published"] == "2024-01-01T10:00:00Z"
     assert news[0]["sentiment"] is None
 
     # 验证API调用参数
@@ -240,9 +238,9 @@ def test_get_company_news_fallback_to_google(mock_news_em, mock_parse):
     # 验证降级到Google News
     assert len(news) == 1
     assert news[0]["title"] == "测试新闻2"
-    assert news[0]["url"] == "http://example.com/2"
+    assert news[0]["link"] == "http://example.com/2"
     assert news[0]["source"] == "google"
-    assert news[0]["published_date"] == "2024-01-01T10:00:00Z"
+    assert news[0]["published"] == "2024-01-01T10:00:00Z"
 
     # 验证RSS URL包含正确的股票代码
     mock_parse.assert_called_once()

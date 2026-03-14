@@ -106,10 +106,9 @@ class CNStockAdapter(MarketAdapter):
 
             return {
                 "title": news_item.get("新闻标题", ""),
-                "url": news_item.get("新闻链接", ""),
-                "published_date": published,
-                "summary": news_item.get("新闻内容", ""),
+                "published": published,
                 "source": "eastmoney",
+                "link": news_item.get("新闻链接", ""),
                 "sentiment": None
             }
         elif source == "google":
@@ -124,10 +123,9 @@ class CNStockAdapter(MarketAdapter):
 
             return {
                 "title": news_item.get("title", ""),
-                "url": news_item.get("link", ""),
-                "published_date": published,
-                "summary": news_item.get("summary", ""),
+                "published": published,
                 "source": "google",
+                "link": news_item.get("link", ""),
                 "sentiment": None
             }
         else:
@@ -145,7 +143,7 @@ class CNStockAdapter(MarketAdapter):
             limit: 最大新闻数量
 
         Returns:
-            List[Dict]: 新闻列表，包含 title, url, published_date, summary, source, sentiment
+            List[Dict]: 新闻列表，包含 title, published, source, link, sentiment
 
         Raises:
             ValueError: ticker格式不支持
