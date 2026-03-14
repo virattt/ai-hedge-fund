@@ -29,8 +29,44 @@ class HKStockAdapter(MarketAdapter):
         """
         return ticker.endswith('.HK')
 
-    def get_prices(self, ticker: str, start_date: str, end_date: str):
-        return []
+    def get_prices(self, ticker: str, start_date: str, end_date: str) -> List[Dict]:
+        """
+        获取港股历史价格数据
+
+        使用yfinance库获取历史价格数据。
+
+        Args:
+            ticker: 股票代码（如 0700.HK）
+            start_date: 开始日期（YYYY-MM-DD）
+            end_date: 结束日期（YYYY-MM-DD）
+
+        Returns:
+            List[Dict]: 价格数据列表，包含 date, open, high, low, close, volume
+
+        Raises:
+            Exception: 数据获取失败
+        """
+        try:
+            stock = yf.Ticker(ticker)
+            df = stock.history(start=start_date, end=end_date)
+
+            if df.empty:
+                return []
+
+            result = []
+            for date_idx, row in df.iterrows():
+                result.append({
+                    "date": date_idx.strftime("%Y-%m-%d"),
+                    "open": float(row['Open']),
+                    "close": float(row['Close']),
+                    "high": float(row['High']),
+                    "low": float(row['Low']),
+                    "volume": int(row['Volume'])
+                })
+
+            return result
+        except Exception as e:
+            raise Exception(f"获取{ticker}价格数据失败: {str(e)}")
 
     def get_company_news(self, ticker: str, end_date: str, limit: int):
         return []
