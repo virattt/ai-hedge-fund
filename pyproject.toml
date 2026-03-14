@@ -39,6 +39,7 @@ langchain-xai = "^0.2.5"
 feedparser = "^6.0.12"
 akshare = "^1.18.39"
 yfinance = "^1.2.0"
+py-mini-racer = "^0.6.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"

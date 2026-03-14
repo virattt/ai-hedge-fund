@@ -3623,7 +3623,6 @@ description = "Minimal, modern embedded V8 for Python."
 optional = false
 python-versions = "*"
 groups = ["main"]
-markers = "platform_system == \"Linux\""
 files = [
     {file = "py_mini_racer-0.6.0-py2.py3-none-macosx_10_10_x86_64.whl", hash = "sha256:346e73bb89a2024888244d487834be24a121089ceb0641dd0200cb96c4e24b57"},
     {file = "py_mini_racer-0.6.0-py2.py3-none-manylinux1_x86_64.whl", hash = "sha256:42896c24968481dd953eeeb11de331f6870917811961c9b26ba09071e07180e2"},
@@ -5252,4 +5251,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "b9e68b7a6043563cdae97d80a23c172f2b79ca7387a0407055b76de61d7f5ec4"
+content-hash = "864b9acb181a39dbac6213b1739c0ffa2e5629f4547999e88a199b5213a0937a"
