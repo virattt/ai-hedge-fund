@@ -75,8 +75,40 @@ class USStockAdapter(MarketAdapter):
 
         return result
 
-    def get_company_news(self, ticker: str, end_date: str, limit: int):
-        return []
+    def get_company_news(self, ticker: str, end_date: str, limit: int) -> List[Dict]:
+        """
+        获取美股相关新闻
+
+        直接调用现有的 api.get_company_news() 函数，并将 Pydantic 模型转换为字典。
+
+        Args:
+            ticker: 股票代码（如 AAPL）
+            end_date: 截止日期（YYYY-MM-DD）
+            limit: 返回新闻条数限制
+
+        Returns:
+            List[Dict]: 新闻列表，包含 title, url, published_date, summary, source, sentiment
+        """
+        # 调用现有API获取CompanyNews对象列表
+        news_list = api.get_company_news(
+            ticker=ticker,
+            end_date=end_date,
+            limit=limit
+        )
+
+        # 转换为MarketAdapter期望的字典格式
+        result = []
+        for news in news_list:
+            result.append({
+                "title": news.title,
+                "url": news.url,
+                "published_date": news.date,  # CompanyNews使用date字段
+                "summary": "",  # CompanyNews模型没有summary字段
+                "source": news.source,
+                "sentiment": news.sentiment
+            })
+
+        return result
 
     def get_financial_metrics(self, ticker: str, end_date: str):
         return {}
