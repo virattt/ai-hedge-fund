@@ -843,7 +843,7 @@ git commit -m "test: add end-to-end tests for NewsNow integration
 - Create: `src/markets/sources/sina_finance_source.py`
 - Test: `tests/markets/sources/test_sina_finance_source.py`
 
-- [ ] **Step 1: Write failing test for initialization**
+- [x] **Step 1: Write failing test for initialization**
 
 ```python
 # tests/markets/sources/test_sina_finance_source.py
@@ -877,13 +877,13 @@ class TestSinaFinanceSourceInit:
         assert source._to_sina_symbol("AAPL", "US") == "gb_aapl"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 poetry run pytest tests/markets/sources/test_sina_finance_source.py::TestSinaFinanceSourceInit -v
 ```
 
-- [ ] **Step 3: Create SinaFinanceSource with ticker conversion**
+- [x] **Step 3: Create SinaFinanceSource with ticker conversion**
 
 ```python
 # src/markets/sources/sina_finance_source.py
@@ -1000,13 +1000,13 @@ class SinaFinanceSource(DataSource):
         return []
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 poetry run pytest tests/markets/sources/test_sina_finance_source.py::TestSinaFinanceSourceInit -v
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/markets/sources/sina_finance_source.py tests/markets/sources/test_sina_finance_source.py
@@ -1027,7 +1027,7 @@ Part of Phase 2: Sina Finance implementation"
 - Modify: `src/markets/sources/sina_finance_source.py`
 - Modify: `tests/markets/sources/test_sina_finance_source.py`
 
-- [ ] **Step 1: Write failing test for CN price fetching**
+- [x] **Step 1: Write failing test for CN price fetching**
 
 ```python
 # tests/markets/sources/test_sina_finance_source.py
@@ -1067,13 +1067,13 @@ class TestSinaFinancePricesCN:
         assert "time" in prices[0]
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 poetry run pytest tests/markets/sources/test_sina_finance_source.py::TestSinaFinancePricesCN -v
 ```
 
-- [ ] **Step 3: Implement CN price fetching**
+- [x] **Step 3: Implement CN price fetching**
 
 ```python
 # src/markets/sources/sina_finance_source.py
@@ -1198,13 +1198,13 @@ class SinaFinanceSource(DataSource):
         return []
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 poetry run pytest tests/markets/sources/test_sina_finance_source.py::TestSinaFinancePricesCN -v
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/markets/sources/sina_finance_source.py tests/markets/sources/test_sina_finance_source.py
@@ -1225,7 +1225,7 @@ Part of Phase 2: Sina Finance implementation"
 - Modify: `src/markets/sources/sina_finance_source.py`
 - Modify: `tests/markets/sources/test_sina_finance_source.py`
 
-- [ ] **Step 1: Write failing test for HK price fetching**
+- [x] **Step 1: Write failing test for HK price fetching**
 
 ```python
 # tests/markets/sources/test_sina_finance_source.py
@@ -1256,13 +1256,13 @@ class TestSinaFinancePricesHK:
         assert prices[0]["open"] == 100.0
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 poetry run pytest tests/markets/sources/test_sina_finance_source.py::TestSinaFinancePricesHK -v
 ```
 
-- [ ] **Step 3: Implement HK price fetching**
+- [x] **Step 3: Implement HK price fetching**
 
 ```python
 # src/markets/sources/sina_finance_source.py
@@ -1336,13 +1336,13 @@ class SinaFinanceSource(DataSource):
         return prices
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 poetry run pytest tests/markets/sources/test_sina_finance_source.py::TestSinaFinancePricesHK -v
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/markets/sources/sina_finance_source.py tests/markets/sources/test_sina_finance_source.py
