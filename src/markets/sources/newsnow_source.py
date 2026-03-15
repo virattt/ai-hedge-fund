@@ -1,6 +1,7 @@
 """NewsNow data source for free news aggregation."""
 import logging
 import time
+import requests
 from typing import Dict, List, Optional
 from datetime import datetime
 
@@ -60,6 +61,135 @@ class NewsNowSource(DataSource):
         """
         Get company news from NewsNow.
 
-        This is a placeholder that will be implemented in next task.
+        Args:
+            ticker: Stock ticker
+            end_date: End date (YYYY-MM-DD)
+            start_date: Start date (optional, not used by NewsNow)
+            limit: Maximum number of news items
+
+        Returns:
+            List of news dictionaries
         """
-        return []
+        # Check cache
+        cache_key = f"{ticker}_{end_date}"
+        if self._is_cache_valid(cache_key):
+            self.logger.info(f"⚡ Using cached news for {ticker}")
+            return self._cache[cache_key]
+
+        # Fetch from all sources
+        all_news = []
+        for source_id in ["cls", "wallstreetcn", "xueqiu"]:
+            try:
+                news = self._fetch_from_source(source_id, limit=50)
+                all_news.extend(news)
+                time.sleep(0.2)  # Avoid request bursts
+            except Exception as e:
+                self.logger.warning(f"Failed to fetch from {source_id}: {e}")
+                continue
+
+        # Filter by ticker
+        filtered = self._filter_by_ticker(all_news, ticker)
+
+        # Convert to standard format
+        result = self._convert_to_company_news(filtered, ticker)[:limit]
+
+        # Cache results
+        self._cache[cache_key] = result
+        self._cache_time[cache_key] = time.time()
+
+        self.logger.info(f"✓ Retrieved {len(result)} news for {ticker}")
+        return result
+
+    def _is_cache_valid(self, cache_key: str) -> bool:
+        """Check if cache entry is still valid."""
+        if cache_key not in self._cache:
+            return False
+
+        age = time.time() - self._cache_time.get(cache_key, 0)
+        return age < self._cache_ttl
+
+    def _fetch_from_source(self, source_id: str, limit: int = 50) -> List[Dict]:
+        """
+        Fetch news from a specific NewsNow source.
+
+        Args:
+            source_id: Source identifier (cls, wallstreetcn, xueqiu)
+            limit: Maximum items to fetch
+
+        Returns:
+            List of raw news items
+        """
+        url = f"{self.BASE_URL}?id={source_id}"
+
+        try:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+
+            data = response.json()
+            items = data.get("items", [])[:limit]
+
+            self.logger.debug(f"Fetched {len(items)} items from {source_id}")
+            return items
+
+        except Exception as e:
+            self.logger.error(f"Error fetching from {source_id}: {e}")
+            return []
+
+    def _filter_by_ticker(self, news_list: List[Dict], ticker: str) -> List[Dict]:
+        """
+        Filter news by ticker keyword.
+
+        Args:
+            news_list: List of news items
+            ticker: Stock ticker to filter by
+
+        Returns:
+            Filtered news list
+        """
+        keywords = [ticker.upper()]
+
+        # Phase 1: Basic ticker matching
+        # Phase 4 TODO: Add company name mapping for better recall
+
+        filtered = []
+        for news in news_list:
+            title = news.get("title", "").upper()
+            if any(kw in title for kw in keywords):
+                filtered.append(news)
+
+        return filtered
+
+    def _convert_to_company_news(self, news_list: List[Dict], ticker: str) -> List[Dict]:
+        """
+        Convert NewsNow format to standard CompanyNews format.
+
+        Args:
+            news_list: List of NewsNow news items
+            ticker: Stock ticker
+
+        Returns:
+            List of standardized news dictionaries
+        """
+        result = []
+
+        for news in news_list:
+            try:
+                # Parse date
+                date_str = news.get("publish_time", datetime.now().isoformat())
+                if not date_str:
+                    date_str = datetime.now().isoformat()
+
+                result.append({
+                    "ticker": ticker,
+                    "title": news.get("title", ""),
+                    "author": "",  # NewsNow doesn't provide author
+                    "source": "NewsNow",
+                    "date": date_str,
+                    "url": news.get("url", ""),
+                    "sentiment": None,  # No sentiment analysis
+                })
+            except Exception as e:
+                self.logger.warning(f"Failed to convert news item: {e}")
+                continue
+
+        return result
