@@ -1,6 +1,18 @@
+import logging
+import os
 import sys
 
+# Load .env FIRST — before any src.* imports so module-level os.environ reads
+# (e.g. USE_FINANCE_DATA in src/tools/api.py) see the correct values.
 from dotenv import load_dotenv
+load_dotenv()
+
+# Configure logging — set LOG_LEVEL=DEBUG or LOG_LEVEL=INFO env var to see provider diagnostics
+logging.basicConfig(
+    level=getattr(logging, os.environ.get("LOG_LEVEL", "WARNING").upper(), logging.WARNING),
+    format="%(levelname)s %(name)s: %(message)s",
+)
+
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
 from colorama import Fore, Style, init
@@ -20,9 +32,6 @@ import argparse
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import json
-
-# Load environment variables from .env file
-load_dotenv()
 
 init(autoreset=True)
 

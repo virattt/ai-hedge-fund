@@ -6,8 +6,9 @@ import questionary
 from colorama import Fore, Style
 
 from src.utils.analysts import ANALYST_ORDER
-from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider, find_model_by_name
+from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, MLX_LLM_ORDER, get_model_info, ModelProvider, find_model_by_name
 from src.utils.ollama import ensure_ollama_and_model
+from src.utils.mlx_lm import ensure_mlx_and_model
 
 from dataclasses import dataclass
 from typing import Optional
@@ -19,6 +20,7 @@ def add_common_args(
     require_tickers: bool = False,
     include_analyst_flags: bool = True,
     include_ollama: bool = True,
+    include_mlx: bool = True,
 ) -> argparse.ArgumentParser:
     parser.add_argument(
         "--tickers",
@@ -40,6 +42,8 @@ def add_common_args(
         )
     if include_ollama:
         parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
+    if include_mlx:
+        parser.add_argument("--mlx", action="store_true", help="Use MLX LM server for local inference on Apple Silicon (or remote via MLX_BASE_URL)")
     parser.add_argument("--model", type=str, required=False, help="Model name to use (e.g., gpt-4o)")
     return parser
 
@@ -102,7 +106,7 @@ def select_analysts(flags: dict | None = None) -> list[str]:
     return choices
 
 
-def select_model(use_ollama: bool, model_flag: str | None = None) -> tuple[str, str]:
+def select_model(use_ollama: bool, model_flag: str | None = None, use_mlx: bool = False) -> tuple[str, str]:
     model_name: str = ""
     model_provider: str | None = None
 
@@ -116,7 +120,40 @@ def select_model(use_ollama: bool, model_flag: str | None = None) -> tuple[str, 
         else:
             print(f"{Fore.RED}Model '{model_flag}' not found. Please select a model.{Style.RESET_ALL}")
 
-    if use_ollama:
+    if use_mlx:
+        print(f"{Fore.CYAN}Using MLX LM server for local inference.{Style.RESET_ALL}")
+        model_name = questionary.select(
+            "Select your MLX model:",
+            choices=[questionary.Choice(display, value=value) for display, value, _ in MLX_LLM_ORDER],
+            style=questionary.Style(
+                [
+                    ("selected", "fg:green bold"),
+                    ("pointer", "fg:green bold"),
+                    ("highlighted", "fg:green"),
+                    ("answer", "fg:green bold"),
+                ]
+            ),
+        ).ask()
+
+        if not model_name:
+            print("\n\nInterrupt received. Exiting...")
+            sys.exit(0)
+
+        if model_name == "-":
+            model_name = questionary.text("Enter the HuggingFace model ID (e.g. mlx-community/Llama-3.1-8B-Instruct-4bit):").ask()
+            if not model_name:
+                print("\n\nInterrupt received. Exiting...")
+                sys.exit(0)
+
+        if not ensure_mlx_and_model(model_name):
+            print(f"{Fore.RED}Cannot proceed without a running MLX server.{Style.RESET_ALL}")
+            sys.exit(1)
+
+        model_provider = ModelProvider.MLX.value
+        print(
+            f"\nSelected {Fore.CYAN}MLX{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n"
+        )
+    elif use_ollama:
         print(f"{Fore.CYAN}Using Ollama for local LLM inference.{Style.RESET_ALL}")
         model_name = questionary.select(
             "Select your Ollama model:",
@@ -268,7 +305,7 @@ def parse_cli_inputs(
         "analysts_all": getattr(args, "analysts_all", False),
         "analysts": getattr(args, "analysts", None),
     })
-    model_name, model_provider = select_model(getattr(args, "ollama", False), getattr(args, "model", None))
+    model_name, model_provider = select_model(getattr(args, "ollama", False), getattr(args, "model", None), use_mlx=getattr(args, "mlx", False))
     start_date, end_date = resolve_dates(getattr(args, "start_date", None), getattr(args, "end_date", None), default_months_back=default_months_back)
 
     return CLIInputs(
