@@ -35,6 +35,13 @@ def risk_management_agent(state: AgentState, agent_id: str = "risk_management_ag
         )
 
         if not prices:
+            # Fallback: try a short recent window to at least get the current price
+            # (handles recent IPOs where full history predates listing)
+            from datetime import date as _date, timedelta as _td
+            _recent_start = (_date.fromisoformat(data["end_date"]) - _td(days=14)).isoformat()
+            prices = get_prices(ticker=ticker, start_date=_recent_start, end_date=data["end_date"], api_key=api_key)
+
+        if not prices:
             progress.update_status(agent_id, ticker, "Warning: No price data found")
             volatility_data[ticker] = {
                 "daily_volatility": 0.05,  # Default fallback volatility (5% daily)
@@ -45,8 +52,8 @@ def risk_management_agent(state: AgentState, agent_id: str = "risk_management_ag
             continue
 
         prices_df = prices_to_df(prices)
-        
-        if not prices_df.empty and len(prices_df) > 1:
+
+        if not prices_df.empty and len(prices_df) >= 1:
             current_price = prices_df["close"].iloc[-1]
             current_prices[ticker] = current_price
             

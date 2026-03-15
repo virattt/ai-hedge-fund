@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing_extensions import Literal
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 from src.graph.state import AgentState, show_agent_reasoning
 from langchain_core.prompts import ChatPromptTemplate
@@ -11,6 +14,7 @@ from langchain_core.messages import HumanMessage
 from src.tools.api import (
     get_financial_metrics,
     get_market_cap,
+    get_prices,
     search_line_items,
 )
 from src.utils.api_key import get_api_key_from_state
@@ -58,13 +62,44 @@ def aswath_damodaran_agent(state: AgentState, agent_id: str = "aswath_damodaran_
                 "outstanding_shares",
                 "net_income",
                 "total_debt",
+                "total_shareholder_equity",
+                "revenue",
             ],
             end_date,
             api_key=api_key,
         )
 
+        logger.info("[Damodaran/%s] metrics=%d line_items=%d", ticker, len(metrics), len(line_items))
+        if line_items:
+            li0 = line_items[0]
+            logger.info(
+                "[Damodaran/%s] li[0]: period=%s fcf=%s net_income=%s revenue=%s shares=%s",
+                ticker,
+                getattr(li0, "report_period", None),
+                getattr(li0, "free_cash_flow", None),
+                getattr(li0, "net_income", None),
+                getattr(li0, "revenue", None),
+                getattr(li0, "outstanding_shares", None),
+            )
+
         progress.update_status(agent_id, ticker, "Getting market cap")
         market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+        logger.info("[Damodaran/%s] market_cap from API: %s", ticker, market_cap)
+
+        # Fallback: price × shares_outstanding (works when OVERVIEW discovery fails)
+        if not market_cap and line_items:
+            shares = getattr(line_items[0], "outstanding_shares", None)
+            if shares:
+                from datetime import date as _date, timedelta as _td
+                _start = (_date.fromisoformat(end_date) - _td(days=7)).isoformat()
+                recent_prices = get_prices(ticker, _start, end_date, api_key=api_key)
+                if recent_prices:
+                    market_cap = recent_prices[-1].close * shares
+                    logger.info("[Damodaran/%s] market_cap from price×shares: %s × %s = %s", ticker, recent_prices[-1].close, shares, market_cap)
+                else:
+                    logger.warning("[Damodaran/%s] price fallback returned no prices for %s to %s", ticker, _start, end_date)
+            else:
+                logger.warning("[Damodaran/%s] outstanding_shares is None, cannot compute market_cap fallback", ticker)
 
         # ─── Analyses ───────────────────────────────────────────────────────────
         progress.update_status(agent_id, ticker, "Analyzing growth and reinvestment")
@@ -100,6 +135,16 @@ def aswath_damodaran_agent(state: AgentState, agent_id: str = "aswath_damodaran_
         else:
             signal = "neutral"
 
+        logger.info(
+            "[Damodaran/%s] intrinsic_value=%s market_cap=%s MoS=%s → signal=%s",
+            ticker,
+            intrinsic_value,
+            market_cap,
+            f"{margin_of_safety:.1%}" if margin_of_safety is not None else "None",
+            signal,
+        )
+        logger.info("[Damodaran/%s] DCF details: %s", ticker, intrinsic_val_analysis.get("details"))
+
         analysis_data[ticker] = {
             "signal": signal,
             "score": total_score,
@@ -119,9 +164,14 @@ def aswath_damodaran_agent(state: AgentState, agent_id: str = "aswath_damodaran_
             analysis_data=analysis_data,
             state=state,
             agent_id=agent_id,
+            signal=signal,
         )
 
-        damodaran_signals[ticker] = damodaran_output.model_dump()
+        # Override the LLM signal with the pre-computed quantitative signal so
+        # the narrative prose cannot contradict the DCF/MoS calculation.
+        final = damodaran_output.model_dump()
+        final["signal"] = signal
+        damodaran_signals[ticker] = final
 
         progress.update_status(agent_id, ticker, "Done", analysis=damodaran_output.reasoning)
 
@@ -143,21 +193,25 @@ def aswath_damodaran_agent(state: AgentState, agent_id: str = "aswath_damodaran_
 def analyze_growth_and_reinvestment(metrics: list, line_items: list) -> dict[str, any]:
     """
     Growth score (0-4):
-      +2  5-yr CAGR of revenue > 8 %
-      +1  5-yr CAGR of revenue > 3 %
-      +1  Positive FCFF growth over 5 yr
+      +2  Revenue CAGR > 8 %
+      +1  Revenue CAGR > 3 %
+      +1  Positive FCFF growth over available history
     Reinvestment efficiency (ROIC > WACC) adds +1
+
+    Revenue and FCF trends are sourced from line_items (historical annual data);
+    metrics[0] provides current-period ratios.
     """
     max_score = 4
-    if len(metrics) < 2:
+    if not metrics and not line_items:
         return {"score": 0, "max_score": max_score, "details": "Insufficient history"}
 
-    # Revenue CAGR (oldest to latest)
-    revs = [m.revenue for m in reversed(metrics) if hasattr(m, "revenue") and m.revenue]
+    # Revenue CAGR — use line_items (oldest to latest order, already sorted desc so reverse)
+    revs = [li.revenue for li in reversed(line_items) if getattr(li, "revenue", None)]
     if len(revs) >= 2 and revs[0] > 0:
         cagr = (revs[-1] / revs[0]) ** (1 / (len(revs) - 1)) - 1
     else:
-        cagr = None
+        # Fallback to FinancialMetrics revenue_growth if available
+        cagr = metrics[0].revenue_growth if metrics and metrics[0].revenue_growth else None
 
     score, details = 0, []
 
@@ -173,21 +227,25 @@ def analyze_growth_and_reinvestment(metrics: list, line_items: list) -> dict[str
     else:
         details.append("Revenue data incomplete")
 
-    # FCFF growth (proxy: free_cash_flow trend)
-    fcfs = [li.free_cash_flow for li in reversed(line_items) if li.free_cash_flow]
+    # FCFF growth (proxy: free_cash_flow trend from line_items)
+    fcfs = [li.free_cash_flow for li in reversed(line_items) if getattr(li, "free_cash_flow", None)]
     if len(fcfs) >= 2 and fcfs[-1] > fcfs[0]:
         score += 1
         details.append("Positive FCFF growth")
     else:
         details.append("Flat or declining FCFF")
 
-    # Reinvestment efficiency (ROIC vs. 10 % hurdle)
-    latest = metrics[0]
-    if latest.return_on_invested_capital and latest.return_on_invested_capital > 0.10:
-        score += 1
-        details.append(f"ROIC {latest.return_on_invested_capital:.1%} (> 10 %)")
+    # Reinvestment efficiency (ROIC vs. 10 % hurdle) — from metrics snapshot
+    if metrics:
+        latest = metrics[0]
+        if latest.return_on_invested_capital and latest.return_on_invested_capital > 0.10:
+            score += 1
+            details.append(f"ROIC {latest.return_on_invested_capital:.1%} (> 10 %)")
+        metrics_dump = latest.model_dump()
+    else:
+        metrics_dump = {}
 
-    return {"score": score, "max_score": max_score, "details": "; ".join(details), "metrics": latest.model_dump()}
+    return {"score": score, "max_score": max_score, "details": "; ".join(details), "metrics": metrics_dump}
 
 
 def analyze_risk_profile(metrics: list, line_items: list) -> dict[str, any]:
@@ -196,16 +254,18 @@ def analyze_risk_profile(metrics: list, line_items: list) -> dict[str, any]:
       +1  Beta < 1.3
       +1  Debt/Equity < 1
       +1  Interest Coverage > 3×
+
+    Beta and D/E are sourced from metrics[0] when available; D/E and interest
+    coverage fall back to line_items[0] when not present in metrics.
     """
     max_score = 3
-    if not metrics:
-        return {"score": 0, "max_score": max_score, "details": "No metrics"}
-
-    latest = metrics[0]
     score, details = 0, []
 
-    # Beta
-    beta = getattr(latest, "beta", None)
+    latest = metrics[0] if metrics else None
+    latest_li = line_items[0] if line_items else None
+
+    # Beta (metrics only — not in line items)
+    beta = getattr(latest, "beta", None) if latest else None
     if beta is not None:
         if beta < 1.3:
             score += 1
@@ -215,20 +275,25 @@ def analyze_risk_profile(metrics: list, line_items: list) -> dict[str, any]:
     else:
         details.append("Beta NA")
 
-    # Debt / Equity
-    dte = getattr(latest, "debt_to_equity", None)
+    # Debt / Equity — metrics first, then compute from line_items
+    dte = getattr(latest, "debt_to_equity", None) if latest else None
+    if dte is None and latest_li:
+        total_debt = getattr(latest_li, "total_debt", None)
+        total_equity = getattr(latest_li, "total_shareholder_equity", None) or getattr(latest_li, "total_equity", None)
+        if total_debt is not None and total_equity and total_equity != 0:
+            dte = total_debt / abs(total_equity)
     if dte is not None:
         if dte < 1:
             score += 1
-            details.append(f"D/E {dte:.1f}")
+            details.append(f"D/E {dte:.2f}")
         else:
-            details.append(f"High D/E {dte:.1f}")
+            details.append(f"High D/E {dte:.2f}")
     else:
         details.append("D/E NA")
 
-    # Interest coverage
-    ebit = getattr(latest, "ebit", None)
-    interest = getattr(latest, "interest_expense", None)
+    # Interest coverage — line_items carry ebit and interest_expense
+    ebit = getattr(latest_li, "ebit", None) if latest_li else None
+    interest = getattr(latest_li, "interest_expense", None) if latest_li else None
     if ebit and interest and interest != 0:
         coverage = ebit / abs(interest)
         if coverage > 3:
@@ -285,24 +350,33 @@ def analyze_relative_valuation(metrics: list) -> dict[str, any]:
 def calculate_intrinsic_value_dcf(metrics: list, line_items: list, risk_analysis: dict) -> dict[str, any]:
     """
     FCFF DCF with:
-      • Base FCFF = latest free cash flow
-      • Growth = 5-yr revenue CAGR (capped 12 %)
+      • Base FCFF = latest free cash flow (from line_items)
+      • Growth = revenue CAGR from line_items history (capped 12 %)
       • Fade linearly to terminal growth 2.5 % by year 10
       • Discount @ cost of equity (no debt split given data limitations)
     """
-    if not metrics or len(metrics) < 2 or not line_items:
+    if not line_items:
         return {"intrinsic_value": None, "details": ["Insufficient data"]}
 
-    latest_m = metrics[0]
-    fcff0 = getattr(latest_m, "free_cash_flow", None)
+    # Base FCFF from latest line item; shares from same period (optional — only needed for per-share display)
+    fcff0 = getattr(line_items[0], "free_cash_flow", None)
     shares = getattr(line_items[0], "outstanding_shares", None)
-    if not fcff0 or not shares:
-        return {"intrinsic_value": None, "details": ["Missing FCFF or share count"]}
+    fcff_source = "free_cash_flow"
 
-    # Growth assumptions
-    revs = [m.revenue for m in reversed(metrics) if m.revenue]
+    # Fallback: use net_income as a FCFF proxy (reasonable for asset-light / fintech companies)
+    if not fcff0:
+        fcff0 = getattr(line_items[0], "net_income", None)
+        fcff_source = "net_income (proxy)"
+
+    if not fcff0:
+        return {"intrinsic_value": None, "details": [f"Missing FCFF (fcff={fcff0})"]}
+
+    # Growth assumptions — use revenue trend from line_items
+    revs = [li.revenue for li in reversed(line_items) if getattr(li, "revenue", None)]
     if len(revs) >= 2 and revs[0] > 0:
         base_growth = min((revs[-1] / revs[0]) ** (1 / (len(revs) - 1)) - 1, 0.12)
+    elif metrics and metrics[0].revenue_growth:
+        base_growth = min(metrics[0].revenue_growth, 0.12)
     else:
         base_growth = 0.04  # fallback
 
@@ -312,38 +386,41 @@ def calculate_intrinsic_value_dcf(metrics: list, line_items: list, risk_analysis
     # Discount rate
     discount = risk_analysis.get("cost_of_equity") or 0.09
 
-    # Project FCFF and discount
+    # Project FCFF and discount — compound each year from the prior year's FCF
     pv_sum = 0.0
+    fcff_t = fcff0
     g = base_growth
     g_step = (terminal_growth - base_growth) / (years - 1)
     for yr in range(1, years + 1):
-        fcff_t = fcff0 * (1 + g)
+        fcff_t = fcff_t * (1 + g)          # compound from prior year, not from base
         pv = fcff_t / (1 + discount) ** yr
         pv_sum += pv
-        g += g_step
+        if yr < years:
+            g += g_step
 
-    # Terminal value (perpetuity with terminal growth)
+    # Terminal value uses the FCF projected at end of Year 10 (not the base)
     tv = (
-        fcff0
+        fcff_t
         * (1 + terminal_growth)
         / (discount - terminal_growth)
         / (1 + discount) ** years
     )
 
     equity_value = pv_sum + tv
-    intrinsic_per_share = equity_value / shares
+    intrinsic_per_share = equity_value / shares if shares else None
 
     return {
         "intrinsic_value": equity_value,
         "intrinsic_per_share": intrinsic_per_share,
         "assumptions": {
             "base_fcff": fcff0,
+            "fcff_source": fcff_source,
             "base_growth": base_growth,
             "terminal_growth": terminal_growth,
             "discount_rate": discount,
             "projection_years": years,
         },
-        "details": ["FCFF DCF completed"],
+        "details": [f"FCFF DCF completed (source: {fcff_source})"],
     }
 
 
@@ -363,6 +440,7 @@ def generate_damodaran_output(
     analysis_data: dict[str, any],
     state: AgentState,
     agent_id: str,
+    signal: str = "neutral",
 ) -> AswathDamodaranSignal:
     """
     Ask the LLM to channel Prof. Damodaran's analytical style:
@@ -375,33 +453,36 @@ def generate_damodaran_output(
             (
                 "system",
                 """You are Aswath Damodaran, Professor of Finance at NYU Stern.
-                Use your valuation framework to issue trading signals on US equities.
+                A quantitative DCF model has already been run. Your sole task is to write the
+                narrative reasoning that explains the pre-computed results — do NOT re-evaluate
+                the signal or claim data is insufficient.
 
-                Speak with your usual clear, data-driven tone:
-                  ◦ Start with the company "story" (qualitatively)
-                  ◦ Connect that story to key numerical drivers: revenue growth, margins, reinvestment, risk
-                  ◦ Conclude with value: your FCFF DCF estimate, margin of safety, and relative valuation sanity checks
-                  ◦ Highlight major uncertainties and how they affect value
+                Write in Damodaran's voice: story → numerical drivers → value conclusion.
+                Reference the specific numbers provided (revenue CAGR, FCFF, margin of safety,
+                intrinsic value). If a metric is missing, note it in one phrase and move on.
                 Return ONLY the JSON specified below.""",
             ),
             (
                 "human",
                 """Ticker: {ticker}
 
-                Analysis data:
+                Pre-computed quantitative analysis:
                 {analysis_data}
+
+                The trading signal has already been determined from the DCF margin of safety.
+                Your job is only to explain WHY in Damodaran's analytical voice.
 
                 Respond EXACTLY in this JSON schema:
                 {{
-                  "signal": "bullish" | "bearish" | "neutral",
-                  "confidence": float (0-100),
-                  "reasoning": "string"
+                  "signal": "{signal}",
+                  "confidence": <float 0-100 reflecting your conviction in the narrative>,
+                  "reasoning": "<3-5 sentence Damodaran-style explanation citing the numbers above>"
                 }}""",
             ),
         ]
     )
 
-    prompt = template.invoke({"analysis_data": json.dumps(analysis_data, indent=2), "ticker": ticker})
+    prompt = template.invoke({"analysis_data": json.dumps(analysis_data, indent=2), "ticker": ticker, "signal": signal})
 
     def default_signal():
         return AswathDamodaranSignal(
