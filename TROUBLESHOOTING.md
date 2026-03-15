@@ -1,5 +1,74 @@
 # 故障排查指南
 
+## 📊 Data Source Architecture
+
+### Architecture Layers
+
+```
+┌─────────────────────────────────────────┐
+│         MarketRouter (路由层)            │
+│   自动识别ticker并路由到对应适配器        │
+└─────────────────────────────────────────┘
+                    │
+        ┌───────────┼───────────┬──────────┐
+        │           │           │          │
+   ┌────▼────┐ ┌───▼────┐ ┌───▼────┐ ┌───▼────┐
+   │ CN Stock│ │HK Stock│ │US Stock│ │Commodity│
+   │ Adapter │ │Adapter │ │Adapter │ │ Adapter│
+   └────┬────┘ └───┬────┘ └───┬────┘ └───┬────┘
+        │          │          │          │
+   ┌────▼────┐ ┌──▼──┐  ┌───▼────┐     │
+   │ AKShare │ │AKShare│ │Financial│    (无)
+   │         │ │       │ │Datasets│
+   └─────────┘ │YFinance│ │  API  │
+               └───────┘ └────────┘
+```
+
+### Data Sources Status
+
+| Data Source | Supported Markets | Status | Rate Limit | Recommended Use |
+|-------------|------------------|--------|------------|-----------------|
+| **Financial Datasets API** | US | ✅ Normal | API Key Limit | 🏆 US Stock Production |
+| **AKShare** | CN, HK | ⚠️ Easy Rate Limited | Anti-crawler | Test Environment |
+| **YFinance** | Global | ⚠️ Easy Rate Limited | 429 Rate Limiting | Backup Data Source |
+| **Tushare Pro** | CN | 📝 Pending Integration | Token Auth | 🏆 A-Stock Production |
+
+---
+
+## 🎫 Ticker Format Reference
+
+### US Stocks
+```
+AAPL        ✅ Apple
+MSFT        ✅ Microsoft
+GOOGL       ✅ Google
+NVDA        ✅ NVIDIA
+TSLA        ✅ Tesla
+```
+
+### A-Stocks (Chinese)
+```
+000001      ✅ Ping An Bank (Shenzhen)
+000001.SZ   ✅ Ping An Bank (Full Format)
+600000      ✅ SPD Bank (Shanghai)
+600000.SH   ✅ SPD Bank (Full Format)
+```
+
+### H-Stocks (Hong Kong)
+```
+0700.HK     ✅ Tencent Holdings
+00700       ✅ Tencent Holdings (Short)
+9988.HK     ✅ Alibaba
+```
+
+### Commodity Futures
+```
+GC=F        ✅ Gold Futures
+CL=F        ✅ Oil Futures
+```
+
+---
+
 ## ❌ 问题: 获取不到 A股/港股 数据
 
 ### 症状
