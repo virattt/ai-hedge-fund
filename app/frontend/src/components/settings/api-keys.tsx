@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { apiKeysService } from '@/services/api-keys-api';
-import { Eye, EyeOff, Key, Trash2 } from 'lucide-react';
+import { Database, Eye, EyeOff, Key, Trash2, Cpu } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 interface ApiKey {
@@ -11,6 +11,7 @@ interface ApiKey {
   description: string;
   url: string;
   placeholder: string;
+  type?: 'password' | 'text';
 }
 
 const FINANCIAL_API_KEYS: ApiKey[] = [
@@ -75,13 +76,36 @@ const LLM_API_KEYS: ApiKey[] = [
   }
 ];
 
+const MLX_SETTINGS: ApiKey[] = [
+  {
+    key: 'MLX_BASE_URL',
+    label: 'MLX Server URL',
+    description: 'Base URL of your MLX LM server (default: http://localhost:8080)',
+    url: 'https://github.com/ml-explore/mlx-examples/tree/main/llms',
+    placeholder: 'http://localhost:8080',
+    type: 'text'
+  },
+  {
+    key: 'MLX_API_KEY',
+    label: 'MLX API Key',
+    description: 'Optional API key for your MLX LM server (leave blank if not required)',
+    url: 'https://github.com/ml-explore/mlx-examples/tree/main/llms',
+    placeholder: 'mlx (optional)'
+  }
+];
+
+const DATA_PROVIDERS = [
+  { value: 'Financial', label: 'Financial Datasets (financialdatasets.ai)' },
+  { value: 'Yahoo', label: 'Yahoo Finance (free, no key required)' },
+  { value: 'Qveris', label: 'Qveris (qveris.ai)' },
+];
+
 export function ApiKeysSettings() {
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load API keys from backend on component mount
   useEffect(() => {
     loadApiKeys();
   }, []);
@@ -91,8 +115,7 @@ export function ApiKeysSettings() {
       setLoading(true);
       setError(null);
       const apiKeysSummary = await apiKeysService.getAllApiKeys();
-      
-      // Load actual key values for existing keys
+
       const keysData: Record<string, string> = {};
       for (const summary of apiKeysSummary) {
         try {
@@ -102,7 +125,7 @@ export function ApiKeysSettings() {
           console.warn(`Failed to load key for ${summary.provider}:`, err);
         }
       }
-      
+
       setApiKeys(keysData);
     } catch (err) {
       console.error('Failed to load API keys:', err);
@@ -113,13 +136,8 @@ export function ApiKeysSettings() {
   };
 
   const handleKeyChange = async (key: string, value: string) => {
-    // Update local state immediately for responsive UI
-    setApiKeys(prev => ({
-      ...prev,
-      [key]: value
-    }));
+    setApiKeys(prev => ({ ...prev, [key]: value }));
 
-    // Auto-save with debouncing
     try {
       if (value.trim()) {
         await apiKeysService.createOrUpdateApiKey({
@@ -128,11 +146,9 @@ export function ApiKeysSettings() {
           is_active: true
         });
       } else {
-        // If value is empty, delete the key
         try {
           await apiKeysService.deleteApiKey(key);
         } catch (err) {
-          // Key might not exist, which is fine
           console.log(`Key ${key} not found for deletion, which is expected`);
         }
       }
@@ -143,10 +159,7 @@ export function ApiKeysSettings() {
   };
 
   const toggleKeyVisibility = (key: string) => {
-    setVisibleKeys(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
+    setVisibleKeys(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   const clearKey = async (key: string) => {
@@ -175,19 +188,20 @@ export function ApiKeysSettings() {
       <CardContent className="space-y-4">
         {keys.map((apiKey) => (
           <div key={apiKey.key} className="space-y-2">
-                         <button
-               className="text-sm font-medium text-primary hover:text-blue-500 cursor-pointer transition-colors text-left"
-               onClick={() => window.open(apiKey.url, '_blank')}
-             >
-               {apiKey.label}
-             </button>
+            <button
+              className="text-sm font-medium text-primary hover:text-blue-500 cursor-pointer transition-colors text-left"
+              onClick={() => window.open(apiKey.url, '_blank')}
+            >
+              {apiKey.label}
+            </button>
+            <p className="text-xs text-muted-foreground">{apiKey.description}</p>
             <div className="relative">
               <Input
-                type={visibleKeys[apiKey.key] ? 'text' : 'password'}
+                type={apiKey.type === 'text' ? 'text' : (visibleKeys[apiKey.key] ? 'text' : 'password')}
                 placeholder={apiKey.placeholder}
                 value={apiKeys[apiKey.key] || ''}
                 onChange={(e) => handleKeyChange(apiKey.key, e.target.value)}
-                className="pr-20"
+                className={apiKey.type === 'text' ? 'pr-10' : 'pr-20'}
               />
               <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1">
                 {apiKeys[apiKey.key] && (
@@ -200,18 +214,20 @@ export function ApiKeysSettings() {
                     <Trash2 className="h-3 w-3" />
                   </Button>
                 )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => toggleKeyVisibility(apiKey.key)}
-                >
-                  {visibleKeys[apiKey.key] ? (
-                    <EyeOff className="h-3 w-3" />
-                  ) : (
-                    <Eye className="h-3 w-3" />
-                  )}
-                </Button>
+                {apiKey.type !== 'text' && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => toggleKeyVisibility(apiKey.key)}
+                  >
+                    {visibleKeys[apiKey.key] ? (
+                      <EyeOff className="h-3 w-3" />
+                    ) : (
+                      <Eye className="h-3 w-3" />
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -225,15 +241,11 @@ export function ApiKeysSettings() {
       <div className="space-y-6">
         <div>
           <h2 className="text-xl font-semibold text-primary mb-2">API Keys</h2>
-          <p className="text-sm text-muted-foreground">
-            Loading API keys...
-          </p>
+          <p className="text-sm text-muted-foreground">Loading API keys...</p>
         </div>
         <Card className="bg-panel border-gray-700 dark:border-gray-700">
           <CardContent className="p-6">
-            <div className="text-sm text-muted-foreground">
-              Please wait while we load your API keys...
-            </div>
+            <div className="text-sm text-muted-foreground">Please wait while we load your API keys...</div>
           </CardContent>
         </Card>
       </div>
@@ -250,7 +262,6 @@ export function ApiKeysSettings() {
         </p>
       </div>
 
-      {/* Error Message */}
       {error && (
         <Card className="bg-red-500/5 border-red-500/20">
           <CardContent className="p-4">
@@ -262,10 +273,7 @@ export function ApiKeysSettings() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => {
-                    setError(null);
-                    loadApiKeys();
-                  }}
+                  onClick={() => { setError(null); loadApiKeys(); }}
                   className="text-xs mt-2 p-0 h-auto text-red-500 hover:text-red-400"
                 >
                   Try again
@@ -276,13 +284,76 @@ export function ApiKeysSettings() {
         </Card>
       )}
 
-      {/* Financial Data API Keys */}
-      {renderApiKeySection(
-        'Financial Data',
-        'API keys for accessing financial market data and datasets.',
-        FINANCIAL_API_KEYS,
-        <Key className="h-4 w-4" />
-      )}
+      {/* Financial Data */}
+      <Card className="bg-panel border-gray-700 dark:border-gray-700">
+        <CardHeader>
+          <CardTitle className="text-lg font-medium text-primary flex items-center gap-2">
+            <Database className="h-4 w-4" />
+            Financial Data
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">Data provider and API keys for financial market data.</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Data Provider selector */}
+          <div className="space-y-2">
+            <div className="text-sm font-medium text-primary">Data Provider</div>
+            <p className="text-xs text-muted-foreground">
+              Select which data source to use for prices, financials, and news.
+              This is the default; per-run overrides are available in the Portfolio node.
+            </p>
+            <select
+              className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring text-primary"
+              value={apiKeys['USE_FINANCE_DATA'] || 'Financial'}
+              onChange={(e) => handleKeyChange('USE_FINANCE_DATA', e.target.value)}
+            >
+              {DATA_PROVIDERS.map(p => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Financial Datasets API key */}
+          {FINANCIAL_API_KEYS.map((apiKey) => (
+            <div key={apiKey.key} className="space-y-2">
+              <button
+                className="text-sm font-medium text-primary hover:text-blue-500 cursor-pointer transition-colors text-left"
+                onClick={() => window.open(apiKey.url, '_blank')}
+              >
+                {apiKey.label}
+              </button>
+              <div className="relative">
+                <Input
+                  type={visibleKeys[apiKey.key] ? 'text' : 'password'}
+                  placeholder={apiKey.placeholder}
+                  value={apiKeys[apiKey.key] || ''}
+                  onChange={(e) => handleKeyChange(apiKey.key, e.target.value)}
+                  className="pr-20"
+                />
+                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                  {apiKeys[apiKey.key] && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 hover:bg-red-500/10 hover:text-red-500"
+                      onClick={() => clearKey(apiKey.key)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => toggleKeyVisibility(apiKey.key)}
+                  >
+                    {visibleKeys[apiKey.key] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
       {/* LLM API Keys */}
       {renderApiKeySection(
@@ -290,6 +361,14 @@ export function ApiKeysSettings() {
         'API keys for accessing various large language model providers.',
         LLM_API_KEYS,
         <Key className="h-4 w-4" />
+      )}
+
+      {/* MLX Local Models */}
+      {renderApiKeySection(
+        'MLX Local Models',
+        'Settings for Apple Silicon MLX LM server (local inference). See Models → MLX for available models.',
+        MLX_SETTINGS,
+        <Cpu className="h-4 w-4" />
       )}
 
       {/* Security Note */}
@@ -300,7 +379,7 @@ export function ApiKeysSettings() {
             <div className="space-y-1">
               <h4 className="text-sm font-medium text-amber-500">Security Note</h4>
               <p className="text-xs text-muted-foreground">
-                API keys are stored securely on your local system and changes are automatically saved. 
+                API keys are stored securely on your local system and changes are automatically saved.
                 Keep your API keys secure and don't share them with others.
               </p>
             </div>
@@ -309,4 +388,4 @@ export function ApiKeysSettings() {
       </Card>
     </div>
   );
-} 
+}

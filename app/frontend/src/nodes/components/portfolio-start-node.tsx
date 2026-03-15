@@ -1,6 +1,6 @@
 import { useReactFlow, type NodeProps } from '@xyflow/react';
 import { ChevronDown, PieChart, Play, Plus, Square, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { CardContent } from '@/components/ui/card';
@@ -12,6 +12,7 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { Input } from '@/components/ui/input';
+import { ModelSelector } from '@/components/ui/llm-selector';
 import {
   Popover,
   PopoverContent,
@@ -25,6 +26,7 @@ import { useFlowConnection } from '@/hooks/use-flow-connection';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useNodeState } from '@/hooks/use-node-state';
 import { cn, formatKeyboardShortcut } from '@/lib/utils';
+import { getDefaultModel, getModels, type LanguageModel } from '@/data/models';
 import { type PortfolioStartNode } from '../types';
 import { NodeShell } from './node-shell';
 
@@ -37,6 +39,12 @@ interface PortfolioPosition {
 const runModes = [
   { value: 'single', label: 'Single Run' },
   { value: 'backtest', label: 'Backtest' },
+];
+
+const dataProviders = [
+  { value: 'Financial', label: 'Financial Datasets' },
+  { value: 'Yahoo', label: 'Yahoo Finance' },
+  { value: 'Qveris', label: 'Qveris' },
 ];
 
 export function PortfolioStartNode({
@@ -58,7 +66,11 @@ export function PortfolioStartNode({
   const [runMode, setRunMode] = useNodeState(id, 'runMode', 'single');
   const [startDate, setStartDate] = useNodeState(id, 'startDate', threeMonthsAgo.toISOString().split('T')[0]);
   const [endDate, setEndDate] = useNodeState(id, 'endDate', today.toISOString().split('T')[0]);
+  const [dataProvider, setDataProvider] = useNodeState<string | null>(id, 'dataProvider', null);
+  const [selectedModel, setSelectedModel] = useNodeState<LanguageModel | null>(id, 'selectedModel', null);
+  const [availableModels, setAvailableModels] = useState<LanguageModel[]>([]);
   const [open, setOpen] = useState(false);
+  const [providerOpen, setProviderOpen] = useState(false);
   
   const { currentFlowId } = useFlowContext();
   const nodeContext = useNodeContext();
@@ -105,6 +117,46 @@ export function PortfolioStartNode({
       recoverFlowState();
     }
   }, [flowId, recoverFlowState]);
+
+
+  // Load available models and auto-select best default if none chosen.
+  // Also load the stored data provider from API keys settings.
+  useEffect(() => {
+    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    (async () => {
+      try {
+        const [models, defaultModel, apiKeys] = await Promise.all([
+          getModels(),
+          getDefaultModel(),
+          fetch(`${API_BASE_URL}/api-keys`).then(r => r.ok ? r.json() : []).catch(() => []),
+        ]);
+
+        setAvailableModels(models);
+
+        if (!selectedModel && defaultModel) {
+          setSelectedModel(defaultModel);
+        }
+
+        // Set data provider from stored setting if the user hasn't chosen one yet
+        if (!dataProvider) {
+          const stored = (apiKeys as Array<{ provider: string; has_key: boolean }>)
+            .find(k => k.provider === 'USE_FINANCE_DATA' && k.has_key);
+          if (stored) {
+            // Fetch the actual value
+            const detail = await fetch(`${API_BASE_URL}/api-keys/USE_FINANCE_DATA`)
+              .then(r => r.ok ? r.json() : null).catch(() => null);
+            const value = detail?.key_value;
+            const valid = ['Financial', 'Yahoo', 'Qveris'];
+            setDataProvider(valid.includes(value) ? value : 'Financial');
+          } else {
+            setDataProvider('Financial');
+          }
+        }
+      } catch {
+        if (!dataProvider) setDataProvider('Financial');
+      }
+    })();
+  }, []);
   
   const handlePositionChange = (index: number, field: keyof PortfolioPosition, value: string) => {
     const newPositions = [...positions];
@@ -224,11 +276,12 @@ export function PortfolioStartNode({
         start_date: startDate,
         end_date: endDate,
         initial_capital: parseFloat(initialCash) || 100000,
-        margin_requirement: 0.0, // Default margin requirement
-        model_name: undefined,
-        model_provider: undefined,
+        margin_requirement: 0.0,
+        model_name: selectedModel?.model_name || undefined,
+        model_provider: selectedModel?.provider as any || undefined,
         // Pass portfolio positions to backend
         portfolio_positions: portfolioPositions,
+        data_provider: dataProvider || undefined,
       });
     } else {
       // Use the regular hedge fund API for single run
@@ -243,17 +296,35 @@ export function PortfolioStartNode({
         })),
         graph_edges: validEdges,
         agent_models: agentModels,
-        // No global model - each agent uses its own model or system default
-        model_name: undefined,
-        model_provider: undefined,
+        model_name: selectedModel?.model_name || undefined,
+        model_provider: selectedModel?.provider as any || undefined,
         start_date: threeMonthsAgo.toISOString().split('T')[0],
         end_date: today.toISOString().split('T')[0],
         initial_cash: parseFloat(initialCash) || 100000,
         // Pass portfolio positions to backend
         portfolio_positions: portfolioPositions,
+        data_provider: dataProvider || undefined,
       });
     }
   };
+
+  // Keep a ref to the latest handlePlay so the event listener always calls the current version
+  const handlePlayRef = useRef(handlePlay);
+  handlePlayRef.current = handlePlay;
+  const canRunRef = useRef(canRunPortfolioAnalyzer);
+  canRunRef.current = canRunPortfolioAnalyzer;
+
+  // Listen for external run trigger (from flow context menu)
+  useEffect(() => {
+    const handleRunTrigger = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { flowId: string };
+      if (detail?.flowId === flowId && canRunRef.current) {
+        handlePlayRef.current();
+      }
+    };
+    document.addEventListener('portfolio-run-trigger', handleRunTrigger);
+    return () => document.removeEventListener('portfolio-run-trigger', handleRunTrigger);
+  }, [flowId]);
 
   // Determine if we're processing (connecting, connected, or any agents running)
   const showAsProcessing = isConnecting || isConnected || isProcessing;
@@ -358,6 +429,56 @@ export function PortfolioStartNode({
                     Add Position
                   </Button>
                 </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <div className="text-subtitle text-primary flex items-center gap-1">
+                  Default Model
+                </div>
+                <ModelSelector
+                  models={availableModels}
+                  value={selectedModel?.model_name || ""}
+                  onChange={(model) => setSelectedModel(model)}
+                  placeholder="Select LLM Model"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <div className="text-subtitle text-primary flex items-center gap-1">
+                  Data Provider
+                </div>
+                <Popover open={providerOpen} onOpenChange={setProviderOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={providerOpen}
+                      className="w-full justify-between h-10 px-3 py-2 bg-node border border-border hover:bg-accent"
+                    >
+                      <span className="text-subtitle">
+                        {dataProviders.find((p) => p.value === dataProvider)?.label || 'Financial Datasets'}
+                      </span>
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 bg-node border border-border shadow-lg">
+                    <Command className="bg-node">
+                      <CommandList className="bg-node">
+                        <CommandEmpty>No provider found.</CommandEmpty>
+                        <CommandGroup>
+                          {dataProviders.map((p) => (
+                            <CommandItem
+                              key={p.value}
+                              value={p.value}
+                              className={cn("cursor-pointer bg-node hover:bg-accent", dataProvider === p.value)}
+                              onSelect={(val) => { setDataProvider(val); setProviderOpen(false); }}
+                            >
+                              {p.label}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="flex flex-col gap-2">
                 <div className="text-subtitle text-primary flex items-center gap-1">

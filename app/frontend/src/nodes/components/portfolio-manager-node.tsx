@@ -60,7 +60,7 @@ export function PortfolioManagerNode({
         ]);
         setAvailableModels(models);
         
-        // Set default model if no model is currently selected
+        // Auto-select best available model if none chosen yet
         if (!selectedModel && defaultModel) {
           setSelectedModel(defaultModel);
         }
@@ -141,7 +141,7 @@ export function PortfolioManagerNode({
                   models={availableModels}
                   value={selectedModel?.model_name || ''}
                   onChange={handleModelChange}
-                  placeholder="Auto"
+                  placeholder="Select LLM Model"
                 />
               </div>
             </div>

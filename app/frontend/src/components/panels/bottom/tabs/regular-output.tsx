@@ -49,6 +49,18 @@ function ProgressSection({ sortedAgents }: { sortedAgents: [string, any][] }) {
 function SummarySection({ outputData }: { outputData: any }) {
   if (!outputData) return null;
 
+  const getSignalCounts = (ticker: string) => {
+    let bullish = 0, bearish = 0, neutral = 0;
+    for (const [agent, signals] of Object.entries(outputData.analyst_signals || {})) {
+      if (agent.includes('risk_management')) continue;
+      const signal = (signals as any)[ticker]?.signal?.toLowerCase();
+      if (signal === 'bullish') bullish++;
+      else if (signal === 'bearish') bearish++;
+      else if (signal === 'neutral') neutral++;
+    }
+    return { bullish, bearish, neutral };
+  };
+
   return (
     <Card className="bg-transparent mb-4">
       <CardHeader>
@@ -59,24 +71,36 @@ function SummarySection({ outputData }: { outputData: any }) {
           <TableHeader>
             <TableRow>
               <TableHead>Ticker</TableHead>
+              <TableHead>Price</TableHead>
               <TableHead>Action</TableHead>
               <TableHead>Quantity</TableHead>
               <TableHead>Confidence</TableHead>
+              <TableHead className="text-green-500">Bullish</TableHead>
+              <TableHead className="text-red-500">Bearish</TableHead>
+              <TableHead className="text-yellow-500">Neutral</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {Object.entries(outputData.decisions).map(([ticker, decision]: [string, any]) => (
-              <TableRow key={ticker}>
-                <TableCell className="font-medium">{ticker}</TableCell>
-                <TableCell>
-                  <span className={cn("font-medium", getActionColor(decision.action || ''))}>
-                    {decision.action?.toUpperCase() || 'UNKNOWN'}
-                  </span>
-                </TableCell>
-                <TableCell>{decision.quantity || 0}</TableCell>
-                <TableCell>{decision.confidence?.toFixed(1) || 0}%</TableCell>
-              </TableRow>
-            ))}
+            {Object.entries(outputData.decisions).map(([ticker, decision]: [string, any]) => {
+              const { bullish, bearish, neutral } = getSignalCounts(ticker);
+              const price = outputData.current_prices?.[ticker];
+              return (
+                <TableRow key={ticker}>
+                  <TableCell className="font-medium">{ticker}</TableCell>
+                  <TableCell>{typeof price === 'number' ? `$${price.toFixed(2)}` : 'N/A'}</TableCell>
+                  <TableCell>
+                    <span className={cn("font-medium", getActionColor(decision.action || ''))}>
+                      {decision.action?.toUpperCase() || 'UNKNOWN'}
+                    </span>
+                  </TableCell>
+                  <TableCell>{decision.quantity || 0}</TableCell>
+                  <TableCell>{decision.confidence?.toFixed(1) || 0}%</TableCell>
+                  <TableCell className="text-green-500 font-medium">{bullish}</TableCell>
+                  <TableCell className="text-red-500 font-medium">{bearish}</TableCell>
+                  <TableCell className="text-yellow-500 font-medium">{neutral}</TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </CardContent>
