@@ -229,14 +229,52 @@ class AKShareSource(DataSource):
     def _get_hk_financial_metrics(self, ticker: str) -> Optional[Dict]:
         """Get HK stock financial metrics."""
         try:
-            # AKShare has limited HK financial data
-            # Return basic metrics if available
-            return {
+            # Log the API call
+            self.logger.info(f"[AKShare] 📡 Calling stock_hk_financial_indicator_em(symbol={ticker})")
+
+            # Use AKShare's HK stock financial indicator interface (Eastmoney)
+            df = self._akshare.stock_hk_financial_indicator_em(symbol=ticker)
+
+            if df is None or df.empty:
+                self.logger.warning(f"[AKShare] No HK financial data for {ticker}")
+                return None
+
+            # Get the most recent data (first row)
+            latest = df.iloc[0]
+
+            metrics = {
                 "ticker": ticker,
-                "report_period": "",
+                "report_period": "",  # Not provided by this API
                 "period": "ttm",
                 "currency": "HKD",
+                # Valuation metrics
+                "price_to_earnings_ratio": self._safe_float(latest.get("市盈率")),
+                "price_to_book_ratio": self._safe_float(latest.get("市净率")),
+                "dividend_yield": self._safe_float(latest.get("股息率TTM(%)")),
+                "market_cap": self._safe_float(latest.get("总市值(港元)")),
+                "hk_market_cap": self._safe_float(latest.get("港股市值(港元)")),
+                # Profitability metrics
+                "net_margin": self._safe_float(latest.get("销售净利率(%)")),
+                "return_on_equity": self._safe_float(latest.get("股东权益回报率(%)")),
+                "return_on_assets": self._safe_float(latest.get("总资产回报率(%)")),
+                # Per share metrics
+                "earnings_per_share": self._safe_float(latest.get("基本每股收益(元)")),
+                "book_value_per_share": self._safe_float(latest.get("每股净资产(元)")),
+                "operating_cash_flow_per_share": self._safe_float(latest.get("每股经营现金流(元)")),
+                "dividend_per_share_ttm": self._safe_float(latest.get("每股股息TTM(港元)")),
+                # Financial data
+                "revenue": self._safe_float(latest.get("营业总收入")),
+                "revenue_growth": self._safe_float(latest.get("营业总收入滚动环比增长(%)")),
+                "net_income": self._safe_float(latest.get("净利润")),
+                "net_income_growth": self._safe_float(latest.get("净利润滚动环比增长(%)")),
+                # Share information
+                "shares_outstanding": self._safe_float(latest.get("已发行股本(股)")),
+                "h_shares_outstanding": self._safe_float(latest.get("已发行股本-H股(股)")),
             }
+
+            self.logger.info(f"[AKShare] ✓ Got HK financial metrics for {ticker}")
+            return metrics
+
         except Exception as e:
             self.logger.error(f"[AKShare] Failed to get HK financial metrics for {ticker}: {e}")
             return None
