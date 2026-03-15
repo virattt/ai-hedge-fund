@@ -8,6 +8,7 @@ import time
 logger = logging.getLogger(__name__)
 
 from src.data.cache import get_cache
+from src.data.dual_cache import get_dual_cache
 from src.data.models import (
     CompanyNews,
     CompanyNewsResponse,
@@ -22,8 +23,13 @@ from src.data.models import (
     CompanyFactsResponse,
 )
 
-# Global cache instance
-_cache = get_cache()
+# Global cache instances
+_cache = get_cache()  # L1 cache (backward compatibility)
+
+
+def _get_dual_cache():
+    """Get the dual-layer cache instance (lazy initialization)."""
+    return get_dual_cache()
 
 # Global market router instance - 延迟初始化以避免循环依赖
 _market_router = None
@@ -149,12 +155,9 @@ def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None)
     Returns:
         list[Price]: 价格数据列表（Pydantic模型）
     """
-    # Create a cache key that includes all parameters to ensure exact matches
-    cache_key = f"{ticker}_{start_date}_{end_date}"
-
-    # Check cache first - simple exact match
-    if cached_data := _cache.get_prices(cache_key):
-        return [Price(**price) for price in cached_data]
+    # Check dual-layer cache first (L1 → L2)
+    if cached_prices := _get_dual_cache().get_prices(ticker, start_date, end_date):
+        return cached_prices
 
     # 判断是否为美股 - 美股使用原始API，其他市场使用MarketRouter
     if _is_us_stock(ticker):
@@ -180,8 +183,8 @@ def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None)
         if not prices:
             return []
 
-        # Cache the results using the comprehensive cache key
-        _cache.set_prices(cache_key, [p.model_dump() for p in prices])
+        # Cache the results in dual-layer cache (L1 + L2)
+        _get_dual_cache().set_prices(ticker, start_date, end_date, prices)
         return prices
     else:
         # 非美股：使用 MarketRouter（支持A股、港股、商品等）
@@ -192,8 +195,8 @@ def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None)
             prices = [Price(**price_dict) for price_dict in price_dicts]
 
             if prices:
-                # Cache the results
-                _cache.set_prices(cache_key, [p.model_dump() for p in prices])
+                # Cache the results in dual-layer cache (L1 + L2)
+                _get_dual_cache().set_prices(ticker, start_date, end_date, prices)
 
             return prices
         except ValueError as e:
@@ -231,12 +234,9 @@ def get_financial_metrics(
     Returns:
         list[FinancialMetrics]: 财务指标列表（Pydantic模型）
     """
-    # Create a cache key that includes all parameters to ensure exact matches
-    cache_key = f"{ticker}_{period}_{end_date}_{limit}"
-
-    # Check cache first - simple exact match
-    if cached_data := _cache.get_financial_metrics(cache_key):
-        return [FinancialMetrics(**metric) for metric in cached_data]
+    # Check dual-layer cache first (L1 → L2)
+    if cached_metrics := _get_dual_cache().get_financial_metrics(ticker, end_date, period, limit):
+        return cached_metrics
 
     # 判断是否为美股
     if _is_us_stock(ticker):
@@ -262,8 +262,8 @@ def get_financial_metrics(
         if not financial_metrics:
             return []
 
-        # Cache the results as dicts using the comprehensive cache key
-        _cache.set_financial_metrics(cache_key, [m.model_dump() for m in financial_metrics])
+        # Cache the results in dual-layer cache (L1 + L2)
+        _get_dual_cache().set_financial_metrics(ticker, end_date, period, limit, financial_metrics)
         return financial_metrics
     else:
         # 非美股：使用 MarketRouter
@@ -278,8 +278,8 @@ def get_financial_metrics(
             metric = FinancialMetrics(**metrics_dict)
             metrics = [metric]
 
-            # Cache the results
-            _cache.set_financial_metrics(cache_key, [m.model_dump() for m in metrics])
+            # Cache the results in dual-layer cache (L1 + L2)
+            _get_dual_cache().set_financial_metrics(ticker, end_date, period, limit, metrics)
 
             return metrics
         except ValueError as e:
@@ -343,8 +343,8 @@ def get_insider_trades(
     """Fetch insider trades from cache or API."""
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
-    
-    # Check cache first - simple exact match
+
+    # Check L1 cache first (insider trades not in L2 yet)
     if cached_data := _cache.get_insider_trades(cache_key):
         return [InsiderTrade(**trade) for trade in cached_data]
 
@@ -425,12 +425,9 @@ def get_company_news(
     Returns:
         list[CompanyNews]: 新闻列表（Pydantic模型）
     """
-    # Create a cache key that includes all parameters to ensure exact matches
-    cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
-
-    # Check cache first - simple exact match
-    if cached_data := _cache.get_company_news(cache_key):
-        return [CompanyNews(**news) for news in cached_data]
+    # Check dual-layer cache first (L1 → L2)
+    if cached_news := _get_dual_cache().get_company_news(ticker, start_date or end_date, end_date, limit):
+        return cached_news
 
     # 判断是否为美股
     if _is_us_stock(ticker):
@@ -480,8 +477,8 @@ def get_company_news(
         if not all_news:
             return []
 
-        # Cache the results using the comprehensive cache key
-        _cache.set_company_news(cache_key, [news.model_dump() for news in all_news])
+        # Cache the results in dual-layer cache (L1 + L2)
+        _get_dual_cache().set_company_news(ticker, start_date or end_date, end_date, limit, all_news)
         return all_news
     else:
         # 非美股：使用 MarketRouter
@@ -494,8 +491,8 @@ def get_company_news(
             # 将字典转换为 Pydantic 模型
             news_list = [CompanyNews(**news_dict) for news_dict in news_dicts]
 
-            # Cache the results
-            _cache.set_company_news(cache_key, [news.model_dump() for news in news_list])
+            # Cache the results in dual-layer cache (L1 + L2)
+            _get_dual_cache().set_company_news(ticker, start_date or end_date, end_date, limit, news_list)
 
             return news_list
         except ValueError as e:
