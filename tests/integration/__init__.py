@@ -1,1 +1,1 @@
-"""端到端集成测试包"""
+"""Integration tests."""
