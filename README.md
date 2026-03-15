@@ -156,3 +156,13 @@ If you have a feature request, please open an [issue](https://github.com/virattt
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+# Test PR for Repository Evaluation
+
+This is a test PR to generate PR history for the repository evaluator.
+
+## Changes
+- Updated README with test section
+- Added testing information
+
+## Purpose
+To create PR history and improve repository evaluation metrics.
