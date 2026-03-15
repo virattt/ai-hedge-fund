@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useFlowContext } from '@/contexts/flow-context';
 import { useFlowConnectionState } from '@/hooks/use-flow-connection';
 import { cn } from '@/lib/utils';
 import { flowService } from '@/services/flow-service';
@@ -29,6 +30,8 @@ export default function FlowItem({ flow, onLoadFlow, onDeleteFlow, onRefresh, is
     position: { x: 0, y: 0 }
   });
   const [editDialog, setEditDialog] = useState(false);
+
+  const { currentFlowId } = useFlowContext();
 
   // Check if this flow has an active connection
   const connectionState = useFlowConnectionState(flow.id.toString());
@@ -75,6 +78,19 @@ export default function FlowItem({ flow, onLoadFlow, onDeleteFlow, onRefresh, is
     } catch (error) {
       console.error('Failed to duplicate flow:', error);
     }
+  };
+
+  const handleRun = async () => {
+    // Load the flow first if it's not currently active
+    if (flow.id.toString() !== currentFlowId?.toString()) {
+      await onLoadFlow(flow);
+    }
+    // Dispatch trigger event after a short delay to allow flow to load
+    setTimeout(() => {
+      document.dispatchEvent(
+        new CustomEvent('portfolio-run-trigger', { detail: { flowId: flow.id.toString() } })
+      );
+    }, 300);
   };
 
   const handleDeleteFlow = async () => {
@@ -185,6 +201,7 @@ export default function FlowItem({ flow, onLoadFlow, onDeleteFlow, onRefresh, is
         isOpen={contextMenu.isOpen}
         position={contextMenu.position}
         onClose={closeContextMenu}
+        onRun={handleRun}
         onEdit={handleEdit}
         onDuplicate={handleDuplicateFlow}
         onDelete={handleDeleteFlow}
