@@ -85,12 +85,119 @@ class SinaFinanceSource(DataSource):
             return f"gb_{code.lower()}"
 
     def get_prices(
-        self, ticker: str, start_date: str, end_date: str
+        self, ticker: str, start_date: str, end_date: str, max_retries: int = 3
     ) -> List[Dict]:
         """
         Get price data from Sina Finance.
 
-        This is a placeholder that will be implemented in next task.
+        Args:
+            ticker: Stock ticker
+            start_date: Start date (YYYY-MM-DD)
+            end_date: End date (YYYY-MM-DD)
+            max_retries: Maximum retry attempts
+
+        Returns:
+            List of price dictionaries
+        """
+        market = self._detect_market(ticker)
+        sina_symbol = self._to_sina_symbol(ticker, market)
+
+        for attempt in range(max_retries):
+            try:
+                # Add delay to avoid rate limiting
+                if attempt > 0:
+                    delay = 2 ** attempt
+                    self.logger.info(f"[SinaFinance] Retry {attempt+1}, waiting {delay}s")
+                    time.sleep(delay)
+                else:
+                    time.sleep(random.uniform(0.5, 1.5))
+
+                # Route to market-specific implementation
+                if market == "CN":
+                    prices = self._get_cn_prices(sina_symbol, start_date, end_date)
+                elif market == "HK":
+                    prices = self._get_hk_prices(sina_symbol, start_date, end_date)
+                else:  # US
+                    prices = self._get_us_prices(sina_symbol, start_date, end_date)
+
+                if prices:
+                    self.logger.info(f"[SinaFinance] ✓ Retrieved {len(prices)} prices for {ticker}")
+                    return prices
+                else:
+                    self.logger.warning(f"[SinaFinance] No price data for {ticker}")
+                    return []
+
+            except Exception as e:
+                self.logger.warning(f"[SinaFinance] Attempt {attempt+1} failed: {e}")
+                if attempt == max_retries - 1:
+                    self.logger.error(f"[SinaFinance] All retries failed for {ticker}")
+                    return []
+
+        return []
+
+    def _get_cn_prices(self, sina_symbol: str, start_date: str, end_date: str) -> List[Dict]:
+        """
+        Get CN stock prices.
+
+        Args:
+            sina_symbol: Sina format symbol (e.g., 'sh600000')
+            start_date: Start date (YYYY-MM-DD)
+            end_date: End date (YYYY-MM-DD)
+
+        Returns:
+            List of price dictionaries
+        """
+        # Calculate number of days
+        from datetime import datetime
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        days = (end_dt - start_dt).days
+        datalen = min(days + 10, 500)  # Add buffer, max 500
+
+        params = {
+            'symbol': sina_symbol,
+            'scale': '240',  # Daily K-line
+            'ma': 'no',
+            'datalen': str(datalen)
+        }
+
+        response = self.session.get(self.KLINE_API_CN, params=params, timeout=15)
+        response.raise_for_status()
+
+        data = response.json()
+        if not data or not isinstance(data, list):
+            return []
+
+        prices = []
+        for item in data:
+            try:
+                prices.append({
+                    'open': float(item['open']),
+                    'close': float(item['close']),
+                    'high': float(item['high']),
+                    'low': float(item['low']),
+                    'volume': int(float(item['volume'])),
+                    'time': f"{item['day']}T00:00:00Z"
+                })
+            except (KeyError, ValueError) as e:
+                self.logger.warning(f"Failed to parse CN price data: {e}")
+                continue
+
+        return prices
+
+    def _get_hk_prices(self, sina_symbol: str, start_date: str, end_date: str) -> List[Dict]:
+        """
+        Get HK stock prices.
+
+        Implementation placeholder - will be added in next task.
+        """
+        return []
+
+    def _get_us_prices(self, sina_symbol: str, start_date: str, end_date: str) -> List[Dict]:
+        """
+        Get US stock prices.
+
+        Implementation placeholder - will be added in next task.
         """
         return []
 

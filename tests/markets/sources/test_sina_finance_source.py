@@ -27,3 +27,39 @@ class TestSinaFinanceSourceInit:
 
         # US market
         assert source._to_sina_symbol("AAPL", "US") == "gb_aapl"
+
+
+class TestSinaFinancePricesCN:
+    def test_get_prices_cn_stock(self, requests_mock):
+        """Test fetching CN stock prices."""
+        source = SinaFinanceSource()
+
+        # Mock Sina CN K-line API
+        requests_mock.get(
+            re.compile(r'https://quotes\.sina\.cn/cn/api/json_v2\.php.*'),
+            json=[
+                {
+                    'day': '2024-01-01',
+                    'open': '100.00',
+                    'close': '105.00',
+                    'high': '106.00',
+                    'low': '99.00',
+                    'volume': '1000000'
+                },
+                {
+                    'day': '2024-01-02',
+                    'open': '105.00',
+                    'close': '107.00',
+                    'high': '108.00',
+                    'low': '104.00',
+                    'volume': '1200000'
+                }
+            ]
+        )
+
+        prices = source.get_prices("600000.SH", "2024-01-01", "2024-01-02")
+
+        assert len(prices) == 2
+        assert prices[0]["open"] == 100.0
+        assert prices[0]["close"] == 105.0
+        assert "time" in prices[0]
