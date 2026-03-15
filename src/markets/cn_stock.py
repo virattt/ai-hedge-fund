@@ -5,6 +5,7 @@ from typing import List, Optional
 from src.markets.base import MarketAdapter
 from src.markets.sources.akshare_source import AKShareSource
 from src.markets.sources.newsnow_source import NewsNowSource
+from src.markets.sources.sina_finance_source import SinaFinanceSource
 from src.data.validation import DataValidator
 
 logger = logging.getLogger(__name__)
@@ -25,13 +26,15 @@ class CNStockAdapter(MarketAdapter):
         from src.markets.sources.tushare_source import TushareSource
 
         # Data sources in priority order:
-        # 1. Tushare Pro - Most stable for CN market (requires token)
-        # 2. AKShare - Free but may be rate limited
-        # 3. YFinance - Global coverage, backup source
+        # 1. AKShare - Free, good CN market coverage
+        # 2. Sina Finance - Free, stable, real-time quotes
+        # 3. Tushare Pro - Most stable for CN market (requires token)
+        # 4. YFinance - Global coverage, backup source
         data_sources = [
-            TushareSource(),    # Primary: Best for CN stocks
-            AKShareSource(),    # Fallback 1: Free but rate limited
-            YFinanceSource(),   # Fallback 2: Global coverage
+            AKShareSource(),        # Primary: Free, good coverage
+            SinaFinanceSource(),    # Fallback 1: Free, stable
+            TushareSource(),        # Fallback 2: Requires token
+            YFinanceSource(),       # Fallback 3: Global coverage
         ]
 
         super().__init__(

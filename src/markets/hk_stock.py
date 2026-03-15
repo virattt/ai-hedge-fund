@@ -6,6 +6,7 @@ from src.markets.base import MarketAdapter
 from src.markets.sources.akshare_source import AKShareSource
 from src.markets.sources.yfinance_source import YFinanceSource
 from src.markets.sources.newsnow_source import NewsNowSource
+from src.markets.sources.sina_finance_source import SinaFinanceSource
 from src.data.validation import DataValidator
 
 logger = logging.getLogger(__name__)
@@ -21,10 +22,14 @@ class HKStockAdapter(MarketAdapter):
         Args:
             validator: Data validator instance
         """
-        # Primary source: AKShare, Fallback: YFinance
+        # Data sources in priority order (per spec):
+        # 1. Sina Finance - Free, stable, real-time HK quotes
+        # 2. YFinance - Good HK coverage
+        # 3. AKShare - Backup source
         data_sources = [
-            AKShareSource(),
-            YFinanceSource(),
+            SinaFinanceSource(),    # Primary: Free, stable
+            YFinanceSource(),       # Fallback 1: Good coverage
+            AKShareSource(),        # Fallback 2: Backup
         ]
 
         super().__init__(
