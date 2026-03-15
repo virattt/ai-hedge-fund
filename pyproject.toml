@@ -40,6 +40,7 @@ pydantic-settings = "^2.0.0"
 akshare = "^1.13.0"
 yfinance = "^0.2.40"
 tushare = "^1.4.25"
+pymysql = "^1.1.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
