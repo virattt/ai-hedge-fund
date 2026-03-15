@@ -65,6 +65,46 @@
     "provider": "GigaChat"
   },
   {
+    "display_name": "Qwen3.5 Plus",
+    "model_name": "qwen3.5-plus",
+    "provider": "DashScope"
+  },
+  {
+    "display_name": "Qwen3 Max (2026-01-23)",
+    "model_name": "qwen3-max-2026-01-23",
+    "provider": "DashScope"
+  },
+  {
+    "display_name": "Qwen3 Coder Next",
+    "model_name": "qwen3-coder-next",
+    "provider": "DashScope"
+  },
+  {
+    "display_name": "Qwen3 Coder Plus",
+    "model_name": "qwen3-coder-plus",
+    "provider": "DashScope"
+  },
+  {
+    "display_name": "GLM-5",
+    "model_name": "glm-5",
+    "provider": "DashScope"
+  },
+  {
+    "display_name": "GLM-4.7",
+    "model_name": "glm-4.7",
+    "provider": "DashScope"
+  },
+  {
+    "display_name": "Kimi K2.5",
+    "model_name": "kimi-k2.5",
+    "provider": "DashScope"
+  },
+  {
+    "display_name": "MiniMax M2.5",
+    "model_name": "MiniMax-M2.5",
+    "provider": "DashScope"
+  },
+  {
     "display_name": "Azure Open AI Deployment",
     "model_name": "",
     "provider": "Azure OpenAI"

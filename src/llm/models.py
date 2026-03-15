@@ -30,6 +30,7 @@ class ModelProvider(str, Enum):
     GIGACHAT = "GigaChat"
     AZURE_OPENAI = "Azure OpenAI"
     XAI = "xAI"
+    DASHSCOPE = "DashScope"
 
 
 class LLMModel(BaseModel):
@@ -205,6 +206,21 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
             print(f"API Key Error: Please make sure XAI_API_KEY is set in your .env file or provided via API keys.")
             raise ValueError("xAI API key not found. Please make sure XAI_API_KEY is set in your .env file or provided via API keys.")
         return ChatXAI(model=model_name, api_key=api_key)
+    elif model_provider == ModelProvider.DASHSCOPE:
+        api_key = (api_keys or {}).get("DASHSCOPE_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure DASHSCOPE_API_KEY is set in your .env file or provided via API keys.")
+            raise ValueError("DashScope API key not found. Please make sure DASHSCOPE_API_KEY is set in your .env file or provided via API keys.")
+        
+        # Determine base URL based on DASHSCOPE_API_BASE setting
+        # Set DASHSCOPE_API_BASE="coding" to use Coding Plan mode
+        api_base_config = os.getenv("DASHSCOPE_API_BASE", "")
+        if api_base_config == "coding":
+            base_url = "https://coding.dashscope.aliyuncs.com/v1"
+        else:
+            base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        
+        return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
     elif model_provider == ModelProvider.GIGACHAT:
         if os.getenv("GIGACHAT_USER") or os.getenv("GIGACHAT_PASSWORD"):
             return GigaChat(model=model_name)
