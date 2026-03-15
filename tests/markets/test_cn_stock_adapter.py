@@ -1,5 +1,6 @@
 """Tests for CN stock adapter."""
 import pytest
+import requests_mock as rm_module
 from unittest.mock import Mock, patch
 from src.markets.cn_stock import CNStockAdapter
 from src.data.models import Price
@@ -119,3 +120,33 @@ class TestCNStockAdapter:
         assert len(news) > 0
         assert news[0]["ticker"] == "000001"
         mock_get_news.assert_called_once()
+
+
+class TestCNStockNewsNowIntegration:
+    def test_get_company_news_uses_newsnow_first(self):
+        """Test that NewsNow is used as primary news source."""
+        adapter = CNStockAdapter()
+
+        # Mock NewsNow API (财联社 for CN stocks)
+        with rm_module.Mocker() as m:
+            m.get(
+                "https://newsnow.busiyi.world/api/s?id=cls",
+                json={
+                    "items": [
+                        {
+                            "id": "1",
+                            "title": "贵州茅台 600519 发布财报",
+                            "url": "https://example.com/1",
+                            "publish_time": "2024-03-15T10:00:00Z"
+                        }
+                    ]
+                }
+            )
+            m.get("https://newsnow.busiyi.world/api/s?id=wallstreetcn", json={"items": []})
+            m.get("https://newsnow.busiyi.world/api/s?id=xueqiu", json={"items": []})
+
+            news = adapter.get_company_news("600519", "2024-03-15", limit=10)
+
+        # Should get news from NewsNow
+        assert len(news) > 0
+        assert news[0]["source"] == "NewsNow"

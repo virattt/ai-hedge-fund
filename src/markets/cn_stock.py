@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from src.markets.base import MarketAdapter
 from src.markets.sources.akshare_source import AKShareSource
+from src.markets.sources.newsnow_source import NewsNowSource
 from src.data.validation import DataValidator
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,12 @@ class CNStockAdapter(MarketAdapter):
             data_sources=data_sources,
             validator=validator,
         )
+
+        # Add NewsNow as primary news source (财联社 for Chinese market)
+        self.news_sources = [
+            NewsNowSource(),  # Free, primary news source
+            # Existing sources as fallback
+        ]
 
     def supports_ticker(self, ticker: str) -> bool:
         """
@@ -141,3 +148,39 @@ class CNStockAdapter(MarketAdapter):
         ticker = self.normalize_ticker(ticker)
         exchange = self.detect_exchange(ticker)
         return f"{exchange}{ticker}"
+
+    def get_company_news(self, ticker: str, end_date: str, start_date=None, limit: int = 100):
+        """
+        Get company news with NewsNow as primary source.
+
+        Fallback order:
+        1. NewsNow (free, 财联社 for CN market)
+        2. AKShare, Tushare, YFinance (existing sources)
+
+        Args:
+            ticker: Stock ticker
+            end_date: End date (YYYY-MM-DD)
+            start_date: Start date (optional, not used)
+            limit: Maximum number of news items
+
+        Returns:
+            List of news dictionaries
+        """
+        ticker = self.normalize_ticker(ticker)
+
+        # Try NewsNow first
+        for source in self.news_sources:
+            try:
+                news = source.get_company_news(ticker, end_date, start_date, limit)
+                if news:
+                    logger.info(f"[CNStock] ✓ Got {len(news)} news from {source.name}")
+                    return news
+                else:
+                    logger.info(f"[CNStock] ⚠ {source.name} returned no data")
+            except Exception as e:
+                logger.warning(f"[CNStock] ✗ {source.name} failed: {e}")
+                continue
+
+        # Fallback to existing sources via base class
+        logger.warning(f"[CNStock] NewsNow failed, using existing sources")
+        return super().get_company_news(ticker, end_date, start_date, limit)
