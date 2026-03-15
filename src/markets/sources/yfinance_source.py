@@ -26,7 +26,7 @@ class YFinanceSource(DataSource):
             # YFinance now handles sessions internally using curl_cffi
             # We just need to add delays between requests
             self._yf = yf
-            self.logger.info("YFinance initialized successfully with rate-limit protection")
+            self.logger.debug("YFinance initialized successfully with rate-limit protection")
         except ImportError:
             self.logger.error("YFinance not installed. Install with: pip install yfinance")
             self._yf = None
@@ -73,6 +73,12 @@ class YFinanceSource(DataSource):
 
                 # Format ticker for yfinance
                 yf_ticker = self._format_ticker_for_yfinance(ticker)
+
+                # Log the API call details
+                self.logger.info(
+                    f"[YFinance] 📡 Calling Ticker({yf_ticker}).history("
+                    f"start={start_date}, end={end_date})"
+                )
 
                 # Download data (let YFinance handle session management)
                 stock = self._yf.Ticker(yf_ticker)

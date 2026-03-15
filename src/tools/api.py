@@ -189,11 +189,9 @@ def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None)
     else:
         # 非美股：使用 MarketRouter（支持A股、港股、商品等）
         try:
-            price_dicts = _get_market_router().get_prices(ticker, start_date, end_date)
+            prices = _get_market_router().get_prices(ticker, start_date, end_date)
 
-            # 将字典转换为 Pydantic 模型以保持接口一致性
-            prices = [Price(**price_dict) for price_dict in price_dicts]
-
+            # MarketRouter已经返回Price对象列表，无需再次转换
             if prices:
                 # Cache the results in dual-layer cache (L1 + L2)
                 _get_dual_cache().set_prices(ticker, start_date, end_date, prices)

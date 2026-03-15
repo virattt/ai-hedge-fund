@@ -1,4 +1,5 @@
 import sys
+import logging
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
@@ -25,6 +26,16 @@ import json
 load_dotenv()
 
 init(autoreset=True)
+
+# Configure logging to show INFO level messages
+# This enables URL logging from data sources
+# Use stderr to avoid conflicts with Rich progress display (which uses stdout)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(message)s',  # Simple format for cleaner output
+    handlers=[logging.StreamHandler(sys.stderr)],
+    force=True  # Force reconfiguration even if already configured
+)
 
 
 def parse_hedge_fund_response(response):

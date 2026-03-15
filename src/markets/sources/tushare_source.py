@@ -32,7 +32,7 @@ class TushareSource(DataSource):
             import tushare as ts
             ts.set_token(self._token)
             self._tushare = ts.pro_api()
-            self.logger.info("Tushare initialized successfully")
+            self.logger.debug("Tushare initialized successfully")
         except ImportError:
             self.logger.error("Tushare not installed. Install with: pip install tushare")
             self._tushare = None
@@ -79,6 +79,12 @@ class TushareSource(DataSource):
                 # Format dates for tushare (YYYYMMDD)
                 start = start_date.replace("-", "")
                 end = end_date.replace("-", "")
+
+                # Log the API call details
+                self.logger.info(
+                    f"[Tushare] 📡 Calling daily(ts_code={ts_code}, "
+                    f"start_date={start}, end_date={end})"
+                )
 
                 # Get daily price data
                 df = self._tushare.daily(

@@ -24,17 +24,20 @@ class CNStockAdapter(MarketAdapter):
         # Import here to avoid circular dependency
         from src.markets.sources.yfinance_source import YFinanceSource
         from src.markets.sources.tushare_source import TushareSource
+        from src.markets.sources.eastmoney_curl_source import EastmoneyCurlSource
 
         # Data sources in priority order:
-        # 1. AKShare - Free, good CN market coverage
-        # 2. Sina Finance - Free, stable, real-time quotes
-        # 3. Tushare Pro - Most stable for CN market (requires token)
-        # 4. YFinance - Global coverage, backup source
+        # 1. EastmoneyCurl - Most comprehensive CN market data (uses curl to bypass anti-bot)
+        # 2. Tushare Pro - Most stable for CN market (requires token)
+        # 3. AKShare - Free, good CN market coverage
+        # 4. Sina Finance - Free, stable, real-time quotes
+        # 5. YFinance - Global coverage, backup source
         data_sources = [
-            AKShareSource(),        # Primary: Free, good coverage
-            SinaFinanceSource(),    # Fallback 1: Free, stable
-            TushareSource(),        # Fallback 2: Requires token
-            YFinanceSource(),       # Fallback 3: Global coverage
+            EastmoneyCurlSource(),  # Primary: Most comprehensive, bypasses anti-bot
+            TushareSource(),        # Fallback 1: Requires token
+            AKShareSource(),        # Fallback 2: Free, good coverage
+            SinaFinanceSource(),    # Fallback 3: Free, stable
+            YFinanceSource(),       # Fallback 4: Global coverage
         ]
 
         super().__init__(

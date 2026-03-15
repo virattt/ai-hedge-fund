@@ -25,19 +25,39 @@ class EastmoneySource(DataSource):
     - CN market only (.SH/.SZ tickers)
     """
 
-    # K-line data API
-    KLINE_API = "http://push2his.eastmoney.com/api/qt/stock/kline/get"
+    # K-line data API (use HTTPS with cookies to bypass anti-bot)
+    KLINE_API = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
 
-    # Financial metrics API (to be implemented in Task 3.3)
-    FINANCE_API = "http://push2.eastmoney.com/api/qt/stock/get"
+    # Financial metrics API (use HTTPS with cookies to bypass anti-bot)
+    FINANCE_API = "https://push2.eastmoney.com/api/qt/stock/get"
 
     def __init__(self):
         super().__init__("Eastmoney")
         self.session = requests.Session()
+
+        # Configure session for better reliability
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=10,
+            pool_maxsize=20,
+            max_retries=0,  # We handle retries manually
+            pool_block=False
+        )
+        self.session.mount('http://', adapter)
+        self.session.mount('https://', adapter)
+
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-            'Referer': 'http://quote.eastmoney.com/'
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
+            'Referer': 'https://quote.eastmoney.com/',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.9',
+            'Connection': 'keep-alive',
         })
+
+        # Set minimal required cookies to bypass anti-bot
+        # These are generic session cookies, not user-specific
+        self.session.cookies.set('qgqp_b_id', '815f755023542909e5d7e12bb425b596', domain='.eastmoney.com')
+        self.session.cookies.set('st_nvi', 'ScjgG2HuISz39_tWj_aok2a2e', domain='.eastmoney.com')
+        self.session.cookies.set('mtp', '1', domain='.eastmoney.com')
 
     def supports_market(self, market: str) -> bool:
         """Eastmoney only supports CN market."""
@@ -149,6 +169,22 @@ class EastmoneySource(DataSource):
                     delay = 2 ** attempt
                     self.logger.info(f"[Eastmoney] Retry {attempt+1}, waiting {delay}s")
                     time.sleep(delay)
+                    # Reset connection on retry
+                    self.session.close()
+                    self.session = requests.Session()
+                    adapter = requests.adapters.HTTPAdapter(
+                        pool_connections=10,
+                        pool_maxsize=20,
+                        max_retries=0,
+                        pool_block=False
+                    )
+                    self.session.mount('http://', adapter)
+                    self.session.headers.update({
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                        'Referer': 'http://quote.eastmoney.com/',
+                        'Accept': 'application/json, text/plain, */*',
+                        'Connection': 'keep-alive'
+                    })
                 else:
                     time.sleep(random.uniform(0.5, 1.5))
 
@@ -163,7 +199,12 @@ class EastmoneySource(DataSource):
                     'end': end_date.replace('-', ''),
                 }
 
-                response = self.session.get(self.KLINE_API, params=params, timeout=15)
+                # Log the request details
+                url_with_params = f"{self.KLINE_API}?{'&'.join(f'{k}={v}' for k, v in params.items())}"
+                self.logger.info(f"[Eastmoney] 📡 GET {url_with_params}")
+                self.logger.debug(f"[Eastmoney] Headers: {dict(self.session.headers)}")
+
+                response = self.session.get(self.KLINE_API, params=params, timeout=20, verify=False)
                 response.raise_for_status()
 
                 # Parse JSON response
@@ -282,12 +323,24 @@ class EastmoneySource(DataSource):
             time.sleep(random.uniform(0.5, 1.5))
 
             # Build request parameters for financial metrics
+            # Key fields:
+            # f116: Total market cap (总市值)
+            # f117: Circulating market cap (流通市值)
+            # f162: PE (TTM)
+            # f167: PB
+            # f173: ROE
+            # f187: Gross margin
             params = {
                 'secid': secid,
-                'fields': 'f43,f44,f45,f46,f47,f48,f49,f50,f57,f58,f84,f85,f86,f87,f88,f89,f90,f91,f92,f93,f94,f95,f96,f97,f98,f99,f100,f101,f102,f103,f104,f105,f106,f107,f108,f109,f110,f111,f112,f113,f114,f115,f116,f117,f118,f119,f120,f121,f122,f123,f124,f125,f126,f127,f128,f129,f130,f131,f132,f133,f134,f135,f136,f137,f138,f139,f140,f141,f142,f143,f144,f145,f146,f147,f148,f149,f150,f151,f152,f153,f154,f155,f156,f157,f158,f159,f160,f161,f162,f163,f164,f165,f166,f167,f168,f169,f170,f171,f172,f173,f174,f175,f176,f177,f178,f179,f180,f181,f182,f183,f184,f185,f186,f187,f188,f189,f190,f191,f192,f193,f194,f195,f196,f197,f198,f199,f200',
+                'fields': 'f43,f116,f117,f162,f167,f173,f187',
             }
 
-            response = self.session.get(self.FINANCE_API, params=params, timeout=15)
+            # Log the request details
+            url_with_params = f"{self.FINANCE_API}?{'&'.join(f'{k}={v}' for k, v in params.items())}"
+            self.logger.info(f"[Eastmoney] 📡 GET {url_with_params}")
+            self.logger.debug(f"[Eastmoney] Headers: {dict(self.session.headers)}")
+
+            response = self.session.get(self.FINANCE_API, params=params, timeout=15, verify=False)
             response.raise_for_status()
 
             # Parse JSON response
@@ -319,20 +372,14 @@ class EastmoneySource(DataSource):
         """
         Parse financial metrics from Eastmoney API response.
 
-        Eastmoney field mappings (commonly used):
-        - f57: Total market cap (总市值)
-        - f58: Circulating market cap (流通市值)
+        Eastmoney field mappings (verified):
         - f43: Latest price
-        - f44: High
-        - f45: Low
-        - f46: Open
-        - f47: Close
-        - f48: Volume
-        - f49: Amount
+        - f116: Total market cap (总市值) in CNY
+        - f117: Circulating market cap (流通市值) in CNY
         - f162: PE (TTM) (市盈率)
         - f167: PB (市净率)
-        - f173: ROE (净资产收益率)
-        - f187: Gross margin (毛利率)
+        - f173: ROE (净资产收益率) %
+        - f187: Gross margin (毛利率) %
 
         Args:
             data: API response data
@@ -345,9 +392,6 @@ class EastmoneySource(DataSource):
         """
         try:
             # Extract basic metrics
-            # Note: Eastmoney API field numbers are documented but can vary
-            # Here we use safe extraction with fallbacks
-
             metrics = {
                 "ticker": ticker,
                 "report_period": end_date,
@@ -355,8 +399,8 @@ class EastmoneySource(DataSource):
                 "currency": "CNY",  # CN market uses CNY
             }
 
-            # Market cap (f57: total, f58: circulating)
-            metrics["market_cap"] = self._safe_float(data.get("f57"))
+            # Market cap (f116: total, f117: circulating) - already in CNY
+            metrics["market_cap"] = self._safe_float(data.get("f116"))
 
             # Valuation metrics
             metrics["price_to_earnings_ratio"] = self._safe_float(data.get("f162"))  # PE (TTM)

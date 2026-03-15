@@ -2,6 +2,8 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Optional
 import logging
+import asyncio
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from src.markets.sources.base import DataSource
 from src.data.validation import DataValidator
@@ -41,7 +43,7 @@ class MarketAdapter(ABC):
             self.logger.warning(f"No data sources available for market {market}")
         else:
             source_names = [s.name for s in self.active_sources]
-            self.logger.info(f"Initialized {market} adapter with sources: {source_names}")
+            self.logger.debug(f"Initialized {market} adapter with sources: {source_names}")
 
     @abstractmethod
     def normalize_ticker(self, ticker: str) -> str:
@@ -60,7 +62,7 @@ class MarketAdapter(ABC):
         self, ticker: str, start_date: str, end_date: str
     ) -> List[Price]:
         """
-        Get price data with multi-source validation.
+        Get price data with multi-source validation (parallel requests).
 
         Args:
             ticker: Stock ticker
@@ -76,21 +78,37 @@ class MarketAdapter(ABC):
             self.logger.error(f"No data sources available for {ticker}")
             return []
 
-        # Collect data from all sources
+        # Collect data from all sources in parallel
         source_data = {}
 
-        for source in self.active_sources:
+        def fetch_from_source(source):
+            """Fetch prices from a single source."""
             try:
+                self.logger.info(f"[{self.market}Adapter] 🔄 Fetching prices from {source.name} for {ticker}...")
                 prices = source.get_prices(ticker, start_date, end_date)
                 if prices:
-                    source_data[source.name] = prices
                     self.logger.info(
                         f"[{self.market}Adapter] ✓ Got {len(prices)} prices from {source.name} for {ticker}"
                     )
+                    return source.name, prices
+                else:
+                    self.logger.warning(f"[{self.market}Adapter] ⚠ {source.name} returned no data for {ticker}")
+                    return None
             except Exception as e:
                 self.logger.error(
-                    f"[{self.market}Adapter] Failed to get prices from {source.name} for {ticker}: {e}"
+                    f"[{self.market}Adapter] ✗ Failed to get prices from {source.name} for {ticker}: {e}"
                 )
+                return None
+
+        # Use ThreadPoolExecutor for parallel requests
+        with ThreadPoolExecutor(max_workers=len(self.active_sources)) as executor:
+            futures = {executor.submit(fetch_from_source, source): source for source in self.active_sources}
+
+            for future in as_completed(futures):
+                result = future.result()
+                if result:
+                    source_name, prices = result
+                    source_data[source_name] = prices
 
         if not source_data:
             self.logger.warning(f"[{self.market}Adapter] No price data available from any source for {ticker}")
@@ -137,7 +155,7 @@ class MarketAdapter(ABC):
         self, ticker: str, end_date: str, period: str = "ttm", limit: int = 10
     ) -> Optional[Dict]:
         """
-        Get financial metrics with multi-source validation.
+        Get financial metrics with multi-source validation (parallel requests).
 
         Args:
             ticker: Stock ticker
@@ -154,19 +172,35 @@ class MarketAdapter(ABC):
             self.logger.error(f"[{self.market}Adapter] No data sources available for {ticker}")
             return None
 
-        # Collect data from all sources
+        # Collect data from all sources in parallel
         source_data = {}
 
-        for source in self.active_sources:
+        def fetch_from_source(source):
+            """Fetch financial metrics from a single source."""
             try:
+                self.logger.info(f"[{self.market}Adapter] 🔄 Fetching financial metrics from {source.name} for {ticker}...")
                 metrics = source.get_financial_metrics(ticker, end_date, period, limit)
                 if metrics:
-                    source_data[source.name] = metrics
                     self.logger.info(f"[{self.market}Adapter] ✓ Got financial metrics from {source.name} for {ticker}")
+                    return source.name, metrics
+                else:
+                    self.logger.warning(f"[{self.market}Adapter] ⚠ {source.name} returned no financial metrics for {ticker}")
+                    return None
             except Exception as e:
                 self.logger.error(
-                    f"[{self.market}Adapter] Failed to get financial metrics from {source.name} for {ticker}: {e}"
+                    f"[{self.market}Adapter] ✗ Failed to get financial metrics from {source.name} for {ticker}: {e}"
                 )
+                return None
+
+        # Use ThreadPoolExecutor for parallel requests
+        with ThreadPoolExecutor(max_workers=len(self.active_sources)) as executor:
+            futures = {executor.submit(fetch_from_source, source): source for source in self.active_sources}
+
+            for future in as_completed(futures):
+                result = future.result()
+                if result:
+                    source_name, metrics = result
+                    source_data[source_name] = metrics
 
         if not source_data:
             self.logger.warning(
@@ -197,7 +231,7 @@ class MarketAdapter(ABC):
         self, ticker: str, end_date: str, start_date: Optional[str] = None, limit: int = 100
     ) -> List[Dict]:
         """
-        Get company news with multi-source validation.
+        Get company news with multi-source validation (parallel requests).
 
         Args:
             ticker: Stock ticker
@@ -214,19 +248,35 @@ class MarketAdapter(ABC):
             self.logger.error(f"[{self.market}Adapter] No data sources available for {ticker}")
             return []
 
-        # Collect data from all sources
+        # Collect data from all sources in parallel
         source_data = {}
 
-        for source in self.active_sources:
+        def fetch_from_source(source):
+            """Fetch news from a single source."""
             try:
+                self.logger.info(f"[{self.market}Adapter] 🔄 Fetching news from {source.name} for {ticker}...")
                 news = source.get_company_news(ticker, end_date, start_date, limit)
                 if news:
-                    source_data[source.name] = news
                     self.logger.info(f"[{self.market}Adapter] ✓ Got {len(news)} news items from {source.name} for {ticker}")
+                    return source.name, news
+                else:
+                    self.logger.warning(f"[{self.market}Adapter] ⚠ {source.name} returned no news for {ticker}")
+                    return None
             except Exception as e:
                 self.logger.error(
-                    f"[{self.market}Adapter] Failed to get news from {source.name} for {ticker}: {e}"
+                    f"[{self.market}Adapter] ✗ Failed to get news from {source.name} for {ticker}: {e}"
                 )
+                return None
+
+        # Use ThreadPoolExecutor for parallel requests
+        with ThreadPoolExecutor(max_workers=len(self.active_sources)) as executor:
+            futures = {executor.submit(fetch_from_source, source): source for source in self.active_sources}
+
+            for future in as_completed(futures):
+                result = future.result()
+                if result:
+                    source_name, news = result
+                    source_data[source_name] = news
 
         if not source_data:
             self.logger.warning(f"[{self.market}Adapter] No news available from any source for {ticker}")

@@ -22,7 +22,7 @@ class AKShareSource(DataSource):
         try:
             import akshare as ak
             self._akshare = ak
-            self.logger.info("AKShare initialized successfully")
+            self.logger.debug("AKShare initialized successfully")
         except ImportError:
             self.logger.error("AKShare not installed. Install with: pip install akshare")
             self._akshare = None
@@ -119,6 +119,12 @@ class AKShareSource(DataSource):
             start = start_date.replace("-", "")
             end = end_date.replace("-", "")
 
+            # Log the API call details
+            self.logger.info(
+                f"[AKShare] 📡 Calling stock_zh_a_hist(symbol={ticker}, "
+                f"start_date={start}, end_date={end}, adjust=qfq)"
+            )
+
             # Use stock_zh_a_hist for A-share historical data
             df = self._akshare.stock_zh_a_hist(
                 symbol=ticker,
@@ -137,6 +143,12 @@ class AKShareSource(DataSource):
             # Format dates for akshare (YYYYMMDD)
             start = start_date.replace("-", "")
             end = end_date.replace("-", "")
+
+            # Log the API call details
+            self.logger.info(
+                f"[AKShare] 📡 Calling stock_hk_hist(symbol={ticker}, "
+                f"start_date={start}, end_date={end}, adjust=qfq)"
+            )
 
             # Use stock_hk_hist for HK stock historical data
             df = self._akshare.stock_hk_hist(

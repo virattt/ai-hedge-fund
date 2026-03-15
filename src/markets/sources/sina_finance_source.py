@@ -57,15 +57,23 @@ class SinaFinanceSource(DataSource):
         elif '.HK' in ticker_upper:
             return "HK"
         else:
-            return "US"
+            # Check for 6-digit CN stock code (without suffix)
+            code = ticker.split('.')[0]
+            if code.isdigit() and len(code) == 6:
+                return "CN"
+            # Check for 5-digit HK stock code (without suffix)
+            elif code.isdigit() and len(code) == 5:
+                return "HK"
+            else:
+                return "US"
 
     def _to_sina_symbol(self, ticker: str, market: str) -> str:
         """
         Convert ticker to Sina Finance format.
 
         Rules:
-        - CN: 600000.SH → sh600000, 000001.SZ → sz000001
-        - HK: 0700.HK → hk00700
+        - CN: 600000.SH → sh600000, 000001.SZ → sz000001, 600000 → sh600000
+        - HK: 0700.HK → hk00700, 00700 → hk00700
         - US: AAPL → gb_aapl
 
         Args:
@@ -78,7 +86,11 @@ class SinaFinanceSource(DataSource):
         code = ticker.split('.')[0]
 
         if market == "CN":
-            prefix = "sh" if ".SH" in ticker.upper() else "sz"
+            # Determine exchange from ticker suffix or code prefix
+            if ".SH" in ticker.upper() or code.startswith('6'):
+                prefix = "sh"
+            else:
+                prefix = "sz"
             return f"{prefix}{code}"
         elif market == "HK":
             return f"hk{code.zfill(5)}"
@@ -148,25 +160,34 @@ class SinaFinanceSource(DataSource):
         Returns:
             List of price dictionaries
         """
-        # Calculate number of days
-        from datetime import datetime
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-        days = (end_dt - start_dt).days
-        datalen = min(days + 10, 500)  # Add buffer, max 500
+        try:
+            # Calculate number of days
+            from datetime import datetime
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            days = (end_dt - start_dt).days
+            datalen = min(days + 10, 500)  # Add buffer, max 500
 
-        params = {
-            'symbol': sina_symbol,
-            'scale': '240',  # Daily K-line
-            'ma': 'no',
-            'datalen': str(datalen)
-        }
+            params = {
+                'symbol': sina_symbol,
+                'scale': '240',  # Daily K-line
+                'ma': 'no',
+                'datalen': str(datalen)
+            }
 
-        response = self.session.get(self.KLINE_API_CN, params=params, timeout=15)
-        response.raise_for_status()
+            # Log the URL being requested
+            url_with_params = f"{self.KLINE_API_CN}?symbol={params['symbol']}&scale={params['scale']}&ma={params['ma']}&datalen={params['datalen']}"
+            self.logger.info(f"[SinaFinance] 📡 GET {url_with_params}")
 
-        data = response.json()
-        if not data or not isinstance(data, list):
+            response = self.session.get(self.KLINE_API_CN, params=params, timeout=15)
+            response.raise_for_status()
+
+            data = response.json()
+            if not data or not isinstance(data, list):
+                self.logger.warning(f"[SinaFinance] Empty or invalid response data")
+                return []
+        except Exception as e:
+            self.logger.error(f"[SinaFinance] Request failed: {e}")
             return []
 
         prices = []
@@ -200,19 +221,28 @@ class SinaFinanceSource(DataSource):
         Returns:
             List of price dictionaries
         """
-        # Calculate data length
-        from datetime import datetime
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-        days = (end_dt - start_dt).days
-        datalen = min(days + 10, 500)
+        try:
+            # Calculate data length
+            from datetime import datetime
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            days = (end_dt - start_dt).days
+            datalen = min(days + 10, 500)
 
-        params = {
-            'param': f'{sina_symbol},day,,,{datalen},qfq'
-        }
+            params = {
+                'param': f'{sina_symbol},day,,,{datalen},qfq'
+            }
 
-        response = self.session.get(self.KLINE_API_HK, params=params, timeout=15)
-        response.raise_for_status()
+            # Log the URL being requested
+            param_value = params['param']
+            url_with_params = f"{self.KLINE_API_HK}?param={param_value}"
+            self.logger.info(f"[SinaFinance] 📡 GET {url_with_params}")
+
+            response = self.session.get(self.KLINE_API_HK, params=params, timeout=15)
+            response.raise_for_status()
+        except Exception as e:
+            self.logger.error(f"[SinaFinance] Request failed: {e}")
+            return []
 
         # Parse JSON from response (may have extra characters)
         text = response.text
