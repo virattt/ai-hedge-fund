@@ -282,7 +282,7 @@ poetry run python src/main.py --ticker 000001 --analysts "warren_buffett" --mode
 
 ## 📚 相关文档
 
-- [数据源限流详细说明](docs/DATA_SOURCE_RATE_LIMITING.md)
-- [反限流机制文档](docs/ANTI_RATE_LIMIT.md)
+- [反限流机制文档](docs/ANTI_RATE_LIMIT.md) - YFinance 反限流优化指南
+- [Tushare 配置指南](docs/TUSHARE_SETUP.md) - Tushare Pro 接入说明
 - [Tushare 官方文档](https://tushare.pro/document/2)
 - [AKShare 官方文档](https://akshare.akfamily.xyz/)
