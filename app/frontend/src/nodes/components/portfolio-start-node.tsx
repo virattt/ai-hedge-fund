@@ -133,7 +133,12 @@ export function PortfolioStartNode({
 
         setAvailableModels(models);
 
-        if (!selectedModel && defaultModel) {
+        // If stored model is not in the available list (e.g. MLX model when MLX is not running),
+        // clear it and fall back to the smart default so the backend never receives an invalid model.
+        const modelInList = selectedModel
+          ? models.some(m => m.model_name === selectedModel.model_name)
+          : false;
+        if (!modelInList && defaultModel) {
           setSelectedModel(defaultModel);
         }
 
