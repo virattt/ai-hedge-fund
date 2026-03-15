@@ -63,3 +63,30 @@ class TestSinaFinancePricesCN:
         assert prices[0]["open"] == 100.0
         assert prices[0]["close"] == 105.0
         assert "time" in prices[0]
+
+
+class TestSinaFinancePricesHK:
+    def test_get_prices_hk_stock(self, requests_mock):
+        """Test fetching HK stock prices."""
+        source = SinaFinanceSource()
+
+        # Mock Tencent HK API (used by Sina for HK stocks)
+        requests_mock.get(
+            re.compile(r'https://web\.ifzq\.gtimg\.cn/appstock/app/fqkline/get.*'),
+            json={
+                'code': 0,
+                'data': {
+                    'hk00700': {
+                        'day': [
+                            ['2024-01-01', '100.00', '105.00', '106.00', '99.00', '1000000'],
+                            ['2024-01-02', '105.00', '107.00', '108.00', '104.00', '1200000']
+                        ]
+                    }
+                }
+            }
+        )
+
+        prices = source.get_prices("0700.HK", "2024-01-01", "2024-01-02")
+
+        assert len(prices) == 2
+        assert prices[0]["open"] == 100.0

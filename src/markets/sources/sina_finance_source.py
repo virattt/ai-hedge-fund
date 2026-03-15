@@ -1,4 +1,5 @@
 """Sina Finance data source for CN/HK/US markets."""
+import json
 import logging
 import re
 import time
@@ -189,9 +190,64 @@ class SinaFinanceSource(DataSource):
         """
         Get HK stock prices.
 
-        Implementation placeholder - will be added in next task.
+        Uses Tencent API which Sina redirects to for HK stocks.
+
+        Args:
+            sina_symbol: Sina format symbol (e.g., 'hk00700')
+            start_date: Start date (YYYY-MM-DD)
+            end_date: End date (YYYY-MM-DD)
+
+        Returns:
+            List of price dictionaries
         """
-        return []
+        # Calculate data length
+        from datetime import datetime
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        days = (end_dt - start_dt).days
+        datalen = min(days + 10, 500)
+
+        params = {
+            'param': f'{sina_symbol},day,,,{datalen},qfq'
+        }
+
+        response = self.session.get(self.KLINE_API_HK, params=params, timeout=15)
+        response.raise_for_status()
+
+        # Parse JSON from response (may have extra characters)
+        text = response.text
+        start_idx = text.find('{')
+        if start_idx == -1:
+            return []
+
+        data = json.loads(text[start_idx:])
+
+        if data.get('code') != 0:
+            return []
+
+        klines = data.get('data', {}).get(sina_symbol, {}).get('day', [])
+        if not klines:
+            return []
+
+        prices = []
+        for item in klines:
+            if not isinstance(item, list) or len(item) < 6:
+                continue
+
+            try:
+                prices.append({
+                    'open': float(item[1]),
+                    'close': float(item[2]),
+                    'high': float(item[3]),
+                    'low': float(item[4]),
+                    'volume': int(float(item[5])),
+                    'time': f"{item[0]}T00:00:00Z"
+                })
+            except (ValueError, IndexError) as e:
+                self.logger.warning(f"Failed to parse HK price data: {e}")
+                continue
+
+        return prices
 
     def _get_us_prices(self, sina_symbol: str, start_date: str, end_date: str) -> List[Dict]:
         """
