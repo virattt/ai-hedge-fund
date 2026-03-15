@@ -3,12 +3,13 @@
 
 使用yfinance库获取商品期货数据，使用Google News RSS获取相关新闻
 """
-from typing import List, Dict
+from typing import List, Dict, Optional
 import yfinance as yf
 import feedparser
 from dateutil import parser as date_parser
 
 from src.markets.base import MarketAdapter
+from src.data.validation import DataValidator
 
 
 class CommodityAdapter(MarketAdapter):
@@ -18,6 +19,21 @@ class CommodityAdapter(MarketAdapter):
     使用yfinance库获取期货价格数据（如黄金GC=F、原油CL=F等）
     使用Google News RSS获取商品相关新闻
     """
+
+    def __init__(self, validator: Optional[DataValidator] = None):
+        """
+        Initialize Commodity adapter.
+
+        Args:
+            validator: Data validator instance (optional, not used for commodities)
+        """
+        # Commodity adapter uses yfinance directly, no data sources needed
+        # Pass empty list to satisfy base class requirements
+        super().__init__(
+            market="COMMODITY",
+            data_sources=[],
+            validator=validator,
+        )
 
     # 常见期货代码到商品名称的映射
     COMMODITY_NAMES = {
@@ -37,6 +53,24 @@ class CommodityAdapter(MarketAdapter):
         "PA": "Palladium",      # 钯金
     }
 
+    def normalize_ticker(self, ticker: str) -> str:
+        """
+        标准化期货ticker为统一格式
+
+        Args:
+            ticker: 原始期货代码（如 GC=F, gc=f）
+
+        Returns:
+            str: 标准化后的期货代码（如 GC=F）
+        """
+        ticker = ticker.upper().strip()
+
+        # 期货代码必须以=F结尾
+        if not ticker.endswith("=F"):
+            self.logger.warning(f"Invalid commodity ticker format: {ticker}, expected format: XX=F")
+
+        return ticker
+
     def supports_ticker(self, ticker: str) -> bool:
         """
         检查是否支持该ticker（期货格式：XX=F）
@@ -47,7 +81,10 @@ class CommodityAdapter(MarketAdapter):
         Returns:
             bool: True表示支持期货格式，False表示不支持
         """
-        # 必须以=F结尾，且不能只是"=F"
+        ticker = ticker.upper().strip()
+
+        # 必须以=F结尾才支持
+        # 不支持其他格式，以避免与美股混淆
         return ticker.endswith("=F") and len(ticker) > 2
 
     def get_prices(self, ticker: str, start_date: str, end_date: str) -> List[Dict]:
@@ -67,6 +104,9 @@ class CommodityAdapter(MarketAdapter):
         Raises:
             Exception: 数据获取失败
         """
+        # 标准化ticker格式
+        ticker = self.normalize_ticker(ticker)
+
         try:
             commodity = yf.Ticker(ticker)
             df = commodity.history(start=start_date, end=end_date)
@@ -101,7 +141,8 @@ class CommodityAdapter(MarketAdapter):
         Returns:
             str: 商品名称（如 Gold）
         """
-        # 移除=F后缀
+        # 标准化并移除=F后缀
+        ticker = self.normalize_ticker(ticker)
         code = ticker.replace("=F", "")
 
         # 查找映射表

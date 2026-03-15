@@ -3,6 +3,7 @@ import logging
 from typing import Dict, List, Optional
 from datetime import datetime
 import time
+import random
 
 from src.markets.sources.base import DataSource
 
@@ -18,11 +19,14 @@ class YFinanceSource(DataSource):
         self._initialize_yfinance()
 
     def _initialize_yfinance(self):
-        """Lazy initialization of yfinance module."""
+        """Lazy initialization of yfinance module with anti-rate-limit configuration."""
         try:
             import yfinance as yf
+
+            # YFinance now handles sessions internally using curl_cffi
+            # We just need to add delays between requests
             self._yf = yf
-            self.logger.info("YFinance initialized successfully")
+            self.logger.info("YFinance initialized successfully with rate-limit protection")
         except ImportError:
             self.logger.error("YFinance not installed. Install with: pip install yfinance")
             self._yf = None
@@ -58,15 +62,24 @@ class YFinanceSource(DataSource):
 
         for attempt in range(max_retries):
             try:
+                # Add random delay before request to avoid rate limiting
+                if attempt > 0:
+                    delay = random.uniform(2, 5) * (attempt + 1)
+                    self.logger.info(f"[YFinance] Waiting {delay:.1f}s before retry {attempt + 1}/{max_retries}")
+                    time.sleep(delay)
+                else:
+                    # Small random delay even on first attempt
+                    time.sleep(random.uniform(0.5, 1.5))
+
                 # Format ticker for yfinance
                 yf_ticker = self._format_ticker_for_yfinance(ticker)
 
-                # Download data
+                # Download data (let YFinance handle session management)
                 stock = self._yf.Ticker(yf_ticker)
                 df = stock.history(start=start_date, end=end_date)
 
                 if df is None or df.empty:
-                    self.logger.warning(f"No price data for {ticker} ({yf_ticker})")
+                    self.logger.warning(f"[YFinance] No price data for {ticker} ({yf_ticker})")
                     return []
 
                 # Convert to standard format
@@ -86,18 +99,17 @@ class YFinanceSource(DataSource):
                         self.logger.warning(f"Failed to parse row for {ticker}: {e}")
                         continue
 
-                self.logger.info(f"Retrieved {len(prices)} price records for {ticker}")
+                self.logger.info(f"[YFinance] ✓ Retrieved {len(prices)} price records for {ticker}")
                 return prices
 
             except Exception as e:
                 self.logger.warning(
-                    f"Attempt {attempt + 1}/{max_retries} failed for {ticker}: {e}"
+                    f"[YFinance] Attempt {attempt + 1}/{max_retries} failed for {ticker}: {e}"
                 )
-                if attempt < max_retries - 1:
-                    time.sleep(1 * (attempt + 1))  # Exponential backoff
-                else:
-                    self.logger.error(f"Failed to get prices for {ticker} after {max_retries} attempts")
+                if attempt >= max_retries - 1:
+                    self.logger.error(f"[YFinance] Failed to get prices for {ticker} after {max_retries} attempts")
                     return []
+                # Delay is handled at the start of the next iteration
 
         return []
 
@@ -140,6 +152,9 @@ class YFinanceSource(DataSource):
         """
         self._ensure_yfinance()
 
+        # Add small random delay to avoid rate limiting
+        time.sleep(random.uniform(0.5, 1.5))
+
         try:
             yf_ticker = self._format_ticker_for_yfinance(ticker)
             stock = self._yf.Ticker(yf_ticker)
@@ -179,7 +194,7 @@ class YFinanceSource(DataSource):
             return metrics
 
         except Exception as e:
-            self.logger.error(f"Failed to get financial metrics for {ticker}: {e}")
+            self.logger.error(f"[YFinance] Failed to get financial metrics for {ticker}: {e}")
             return None
 
     def _safe_float(self, value) -> Optional[float]:
@@ -200,6 +215,9 @@ class YFinanceSource(DataSource):
         Note: YFinance provides limited news through the news API.
         """
         self._ensure_yfinance()
+
+        # Add small random delay to avoid rate limiting
+        time.sleep(random.uniform(0.5, 1.5))
 
         try:
             yf_ticker = self._format_ticker_for_yfinance(ticker)
@@ -239,5 +257,5 @@ class YFinanceSource(DataSource):
             return news_list[:limit]
 
         except Exception as e:
-            self.logger.error(f"Failed to get company news for {ticker}: {e}")
+            self.logger.error(f"[YFinance] Failed to get company news for {ticker}: {e}")
             return []

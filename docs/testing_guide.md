@@ -283,9 +283,15 @@ def test_new_feature(self, mixed_tickers, date_range):
 
 ### 生成报告
 
-详细的测试结果见：
-- [E2E测试报告](e2e_test_report.md)
-- 包含性能数据、问题记录、改进建议
+运行测试并生成报告：
+
+```bash
+# 运行所有测试并生成覆盖率报告
+poetry run pytest --cov=src --cov-report=html
+
+# 查看报告
+open htmlcov/index.html
+```
 
 ### 报告内容
 
@@ -324,10 +330,10 @@ def test_new_feature(self, mixed_tickers, date_range):
 
 ## 相关文档
 
-- [E2E测试报告](e2e_test_report.md) - 详细测试结果
-- [多市场架构](multi_market_architecture.md) - 系统架构
-- [市场适配器](market_adapters.md) - 适配器实现
-- [API文档](api_documentation.md) - API使用说明
+- [TROUBLESHOOTING.md](../TROUBLESHOOTING.md) - 问题排查和解决方案
+- [ANTI_RATE_LIMIT.md](ANTI_RATE_LIMIT.md) - 反限流机制文档
+- [TUSHARE_SETUP.md](TUSHARE_SETUP.md) - Tushare Pro 配置指南
+- [CLAUDE.md](../CLAUDE.md) - 项目架构和开发指南
 
 ## 维护清单
 

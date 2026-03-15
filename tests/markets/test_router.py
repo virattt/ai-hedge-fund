@@ -11,6 +11,12 @@ from src.markets.base import MarketAdapter
 class MockUSAdapter(MarketAdapter):
     """模拟美股适配器"""
 
+    def __init__(self):
+        super().__init__(market="US", data_sources=[])
+
+    def normalize_ticker(self, ticker: str) -> str:
+        return ticker.upper().strip()
+
     def supports_ticker(self, ticker: str) -> bool:
         # 美股作为默认，支持所有不带特殊后缀的ticker
         return not any(suffix in ticker for suffix in ['.SH', '.SZ', '.HK', '=F'])
@@ -28,6 +34,15 @@ class MockUSAdapter(MarketAdapter):
 class MockCNAdapter(MarketAdapter):
     """模拟A股适配器"""
 
+    def __init__(self):
+        super().__init__(market="CN", data_sources=[])
+
+    def normalize_ticker(self, ticker: str) -> str:
+        ticker = ticker.upper().strip()
+        if ticker.endswith(".SH") or ticker.endswith(".SZ"):
+            ticker = ticker[:-3]
+        return ticker
+
     def supports_ticker(self, ticker: str) -> bool:
         return ticker.endswith('.SH') or ticker.endswith('.SZ')
 
@@ -44,6 +59,15 @@ class MockCNAdapter(MarketAdapter):
 class MockHKAdapter(MarketAdapter):
     """模拟港股适配器"""
 
+    def __init__(self):
+        super().__init__(market="HK", data_sources=[])
+
+    def normalize_ticker(self, ticker: str) -> str:
+        ticker = ticker.upper().strip()
+        if ticker.endswith(".HK"):
+            ticker = ticker[:-3]
+        return ticker.zfill(5) if ticker.isdigit() else ticker
+
     def supports_ticker(self, ticker: str) -> bool:
         return ticker.endswith('.HK')
 
@@ -59,6 +83,12 @@ class MockHKAdapter(MarketAdapter):
 
 class MockCommodityAdapter(MarketAdapter):
     """模拟商品适配器"""
+
+    def __init__(self):
+        super().__init__(market="COMMODITY", data_sources=[])
+
+    def normalize_ticker(self, ticker: str) -> str:
+        return ticker.upper().strip()
 
     def supports_ticker(self, ticker: str) -> bool:
         return '=F' in ticker
