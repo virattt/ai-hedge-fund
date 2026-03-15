@@ -3,10 +3,14 @@
 
 复用现有 src.tools.api 中的美股数据获取逻辑
 """
+import logging
 from typing import List, Dict, Optional
 from src.markets.base import MarketAdapter
 from src.tools import api
 from src.data.validation import DataValidator
+from src.markets.sources.newsnow_source import NewsNowSource
+
+logger = logging.getLogger(__name__)
 
 
 class USStockAdapter(MarketAdapter):
@@ -31,6 +35,12 @@ class USStockAdapter(MarketAdapter):
             data_sources=[],
             validator=validator,
         )
+
+        # Initialize news sources with fallback chain
+        self.news_sources = [
+            NewsNowSource(),  # Free, primary source
+            # Financial Datasets API handled by api.py as fallback
+        ]
 
     def normalize_ticker(self, ticker: str) -> str:
         """
@@ -107,7 +117,9 @@ class USStockAdapter(MarketAdapter):
         """
         获取美股相关新闻
 
-        直接调用现有的 api.get_company_news() 函数，并将 Pydantic 模型转换为字典。
+        使用多源fallback策略：
+        1. NewsNow (免费，无速率限制)
+        2. Financial Datasets API (付费，有速率限制)
 
         Args:
             ticker: 股票代码（如 AAPL）
@@ -117,25 +129,53 @@ class USStockAdapter(MarketAdapter):
         Returns:
             List[Dict]: 新闻列表，包含 title, published, source, link, sentiment
         """
-        # 调用现有API获取CompanyNews对象列表
-        news_list = api.get_company_news(
-            ticker=ticker,
-            end_date=end_date,
-            limit=limit
-        )
+        # Try free sources first
+        for source in self.news_sources:
+            try:
+                news = source.get_company_news(ticker, end_date, limit=limit)
+                if news:
+                    logger.info(f"[USStock] ✓ Got {len(news)} news from {source.name}")
+                    # Convert to expected format
+                    result = []
+                    for n in news:
+                        result.append({
+                            "title": n.get("title", ""),
+                            "published": n.get("date", ""),
+                            "source": n.get("source", ""),
+                            "link": n.get("url", ""),
+                            "sentiment": n.get("sentiment")
+                        })
+                    return result
+                else:
+                    logger.info(f"[USStock] ⚠ {source.name} returned no data")
+            except Exception as e:
+                logger.warning(f"[USStock] ✗ {source.name} failed: {e}")
+                continue
 
-        # 转换为MarketAdapter期望的字典格式
-        result = []
-        for news in news_list:
-            result.append({
-                "title": news.title,
-                "published": news.date,  # CompanyNews的date字段映射到published
-                "source": news.source,
-                "link": news.url,  # CompanyNews的url字段映射到link
-                "sentiment": news.sentiment
-            })
+        # All free sources failed, fallback to Financial API via api.py
+        logger.warning(f"[USStock] All free news sources failed, using Financial API fallback")
+        try:
+            news_list = api.get_company_news(
+                ticker=ticker,
+                end_date=end_date,
+                limit=limit
+            )
 
-        return result
+            # 转换为MarketAdapter期望的字典格式
+            result = []
+            for news in news_list:
+                result.append({
+                    "title": news.title,
+                    "published": news.date,  # CompanyNews的date字段映射到published
+                    "source": news.source,
+                    "link": news.url,  # CompanyNews的url字段映射到link
+                    "sentiment": news.sentiment
+                })
+
+            return result
+        except Exception as e:
+            logger.error(f"[USStock] Financial API also failed: {e}")
+            return []
 
     def get_financial_metrics(self, ticker: str, end_date: str) -> Dict:
         """

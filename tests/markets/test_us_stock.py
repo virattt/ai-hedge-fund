@@ -316,3 +316,37 @@ def test_get_financial_metrics_missing_fields(mock_api_metrics):
     assert metrics["pe_ratio"] == 25.5
     assert metrics["pb_ratio"] == 0  # None被转换为0
     assert metrics["market_cap"] == 5000000000.0
+
+
+# ============== NewsNow Integration Tests ==============
+
+class TestUSStockNewsNowIntegration:
+    def test_get_company_news_uses_newsnow_first(self, requests_mock):
+        """Test that NewsNow is used as primary news source."""
+        import requests_mock as rm_module
+
+        adapter = USStockAdapter()
+
+        # Mock NewsNow API
+        with rm_module.Mocker() as m:
+            m.get(
+                "https://newsnow.busiyi.world/api/s?id=cls",
+                json={
+                    "items": [
+                        {
+                            "id": "1",
+                            "title": "AAPL reports earnings",
+                            "url": "https://example.com/1",
+                            "publish_time": "2024-03-15T10:00:00Z"
+                        }
+                    ]
+                }
+            )
+            m.get("https://newsnow.busiyi.world/api/s?id=wallstreetcn", json={"items": []})
+            m.get("https://newsnow.busiyi.world/api/s?id=xueqiu", json={"items": []})
+
+            news = adapter.get_company_news("AAPL", "2024-03-15", limit=10)
+
+        # Should get news from NewsNow
+        assert len(news) > 0
+        assert news[0]["source"] == "NewsNow"
