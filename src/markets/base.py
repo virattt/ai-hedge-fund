@@ -84,16 +84,16 @@ class MarketAdapter(ABC):
                 prices = source.get_prices(ticker, start_date, end_date)
                 if prices:
                     source_data[source.name] = prices
-                    self.logger.debug(
-                        f"Got {len(prices)} prices from {source.name} for {ticker}"
+                    self.logger.info(
+                        f"[{self.market}Adapter] ✓ Got {len(prices)} prices from {source.name} for {ticker}"
                     )
             except Exception as e:
                 self.logger.error(
-                    f"Failed to get prices from {source.name} for {ticker}: {e}"
+                    f"[{self.market}Adapter] Failed to get prices from {source.name} for {ticker}: {e}"
                 )
 
         if not source_data:
-            self.logger.warning(f"No price data available from any source for {ticker}")
+            self.logger.warning(f"[{self.market}Adapter] No price data available from any source for {ticker}")
             return []
 
         # Validate and merge data
@@ -118,7 +118,7 @@ class MarketAdapter(ABC):
                     self.logger.warning(f"Failed to create Price object: {e}")
 
             self.logger.info(
-                f"Retrieved {len(price_objects)} validated prices for {ticker}"
+                f"[{self.market}Adapter] ✓ Retrieved {len(price_objects)} validated prices for {ticker}"
             )
             return price_objects
 
@@ -151,7 +151,7 @@ class MarketAdapter(ABC):
         ticker = self.normalize_ticker(ticker)
 
         if not self.active_sources:
-            self.logger.error(f"No data sources available for {ticker}")
+            self.logger.error(f"[{self.market}Adapter] No data sources available for {ticker}")
             return None
 
         # Collect data from all sources
@@ -162,15 +162,15 @@ class MarketAdapter(ABC):
                 metrics = source.get_financial_metrics(ticker, end_date, period, limit)
                 if metrics:
                     source_data[source.name] = metrics
-                    self.logger.debug(f"Got financial metrics from {source.name} for {ticker}")
+                    self.logger.info(f"[{self.market}Adapter] ✓ Got financial metrics from {source.name} for {ticker}")
             except Exception as e:
                 self.logger.error(
-                    f"Failed to get financial metrics from {source.name} for {ticker}: {e}"
+                    f"[{self.market}Adapter] Failed to get financial metrics from {source.name} for {ticker}: {e}"
                 )
 
         if not source_data:
             self.logger.warning(
-                f"No financial metrics available from any source for {ticker}"
+                f"[{self.market}Adapter] No financial metrics available from any source for {ticker}"
             )
             return None
 
@@ -211,7 +211,7 @@ class MarketAdapter(ABC):
         ticker = self.normalize_ticker(ticker)
 
         if not self.active_sources:
-            self.logger.error(f"No data sources available for {ticker}")
+            self.logger.error(f"[{self.market}Adapter] No data sources available for {ticker}")
             return []
 
         # Collect data from all sources
@@ -222,20 +222,20 @@ class MarketAdapter(ABC):
                 news = source.get_company_news(ticker, end_date, start_date, limit)
                 if news:
                     source_data[source.name] = news
-                    self.logger.debug(f"Got {len(news)} news items from {source.name} for {ticker}")
+                    self.logger.info(f"[{self.market}Adapter] ✓ Got {len(news)} news items from {source.name} for {ticker}")
             except Exception as e:
                 self.logger.error(
-                    f"Failed to get news from {source.name} for {ticker}: {e}"
+                    f"[{self.market}Adapter] Failed to get news from {source.name} for {ticker}: {e}"
                 )
 
         if not source_data:
-            self.logger.warning(f"No news available from any source for {ticker}")
+            self.logger.warning(f"[{self.market}Adapter] No news available from any source for {ticker}")
             return []
 
         # Validate and merge data
         try:
             validated_news = self.validator.validate_news(source_data)
-            self.logger.info(f"Retrieved {len(validated_news)} validated news items for {ticker}")
+            self.logger.info(f"[{self.market}Adapter] ✓ Retrieved {len(validated_news)} validated news items for {ticker}")
             return validated_news[:limit]
 
         except Exception as e:

@@ -32,6 +32,32 @@ class HKStockAdapter(MarketAdapter):
             validator=validator,
         )
 
+    def supports_ticker(self, ticker: str) -> bool:
+        """
+        检查是否支持该ticker（港股格式）
+
+        港股ticker特征：
+        - 包含 .HK 后缀（如 0700.HK, 3690.HK）
+        - 或者是4-5位纯数字（如 700, 0700, 03690）
+
+        Args:
+            ticker: 股票代码
+
+        Returns:
+            bool: True表示支持港股格式，False表示不支持
+        """
+        ticker = ticker.upper().strip()
+
+        # 检查是否有 .HK 后缀
+        if ticker.endswith(".HK"):
+            return True
+
+        # 检查是否是4-5位纯数字（港股代码范围）
+        if ticker.isdigit() and 4 <= len(ticker) <= 5:
+            return True
+
+        return False
+
     def normalize_ticker(self, ticker: str) -> str:
         """
         Normalize ticker for Hong Kong market.

@@ -3,9 +3,10 @@
 
 复用现有 src.tools.api 中的美股数据获取逻辑
 """
-from typing import List, Dict
+from typing import List, Dict, Optional
 from src.markets.base import MarketAdapter
 from src.tools import api
+from src.data.validation import DataValidator
 
 
 class USStockAdapter(MarketAdapter):
@@ -15,6 +16,33 @@ class USStockAdapter(MarketAdapter):
     复用现有的 src.tools.api 中的美股数据获取逻辑，
     将其包装为统一的 MarketAdapter 接口。
     """
+
+    def __init__(self, validator: Optional[DataValidator] = None):
+        """
+        Initialize US stock adapter.
+
+        Args:
+            validator: Data validator instance (optional, not used for US stocks)
+        """
+        # US stock adapter uses legacy API, no data sources needed
+        # Pass empty list to satisfy base class requirements
+        super().__init__(
+            market="US",
+            data_sources=[],
+            validator=validator,
+        )
+
+    def normalize_ticker(self, ticker: str) -> str:
+        """
+        Normalize ticker for US market.
+
+        Args:
+            ticker: Raw ticker (e.g., 'AAPL', 'aapl')
+
+        Returns:
+            Normalized ticker (uppercase)
+        """
+        return ticker.upper().strip()
 
     def supports_ticker(self, ticker: str) -> bool:
         """

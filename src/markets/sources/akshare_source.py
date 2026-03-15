@@ -56,6 +56,15 @@ class AKShareSource(DataSource):
         self._ensure_akshare()
 
         for attempt in range(max_retries):
+            # Add delay before each request to avoid rate limiting
+            if attempt > 0:
+                delay = 3 * (attempt + 1)  # 3s, 6s, 9s...
+                self.logger.info(f"[AKShare] Waiting {delay}s before retry {attempt + 1}/{max_retries}")
+                time.sleep(delay)
+            else:
+                # Small delay even on first attempt
+                time.sleep(1)
+
             try:
                 # Determine market from ticker format
                 if self._is_hk_ticker(ticker):
@@ -64,7 +73,7 @@ class AKShareSource(DataSource):
                     df = self._get_cn_prices(ticker, start_date, end_date)
 
                 if df is None or df.empty:
-                    self.logger.warning(f"No price data for {ticker}")
+                    self.logger.warning(f"[AKShare] No price data for {ticker}")
                     return []
 
                 # Convert to standard format
@@ -84,18 +93,17 @@ class AKShareSource(DataSource):
                         self.logger.warning(f"Failed to parse row for {ticker}: {e}")
                         continue
 
-                self.logger.info(f"Retrieved {len(prices)} price records for {ticker}")
+                self.logger.info(f"[AKShare] ✓ Retrieved {len(prices)} price records for {ticker}")
                 return prices
 
             except Exception as e:
                 self.logger.warning(
-                    f"Attempt {attempt + 1}/{max_retries} failed for {ticker}: {e}"
+                    f"[AKShare] Attempt {attempt + 1}/{max_retries} failed for {ticker}: {e}"
                 )
-                if attempt < max_retries - 1:
-                    time.sleep(1 * (attempt + 1))  # Exponential backoff
-                else:
-                    self.logger.error(f"Failed to get prices for {ticker} after {max_retries} attempts")
+                if attempt >= max_retries - 1:
+                    self.logger.error(f"[AKShare] Failed to get prices for {ticker} after {max_retries} attempts")
                     return []
+                # Delay is handled at the start of the next iteration
 
         return []
 
@@ -120,7 +128,7 @@ class AKShareSource(DataSource):
             )
             return df
         except Exception as e:
-            self.logger.error(f"Failed to get CN prices for {ticker}: {e}")
+            self.logger.error(f"[AKShare] Failed to get CN prices for {ticker}: {e}")
             return None
 
     def _get_hk_prices(self, ticker: str, start_date: str, end_date: str):
@@ -139,7 +147,7 @@ class AKShareSource(DataSource):
             )
             return df
         except Exception as e:
-            self.logger.error(f"Failed to get HK prices for {ticker}: {e}")
+            self.logger.error(f"[AKShare] Failed to get HK prices for {ticker}: {e}")
             return None
 
     def _parse_date(self, date_value) -> str:
@@ -171,7 +179,7 @@ class AKShareSource(DataSource):
             else:
                 return self._get_cn_financial_metrics(ticker)
         except Exception as e:
-            self.logger.error(f"Failed to get financial metrics for {ticker}: {e}")
+            self.logger.error(f"[AKShare] Failed to get financial metrics for {ticker}: {e}")
             return None
 
     def _get_cn_financial_metrics(self, ticker: str) -> Optional[Dict]:
@@ -203,7 +211,7 @@ class AKShareSource(DataSource):
 
             return metrics
         except Exception as e:
-            self.logger.error(f"Failed to get CN financial metrics for {ticker}: {e}")
+            self.logger.error(f"[AKShare] Failed to get CN financial metrics for {ticker}: {e}")
             return None
 
     def _get_hk_financial_metrics(self, ticker: str) -> Optional[Dict]:
@@ -218,7 +226,7 @@ class AKShareSource(DataSource):
                 "currency": "HKD",
             }
         except Exception as e:
-            self.logger.error(f"Failed to get HK financial metrics for {ticker}: {e}")
+            self.logger.error(f"[AKShare] Failed to get HK financial metrics for {ticker}: {e}")
             return None
 
     def _safe_float(self, value) -> Optional[float]:
@@ -267,5 +275,5 @@ class AKShareSource(DataSource):
             return news_list[:limit]
 
         except Exception as e:
-            self.logger.error(f"Failed to get company news for {ticker}: {e}")
+            self.logger.error(f"[AKShare] Failed to get company news for {ticker}: {e}")
             return []

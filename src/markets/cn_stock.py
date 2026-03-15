@@ -19,9 +19,18 @@ class CNStockAdapter(MarketAdapter):
         Args:
             validator: Data validator instance
         """
-        # Primary source: AKShare (best for CN stocks)
+        # Import here to avoid circular dependency
+        from src.markets.sources.yfinance_source import YFinanceSource
+        from src.markets.sources.tushare_source import TushareSource
+
+        # Data sources in priority order:
+        # 1. Tushare Pro - Most stable for CN market (requires token)
+        # 2. AKShare - Free but may be rate limited
+        # 3. YFinance - Global coverage, backup source
         data_sources = [
-            AKShareSource(),
+            TushareSource(),    # Primary: Best for CN stocks
+            AKShareSource(),    # Fallback 1: Free but rate limited
+            YFinanceSource(),   # Fallback 2: Global coverage
         ]
 
         super().__init__(
@@ -29,6 +38,38 @@ class CNStockAdapter(MarketAdapter):
             data_sources=data_sources,
             validator=validator,
         )
+
+    def supports_ticker(self, ticker: str) -> bool:
+        """
+        检查是否支持该ticker（A股格式）
+
+        A股ticker特征：
+        - 包含 .SH 或 .SZ 后缀（如 600000.SH, 000001.SZ）
+        - 或者以 SH/SZ 开头后接6位数字（如 SH600000, SZ000001）
+        - 或者是6位纯数字（如 600000, 000001）
+
+        Args:
+            ticker: 股票代码
+
+        Returns:
+            bool: True表示支持A股格式，False表示不支持
+        """
+        ticker = ticker.upper().strip()
+
+        # 检查是否有 .SH 或 .SZ 后缀
+        if ticker.endswith(".SH") or ticker.endswith(".SZ"):
+            return True
+
+        # 检查是否以 SH 或 SZ 开头后接数字
+        if ticker.startswith("SH") or ticker.startswith("SZ"):
+            code = ticker[2:]
+            return code.isdigit() and len(code) == 6
+
+        # 检查是否是6位纯数字
+        if ticker.isdigit() and len(ticker) == 6:
+            return True
+
+        return False
 
     def normalize_ticker(self, ticker: str) -> str:
         """
@@ -41,6 +82,12 @@ class CNStockAdapter(MarketAdapter):
             Normalized ticker (6-digit format)
         """
         ticker = ticker.upper().strip()
+
+        # Remove .SH/.SZ suffix if present
+        if ticker.endswith(".SH"):
+            ticker = ticker[:-3]
+        elif ticker.endswith(".SZ"):
+            ticker = ticker[:-3]
 
         # Remove exchange prefix if present
         if ticker.startswith("SH"):
