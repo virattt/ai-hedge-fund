@@ -45,15 +45,19 @@ def call_llm(
         if request and hasattr(request, 'api_keys'):
             api_keys = request.api_keys
 
-    model_info = get_model_info(model_name, model_provider)
-    llm = get_model(model_name, model_provider, api_keys)
+    # Set up the LLM — catch configuration errors (missing API key, bad provider, etc.)
+    last_error = None
+    try:
+        model_info = get_model_info(model_name, model_provider)
+        llm = get_model(model_name, model_provider, api_keys)
 
-    # For non-JSON support models, we can use structured output
-    if not (model_info and not model_info.has_json_mode()):
-        llm = llm.with_structured_output(
-            pydantic_model,
-            method="json_mode",
-        )
+        # Use structured output for models that support it
+        if not (model_info and not model_info.has_json_mode()):
+            llm = llm.with_structured_output(pydantic_model)
+    except Exception as setup_error:
+        last_error = setup_error
+        print(f"LLM setup error ({model_provider}/{model_name}): {setup_error}")
+        return _make_error_response(pydantic_model, default_factory, setup_error)
 
     # Call the LLM with retries
     for attempt in range(max_retries):
@@ -70,18 +74,27 @@ def call_llm(
                 return result
 
         except Exception as e:
+            last_error = e
             if agent_name:
                 progress.update_status(agent_name, None, f"Error - retry {attempt + 1}/{max_retries}")
 
             if attempt == max_retries - 1:
-                print(f"Error in LLM call after {max_retries} attempts: {e}")
-                # Use default_factory if provided, otherwise create a basic default
-                if default_factory:
-                    return default_factory()
-                return create_default_response(pydantic_model)
+                print(f"LLM call failed ({model_provider}/{model_name}) after {max_retries} attempts: {e}")
+                return _make_error_response(pydantic_model, default_factory, e)
 
-    # This should never be reached due to the retry logic above
-    return create_default_response(pydantic_model)
+    return _make_error_response(pydantic_model, default_factory, last_error)
+
+
+def _make_error_response(pydantic_model, default_factory, error: Exception) -> BaseModel:
+    """Return the default_factory result (or a generic default) with the real error injected into reasoning."""
+    result = default_factory() if default_factory else create_default_response(pydantic_model)
+    if hasattr(result, "reasoning"):
+        try:
+            error_msg = f"LLM error: {str(error)[:300]}"
+            result = result.__class__(**{**result.model_dump(), "reasoning": error_msg})
+        except Exception:
+            pass
+    return result
 
 
 def create_default_response(model_class: type[BaseModel]) -> BaseModel:
@@ -107,15 +120,31 @@ def create_default_response(model_class: type[BaseModel]) -> BaseModel:
 
 
 def extract_json_from_response(content: str) -> dict | None:
-    """Extracts JSON from markdown-formatted response."""
+    """Extracts JSON from a model response.
+
+    Handles:
+    - Markdown ```json ... ``` blocks
+    - Qwen 3.x / reasoning models that prefix output with <think>...</think> blocks
+    - Bare JSON objects at the root level
+    """
+    import re
+
+    # Strip <think>...</think> reasoning tokens (Qwen 3.x, DeepSeek-R1, etc.)
+    content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+
     try:
+        # Markdown fenced block: ```json ... ```
         json_start = content.find("```json")
         if json_start != -1:
-            json_text = content[json_start + 7 :]  # Skip past ```json
+            json_text = content[json_start + 7:]
             json_end = json_text.find("```")
             if json_end != -1:
-                json_text = json_text[:json_end].strip()
-                return json.loads(json_text)
+                return json.loads(json_text[:json_end].strip())
+
+        # Bare JSON object/array
+        brace_start = content.find("{")
+        if brace_start != -1:
+            return json.loads(content[brace_start:])
     except Exception as e:
         print(f"Error extracting JSON from response: {e}")
     return None
@@ -138,7 +167,7 @@ def get_agent_model_config(state, agent_name):
     
     # Fall back to global configuration (system defaults)
     model_name = state.get("metadata", {}).get("model_name") or "gpt-4.1"
-    model_provider = state.get("metadata", {}).get("model_provider") or "OPENAI"
+    model_provider = state.get("metadata", {}).get("model_provider") or "OpenAI"
     
     # Convert enum to string if necessary
     if hasattr(model_provider, 'value'):
