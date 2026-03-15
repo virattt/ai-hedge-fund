@@ -298,3 +298,63 @@ class MarketAdapter(ABC):
                 )
                 return first_news[:limit]
             return []
+
+    def get_insider_trades(
+        self, ticker: str, end_date: str, start_date: Optional[str] = None, limit: int = 100
+    ) -> List[Dict]:
+        """
+        Get insider trading data with multi-source support (parallel requests).
+
+        Args:
+            ticker: Stock ticker
+            end_date: End date in YYYY-MM-DD format
+            start_date: Start date in YYYY-MM-DD format (optional)
+            limit: Maximum number of trades
+
+        Returns:
+            List of insider trade dictionaries
+        """
+        ticker = self.normalize_ticker(ticker)
+
+        if not self.active_sources:
+            self.logger.error(f"[{self.market}Adapter] No data sources available for {ticker}")
+            return []
+
+        # Collect data from all sources in parallel
+        source_data = {}
+
+        def fetch_from_source(source):
+            """Fetch insider trades from a single source."""
+            try:
+                self.logger.info(f"[{self.market}Adapter] 🔄 Fetching insider trades from {source.name} for {ticker}...")
+                trades = source.get_insider_trades(ticker, end_date, start_date, limit)
+                if trades:
+                    self.logger.info(f"[{self.market}Adapter] ✓ Got {len(trades)} insider trades from {source.name} for {ticker}")
+                    return source.name, trades
+                else:
+                    self.logger.info(f"[{self.market}Adapter] ⚠ {source.name} returned no insider trades for {ticker}")
+                    return None
+            except Exception as e:
+                self.logger.warning(
+                    f"[{self.market}Adapter] ✗ Failed to get insider trades from {source.name} for {ticker}: {e}"
+                )
+                return None
+
+        # Use ThreadPoolExecutor for parallel requests
+        with ThreadPoolExecutor(max_workers=len(self.active_sources)) as executor:
+            futures = {executor.submit(fetch_from_source, source): source for source in self.active_sources}
+
+            for future in as_completed(futures):
+                result = future.result()
+                if result:
+                    source_name, trades = result
+                    source_data[source_name] = trades
+
+        if not source_data:
+            self.logger.info(f"[{self.market}Adapter] No insider trades available from any source for {ticker}")
+            return []
+
+        # Use first available source (no cross-validation for insider trades)
+        first_trades = list(source_data.values())[0]
+        self.logger.info(f"[{self.market}Adapter] ✓ Retrieved {len(first_trades)} insider trades for {ticker}")
+        return first_trades[:limit]

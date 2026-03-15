@@ -72,6 +72,30 @@ class DataSource(ABC):
         """
         pass
 
+    def get_insider_trades(
+        self, ticker: str, end_date: str, start_date: Optional[str] = None, limit: int = 100
+    ) -> List[Dict]:
+        """
+        Get insider trading data for a ticker.
+
+        Args:
+            ticker: Stock ticker symbol
+            end_date: End date in YYYY-MM-DD format
+            start_date: Start date in YYYY-MM-DD format (optional)
+            limit: Maximum number of trades
+
+        Returns:
+            List of insider trade dictionaries with keys:
+            - ticker, name, title, transaction_date, transaction_shares,
+              transaction_price_per_share, transaction_value, filing_date, etc.
+
+        Note:
+            This is an optional method. Default implementation returns empty list.
+            Override in subclasses if insider trading data is available.
+        """
+        self.logger.debug(f"Insider trading data not available for {ticker} from {self.name}")
+        return []
+
     @abstractmethod
     def supports_market(self, market: str) -> bool:
         """

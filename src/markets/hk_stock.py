@@ -6,6 +6,7 @@ from src.markets.base import MarketAdapter
 from src.markets.sources.akshare_source import AKShareSource
 from src.markets.sources.yfinance_source import YFinanceSource
 from src.markets.sources.newsnow_source import NewsNowSource
+from src.markets.sources.akshare_news_source import AKShareNewsSource
 from src.markets.sources.sina_finance_source import SinaFinanceSource
 from src.data.validation import DataValidator
 
@@ -38,10 +39,14 @@ class HKStockAdapter(MarketAdapter):
             validator=validator,
         )
 
-        # Add NewsNow as primary news source
+        # News sources in priority order:
+        # 1. AKShareNews - Reliable Eastmoney news
+        # 2. NewsNow - Aggregator (may be unreliable)
+        # 3. YFinance - Last resort (rate limited)
         self.news_sources = [
-            NewsNowSource(),  # Free, primary news source
-            # Existing sources as fallback
+            AKShareNewsSource(),  # Primary: Eastmoney news
+            NewsNowSource(),      # Fallback 1: News aggregator
+            YFinanceSource(),     # Fallback 2: Limited by rate
         ]
 
     def supports_ticker(self, ticker: str) -> bool:
@@ -112,11 +117,12 @@ class HKStockAdapter(MarketAdapter):
 
     def get_company_news(self, ticker: str, end_date: str, start_date=None, limit: int = 100):
         """
-        Get company news with NewsNow as primary source.
+        Get company news with multi-source fallback.
 
         Fallback order:
-        1. NewsNow (free, 华尔街见闻 for HK market)
-        2. AKShare, YFinance (existing sources)
+        1. AKShareNews (Eastmoney - reliable for CN/HK stocks)
+        2. NewsNow (free aggregator - may be unreliable)
+        3. YFinance (rate limited)
 
         Args:
             ticker: Stock ticker
@@ -129,9 +135,10 @@ class HKStockAdapter(MarketAdapter):
         """
         ticker = self.normalize_ticker(ticker)
 
-        # Try NewsNow first
+        # Try news sources in priority order
         for source in self.news_sources:
             try:
+                self.logger.info(f"[HKStock] Trying {source.name} for news...")
                 news = source.get_company_news(ticker, end_date, start_date, limit)
                 if news:
                     logger.info(f"[HKStock] ✓ Got {len(news)} news from {source.name}")
@@ -142,6 +149,6 @@ class HKStockAdapter(MarketAdapter):
                 logger.warning(f"[HKStock] ✗ {source.name} failed: {e}")
                 continue
 
-        # Fallback to existing sources via base class
-        logger.warning(f"[HKStock] NewsNow failed, using existing sources")
-        return super().get_company_news(ticker, end_date, start_date, limit)
+        # If all news sources fail, return empty list
+        logger.warning(f"[HKStock] All news sources failed for {ticker}")
+        return []

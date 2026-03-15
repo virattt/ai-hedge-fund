@@ -134,3 +134,27 @@ class MarketRouter:
         """
         adapter = self.route(ticker)
         return adapter.get_financial_metrics(ticker, end_date)
+
+    def get_insider_trades(
+        self,
+        ticker: str,
+        end_date: str,
+        start_date: str = None,
+        limit: int = 100
+    ) -> List[Dict]:
+        """
+内部交易数据
+
+        自动路由到对应适配器并获取数据
+
+        Args:
+            ticker: 股票代码
+            end_date: 截止日期 "YYYY-MM-DD"
+            start_date: 开始日期 "YYYY-MM-DD" (可选)
+            limit: 最大数量
+
+        Returns:
+            List[Dict]: 内部交易列表
+        """
+        adapter = self.route(ticker)
+        return adapter.get_insider_trades(ticker, end_date, start_date, limit)

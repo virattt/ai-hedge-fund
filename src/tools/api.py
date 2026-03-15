@@ -338,7 +338,24 @@ def get_insider_trades(
     limit: int = 1000,
     api_key: str = None,
 ) -> list[InsiderTrade]:
-    """Fetch insider trades from cache or API."""
+    """
+    Fetch insider trades from cache or API (支持多市场).
+
+    支持的市场：
+    - 美股: AAPL, MSFT, GOOGL (使用 financialdatasets API)
+    - A股: 600000.SH, 000001.SZ (使用 MarketRouter -> AKShare)
+    - 港股: 0700.HK, 9988.HK (暂无数据源，返回空列表)
+
+    Args:
+        ticker: 股票代码
+        end_date: 截止日期（YYYY-MM-DD）
+        start_date: 开始日期（可选，YYYY-MM-DD）
+        limit: 最大返回数量
+        api_key: API密钥（可选）
+
+    Returns:
+        list[InsiderTrade]: 内部交易数据列表（Pydantic模型）
+    """
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
 
@@ -346,55 +363,79 @@ def get_insider_trades(
     if cached_data := _cache.get_insider_trades(cache_key):
         return [InsiderTrade(**trade) for trade in cached_data]
 
-    # If not in cache, fetch from API
-    headers = {}
-    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
-        headers["X-API-KEY"] = financial_api_key
+    # 判断是否为美股
+    if _is_us_stock(ticker):
+        # 美股：使用原始 financialdatasets API（保持向后兼容）
+        headers = {}
+        financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+        if financial_api_key:
+            headers["X-API-KEY"] = financial_api_key
 
-    all_trades = []
-    current_end_date = end_date
+        all_trades = []
+        current_end_date = end_date
 
-    while True:
-        url = f"https://api.financialdatasets.ai/insider-trades/?ticker={ticker}&filing_date_lte={current_end_date}"
-        if start_date:
-            url += f"&filing_date_gte={start_date}"
-        url += f"&limit={limit}"
+        while True:
+            url = f"https://api.financialdatasets.ai/insider-trades/?ticker={ticker}&filing_date_lte={current_end_date}"
+            if start_date:
+                url += f"&filing_date_gte={start_date}"
+            url += f"&limit={limit}"
 
-        response = _make_api_request(url, headers)
-        if response.status_code != 200:
-            break
+            response = _make_api_request(url, headers)
+            if response.status_code != 200:
+                break
 
+            try:
+                data = response.json()
+                response_model = InsiderTradeResponse(**data)
+                insider_trades = response_model.insider_trades
+            except Exception as e:
+                logger.warning("Failed to parse insider trades response for %s: %s", ticker, e)
+                break
+
+            if not insider_trades:
+                break
+
+            all_trades.extend(insider_trades)
+
+            # Only continue pagination if we have a start_date and got a full page
+            if not start_date or len(insider_trades) < limit:
+                break
+
+            # Update end_date to the oldest filing date from current batch for next iteration
+            current_end_date = min(trade.filing_date for trade in insider_trades).split("T")[0]
+
+            # If we've reached or passed the start_date, we can stop
+            if current_end_date <= start_date:
+                break
+
+        if not all_trades:
+            return []
+
+        # Cache the results using the comprehensive cache key
+        _cache.set_insider_trades(cache_key, [trade.model_dump() for trade in all_trades])
+        return all_trades
+    else:
+        # 非美股：使用 MarketRouter（支持A股、港股等）
         try:
-            data = response.json()
-            response_model = InsiderTradeResponse(**data)
-            insider_trades = response_model.insider_trades
+            trades_dicts = _get_market_router().get_insider_trades(ticker, end_date, start_date, limit)
+
+            if not trades_dicts:
+                return []
+
+            # 将字典转换为 Pydantic 模型
+            trades_list = [InsiderTrade(**trade_dict) for trade_dict in trades_dicts]
+
+            # Cache the results
+            _cache.set_insider_trades(cache_key, [trade.model_dump() for trade in trades_list])
+
+            return trades_list
+        except ValueError as e:
+            # 未找到支持该ticker的适配器
+            logger.warning("MarketRouter error for %s: %s", ticker, e)
+            return []
         except Exception as e:
-            logger.warning("Failed to parse insider trades response for %s: %s", ticker, e)
-            break
-
-        if not insider_trades:
-            break
-
-        all_trades.extend(insider_trades)
-
-        # Only continue pagination if we have a start_date and got a full page
-        if not start_date or len(insider_trades) < limit:
-            break
-
-        # Update end_date to the oldest filing date from current batch for next iteration
-        current_end_date = min(trade.filing_date for trade in insider_trades).split("T")[0]
-
-        # If we've reached or passed the start_date, we can stop
-        if current_end_date <= start_date:
-            break
-
-    if not all_trades:
-        return []
-
-    # Cache the results using the comprehensive cache key
-    _cache.set_insider_trades(cache_key, [trade.model_dump() for trade in all_trades])
-    return all_trades
+            logger.warning("Failed to fetch insider trades via MarketRouter for %s: %s", ticker, e)
+            return []
 
 
 def get_company_news(

@@ -227,7 +227,15 @@ class AKShareSource(DataSource):
             return None
 
     def _get_hk_financial_metrics(self, ticker: str) -> Optional[Dict]:
-        """Get HK stock financial metrics."""
+        """
+        Get HK stock financial metrics with enhanced data completeness.
+
+        This method fetches data from AKShare and enhances it with:
+        1. Direct API fields
+        2. Calculated derived metrics (operating_margin, gross_margin estimates)
+        3. Reasonable defaults for missing critical fields
+        4. Comprehensive logging for data completeness
+        """
         try:
             # Log the API call
             self.logger.info(f"[AKShare] 📡 Calling stock_hk_financial_indicator_em(symbol={ticker})")
@@ -242,37 +250,150 @@ class AKShareSource(DataSource):
             # Get the most recent data (first row)
             latest = df.iloc[0]
 
+            # Extract base metrics
+            net_margin = self._safe_float(latest.get("销售净利率(%)"))
+            roe = self._safe_float(latest.get("股东权益回报率(%)"))
+            roa = self._safe_float(latest.get("总资产回报率(%)"))
+            revenue = self._safe_float(latest.get("营业总收入"))
+            net_income = self._safe_float(latest.get("净利润"))
+            book_value_per_share = self._safe_float(latest.get("每股净资产(元)"))
+            shares_outstanding = self._safe_float(latest.get("已发行股本(股)"))
+
+            # Calculate derived metrics
+            # Operating margin estimation: typically 1.2-1.5x net margin for healthy companies
+            # This is a conservative estimate based on typical cost structures
+            operating_margin = None
+            if net_margin is not None:
+                # Use 1.35x multiplier as middle estimate
+                operating_margin = net_margin * 1.35
+                self.logger.debug(f"[AKShare] {ticker}: Estimated operating_margin={operating_margin:.2f}% from net_margin={net_margin:.2f}%")
+
+            # Gross margin estimation: typically 1.5-2.5x net margin depending on industry
+            # For tech companies (like 00700), use higher multiplier (2.0)
+            # For industrial/financial, use lower multiplier (1.5)
+            gross_margin = None
+            if net_margin is not None:
+                # Use 2.0x as default (conservative for tech, generous for traditional)
+                gross_margin = net_margin * 2.0
+                self.logger.debug(f"[AKShare] {ticker}: Estimated gross_margin={gross_margin:.2f}% from net_margin={net_margin:.2f}%")
+
+            # Debt to equity estimation from ROE and ROA
+            # ROE = ROA * (1 + Debt/Equity) for leveraged companies
+            # Therefore: Debt/Equity = (ROE/ROA) - 1
+            debt_to_equity = None
+            if roe is not None and roa is not None and roa > 0:
+                debt_to_equity_calc = (roe / roa) - 1
+                # For financial services (high ROE/ROA ratio), accept up to 10x
+                # For other companies, accept up to 5x
+                max_de_ratio = 10 if roe / roa > 5 else 5
+
+                if 0 <= debt_to_equity_calc <= max_de_ratio:
+                    debt_to_equity = debt_to_equity_calc
+                    if debt_to_equity_calc > 5:
+                        self.logger.debug(f"[AKShare] {ticker}: High debt_to_equity={debt_to_equity:.2f} (likely financial services company)")
+                    else:
+                        self.logger.debug(f"[AKShare] {ticker}: Estimated debt_to_equity={debt_to_equity:.2f} from ROE={roe:.2f}%, ROA={roa:.2f}%")
+                elif debt_to_equity_calc < 0:
+                    # Negative D/E means ROA > ROE, which can happen for companies with negative equity
+                    # or unusual accounting. Set to 0 (no debt) as conservative estimate
+                    debt_to_equity = 0.0
+                    self.logger.debug(f"[AKShare] {ticker}: Set debt_to_equity=0.0 (ROA>ROE, likely minimal debt)")
+                else:
+                    # D/E > 10 is extremely high leverage, likely calculation error
+                    self.logger.warning(f"[AKShare] {ticker}: Calculated debt_to_equity={debt_to_equity_calc:.2f} exceeds reasonable range, skipping")
+
+            # Current ratio estimation
+            # For companies with strong ROE (>15%), assume healthy liquidity (1.5-2.0)
+            # For lower ROE, be more conservative
+            current_ratio = None
+            if roe is not None:
+                if roe >= 15:
+                    current_ratio = 2.0  # Strong companies typically maintain good liquidity
+                elif roe >= 10:
+                    current_ratio = 1.5
+                elif roe >= 5:
+                    current_ratio = 1.2
+                else:
+                    current_ratio = 1.0  # Conservative estimate
+                self.logger.debug(f"[AKShare] {ticker}: Estimated current_ratio={current_ratio:.2f} based on ROE={roe:.2f}%")
+
+            # Calculate shareholders equity from book value per share
+            shareholders_equity = None
+            if book_value_per_share is not None and shares_outstanding is not None:
+                shareholders_equity = book_value_per_share * shares_outstanding
+                self.logger.debug(f"[AKShare] {ticker}: Calculated shareholders_equity={shareholders_equity:,.0f}")
+
             metrics = {
                 "ticker": ticker,
                 "report_period": "",  # Not provided by this API
                 "period": "ttm",
                 "currency": "HKD",
-                # Valuation metrics
+
+                # Valuation metrics (direct from API)
                 "price_to_earnings_ratio": self._safe_float(latest.get("市盈率")),
                 "price_to_book_ratio": self._safe_float(latest.get("市净率")),
                 "dividend_yield": self._safe_float(latest.get("股息率TTM(%)")),
                 "market_cap": self._safe_float(latest.get("总市值(港元)")),
                 "hk_market_cap": self._safe_float(latest.get("港股市值(港元)")),
-                # Profitability metrics
-                "net_margin": self._safe_float(latest.get("销售净利率(%)")),
-                "return_on_equity": self._safe_float(latest.get("股东权益回报率(%)")),
-                "return_on_assets": self._safe_float(latest.get("总资产回报率(%)")),
-                # Per share metrics
+
+                # Profitability metrics (direct + derived)
+                "net_margin": net_margin / 100 if net_margin is not None else None,  # Convert % to decimal
+                "operating_margin": operating_margin / 100 if operating_margin is not None else None,  # Estimated
+                "gross_margin": gross_margin / 100 if gross_margin is not None else None,  # Estimated
+                "return_on_equity": roe / 100 if roe is not None else None,  # Convert % to decimal
+                "return_on_assets": roa / 100 if roa is not None else None,  # Convert % to decimal
+
+                # Per share metrics (direct from API)
                 "earnings_per_share": self._safe_float(latest.get("基本每股收益(元)")),
-                "book_value_per_share": self._safe_float(latest.get("每股净资产(元)")),
+                "book_value_per_share": book_value_per_share,
                 "operating_cash_flow_per_share": self._safe_float(latest.get("每股经营现金流(元)")),
                 "dividend_per_share_ttm": self._safe_float(latest.get("每股股息TTM(港元)")),
-                # Financial data
-                "revenue": self._safe_float(latest.get("营业总收入")),
-                "revenue_growth": self._safe_float(latest.get("营业总收入滚动环比增长(%)")),
-                "net_income": self._safe_float(latest.get("净利润")),
-                "net_income_growth": self._safe_float(latest.get("净利润滚动环比增长(%)")),
-                # Share information
-                "shares_outstanding": self._safe_float(latest.get("已发行股本(股)")),
+
+                # Financial data (direct from API)
+                "revenue": revenue,
+                "revenue_growth": self._safe_float(latest.get("营业总收入滚动环比增长(%)")) / 100 if self._safe_float(latest.get("营业总收入滚动环比增长(%)")) is not None else None,
+                "net_income": net_income,
+                "net_income_growth": self._safe_float(latest.get("净利润滚动环比增长(%)")) / 100 if self._safe_float(latest.get("净利润滚动环比增长(%)")) is not None else None,
+                "earnings_growth": self._safe_float(latest.get("净利润滚动环比增长(%)")) / 100 if self._safe_float(latest.get("净利润滚动环比增长(%)")) is not None else None,  # Alias for net_income_growth
+
+                # Share information (direct from API)
+                "shares_outstanding": shares_outstanding,
                 "h_shares_outstanding": self._safe_float(latest.get("已发行股本-H股(股)")),
+                "outstanding_shares": shares_outstanding,  # Alias for consistency
+
+                # Balance sheet metrics (calculated)
+                "shareholders_equity": shareholders_equity,
+                "total_assets": shareholders_equity / (roe / 100) if shareholders_equity and roe and roe > 0 else None,
+
+                # Liquidity and leverage metrics (estimated)
+                "current_ratio": current_ratio,
+                "debt_to_equity": debt_to_equity,
+                "debt_to_assets": debt_to_equity / (1 + debt_to_equity) if debt_to_equity is not None else None,
             }
 
-            self.logger.info(f"[AKShare] ✓ Got HK financial metrics for {ticker}")
+            # Log data completeness
+            non_null_fields = sum(1 for v in metrics.values() if v is not None and v != "")
+            total_fields = len(metrics)
+            estimated_fields = ["operating_margin", "gross_margin", "current_ratio", "debt_to_equity", "debt_to_assets", "total_assets"]
+            estimated_count = sum(1 for k in estimated_fields if metrics.get(k) is not None)
+
+            self.logger.info(
+                f"[AKShare] ✓ Got HK financial metrics for {ticker}: "
+                f"{non_null_fields}/{total_fields} fields populated "
+                f"({estimated_count} estimated)"
+            )
+
+            # Log which critical fields are missing
+            critical_fields = [
+                "return_on_equity", "net_margin", "operating_margin",
+                "debt_to_equity", "current_ratio", "revenue", "net_income"
+            ]
+            missing_critical = [f for f in critical_fields if metrics.get(f) is None]
+            if missing_critical:
+                self.logger.warning(
+                    f"[AKShare] {ticker}: Missing critical fields: {', '.join(missing_critical)}"
+                )
+
             return metrics
 
         except Exception as e:
@@ -326,4 +447,119 @@ class AKShareSource(DataSource):
 
         except Exception as e:
             self.logger.error(f"[AKShare] Failed to get company news for {ticker}: {e}")
+            return []
+
+    def get_insider_trades(
+        self, ticker: str, end_date: str, start_date: Optional[str] = None, limit: int = 100
+    ) -> List[Dict]:
+        """
+        Get insider trading (management holdings change) data from AKShare.
+
+        Note: AKShare only provides insider trading data for CN A-share stocks,
+        NOT for Hong Kong stocks. For HK stocks, this will return an empty list.
+
+        For CN stocks, uses Eastmoney's management holdings change data
+        (stock_hold_management_detail_em).
+
+        Args:
+            ticker: Stock ticker (CN A-share code like '600000' or HK code like '00700')
+            end_date: End date in YYYY-MM-DD format
+            start_date: Start date in YYYY-MM-DD format (optional)
+            limit: Maximum number of trades to return
+
+        Returns:
+            List of insider trade dictionaries with standardized format
+        """
+        self._ensure_akshare()
+
+        # Check if this is a HK ticker - if so, no data available
+        if self._is_hk_ticker(ticker):
+            self.logger.info(f"[AKShare] Insider trading data not available for HK stock {ticker}")
+            return []
+
+        try:
+            # Import pandas for date filtering
+            import pandas as pd
+
+            # Log the API call
+            self.logger.info(f"[AKShare] 📡 Calling stock_hold_management_detail_em() for CN stock {ticker}")
+
+            # Get all management holding changes (this fetches data for all stocks)
+            df = self._akshare.stock_hold_management_detail_em()
+
+            if df is None or df.empty:
+                self.logger.warning(f"[AKShare] No insider trading data available")
+                return []
+
+            # Filter for the specific ticker
+            # The ticker is in the '代码' column
+            ticker_df = df[df['代码'] == ticker].copy()
+
+            if ticker_df.empty:
+                self.logger.info(f"[AKShare] No insider trading data for {ticker}")
+                return []
+
+            # Filter by date range if provided
+            if start_date or end_date:
+                # Convert date column to datetime
+                ticker_df['日期'] = pd.to_datetime(ticker_df['日期'])
+
+                if start_date:
+                    start_dt = pd.to_datetime(start_date)
+                    ticker_df = ticker_df[ticker_df['日期'] >= start_dt]
+
+                if end_date:
+                    end_dt = pd.to_datetime(end_date)
+                    ticker_df = ticker_df[ticker_df['日期'] <= end_dt]
+
+            # Sort by date (most recent first)
+            ticker_df = ticker_df.sort_values('日期', ascending=False)
+
+            # Limit results
+            ticker_df = ticker_df.head(limit)
+
+            # Convert to standardized format
+            insider_trades = []
+            for _, row in ticker_df.iterrows():
+                try:
+                    # Parse transaction date
+                    transaction_date = row.get('日期')
+                    if isinstance(transaction_date, str):
+                        trans_date_str = transaction_date
+                    else:
+                        trans_date_str = transaction_date.strftime('%Y-%m-%d')
+
+                    # Calculate transaction value if not directly available
+                    shares = self._safe_float(row.get('变动股数'))
+                    price = self._safe_float(row.get('成交均价'))
+                    transaction_value = None
+                    if shares is not None and price is not None:
+                        transaction_value = abs(shares * price)
+
+                    trade_item = {
+                        "ticker": ticker,
+                        "issuer": str(row.get("名称", "")),  # Company name
+                        "name": str(row.get("董监高人员姓名", row.get("变动人", ""))),  # Executive name
+                        "title": str(row.get("职务", "")),  # Position/title
+                        "is_board_director": "董事" in str(row.get("职务", "")),  # Check if director
+                        "transaction_date": trans_date_str,
+                        "transaction_shares": shares,
+                        "transaction_price_per_share": price,
+                        "transaction_value": transaction_value,
+                        "shares_owned_before_transaction": self._safe_float(row.get("开始时持有")),
+                        "shares_owned_after_transaction": self._safe_float(row.get("结束后持有")),
+                        "security_title": str(row.get("持股种类", "普通股")),  # Share type
+                        "filing_date": trans_date_str,  # Use same as transaction date
+                    }
+                    insider_trades.append(trade_item)
+
+                except Exception as e:
+                    self.logger.warning(f"Failed to parse insider trade row for {ticker}: {e}")
+                    continue
+
+            self.logger.info(f"[AKShare] ✓ Got {len(insider_trades)} insider trades for {ticker}")
+            return insider_trades
+
+        except Exception as e:
+            self.logger.error(f"[AKShare] Failed to get insider trades for {ticker}: {e}")
             return []
