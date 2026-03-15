@@ -82,6 +82,35 @@ FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 
 **Financial Data**: Data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key. For any other ticker, you will need to set the `FINANCIAL_DATASETS_API_KEY` in the .env file.
 
+## 💾 Data Source Configuration
+
+### Quick Start
+
+- **US Stocks**: Works out of the box with Financial Datasets API
+- **CN/HK Stocks**: Requires Tushare Pro (recommended for stability)
+  - **Quick setup**: `./setup_tushare.sh`
+  - **Detailed guide**: [docs/TUSHARE_SETUP.md](docs/TUSHARE_SETUP.md)
+  - **Register**: https://tushare.pro/register (free)
+
+### Testing Data Sources
+
+Verify your data source configuration:
+
+```bash
+poetry run python test_data_sources.py
+```
+
+Expected output:
+```
+✅ US Stocks    - PASS
+✅ CN Stocks    - PASS (if Tushare configured)
+✅ Market Router - PASS
+```
+
+### Troubleshooting
+
+If you encounter data source issues, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+
 ## How to Run
 
 ### ⌨️ Command Line Interface
