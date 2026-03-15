@@ -5,14 +5,20 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import argparse
 
+# Load .env FIRST — before any src.* imports so module-level os.environ reads
+# (e.g. USE_FINANCE_DATA in src/tools/api.py) see the correct values.
+from dotenv import load_dotenv
+load_dotenv()
+
 from colorama import Fore, Style, init
 import questionary
 
 from .engine import BacktestEngine
-from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider
+from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, MLX_LLM_ORDER, get_model_info, ModelProvider
 from src.utils.analysts import ANALYST_ORDER
 from src.main import run_hedge_fund
 from src.utils.ollama import ensure_ollama_and_model
+from src.utils.mlx_lm import ensure_mlx_and_model
 
 
 def main() -> int:
@@ -35,6 +41,7 @@ def main() -> int:
     parser.add_argument("--analysts", type=str, required=False)
     parser.add_argument("--analysts-all", action="store_true")
     parser.add_argument("--ollama", action="store_true")
+    parser.add_argument("--mlx", action="store_true", help="Use MLX LM server (Apple Silicon / LAN)")
 
     args = parser.parse_args()
     init(autoreset=True)
@@ -71,8 +78,37 @@ def main() -> int:
             f"{', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n"
         )
 
-    # Model selection simplified: default to first ordered model or Ollama flag
-    if args.ollama:
+    # Model selection: MLX takes priority over Ollama; fall back to cloud models
+    if args.mlx:
+        print(f"{Fore.CYAN}Using MLX LM server for local inference.{Style.RESET_ALL}")
+        model_name = questionary.select(
+            "Select your MLX model:",
+            choices=[questionary.Choice(display, value=value) for display, value, _ in MLX_LLM_ORDER],
+            style=questionary.Style(
+                [
+                    ("selected", "fg:green bold"),
+                    ("pointer", "fg:green bold"),
+                    ("highlighted", "fg:green"),
+                    ("answer", "fg:green bold"),
+                ]
+            ),
+        ).ask()
+        if not model_name:
+            print("\n\nInterrupt received. Exiting...")
+            return 1
+        if model_name == "-":
+            model_name = questionary.text("Enter the HuggingFace model ID (e.g. mlx-community/Llama-3.1-8B-Instruct-4bit):").ask()
+            if not model_name:
+                print("\n\nInterrupt received. Exiting...")
+                return 1
+        if not ensure_mlx_and_model(model_name):
+            print(f"{Fore.RED}Cannot proceed without a running MLX server.{Style.RESET_ALL}")
+            return 1
+        model_provider = ModelProvider.MLX.value
+        print(
+            f"\nSelected {Fore.CYAN}MLX{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n"
+        )
+    elif args.ollama:
         print(f"{Fore.CYAN}Using Ollama for local LLM inference.{Style.RESET_ALL}")
         model_name = questionary.select(
             "Select your Ollama model:",
