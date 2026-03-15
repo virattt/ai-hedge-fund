@@ -1,5 +1,6 @@
 """Tests for HK stock adapter."""
 import pytest
+import requests_mock as rm_module
 from unittest.mock import Mock, patch
 from src.markets.hk_stock import HKStockAdapter
 from src.data.models import Price
@@ -120,3 +121,32 @@ class TestHKStockAdapter:
         # Verify
         assert metrics is not None
         assert metrics["ticker"] == "00700"
+
+
+class TestHKStockNewsNowIntegration:
+    def test_get_company_news_uses_newsnow_first(self):
+        """Test that NewsNow is used as primary news source."""
+        adapter = HKStockAdapter()
+
+        # Mock NewsNow API - use normalized ticker in title (00700)
+        with rm_module.Mocker() as m:
+            m.get(
+                "https://newsnow.busiyi.world/api/s?id=cls",
+                json={
+                    "items": [
+                        {
+                            "id": "1",
+                            "title": "腾讯 00700 股价上涨",
+                            "url": "https://example.com/1",
+                            "publish_time": "2024-03-15T10:00:00Z"
+                        }
+                    ]
+                }
+            )
+            m.get("https://newsnow.busiyi.world/api/s?id=wallstreetcn", json={"items": []})
+            m.get("https://newsnow.busiyi.world/api/s?id=xueqiu", json={"items": []})
+
+            news = adapter.get_company_news("0700", "2024-03-15", limit=10)
+
+        assert len(news) > 0
+        assert news[0]["source"] == "NewsNow"
