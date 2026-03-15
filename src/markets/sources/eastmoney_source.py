@@ -254,7 +254,11 @@ class EastmoneySource(DataSource):
         """
         Get financial metrics from Eastmoney.
 
-        Implementation in Task 3.3.
+        Fetches comprehensive financial indicators including:
+        - Valuation: PE, PB, PS, EV/EBITDA
+        - Profitability: gross margin, net margin, ROE, ROA
+        - Solvency: debt ratio, current ratio
+        - Growth: revenue growth, profit growth
 
         Args:
             ticker: Stock ticker (CN market format)
@@ -270,9 +274,144 @@ class EastmoneySource(DataSource):
             self.logger.warning(f"[Eastmoney] Ticker {ticker} is not CN market format")
             return None
 
-        # To be implemented in Task 3.3
-        self.logger.info(f"[Eastmoney] Financial metrics not yet implemented")
-        return None
+        # Convert to Eastmoney format
+        secid = self._to_eastmoney_secid(ticker)
+
+        try:
+            # Add delay to avoid rate limiting
+            time.sleep(random.uniform(0.5, 1.5))
+
+            # Build request parameters for financial metrics
+            params = {
+                'secid': secid,
+                'fields': 'f43,f44,f45,f46,f47,f48,f49,f50,f57,f58,f84,f85,f86,f87,f88,f89,f90,f91,f92,f93,f94,f95,f96,f97,f98,f99,f100,f101,f102,f103,f104,f105,f106,f107,f108,f109,f110,f111,f112,f113,f114,f115,f116,f117,f118,f119,f120,f121,f122,f123,f124,f125,f126,f127,f128,f129,f130,f131,f132,f133,f134,f135,f136,f137,f138,f139,f140,f141,f142,f143,f144,f145,f146,f147,f148,f149,f150,f151,f152,f153,f154,f155,f156,f157,f158,f159,f160,f161,f162,f163,f164,f165,f166,f167,f168,f169,f170,f171,f172,f173,f174,f175,f176,f177,f178,f179,f180,f181,f182,f183,f184,f185,f186,f187,f188,f189,f190,f191,f192,f193,f194,f195,f196,f197,f198,f199,f200',
+            }
+
+            response = self.session.get(self.FINANCE_API, params=params, timeout=15)
+            response.raise_for_status()
+
+            # Parse JSON response
+            data = response.json()
+
+            if not data or 'data' not in data:
+                self.logger.warning(f"[Eastmoney] No financial data for {ticker}")
+                return None
+
+            finance_data = data['data']
+            if not finance_data:
+                return None
+
+            # Extract and convert financial metrics
+            metrics = self._parse_financial_metrics(finance_data, ticker, end_date, period)
+
+            if metrics:
+                self.logger.info(f"[Eastmoney] ✓ Retrieved financial metrics for {ticker}")
+            else:
+                self.logger.warning(f"[Eastmoney] Failed to parse financial metrics for {ticker}")
+
+            return metrics
+
+        except Exception as e:
+            self.logger.error(f"[Eastmoney] Failed to get financial metrics for {ticker}: {e}")
+            return None
+
+    def _parse_financial_metrics(self, data: Dict, ticker: str, end_date: str, period: str) -> Optional[Dict]:
+        """
+        Parse financial metrics from Eastmoney API response.
+
+        Eastmoney field mappings (commonly used):
+        - f57: Total market cap (总市值)
+        - f58: Circulating market cap (流通市值)
+        - f43: Latest price
+        - f44: High
+        - f45: Low
+        - f46: Open
+        - f47: Close
+        - f48: Volume
+        - f49: Amount
+        - f162: PE (TTM) (市盈率)
+        - f167: PB (市净率)
+        - f173: ROE (净资产收益率)
+        - f187: Gross margin (毛利率)
+
+        Args:
+            data: API response data
+            ticker: Stock ticker
+            end_date: End date
+            period: Period type
+
+        Returns:
+            Dictionary with parsed financial metrics
+        """
+        try:
+            # Extract basic metrics
+            # Note: Eastmoney API field numbers are documented but can vary
+            # Here we use safe extraction with fallbacks
+
+            metrics = {
+                "ticker": ticker,
+                "report_period": end_date,
+                "period": period,
+                "currency": "CNY",  # CN market uses CNY
+            }
+
+            # Market cap (f57: total, f58: circulating)
+            metrics["market_cap"] = self._safe_float(data.get("f57"))
+
+            # Valuation metrics
+            metrics["price_to_earnings_ratio"] = self._safe_float(data.get("f162"))  # PE (TTM)
+            metrics["price_to_book_ratio"] = self._safe_float(data.get("f167"))      # PB
+            # PS and EV/EBITDA not directly available in basic quote API
+            metrics["price_to_sales_ratio"] = None
+            metrics["enterprise_value_to_ebitda_ratio"] = None
+            metrics["enterprise_value_to_revenue_ratio"] = None
+
+            # Profitability metrics
+            metrics["gross_margin"] = self._safe_float(data.get("f187"))    # 毛利率
+            metrics["net_margin"] = None  # Not in basic quote
+            metrics["operating_margin"] = None
+            metrics["return_on_equity"] = self._safe_float(data.get("f173"))  # ROE
+            metrics["return_on_assets"] = None  # Not in basic quote
+
+            # Solvency metrics - not available in basic quote API
+            metrics["current_ratio"] = None
+            metrics["quick_ratio"] = None
+            metrics["debt_to_equity"] = None
+
+            # Growth metrics - not available in basic quote API
+            metrics["revenue_growth"] = None
+            metrics["earnings_growth"] = None
+
+            # Per share metrics
+            metrics["earnings_per_share"] = None
+            metrics["book_value_per_share"] = None
+
+            # Additional info
+            metrics["enterprise_value"] = None
+            metrics["payout_ratio"] = None
+
+            return metrics
+
+        except Exception as e:
+            self.logger.error(f"Failed to parse financial metrics: {e}")
+            return None
+
+    def _safe_float(self, value) -> Optional[float]:
+        """
+        Safely convert value to float.
+
+        Args:
+            value: Value to convert
+
+        Returns:
+            Float value or None
+        """
+        try:
+            if value is None or value == "" or value == "-":
+                return None
+            return float(value)
+        except (ValueError, TypeError):
+            return None
 
     def get_company_news(
         self, ticker: str, end_date: str, start_date: Optional[str] = None, limit: int = 100

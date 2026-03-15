@@ -174,13 +174,71 @@ class TestEastmoneySource:
 
         assert prices == []
 
-    def test_get_financial_metrics_not_implemented(self):
-        """Test financial metrics (not yet implemented)."""
+    @patch('src.markets.sources.eastmoney_source.requests.Session.get')
+    def test_get_financial_metrics_success(self, mock_get):
+        """Test successful financial metrics fetching."""
         source = EastmoneySource()
+
+        # Mock API response with financial data
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            'data': {
+                'f57': 1000000000000,  # Market cap (1 trillion)
+                'f162': 15.5,          # PE ratio
+                'f167': 1.8,           # PB ratio
+                'f173': 12.5,          # ROE
+                'f187': 35.2,          # Gross margin
+            }
+        }
+        mock_get.return_value = mock_response
+
+        metrics = source.get_financial_metrics("600000.SH", "2024-01-31")
+
+        assert metrics is not None
+        assert metrics['ticker'] == "600000.SH"
+        assert metrics['currency'] == "CNY"
+        assert metrics['market_cap'] == 1000000000000
+        assert metrics['price_to_earnings_ratio'] == 15.5
+        assert metrics['price_to_book_ratio'] == 1.8
+        assert metrics['return_on_equity'] == 12.5
+        assert metrics['gross_margin'] == 35.2
+
+    @patch('src.markets.sources.eastmoney_source.requests.Session.get')
+    def test_get_financial_metrics_empty_response(self, mock_get):
+        """Test financial metrics with empty response."""
+        source = EastmoneySource()
+
+        # Mock empty response
+        mock_response = Mock()
+        mock_response.json.return_value = {}
+        mock_get.return_value = mock_response
 
         metrics = source.get_financial_metrics("600000.SH", "2024-01-31")
 
         assert metrics is None
+
+    def test_get_financial_metrics_non_cn_ticker(self):
+        """Test financial metrics with non-CN ticker."""
+        source = EastmoneySource()
+
+        metrics = source.get_financial_metrics("AAPL", "2024-01-31")
+
+        assert metrics is None
+
+    def test_safe_float(self):
+        """Test safe float conversion."""
+        source = EastmoneySource()
+
+        # Valid conversions
+        assert source._safe_float(15.5) == 15.5
+        assert source._safe_float("15.5") == 15.5
+        assert source._safe_float(100) == 100.0
+
+        # Invalid values
+        assert source._safe_float(None) is None
+        assert source._safe_float("") is None
+        assert source._safe_float("-") is None
+        assert source._safe_float("invalid") is None
 
     def test_get_company_news_not_supported(self):
         """Test company news (not supported)."""
@@ -234,3 +292,23 @@ class TestEastmoneySourceIntegration:
 
         # Should have same number of records
         assert len(prices_1) == len(prices_2) == len(prices_3)
+
+    def test_get_financial_metrics_real_api(self):
+        """Test fetching real financial metrics from Eastmoney API."""
+        source = EastmoneySource()
+
+        # Test with a well-known CN stock (招商银行 600036.SH)
+        metrics = source.get_financial_metrics("600036.SH", "2024-01-31")
+
+        # Should have basic metrics
+        assert metrics is not None
+        assert metrics['ticker'] == "600036.SH"
+        assert metrics['currency'] == "CNY"
+
+        # Check that we have some valuation metrics
+        # PE and PB are typically available
+        if metrics.get('price_to_earnings_ratio'):
+            assert metrics['price_to_earnings_ratio'] > 0
+
+        if metrics.get('price_to_book_ratio'):
+            assert metrics['price_to_book_ratio'] > 0
