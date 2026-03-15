@@ -328,13 +328,38 @@ class EastMoneyDirectSource:
         response = fetch_with_proxy_fallback(
             lambda: requests.get(cls.KLINE_URL, params=params, timeout=10)
         )
+        response.raise_for_status()
 
-        # 解析数据...
+        # 解析响应数据
+        data = response.json().get('data')
+        if not data or not data.get('klines'):
+            return pd.DataFrame()
+
+        # kline 格式: "日期,开盘,收盘,最高,最低,成交量,成交额,振幅,涨跌幅,涨跌额,换手率"
+        rows = [k.split(',') for k in data['klines']]
+        df = pd.DataFrame(rows, columns=[
+            '日期', '开盘', '收盘', '最高', '最低', '成交量',
+            '成交额', '振幅', '涨跌幅', '涨跌额', '换手率'
+        ])
+
+        # 转为数值类型并验证数据
+        for col in ['开盘', '收盘', '最高', '最低', '成交量', '涨跌幅']:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        # 数据质量验证
+        if df['收盘'].isna().all():
+            raise ValueError(f"Invalid data for {ticker}: all close prices are NaN")
+
+        return df
 ```
 
 ### 4.3 代理自动检测机制
 
 ```python
+from contextlib import contextmanager
+from requests.exceptions import RequestException
+import os
+
 @contextmanager
 def temporary_no_proxy():
     """
@@ -540,32 +565,63 @@ class DataFetchScheduler:
         - 获取股票池中所有股票的历史数据
         - 日期范围：最近1年（或自定义）
         - 跳过已存在的数据（增量更新）
+
+        错误处理：
+        - 每个ticker独立重试3次，指数退避（2s, 4s, 8s）
+        - 记录失败ticker到日志表
+        - 部分失败不影响其他ticker的处理
+        - 连续失败超过阈值时发送告警（可选）
         """
         logger.info("🔄 Starting daily historical data fetch...")
         stock_pool = self.cache.get_active_stock_pool()
 
+        failed_tickers = []
+        success_count = 0
+
         for ticker in stock_pool:
-            try:
-                # 查询数据库中已有的最新日期
-                latest_date = self.cache.get_latest_price_date(ticker)
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    # 查询数据库中已有的最新日期
+                    latest_date = self.cache.get_latest_price_date(ticker)
 
-                # 计算需要获取的日期范围
-                start_date = latest_date + timedelta(days=1) if latest_date else (datetime.now() - timedelta(days=365))
-                end_date = datetime.now() - timedelta(days=1)  # 昨天
+                    # 计算需要获取的日期范围
+                    start_date = latest_date + timedelta(days=1) if latest_date else (datetime.now() - timedelta(days=365))
+                    end_date = datetime.now() - timedelta(days=1)  # 昨天
 
-                if start_date >= end_date:
-                    logger.info(f"✓ {ticker} is up-to-date")
-                    continue
+                    if start_date >= end_date:
+                        logger.info(f"✓ {ticker} is up-to-date")
+                        success_count += 1
+                        break
 
-                # 获取数据
-                prices = self.fetcher.get_prices(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+                    # 获取数据
+                    prices = self.fetcher.get_prices(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
 
-                # 保存到数据库
-                self.cache.save_prices(ticker, prices)
-                logger.info(f"✅ {ticker}: saved {len(prices)} records")
+                    # 保存到数据库
+                    self.cache.save_prices(ticker, prices)
+                    logger.info(f"✅ {ticker}: saved {len(prices)} records")
+                    success_count += 1
+                    break  # 成功，跳出重试循环
 
-            except Exception as e:
-                logger.error(f"❌ Failed to fetch historical data for {ticker}: {e}")
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        # 指数退避重试
+                        delay = 2 ** (attempt + 1)
+                        logger.warning(f"⚠️ {ticker} failed (attempt {attempt + 1}/{max_retries}), retrying in {delay}s: {e}")
+                        time.sleep(delay)
+                    else:
+                        # 最终失败
+                        logger.error(f"❌ {ticker} failed after {max_retries} attempts: {e}")
+                        failed_tickers.append(ticker)
+                        self.cache.log_fetch_failure(ticker, 'prices', str(e))
+
+        # 汇总统计
+        logger.info(f"📊 Daily fetch completed: {success_count} success, {len(failed_tickers)} failed")
+        if failed_tickers:
+            logger.warning(f"Failed tickers: {', '.join(failed_tickers)}")
+            # 可选：发送告警通知
+            if len(failed_tickers) > len(stock_pool) * 0.3:  # 失败率>30%
+                self._send_alert(f"High failure rate in daily fetch: {len(failed_tickers)}/{len(stock_pool)}")
 
     def hourly_current_fetch(self):
         """
@@ -760,47 +816,79 @@ class MySQLCache:
 
     def save_prices(self, ticker: str, prices: List[Price], overwrite_today: bool = False):
         """
-        保存价格数据到MySQL
+        保存价格数据到MySQL（使用批量插入优化性能）
 
         参数：
         - overwrite_today: 是否覆盖当日数据（用于更新最新价格）
+
+        事务隔离级别：READ_COMMITTED
+        - 避免脏读
+        - 允许不可重复读（当日数据可能被更新）
+        - 性能与一致性平衡
         """
         session = self.Session()
         try:
-            for price in prices:
-                # 检查是否已存在
-                existing = session.query(StockPriceModel).filter(
-                    StockPriceModel.ticker == ticker,
-                    StockPriceModel.time == price.time
-                ).first()
+            # 设置事务隔离级别
+            session.connection(execution_options={"isolation_level": "READ_COMMITTED"})
 
-                if existing:
+            # 批量查询已存在的记录（优化性能）
+            time_list = [p.time for p in prices]
+            existing_records = session.query(StockPriceModel).filter(
+                StockPriceModel.ticker == ticker,
+                StockPriceModel.time.in_(time_list)
+            ).all()
+            existing_times = {r.time for r in existing_records}
+
+            # 分离需要更新和插入的数据
+            to_update = []
+            to_insert = []
+
+            for price in prices:
+                if price.time in existing_times:
                     if overwrite_today and price.time.date() == datetime.now().date():
-                        # 更新当日数据
-                        existing.open = price.open
-                        existing.close = price.close
-                        existing.high = price.high
-                        existing.low = price.low
-                        existing.volume = price.volume
-                        existing.updated_at = datetime.now()
+                        to_update.append(price)
                 else:
-                    # 插入新数据
-                    model = StockPriceModel(
-                        ticker=ticker,
-                        date=price.time.date(),
-                        time=price.time,
-                        open=price.open,
-                        close=price.close,
-                        high=price.high,
-                        low=price.low,
-                        volume=price.volume,
-                        data_source=price.source if hasattr(price, 'source') else 'unknown'
-                    )
-                    session.add(model)
+                    to_insert.append(price)
+
+            # 批量更新当日数据
+            if to_update:
+                for price in to_update:
+                    session.query(StockPriceModel).filter(
+                        StockPriceModel.ticker == ticker,
+                        StockPriceModel.time == price.time
+                    ).update({
+                        'open': price.open,
+                        'close': price.close,
+                        'high': price.high,
+                        'low': price.low,
+                        'volume': price.volume,
+                        'updated_at': datetime.now()
+                    })
+
+            # 批量插入新数据（使用 bulk_insert_mappings 优化性能）
+            if to_insert:
+                mappings = [
+                    {
+                        'ticker': ticker,
+                        'date': price.time.date(),
+                        'time': price.time,
+                        'open': price.open,
+                        'close': price.close,
+                        'high': price.high,
+                        'low': price.low,
+                        'volume': price.volume,
+                        'data_source': price.source if hasattr(price, 'source') else 'unknown'
+                    }
+                    for price in to_insert
+                ]
+                session.bulk_insert_mappings(StockPriceModel, mappings)
 
             session.commit()
+            logger.debug(f"Saved {len(to_insert)} new records, updated {len(to_update)} records for {ticker}")
+
         except Exception as e:
             session.rollback()
+            logger.error(f"Failed to save prices for {ticker}: {e}")
             raise
         finally:
             session.close()
@@ -952,6 +1040,147 @@ poetry run alembic revision --autogenerate -m "add_cache_tables"
 
 # 应用迁移
 poetry run alembic upgrade head
+```
+
+**迁移文件示例** (`app/backend/alembic/versions/xxx_add_cache_tables.py`):
+
+```python
+"""add_cache_tables
+
+Revision ID: xxx
+Revises: add_api_keys_table
+Create Date: 2026-03-15 10:00:00.000000
+
+"""
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects import mysql
+
+# revision identifiers, used by Alembic.
+revision = 'xxx'
+down_revision = 'add_api_keys_table'
+branch_labels = None
+depends_on = None
+
+
+def upgrade():
+    # stock_prices表
+    op.create_table('stock_prices',
+        sa.Column('id', sa.BigInteger(), autoincrement=True, nullable=False),
+        sa.Column('ticker', sa.String(length=20), nullable=False),
+        sa.Column('date', sa.Date(), nullable=False),
+        sa.Column('time', sa.DateTime(), nullable=False),
+        sa.Column('open', sa.DECIMAL(precision=20, scale=6), nullable=True),
+        sa.Column('close', sa.DECIMAL(precision=20, scale=6), nullable=True),
+        sa.Column('high', sa.DECIMAL(precision=20, scale=6), nullable=True),
+        sa.Column('low', sa.DECIMAL(precision=20, scale=6), nullable=True),
+        sa.Column('volume', sa.BigInteger(), nullable=True),
+        sa.Column('data_source', sa.String(length=50), nullable=False),
+        sa.Column('created_at', sa.TIMESTAMP(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+        sa.Column('updated_at', sa.TIMESTAMP(), server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'), nullable=False),
+        sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('ticker', 'time', name='uk_ticker_time')
+    )
+    op.create_index('idx_ticker_date', 'stock_prices', ['ticker', 'date'])
+    op.create_index('idx_created_at', 'stock_prices', ['created_at'])
+
+    # financial_metrics表
+    op.create_table('financial_metrics',
+        sa.Column('id', sa.BigInteger(), autoincrement=True, nullable=False),
+        sa.Column('ticker', sa.String(length=20), nullable=False),
+        sa.Column('report_period', sa.Date(), nullable=False),
+        sa.Column('period', sa.String(length=20), nullable=False),
+        sa.Column('market_cap', sa.DECIMAL(precision=20, scale=2), nullable=True),
+        sa.Column('pe_ratio', sa.DECIMAL(precision=10, scale=4), nullable=True),
+        sa.Column('pb_ratio', sa.DECIMAL(precision=10, scale=4), nullable=True),
+        sa.Column('ps_ratio', sa.DECIMAL(precision=10, scale=4), nullable=True),
+        sa.Column('revenue', sa.DECIMAL(precision=20, scale=2), nullable=True),
+        sa.Column('net_income', sa.DECIMAL(precision=20, scale=2), nullable=True),
+        sa.Column('metrics_json', mysql.JSON(), nullable=True),
+        sa.Column('data_source', sa.String(length=50), nullable=False),
+        sa.Column('created_at', sa.TIMESTAMP(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+        sa.Column('updated_at', sa.TIMESTAMP(), server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'), nullable=False),
+        sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('ticker', 'report_period', 'period', name='uk_ticker_period')
+    )
+    op.create_index('idx_ticker', 'financial_metrics', ['ticker'])
+
+    # company_news表
+    op.create_table('company_news',
+        sa.Column('id', sa.BigInteger(), autoincrement=True, nullable=False),
+        sa.Column('ticker', sa.String(length=20), nullable=False),
+        sa.Column('date', sa.DateTime(), nullable=False),
+        sa.Column('title', sa.Text(), nullable=True),
+        sa.Column('content', sa.Text(), nullable=True),
+        sa.Column('url', sa.String(length=500), nullable=True),
+        sa.Column('source', sa.String(length=100), nullable=True),
+        sa.Column('data_source', sa.String(length=50), nullable=False),
+        sa.Column('created_at', sa.TIMESTAMP(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+        sa.Column('updated_at', sa.TIMESTAMP(), server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'), nullable=False),
+        sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('idx_ticker_date', 'company_news', ['ticker', 'date'])
+
+    # insider_trades表
+    op.create_table('insider_trades',
+        sa.Column('id', sa.BigInteger(), autoincrement=True, nullable=False),
+        sa.Column('ticker', sa.String(length=20), nullable=False),
+        sa.Column('filing_date', sa.Date(), nullable=False),
+        sa.Column('trade_date', sa.Date(), nullable=True),
+        sa.Column('insider_name', sa.String(length=200), nullable=True),
+        sa.Column('title', sa.String(length=200), nullable=True),
+        sa.Column('transaction_type', sa.String(length=50), nullable=True),
+        sa.Column('shares', sa.BigInteger(), nullable=True),
+        sa.Column('price', sa.DECIMAL(precision=20, scale=6), nullable=True),
+        sa.Column('value', sa.DECIMAL(precision=20, scale=2), nullable=True),
+        sa.Column('data_source', sa.String(length=50), nullable=False),
+        sa.Column('created_at', sa.TIMESTAMP(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+        sa.Column('updated_at', sa.TIMESTAMP(), server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'), nullable=False),
+        sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('idx_ticker_filing', 'insider_trades', ['ticker', 'filing_date'])
+
+    # stock_pool表
+    op.create_table('stock_pool',
+        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column('ticker', sa.String(length=20), nullable=False),
+        sa.Column('priority', sa.Integer(), server_default='1', nullable=True),
+        sa.Column('is_active', sa.Boolean(), server_default='1', nullable=True),
+        sa.Column('last_fetched_at', sa.TIMESTAMP(), nullable=True),
+        sa.Column('fetch_frequency', sa.String(length=20), server_default='hourly', nullable=True),
+        sa.Column('notes', sa.Text(), nullable=True),
+        sa.Column('created_at', sa.TIMESTAMP(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+        sa.Column('updated_at', sa.TIMESTAMP(), server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'), nullable=False),
+        sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('ticker')
+    )
+    op.create_index('idx_priority', 'stock_pool', ['priority', 'is_active'])
+    op.create_index('idx_last_fetched', 'stock_pool', ['last_fetched_at'])
+
+    # data_fetch_logs表
+    op.create_table('data_fetch_logs',
+        sa.Column('id', sa.BigInteger(), autoincrement=True, nullable=False),
+        sa.Column('ticker', sa.String(length=20), nullable=False),
+        sa.Column('data_type', sa.String(length=50), nullable=False),
+        sa.Column('data_source', sa.String(length=50), nullable=False),
+        sa.Column('status', sa.String(length=20), nullable=False),
+        sa.Column('records_count', sa.Integer(), server_default='0', nullable=True),
+        sa.Column('error_message', sa.Text(), nullable=True),
+        sa.Column('fetch_duration_ms', sa.Integer(), nullable=True),
+        sa.Column('created_at', sa.TIMESTAMP(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+        sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('idx_ticker_type', 'data_fetch_logs', ['ticker', 'data_type'])
+    op.create_index('idx_status', 'data_fetch_logs', ['status'])
+
+
+def downgrade():
+    op.drop_table('data_fetch_logs')
+    op.drop_table('stock_pool')
+    op.drop_table('insider_trades')
+    op.drop_table('company_news')
+    op.drop_table('financial_metrics')
+    op.drop_table('stock_prices')
 ```
 
 ### 8.3 环境变量配置
