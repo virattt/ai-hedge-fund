@@ -258,6 +258,7 @@ class AKShareSource(DataSource):
             net_income = self._safe_float(latest.get("净利润"))
             book_value_per_share = self._safe_float(latest.get("每股净资产(元)"))
             shares_outstanding = self._safe_float(latest.get("已发行股本(股)"))
+            operating_cash_flow_per_share = self._safe_float(latest.get("每股经营现金流(元)"))
 
             # Calculate derived metrics
             # Operating margin estimation: typically 1.2-1.5x net margin for healthy companies
@@ -281,26 +282,31 @@ class AKShareSource(DataSource):
             # ROE = ROA * (1 + Debt/Equity) for leveraged companies
             # Therefore: Debt/Equity = (ROE/ROA) - 1
             debt_to_equity = None
-            if roe is not None and roa is not None and roa > 0:
-                debt_to_equity_calc = (roe / roa) - 1
-                # For financial services (high ROE/ROA ratio), accept up to 10x
-                # For other companies, accept up to 5x
-                max_de_ratio = 10 if roe / roa > 5 else 5
+            if roe is not None and roa is not None and roa != 0:
+                # Use absolute values for loss-making companies
+                roe_abs = abs(roe)
+                roa_abs = abs(roa)
 
-                if 0 <= debt_to_equity_calc <= max_de_ratio:
-                    debt_to_equity = debt_to_equity_calc
-                    if debt_to_equity_calc > 5:
-                        self.logger.debug(f"[AKShare] {ticker}: High debt_to_equity={debt_to_equity:.2f} (likely financial services company)")
+                if roa_abs > 0.01:  # Avoid division by very small numbers
+                    debt_to_equity_calc = (roe_abs / roa_abs) - 1
+                    # For financial services (high ROE/ROA ratio), accept up to 10x
+                    # For other companies, accept up to 5x
+                    max_de_ratio = 10 if roe_abs / roa_abs > 5 else 5
+
+                    if 0 <= debt_to_equity_calc <= max_de_ratio:
+                        debt_to_equity = debt_to_equity_calc
+                        if debt_to_equity_calc > 5:
+                            self.logger.debug(f"[AKShare] {ticker}: High debt_to_equity={debt_to_equity:.2f} (likely financial services company)")
+                        else:
+                            self.logger.debug(f"[AKShare] {ticker}: Estimated debt_to_equity={debt_to_equity:.2f} from |ROE|={roe_abs:.2f}%, |ROA|={roa_abs:.2f}%")
+                    elif debt_to_equity_calc < 0:
+                        # Negative D/E means ROA > ROE, which can happen for companies with negative equity
+                        # or unusual accounting. Set to 0 (no debt) as conservative estimate
+                        debt_to_equity = 0.0
+                        self.logger.debug(f"[AKShare] {ticker}: Set debt_to_equity=0.0 (|ROA|>|ROE|, likely minimal debt)")
                     else:
-                        self.logger.debug(f"[AKShare] {ticker}: Estimated debt_to_equity={debt_to_equity:.2f} from ROE={roe:.2f}%, ROA={roa:.2f}%")
-                elif debt_to_equity_calc < 0:
-                    # Negative D/E means ROA > ROE, which can happen for companies with negative equity
-                    # or unusual accounting. Set to 0 (no debt) as conservative estimate
-                    debt_to_equity = 0.0
-                    self.logger.debug(f"[AKShare] {ticker}: Set debt_to_equity=0.0 (ROA>ROE, likely minimal debt)")
-                else:
-                    # D/E > 10 is extremely high leverage, likely calculation error
-                    self.logger.warning(f"[AKShare] {ticker}: Calculated debt_to_equity={debt_to_equity_calc:.2f} exceeds reasonable range, skipping")
+                        # D/E > 10 is extremely high leverage, likely calculation error
+                        self.logger.warning(f"[AKShare] {ticker}: Calculated debt_to_equity={debt_to_equity_calc:.2f} exceeds reasonable range, skipping")
 
             # Current ratio estimation
             # For companies with strong ROE (>15%), assume healthy liquidity (1.5-2.0)
@@ -322,6 +328,16 @@ class AKShareSource(DataSource):
             if book_value_per_share is not None and shares_outstanding is not None:
                 shareholders_equity = book_value_per_share * shares_outstanding
                 self.logger.debug(f"[AKShare] {ticker}: Calculated shareholders_equity={shareholders_equity:,.0f}")
+
+            # Calculate free cash flow from operating cash flow per share
+            # FCF = Operating Cash Flow - CapEx
+            # Since we don't have CapEx, use OCF as proxy (conservative estimate)
+            free_cash_flow = None
+            if operating_cash_flow_per_share is not None and shares_outstanding is not None:
+                operating_cash_flow = operating_cash_flow_per_share * shares_outstanding
+                # Conservative estimate: FCF ≈ 70% of OCF (assuming 30% CapEx)
+                free_cash_flow = operating_cash_flow * 0.7
+                self.logger.debug(f"[AKShare] {ticker}: Estimated free_cash_flow={free_cash_flow:,.0f} (70% of OCF)")
 
             metrics = {
                 "ticker": ticker,
@@ -349,12 +365,13 @@ class AKShareSource(DataSource):
                 "operating_cash_flow_per_share": self._safe_float(latest.get("每股经营现金流(元)")),
                 "dividend_per_share_ttm": self._safe_float(latest.get("每股股息TTM(港元)")),
 
-                # Financial data (direct from API)
+                # Financial data (direct from API + calculated)
                 "revenue": revenue,
                 "revenue_growth": self._safe_float(latest.get("营业总收入滚动环比增长(%)")) / 100 if self._safe_float(latest.get("营业总收入滚动环比增长(%)")) is not None else None,
                 "net_income": net_income,
                 "net_income_growth": self._safe_float(latest.get("净利润滚动环比增长(%)")) / 100 if self._safe_float(latest.get("净利润滚动环比增长(%)")) is not None else None,
                 "earnings_growth": self._safe_float(latest.get("净利润滚动环比增长(%)")) / 100 if self._safe_float(latest.get("净利润滚动环比增长(%)")) is not None else None,  # Alias for net_income_growth
+                "free_cash_flow": free_cash_flow,  # Estimated from OCF
 
                 # Share information (direct from API)
                 "shares_outstanding": shares_outstanding,
@@ -363,7 +380,8 @@ class AKShareSource(DataSource):
 
                 # Balance sheet metrics (calculated)
                 "shareholders_equity": shareholders_equity,
-                "total_assets": shareholders_equity / (roe / 100) if shareholders_equity and roe and roe > 0 else None,
+                "total_assets": shareholders_equity / (abs(roe) / 100) if shareholders_equity and roe and abs(roe) > 0.01 else None,
+                "total_liabilities": (shareholders_equity / (abs(roe) / 100) if shareholders_equity and roe and abs(roe) > 0.01 else 0) - (shareholders_equity or 0) if shareholders_equity else None,
 
                 # Liquidity and leverage metrics (estimated)
                 "current_ratio": current_ratio,
@@ -374,7 +392,7 @@ class AKShareSource(DataSource):
             # Log data completeness
             non_null_fields = sum(1 for v in metrics.values() if v is not None and v != "")
             total_fields = len(metrics)
-            estimated_fields = ["operating_margin", "gross_margin", "current_ratio", "debt_to_equity", "debt_to_assets", "total_assets"]
+            estimated_fields = ["operating_margin", "gross_margin", "current_ratio", "debt_to_equity", "debt_to_assets", "total_assets", "total_liabilities", "free_cash_flow"]
             estimated_count = sum(1 for k in estimated_fields if metrics.get(k) is not None)
 
             self.logger.info(

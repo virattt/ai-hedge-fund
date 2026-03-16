@@ -10,6 +10,7 @@ Smart freshness rules:
 - Current data (date = today): 1小时内有效
 """
 import logging
+import threading
 from datetime import datetime, date, timedelta
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -21,6 +22,10 @@ from src.data.models import Price, FinancialMetrics, CompanyNews
 
 logger = logging.getLogger(__name__)
 
+# Global initialization lock and flag to prevent concurrent init_db() calls
+_init_lock = threading.Lock()
+_db_initialized = False
+
 
 class MySQLCacheManager:
     """
@@ -31,8 +36,13 @@ class MySQLCacheManager:
 
     def __init__(self):
         """Initialize the MySQL cache manager."""
-        # Initialize database tables if they don't exist
-        init_db()
+        global _db_initialized
+
+        # Initialize database tables if they don't exist (thread-safe)
+        with _init_lock:
+            if not _db_initialized:
+                init_db()
+                _db_initialized = True
 
         # Get a database session
         self.session = get_session()
@@ -210,8 +220,17 @@ class MySQLCacheManager:
 
         try:
             for metric in metrics:
-                # Parse date
-                report_date = datetime.strptime(metric.report_period, "%Y-%m-%d").date()
+                # Parse date - handle empty report_period for non-US stocks
+                if metric.report_period and metric.report_period.strip():
+                    try:
+                        report_date = datetime.strptime(metric.report_period, "%Y-%m-%d").date()
+                    except ValueError:
+                        # If date format is invalid, use today's date
+                        report_date = datetime.now().date()
+                        logger.warning(f"Invalid report_period format for {ticker}: {metric.report_period}, using today's date")
+                else:
+                    # For empty report_period (e.g., HK stocks with TTM data), use today's date
+                    report_date = datetime.now().date()
 
                 # Check if record already exists
                 existing = (

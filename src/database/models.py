@@ -1,7 +1,6 @@
 """Database models for storing trading data"""
-from sqlalchemy import Column, Integer, String, DateTime, Text, Float, JSON, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, JSON, Index
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
 from .connection import Base
 
 
@@ -28,9 +27,7 @@ class TradingSession(Base):
     status = Column(String(20), default="RUNNING")  # RUNNING, COMPLETED, ERROR
     error_message = Column(Text, nullable=True)
 
-    # 关系
-    decisions = relationship("TradingDecision", back_populates="session", cascade="all, delete-orphan")
-    analyst_analyses = relationship("AnalystAnalysis", back_populates="session", cascade="all, delete-orphan")
+    # Note: Relationships removed - use manual joins via session_id if needed
 
     # 索引
     __table_args__ = (
@@ -44,7 +41,7 @@ class TradingDecision(Base):
     __tablename__ = "trading_decisions"
 
     id = Column(Integer, primary_key=True, index=True)
-    session_id = Column(Integer, ForeignKey("trading_sessions.id"), nullable=False, index=True)
+    session_id = Column(Integer, nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # 股票信息
@@ -64,8 +61,7 @@ class TradingDecision(Base):
     bearish_signals = Column(Integer, default=0)
     neutral_signals = Column(Integer, default=0)
 
-    # 关系
-    session = relationship("TradingSession", back_populates="decisions")
+    # Note: Relationship removed - use manual joins via session_id if needed
 
     # 索引
     __table_args__ = (
@@ -80,7 +76,7 @@ class AnalystAnalysis(Base):
     __tablename__ = "analyst_analyses"
 
     id = Column(Integer, primary_key=True, index=True)
-    session_id = Column(Integer, ForeignKey("trading_sessions.id"), nullable=False, index=True)
+    session_id = Column(Integer, nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # 分析师信息
@@ -98,8 +94,7 @@ class AnalystAnalysis(Base):
     # 详细分析数据（JSON格式存储原始数据）
     analysis_data = Column(JSON, nullable=True)
 
-    # 关系
-    session = relationship("TradingSession", back_populates="analyst_analyses")
+    # Note: Relationship removed - use manual joins via session_id if needed
 
     # 索引
     __table_args__ = (
@@ -115,7 +110,7 @@ class MarketData(Base):
     __tablename__ = "market_data"
 
     id = Column(Integer, primary_key=True, index=True)
-    session_id = Column(Integer, ForeignKey("trading_sessions.id"), nullable=True, index=True)
+    session_id = Column(Integer, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # 股票信息
@@ -151,7 +146,7 @@ class PerformanceMetrics(Base):
     __tablename__ = "performance_metrics"
 
     id = Column(Integer, primary_key=True, index=True)
-    session_id = Column(Integer, ForeignKey("trading_sessions.id"), nullable=False, index=True)
+    session_id = Column(Integer, nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # 日期范围

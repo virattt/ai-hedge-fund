@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, JSON
 from sqlalchemy.sql import func
 from .connection import Base
 
@@ -31,7 +31,7 @@ class HedgeFundFlowRun(Base):
     __tablename__ = "hedge_fund_flow_runs"
     
     id = Column(Integer, primary_key=True, index=True)
-    flow_id = Column(Integer, ForeignKey("hedge_fund_flows.id"), nullable=False, index=True)
+    flow_id = Column(Integer, nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
@@ -61,7 +61,7 @@ class HedgeFundFlowRunCycle(Base):
     __tablename__ = "hedge_fund_flow_run_cycles"
     
     id = Column(Integer, primary_key=True, index=True)
-    flow_run_id = Column(Integer, ForeignKey("hedge_fund_flow_runs.id"), nullable=False, index=True)
+    flow_run_id = Column(Integer, nullable=False, index=True)
     cycle_number = Column(Integer, nullable=False)  # 1, 2, 3, etc. within the run
     
     # Timing
