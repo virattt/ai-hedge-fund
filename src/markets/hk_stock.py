@@ -4,7 +4,7 @@ from typing import Optional
 
 from src.markets.base import MarketAdapter
 from src.markets.sources.akshare_source import AKShareSource
-from src.markets.sources.yfinance_source import YFinanceSource
+# from src.markets.sources.yfinance_source import YFinanceSource  # Disabled: Not available in China
 from src.markets.sources.newsnow_source import NewsNowSource
 from src.markets.sources.akshare_news_source import AKShareNewsSource
 from src.markets.sources.sina_finance_source import SinaFinanceSource
@@ -25,12 +25,12 @@ class HKStockAdapter(MarketAdapter):
         """
         # Data sources in priority order (per spec):
         # 1. Sina Finance - Free, stable, real-time HK quotes
-        # 2. YFinance - Good HK coverage
-        # 3. AKShare - Backup source
+        # 2. AKShare - Backup source
+        # Note: YFinance disabled (not available in China)
         data_sources = [
             SinaFinanceSource(),    # Primary: Free, stable
-            YFinanceSource(),       # Fallback 1: Good coverage
-            AKShareSource(),        # Fallback 2: Backup
+            # YFinanceSource(),     # Disabled: Not available in China
+            AKShareSource(),        # Fallback: Backup
         ]
 
         super().__init__(
@@ -42,11 +42,11 @@ class HKStockAdapter(MarketAdapter):
         # News sources in priority order:
         # 1. AKShareNews - Reliable Eastmoney news
         # 2. NewsNow - Aggregator (may be unreliable)
-        # 3. YFinance - Last resort (rate limited)
+        # Note: YFinance disabled (not available in China)
         self.news_sources = [
             AKShareNewsSource(),  # Primary: Eastmoney news
-            NewsNowSource(),      # Fallback 1: News aggregator
-            YFinanceSource(),     # Fallback 2: Limited by rate
+            NewsNowSource(),      # Fallback: News aggregator
+            # YFinanceSource(),   # Disabled: Not available in China
         ]
 
     def supports_ticker(self, ticker: str) -> bool:

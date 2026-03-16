@@ -297,38 +297,84 @@ def search_line_items(
     limit: int = 10,
     api_key: str = None,
 ) -> list[LineItem]:
-    """Fetch line items from API."""
-    # If not in cache or insufficient data, fetch from API
-    headers = {}
-    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
-        headers["X-API-KEY"] = financial_api_key
+    """
+    Fetch line items from API (支持多市场).
 
-    url = "https://api.financialdatasets.ai/financials/search/line-items"
+    对于美股：使用 financialdatasets.ai API
+    对于非美股（港股、A股）：从 financial_metrics 构建 LineItem 对象
+    """
+    # 判断是否为美股
+    if _is_us_stock(ticker):
+        # 美股：使用原始 financialdatasets API
+        headers = {}
+        financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+        if financial_api_key:
+            headers["X-API-KEY"] = financial_api_key
 
-    body = {
-        "tickers": [ticker],
-        "line_items": line_items,
-        "end_date": end_date,
-        "period": period,
-        "limit": limit,
-    }
-    response = _make_api_request(url, headers, method="POST", json_data=body)
-    if response.status_code != 200:
-        return []
-    
-    try:
-        data = response.json()
-        response_model = LineItemResponse(**data)
-        search_results = response_model.search_results
-    except Exception as e:
-        logger.warning("Failed to parse line items response for %s: %s", ticker, e)
-        return []
-    if not search_results:
-        return []
+        url = "https://api.financialdatasets.ai/financials/search/line-items"
 
-    # Cache the results
-    return search_results[:limit]
+        body = {
+            "tickers": [ticker],
+            "line_items": line_items,
+            "end_date": end_date,
+            "period": period,
+            "limit": limit,
+        }
+        response = _make_api_request(url, headers, method="POST", json_data=body)
+        if response.status_code != 200:
+            return []
+
+        try:
+            data = response.json()
+            response_model = LineItemResponse(**data)
+            search_results = response_model.search_results
+        except Exception as e:
+            logger.warning("Failed to parse line items response for %s: %s", ticker, e)
+            return []
+        if not search_results:
+            return []
+
+        return search_results[:limit]
+    else:
+        # 非美股：从 financial_metrics 构建 LineItem
+        # 获取多期财务数据
+        metrics_list = get_financial_metrics(ticker, end_date, period=period, limit=limit, api_key=api_key)
+
+        if not metrics_list:
+            return []
+
+        # 将 FinancialMetrics 转换为 LineItem 格式
+        line_items_result = []
+        for metric in metrics_list:
+            # 构建 LineItem 对象，将请求的字段映射到 metric 中的对应字段
+            line_item_dict = {
+                "ticker": metric.ticker,
+                "report_period": metric.report_period or "",
+                "period": metric.period,
+                "currency": metric.currency or "USD",
+            }
+
+            # 映射请求的字段到 metric 中的对应字段
+            field_mapping = {
+                "revenue": "revenue",
+                "operating_margin": "operating_margin",
+                "debt_to_equity": "debt_to_equity",
+                "free_cash_flow": "free_cash_flow",
+                "total_assets": "total_assets",
+                "total_liabilities": "total_liabilities",
+                "dividends_and_other_cash_distributions": "dividends",
+                "outstanding_shares": "outstanding_shares",
+            }
+
+            # 为所有请求的字段添加值（即使是None），确保字段可访问
+            for requested_field in line_items:
+                metric_field = field_mapping.get(requested_field, requested_field)
+                value = getattr(metric, metric_field, None)
+                line_item_dict[requested_field] = value
+
+            line_items_result.append(LineItem(**line_item_dict))
+
+        return line_items_result
 
 
 def get_insider_trades(
@@ -548,25 +594,34 @@ def get_market_cap(
     end_date: str,
     api_key: str = None,
 ) -> float | None:
-    """Fetch market cap from the API."""
-    # Check if end_date is today
-    if end_date == datetime.datetime.now().strftime("%Y-%m-%d"):
-        # Get the market cap from company facts API
-        headers = {}
-        financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-        if financial_api_key:
-            headers["X-API-KEY"] = financial_api_key
+    """
+    Fetch market cap from the API (支持多市场).
 
-        url = f"https://api.financialdatasets.ai/company/facts/?ticker={ticker}"
-        response = _make_api_request(url, headers)
-        if response.status_code != 200:
-            logger.warning(f"Error fetching company facts: {ticker} - {response.status_code}")
-            return None
+    对于美股：使用 financialdatasets.ai API
+    对于非美股：从 financial_metrics 中获取 market_cap 字段
+    """
+    # 判断是否为美股
+    if _is_us_stock(ticker):
+        # 美股：使用原始逻辑
+        # Check if end_date is today
+        if end_date == datetime.datetime.now().strftime("%Y-%m-%d"):
+            # Get the market cap from company facts API
+            headers = {}
+            financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+            if financial_api_key:
+                headers["X-API-KEY"] = financial_api_key
 
-        data = response.json()
-        response_model = CompanyFactsResponse(**data)
-        return response_model.company_facts.market_cap
+            url = f"https://api.financialdatasets.ai/company/facts/?ticker={ticker}"
+            response = _make_api_request(url, headers)
+            if response.status_code != 200:
+                logger.warning(f"Error fetching company facts: {ticker} - {response.status_code}")
+                return None
 
+            data = response.json()
+            response_model = CompanyFactsResponse(**data)
+            return response_model.company_facts.market_cap
+
+    # 非美股 或 美股历史数据：从 financial_metrics 获取
     financial_metrics = get_financial_metrics(ticker, end_date, api_key=api_key)
     if not financial_metrics:
         return None

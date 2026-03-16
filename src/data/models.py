@@ -60,6 +60,16 @@ class FinancialMetrics(BaseModel):
     book_value_per_share: float | None = None
     free_cash_flow_per_share: float | None = None
 
+    # Additional fields for Bill Ackman and other fundamental analysts
+    revenue: float | None = None
+    net_income: float | None = None
+    free_cash_flow: float | None = None
+    total_assets: float | None = None
+    total_liabilities: float | None = None
+    shareholders_equity: float | None = None
+    dividends: float | None = None
+    outstanding_shares: float | None = None
+
 
 class FinancialMetricsResponse(BaseModel):
     financial_metrics: list[FinancialMetrics]

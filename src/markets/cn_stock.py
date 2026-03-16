@@ -22,7 +22,7 @@ class CNStockAdapter(MarketAdapter):
             validator: Data validator instance
         """
         # Import here to avoid circular dependency
-        from src.markets.sources.yfinance_source import YFinanceSource
+        # from src.markets.sources.yfinance_source import YFinanceSource  # Disabled: Not available in China
         from src.markets.sources.tushare_source import TushareSource
         from src.markets.sources.eastmoney_curl_source import EastmoneyCurlSource
 
@@ -31,13 +31,13 @@ class CNStockAdapter(MarketAdapter):
         # 2. Tushare Pro - Most stable for CN market (requires token)
         # 3. AKShare - Free, good CN market coverage
         # 4. Sina Finance - Free, stable, real-time quotes
-        # 5. YFinance - Global coverage, backup source
+        # Note: YFinance disabled (not available in China)
         data_sources = [
             EastmoneyCurlSource(),  # Primary: Most comprehensive, bypasses anti-bot
             TushareSource(),        # Fallback 1: Requires token
             AKShareSource(),        # Fallback 2: Free, good coverage
             SinaFinanceSource(),    # Fallback 3: Free, stable
-            YFinanceSource(),       # Fallback 4: Global coverage
+            # YFinanceSource(),     # Disabled: Not available in China
         ]
 
         super().__init__(
