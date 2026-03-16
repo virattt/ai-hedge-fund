@@ -1,7 +1,10 @@
+import pytest
 from src.backtesting.engine import BacktestEngine
 from tests.backtesting.integration.mocks import MockConfigurableAgent
 
 
+@pytest.mark.integration
+@pytest.mark.slow
 def test_long_short_strategy_partial_exits():
     """Simultaneous long and short with partial exits on both sides."""
 

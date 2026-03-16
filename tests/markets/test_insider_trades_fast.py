@@ -1,14 +1,16 @@
 """
-Quick test for insider trading data retrieval functionality.
+Fast unit tests for insider trading data retrieval functionality.
 """
 import pytest
 from src.markets.sources.akshare_source import AKShareSource
 from src.markets.hk_stock import HKStockAdapter
 
 
-class TestInsiderTradesQuick:
-    """Quick test for insider trading data functionality."""
+@pytest.mark.fast
+class TestInsiderTradesFast:
+    """Fast unit tests for insider trading data functionality."""
 
+    @pytest.mark.unit
     def test_akshare_hk_stock_no_insider_data(self):
         """Test that HK stocks return empty list for insider trades."""
         source = AKShareSource()
@@ -28,6 +30,7 @@ class TestInsiderTradesQuick:
         assert len(trades) == 0
         print(f"✓ HK stock {hk_ticker} correctly returns empty insider trades list")
 
+    @pytest.mark.unit
     def test_hk_adapter_insider_trades(self):
         """Test HK adapter insider trades integration."""
         adapter = HKStockAdapter()
@@ -47,6 +50,7 @@ class TestInsiderTradesQuick:
         assert len(trades) == 0
         print(f"✓ HK adapter correctly returns empty insider trades list for {hk_ticker}")
 
+    @pytest.mark.unit
     def test_base_datasource_default_implementation(self):
         """Test that base DataSource has default implementation."""
         from src.markets.sources.base import DataSource
@@ -76,9 +80,9 @@ class TestInsiderTradesQuick:
 
 if __name__ == "__main__":
     # Run tests manually
-    test = TestInsiderTradesQuick()
+    test = TestInsiderTradesFast()
 
-    print("\n=== Running Insider Trades Quick Tests ===\n")
+    print("\n=== Running Insider Trades Fast Tests ===\n")
 
     try:
         test.test_akshare_hk_stock_no_insider_data()
@@ -95,4 +99,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"✗ test_base_datasource_default_implementation failed: {e}")
 
-    print("\n=== All Quick Tests Passed! ===\n")
+    print("\n=== All Fast Tests Passed! ===\n")

@@ -1,7 +1,10 @@
+import pytest
 from src.backtesting.engine import BacktestEngine
 from tests.backtesting.integration.mocks import MockConfigurableAgent
 
 
+@pytest.mark.integration
+@pytest.mark.slow
 def test_short_only_strategy_shorts_and_covers():
     """Short, hold, then partial cover. Validate positions, realized gains, and summary consistency."""
 

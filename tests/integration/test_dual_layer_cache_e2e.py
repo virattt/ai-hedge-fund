@@ -15,6 +15,8 @@ from src.data.mysql_cache import MySQLCacheManager
 from src.data.models import Price, FinancialMetrics, CompanyNews
 
 
+@pytest.mark.integration
+@pytest.mark.e2e
 @pytest.fixture
 def clean_test_env():
     """Setup clean test environment with in-memory database."""
@@ -48,6 +50,8 @@ def clean_test_env():
     os.environ.pop("DATABASE_URL", None)
 
 
+@pytest.mark.integration
+@pytest.mark.e2e
 class TestDualLayerCacheE2E:
     """End-to-end integration tests for dual-layer cache."""
 

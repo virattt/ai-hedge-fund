@@ -64,3 +64,17 @@ force_alphabetical_sort_within_sections = true
 
 [tool.poetry.scripts]
 backtester = "src.backtesting.cli:main"
+
+[tool.pytest.ini_options]
+markers = [
+    "unit: Unit tests - test single functions/classes without external dependencies",
+    "integration: Integration tests - test multiple components interaction",
+    "e2e: End-to-end tests - test complete workflows",
+    "fast: Fast tests - complete in <1 second",
+    "slow: Slow tests - take >5 seconds (may involve real API calls)",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"

@@ -1,6 +1,10 @@
+import pytest
 from src.backtesting.engine import BacktestEngine
 from tests.backtesting.integration.mocks import MockConfigurableAgent
 
+
+@pytest.mark.integration
+@pytest.mark.slow
 def test_long_only_strategy_buys_and_sells():
     """Test a strategy that buys shares, holds, then sells some shares to test realized gains/losses."""
     

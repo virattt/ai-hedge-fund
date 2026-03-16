@@ -13,6 +13,8 @@ from src.tools import api
 from src.data.models import Price, CompanyNews, FinancialMetrics
 
 
+@pytest.mark.integration
+@pytest.mark.e2e
 class TestMultiMarketE2E:
     """端到端多市场集成测试"""
 
@@ -397,6 +399,8 @@ class TestMultiMarketE2E:
                   f"metrics={len(results['metrics']):2d}")
 
 
+@pytest.mark.integration
+@pytest.mark.e2e
 class TestEdgeCases:
     """边界情况测试"""
 
@@ -443,6 +447,8 @@ class TestEdgeCases:
         assert isinstance(prices, list)
 
 
+@pytest.mark.integration
+@pytest.mark.e2e
 class TestMarketSpecific:
     """市场特定功能测试"""
 
