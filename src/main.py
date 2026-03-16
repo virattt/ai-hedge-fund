@@ -30,12 +30,21 @@ init(autoreset=True)
 # Configure logging to show INFO level messages
 # This enables URL logging from data sources
 # Use stderr to avoid conflicts with Rich progress display (which uses stdout)
+# Add flush=True to ensure immediate output
+stderr_handler = logging.StreamHandler(sys.stderr)
+stderr_handler.setLevel(logging.INFO)
+stderr_handler.setFormatter(logging.Formatter('%(message)s'))
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(message)s',  # Simple format for cleaner output
-    handlers=[logging.StreamHandler(sys.stderr)],
+    handlers=[stderr_handler],
     force=True  # Force reconfiguration even if already configured
 )
+
+# Set specific loggers to INFO level to ensure they are visible
+logging.getLogger('src.markets.sources').setLevel(logging.INFO)
+logging.getLogger('src.tools.api').setLevel(logging.INFO)
+logging.getLogger('src.markets.base').setLevel(logging.INFO)
 
 
 def parse_hedge_fund_response(response):

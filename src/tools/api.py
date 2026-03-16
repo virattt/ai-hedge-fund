@@ -108,7 +108,7 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
             if response.status_code == 429 and attempt < max_retries:
                 # Linear backoff: 60s, 90s, 120s, 150s...
                 delay = 60 + (30 * attempt)
-                print(f"Rate limited (429). Attempt {attempt + 1}/{max_retries + 1}. Waiting {delay}s before retrying...")
+                logger.warning(f"Rate limited (429). Attempt {attempt + 1}/{max_retries + 1}. Waiting {delay}s before retrying...")
                 time.sleep(delay)
                 continue
 
@@ -122,12 +122,12 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
             if attempt < max_retries:
                 # Exponential backoff for connection errors: 2s, 4s, 8s
                 delay = 2 ** (attempt + 1)
-                print(f"Connection error: {type(e).__name__}. Attempt {attempt + 1}/{max_retries + 1}. Retrying in {delay}s...")
+                logger.warning(f"Connection error: {type(e).__name__}. Attempt {attempt + 1}/{max_retries + 1}. Retrying in {delay}s...")
                 time.sleep(delay)
                 continue
             else:
                 # Last attempt failed, raise the exception
-                print(f"Connection error after {max_retries + 1} attempts: {type(e).__name__}")
+                logger.error(f"Connection error after {max_retries + 1} attempts: {type(e).__name__}")
                 raise
 
     # Should not reach here, but just in case
@@ -560,7 +560,7 @@ def get_market_cap(
         url = f"https://api.financialdatasets.ai/company/facts/?ticker={ticker}"
         response = _make_api_request(url, headers)
         if response.status_code != 200:
-            print(f"Error fetching company facts: {ticker} - {response.status_code}")
+            logger.warning(f"Error fetching company facts: {ticker} - {response.status_code}")
             return None
 
         data = response.json()
