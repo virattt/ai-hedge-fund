@@ -30,7 +30,7 @@ class NewsNowSource(DataSource):
     SOURCES = {
         "cls": "财联社",
         "wallstreetcn": "华尔街见闻",
-        "xueqiu": "雪球",
+        # "xueqiu": "雪球",  # 403 Forbidden，已禁用
     }
 
     def __init__(self):
@@ -78,7 +78,7 @@ class NewsNowSource(DataSource):
 
         # Fetch from all sources
         all_news = []
-        for source_id in ["cls", "wallstreetcn", "xueqiu"]:
+        for source_id in ["cls", "wallstreetcn"]:
             try:
                 news = self._fetch_from_source(source_id, limit=50)
                 all_news.extend(news)

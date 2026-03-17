@@ -195,33 +195,146 @@ class AKShareSource(DataSource):
             return None
 
     def _get_cn_financial_metrics(self, ticker: str) -> Optional[Dict]:
-        """Get CN stock financial metrics."""
+        """Get CN stock financial metrics by combining multiple AKShare APIs."""
         try:
-            # Get basic financial indicators
-            df = self._akshare.stock_financial_analysis_indicator(symbol=ticker)
+            # Step 1: Basic ratio indicators (ROE, margins, growth rates, current_ratio)
+            # stock_financial_abstract_ths provides comprehensive financial ratios
+            ratio_df = None
+            try:
+                ratio_df = self._akshare.stock_financial_abstract_ths(symbol=ticker, indicator="按报告期")
+                if ratio_df is not None and not ratio_df.empty:
+                    # Sort by report date descending to get latest
+                    ratio_df = ratio_df.sort_values("报告期", ascending=False)
+            except Exception as e:
+                self.logger.warning(f"[AKShare] stock_financial_abstract_ths failed for {ticker}: {e}")
 
-            if df is None or df.empty:
-                return None
+            latest_ratio = ratio_df.iloc[0] if ratio_df is not None and not ratio_df.empty else {}
 
-            # Get the most recent row
-            latest = df.iloc[0]
+            # Step 2: Income statement (revenue, net_income, operating_income)
+            income_df = None
+            try:
+                income_df = self._akshare.stock_financial_report_sina(stock=ticker, symbol="利润表")
+            except Exception as e:
+                self.logger.warning(f"[AKShare] Income statement failed for {ticker}: {e}")
+
+            latest_income = income_df.iloc[0] if income_df is not None and not income_df.empty else {}
+
+            # Step 3: Balance sheet (total_assets, total_liabilities, equity, current_ratio)
+            balance_df = None
+            try:
+                balance_df = self._akshare.stock_financial_report_sina(stock=ticker, symbol="资产负债表")
+            except Exception as e:
+                self.logger.warning(f"[AKShare] Balance sheet failed for {ticker}: {e}")
+
+            latest_balance = balance_df.iloc[0] if balance_df is not None and not balance_df.empty else {}
+
+            # Step 4: Cash flow statement (operating_cash_flow, free_cash_flow)
+            cashflow_df = None
+            try:
+                cashflow_df = self._akshare.stock_financial_report_sina(stock=ticker, symbol="现金流量表")
+            except Exception as e:
+                self.logger.warning(f"[AKShare] Cash flow statement failed for {ticker}: {e}")
+
+            latest_cf = cashflow_df.iloc[0] if cashflow_df is not None and not cashflow_df.empty else {}
+
+            # Extract income statement fields
+            revenue = self._safe_float(latest_income.get("营业收入"))
+            net_income = self._safe_float(latest_income.get("净利润"))
+            operating_income = self._safe_float(latest_income.get("营业利润"))
+
+            # Extract balance sheet fields
+            total_assets = self._safe_float(latest_balance.get("资产总计"))
+            total_liabilities = self._safe_float(latest_balance.get("负债合计"))
+            # 银行类公司无流动资产/流动负债分类，current_ratio 可能为 None
+            current_assets = self._safe_float(latest_balance.get("流动资产合计"))
+            current_liabilities = self._safe_float(latest_balance.get("流动负债合计"))
+            shareholders_equity = self._safe_float(
+                latest_balance.get("归属于母公司股东的权益") or
+                latest_balance.get("负债及股东权益总计")  # fallback
+            )
+
+            # Extract cash flow fields
+            operating_cash_flow = self._safe_float(latest_cf.get("经营活动产生的现金流量净额"))
+            capex = self._safe_float(latest_cf.get("购建固定资产、无形资产和其他长期资产支付的现金"))
+
+            # Derive calculated metrics
+            current_ratio = (current_assets / current_liabilities) if current_assets and current_liabilities and current_liabilities != 0 else None
+            debt_to_equity = (total_liabilities / shareholders_equity) if total_liabilities and shareholders_equity and shareholders_equity != 0 else self._safe_float(latest_ratio.get("资产负债率"))
+            operating_margin = (operating_income / revenue) if operating_income and revenue and revenue != 0 else None
+            net_margin_calc = (net_income / revenue) if net_income and revenue and revenue != 0 else None
+            free_cash_flow = (operating_cash_flow - abs(capex)) if operating_cash_flow is not None and capex is not None else operating_cash_flow
+
+            # Determine report period
+            report_period = ""
+            if ratio_df is not None and not ratio_df.empty:
+                report_period = str(latest_ratio.get("报告期", ""))
+            elif income_df is not None and not income_df.empty:
+                report_period = str(df.iloc[0].get("报告日", "")) if not income_df.empty else ""
+
+            # Parse growth rates (stored as "64.75%" strings)
+            def _parse_pct(val) -> Optional[float]:
+                if val is None or val is False or str(val) in ("False", "", "--"):
+                    return None
+                try:
+                    return float(str(val).replace("%", "")) / 100
+                except (ValueError, TypeError):
+                    return None
+
+            # Parse ROE (stored as "12.34%" or decimal)
+            roe_raw = latest_ratio.get("净资产收益率") or latest_ratio.get("净资产收益率-摊薄")
+            roe = _parse_pct(roe_raw) if roe_raw and "%" in str(roe_raw) else self._safe_float(roe_raw)
+
+            # current_ratio from THS abstract (直接字段)，0值视为无效（银行类公司）
+            current_ratio_ths = self._safe_float(latest_ratio.get("流动比率"))
+            if current_ratio_ths is not None and current_ratio_ths <= 0:
+                current_ratio_ths = None
+            final_current_ratio = current_ratio_ths if current_ratio_ths is not None else current_ratio
+
+            # debt_to_equity: prefer calculated from balance sheet; fallback to ratio API
+            # THS provides 产权比率 (debt/equity) and 资产负债率 (liabilities/assets)
+            de_ths_raw = latest_ratio.get("产权比率")
+            de_ths = self._safe_float(de_ths_raw)
+            final_debt_to_equity = debt_to_equity if debt_to_equity is not None else de_ths
 
             metrics = {
                 "ticker": ticker,
-                "report_period": str(latest.get("报告期", "")),
+                "report_period": report_period,
                 "period": "ttm",
                 "currency": "CNY",
-                "price_to_earnings_ratio": self._safe_float(latest.get("市盈率")),
-                "price_to_book_ratio": self._safe_float(latest.get("市净率")),
-                "return_on_equity": self._safe_float(latest.get("净资产收益率")),
-                "gross_margin": self._safe_float(latest.get("销售毛利率")),
-                "net_margin": self._safe_float(latest.get("销售净利率")),
-                "debt_to_equity": self._safe_float(latest.get("资产负债率")),
-                "revenue_growth": self._safe_float(latest.get("营业收入同比增长率")),
-                "earnings_growth": self._safe_float(latest.get("净利润同比增长率")),
+                # Valuation ratios (no PE/PB from THS abstract, use EastmoneyCurl as primary)
+                "price_to_earnings_ratio": None,
+                "price_to_book_ratio": None,
+                # Profitability
+                "return_on_equity": roe,
+                "return_on_assets": None,
+                "gross_margin": None,
+                "net_margin": net_margin_calc or _parse_pct(latest_ratio.get("销售净利率")),
+                "operating_margin": operating_margin,
+                # Growth rates
+                "revenue_growth": _parse_pct(latest_ratio.get("营业总收入同比增长率")),
+                "earnings_growth": _parse_pct(latest_ratio.get("净利润同比增长率")),
+                # Leverage & liquidity
+                "debt_to_equity": final_debt_to_equity,
+                "current_ratio": final_current_ratio,
+                # Absolute financial data
+                "revenue": revenue,
+                "net_income": net_income,
+                "operating_income": operating_income,
+                "total_assets": total_assets,
+                "total_liabilities": total_liabilities,
+                "shareholders_equity": shareholders_equity,
+                "operating_cash_flow": operating_cash_flow,
+                "capital_expenditure": capex,
+                "free_cash_flow": free_cash_flow,
+                # Per share
+                "earnings_per_share": self._safe_float(latest_ratio.get("基本每股收益")),
+                "book_value_per_share": self._safe_float(latest_ratio.get("每股净资产")),
             }
 
+            non_null = sum(1 for v in metrics.values() if v is not None and v != "")
+            self.logger.info(f"[AKShare] ✓ Got CN financial metrics for {ticker}: {non_null}/{len(metrics)} fields populated")
             return metrics
+
         except Exception as e:
             self.logger.error(f"[AKShare] Failed to get CN financial metrics for {ticker}: {e}")
             return None

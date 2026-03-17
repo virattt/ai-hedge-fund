@@ -46,6 +46,7 @@ By using this software, you agree to use it solely for learning purposes.
 - [How to Run](#how-to-run)
   - [⌨️ Command Line Interface](#️-command-line-interface)
   - [🖥️ Web Application](#️-web-application)
+- [Documentation](#documentation)
 - [How to Contribute](#how-to-contribute)
 - [Feature Requests](#feature-requests)
 - [License](#license)
@@ -184,6 +185,51 @@ Please see detailed instructions on how to install and run the web application [
 
 <img width="1721" alt="Screenshot 2025-06-28 at 6 41 03 PM" src="https://github.com/user-attachments/assets/b95ab696-c9f4-416c-9ad1-51feb1f5374b" />
 
+
+## Documentation
+
+### 📚 Complete Documentation Index
+
+All project documentation is organized in the [`docs/`](docs/) directory:
+
+**Getting Started:**
+- 🚀 [Quick Start Guide](QUICK_START.md) - 5-minute setup
+- 🔧 [Troubleshooting](TROUBLESHOOTING.md) - Common issues and solutions
+- 📖 [Documentation Index](docs/README.md) - Complete documentation navigation
+
+**Core Documentation:**
+- 📊 [Database Schema](docs/database_schema.md) - Complete table structure
+- 🗄️ [Database Quick Reference](docs/database_quick_reference.md) - Common queries
+- 💾 [Cache Architecture](docs/CACHE_ARCHITECTURE.md) - Dual-layer caching design
+- 📝 [Logging Configuration](docs/logging_configuration.md) - Log system guide
+- 🧪 [Test Guide](docs/TEST_GUIDE.md) - Testing framework
+
+**Development:**
+- 🐛 [Fixes History](docs/FIXES_HISTORY.md) - Bug fixes and improvements
+- 🔄 [Changelog](CHANGELOG.md) - Version history
+- 🚀 [Deployment Checklist](docs/DEPLOYMENT_CHECKLIST.md) - Production deployment
+
+### 🧪 Testing & Validation
+
+**Verify System Status:**
+```bash
+# Test data fixes (ROE format, JSON parsing)
+poetry run python test_fixes.py
+
+# Validate A-share stock data
+poetry run python verify_cn_stocks.py
+```
+
+**Database Management:**
+```bash
+# Validate SQL comments
+poetry run python scripts/validate_sql_comments.py
+
+# Add database comments
+poetry run python scripts/add_database_comments.py
+```
+
+See [Test Guide](docs/TEST_GUIDE.md) for comprehensive testing documentation.
 
 ## How to Contribute
 

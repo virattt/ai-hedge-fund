@@ -107,17 +107,57 @@ def create_default_response(model_class: type[BaseModel]) -> BaseModel:
 
 
 def extract_json_from_response(content: str) -> dict | None:
-    """Extracts JSON from markdown-formatted response."""
+    """
+    Extracts JSON from response with enhanced robustness.
+
+    Handles:
+    - Markdown code blocks (```json ... ```)
+    - XML-style tags (<think>, <output>, etc.)
+    - Plain JSON in text
+    - Leading/trailing whitespace
+    """
+    import re
+
     try:
+        # Strategy 1: Try markdown code block first
         json_start = content.find("```json")
         if json_start != -1:
-            json_text = content[json_start + 7 :]  # Skip past ```json
+            json_text = content[json_start + 7:]  # Skip past ```json
             json_end = json_text.find("```")
             if json_end != -1:
                 json_text = json_text[:json_end].strip()
                 return json.loads(json_text)
+
+        # Strategy 2: Remove common XML-style tags (<think>, <output>, etc.)
+        # Pattern matches: <tag>...</tag> or <tag ...>...</tag>
+        cleaned = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL | re.IGNORECASE)
+        cleaned = re.sub(r'<output>.*?</output>', '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+        cleaned = re.sub(r'<reasoning>.*?</reasoning>', '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+
+        # Strategy 3: Find JSON object by looking for balanced braces
+        # Look for the first { and try to find its matching }
+        brace_start = cleaned.find('{')
+        if brace_start != -1:
+            # Find matching closing brace
+            brace_count = 0
+            for i in range(brace_start, len(cleaned)):
+                if cleaned[i] == '{':
+                    brace_count += 1
+                elif cleaned[i] == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        json_text = cleaned[brace_start:i+1]
+                        return json.loads(json_text)
+
+        # Strategy 4: Try to parse the entire cleaned content
+        return json.loads(cleaned.strip())
+
+    except json.JSONDecodeError as e:
+        print(f"JSON decode error: {e}")
+        print(f"Attempted to parse: {content[:500]}...")  # Show first 500 chars
     except Exception as e:
         print(f"Error extracting JSON from response: {e}")
+
     return None
 
 

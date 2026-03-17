@@ -146,7 +146,7 @@ class DatabaseService:
                     signal=signal_data.get("signal", "NEUTRAL").upper(),
                     confidence=signal_data.get("confidence", 0.0),
                     reasoning=self._extract_reasoning(signal_data.get("reasoning")),
-                    analysis_data=signal_data.get("reasoning"),  # 保存完整的reasoning数据
+                    analysis_data=signal_data,  # 保存完整的signal_data（含signal/confidence/reasoning）
                 )
                 self.db.add(analyst_analysis)
 

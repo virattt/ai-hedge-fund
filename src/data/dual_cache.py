@@ -16,6 +16,7 @@ Query Flow:
 """
 import logging
 import os
+import threading
 from typing import List, Optional
 from datetime import datetime, timedelta
 
@@ -271,13 +272,14 @@ class DualLayerCacheManager:
                 logger.warning(f"Failed to save company_news to L2 cache: {e}")
 
 
-# Global dual-layer cache instance
+# Global dual-layer cache instance with thread-safe initialization
 _dual_cache = None
+_dual_cache_lock = threading.Lock()
 
 
 def get_dual_cache(enable_l2: bool = True) -> DualLayerCacheManager:
     """
-    Get the global dual-layer cache instance.
+    Get the global dual-layer cache instance (thread-safe singleton).
 
     Args:
         enable_l2: Enable L2 (MySQL) cache
@@ -287,5 +289,7 @@ def get_dual_cache(enable_l2: bool = True) -> DualLayerCacheManager:
     """
     global _dual_cache
     if _dual_cache is None:
-        _dual_cache = DualLayerCacheManager(enable_l2=enable_l2)
+        with _dual_cache_lock:
+            if _dual_cache is None:
+                _dual_cache = DualLayerCacheManager(enable_l2=enable_l2)
     return _dual_cache
