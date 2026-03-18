@@ -33,9 +33,7 @@ class DataValidator:
         self.min_sources_for_validation = min_sources_for_validation
         self.logger = logging.getLogger(__name__)
 
-    def cross_validate_prices(
-        self, data_sources: Dict[str, List[Dict]]
-    ) -> List[Dict]:
+    def cross_validate_prices(self, data_sources: Dict[str, List[Dict]]) -> List[Dict]:
         """
         Cross-validate price data from multiple sources.
 
@@ -68,17 +66,13 @@ class DataValidator:
                 price["data_source"] = source_name
                 price["num_sources"] = 1
 
-            self.logger.info(
-                f"Single source validation: {source_name}, {len(prices)} records, confidence={confidence:.2f}"
-            )
+            self.logger.info(f"Single source validation: {source_name}, {len(prices)} records, confidence={confidence:.2f}")
             return prices
 
         # Multiple sources: cross-validate by timestamp
         return self._merge_and_validate_prices(valid_sources)
 
-    def _merge_and_validate_prices(
-        self, data_sources: Dict[str, List[Dict]]
-    ) -> List[Dict]:
+    def _merge_and_validate_prices(self, data_sources: Dict[str, List[Dict]]) -> List[Dict]:
         """Merge and validate prices from multiple sources."""
         # Group prices by date
         prices_by_date: Dict[str, Dict[str, Dict]] = {}
@@ -117,14 +111,10 @@ class DataValidator:
             if validated_price:
                 validated_prices.append(validated_price)
 
-        self.logger.info(
-            f"Cross-validated {len(validated_prices)} price records from {len(data_sources)} sources"
-        )
+        self.logger.info(f"Cross-validated {len(validated_prices)} price records from {len(data_sources)} sources")
         return validated_prices
 
-    def _validate_price_group(
-        self, source_prices: Dict[str, Dict], date_key: str
-    ) -> Optional[Dict]:
+    def _validate_price_group(self, source_prices: Dict[str, Dict], date_key: str) -> Optional[Dict]:
         """Validate and merge prices from multiple sources for a single date."""
         # Extract close prices for comparison
         close_prices = []
@@ -145,10 +135,7 @@ class DataValidator:
 
         # Check if deviation exceeds threshold
         if max_deviation > self.price_threshold:
-            self.logger.warning(
-                f"Price deviation {max_deviation:.2%} exceeds threshold "
-                f"{self.price_threshold:.2%} for {date_key}"
-            )
+            self.logger.warning(f"Price deviation {max_deviation:.2%} exceeds threshold " f"{self.price_threshold:.2%} for {date_key}")
 
         # Calculate confidence score
         confidence = self._calculate_confidence(
@@ -197,9 +184,7 @@ class DataValidator:
 
         return sum(v * w for v, w in zip(values, weights)) / total_weight
 
-    def _calculate_confidence(
-        self, num_sources: int, max_deviation: float
-    ) -> float:
+    def _calculate_confidence(self, num_sources: int, max_deviation: float) -> float:
         """
         Calculate confidence score based on number of sources and deviation.
 
@@ -225,9 +210,7 @@ class DataValidator:
 
         return max(0.0, min(1.0, confidence))
 
-    def validate_financial_metrics(
-        self, data_sources: Dict[str, Optional[Dict]]
-    ) -> Optional[Dict]:
+    def validate_financial_metrics(self, data_sources: Dict[str, Optional[Dict]]) -> Optional[Dict]:
         """
         Validate and merge financial metrics from multiple sources.
 
@@ -257,29 +240,63 @@ class DataValidator:
         # Multiple sources: merge with weighted average
         return self._merge_financial_metrics(valid_sources)
 
-    def _merge_financial_metrics(
-        self, data_sources: Dict[str, Dict]
-    ) -> Dict:
+    def _merge_financial_metrics(self, data_sources: Dict[str, Dict]) -> Dict:
         """Merge financial metrics from multiple sources."""
         # Start with the first source as base
         merged = list(data_sources.values())[0].copy()
 
         # Metric fields that should be averaged
         numeric_fields = [
-            "market_cap", "enterprise_value", "price_to_earnings_ratio",
-            "price_to_book_ratio", "price_to_sales_ratio",
-            "enterprise_value_to_ebitda_ratio", "enterprise_value_to_revenue_ratio",
-            "free_cash_flow_yield", "peg_ratio", "gross_margin",
-            "operating_margin", "net_margin", "return_on_equity",
-            "return_on_assets", "return_on_invested_capital", "asset_turnover",
-            "inventory_turnover", "receivables_turnover", "days_sales_outstanding",
-            "operating_cycle", "working_capital_turnover", "current_ratio",
-            "quick_ratio", "cash_ratio", "operating_cash_flow_ratio",
-            "debt_to_equity", "debt_to_assets", "interest_coverage",
-            "revenue_growth", "earnings_growth", "book_value_growth",
-            "earnings_per_share_growth", "free_cash_flow_growth",
-            "operating_income_growth", "ebitda_growth", "payout_ratio",
-            "earnings_per_share", "book_value_per_share", "free_cash_flow_per_share",
+            "market_cap",
+            "enterprise_value",
+            "price_to_earnings_ratio",
+            "price_to_book_ratio",
+            "price_to_sales_ratio",
+            "enterprise_value_to_ebitda_ratio",
+            "enterprise_value_to_revenue_ratio",
+            "free_cash_flow_yield",
+            "peg_ratio",
+            "gross_margin",
+            "operating_margin",
+            "net_margin",
+            "return_on_equity",
+            "return_on_assets",
+            "return_on_invested_capital",
+            "asset_turnover",
+            "inventory_turnover",
+            "receivables_turnover",
+            "days_sales_outstanding",
+            "operating_cycle",
+            "working_capital_turnover",
+            "current_ratio",
+            "quick_ratio",
+            "cash_ratio",
+            "operating_cash_flow_ratio",
+            "debt_to_equity",
+            "debt_to_assets",
+            "interest_coverage",
+            "revenue_growth",
+            "earnings_growth",
+            "book_value_growth",
+            "earnings_per_share_growth",
+            "free_cash_flow_growth",
+            "operating_income_growth",
+            "ebitda_growth",
+            "payout_ratio",
+            "earnings_per_share",
+            "book_value_per_share",
+            "free_cash_flow_per_share",
+            "operating_cash_flow",
+            "capital_expenditure",
+            "investing_cash_flow",
+            "financing_cash_flow",
+            "cash_and_equivalents",
+            "current_assets",
+            "current_liabilities",
+            "gross_profit",
+            "operating_income",
+            "research_and_development",
+            "operating_cash_flow_per_share",
         ]
 
         # Calculate weighted average for each numeric field
@@ -303,10 +320,7 @@ class DataValidator:
         merged["data_sources"] = ",".join(data_sources.keys())
         merged["num_sources"] = len(data_sources)
 
-        self.logger.info(
-            f"Merged financial metrics from {len(data_sources)} sources, "
-            f"confidence={merged['confidence']:.2f}"
-        )
+        self.logger.info(f"Merged financial metrics from {len(data_sources)} sources, " f"confidence={merged['confidence']:.2f}")
 
         return merged
 
@@ -365,9 +379,6 @@ class DataValidator:
                 seen_titles.add(title)
                 unique_news.append(news)
 
-        self.logger.info(
-            f"Validated {len(unique_news)} unique news items from "
-            f"{len(data_sources)} sources ({len(all_news)} total)"
-        )
+        self.logger.info(f"Validated {len(unique_news)} unique news items from " f"{len(data_sources)} sources ({len(all_news)} total)")
 
         return unique_news
