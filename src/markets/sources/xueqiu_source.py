@@ -88,6 +88,72 @@ class XueqiuSource(DataSource):
         except (ValueError, TypeError):
             return None
 
+    def _compute_derived_metrics(self, metrics: Dict) -> None:
+        """
+        在 metrics dict 上原地计算衍生指标。
+        仅在输入字段有效时才写入结果，避免用 None 覆盖已有值。
+        """
+        def get(field):
+            return metrics.get(field)
+
+        def safe_div(a, b):
+            if a is not None and b and b != 0:
+                return a / b
+            return None
+
+        # free_cash_flow_yield = FCF / market_cap
+        # Note: market_cap is only available for the most recent period.
+        # For historical periods, market_cap will be None and these ratios will remain None.
+        if metrics.get("free_cash_flow_yield") is None:
+            metrics["free_cash_flow_yield"] = safe_div(get("free_cash_flow"), get("market_cap"))
+
+        # free_cash_flow_per_share = FCF / shares_outstanding
+        if metrics.get("free_cash_flow_per_share") is None:
+            shares = get("shares_outstanding") or get("outstanding_shares")
+            metrics["free_cash_flow_per_share"] = safe_div(get("free_cash_flow"), shares)
+
+        # price_to_sales_ratio = market_cap / revenue
+        if metrics.get("price_to_sales_ratio") is None:
+            metrics["price_to_sales_ratio"] = safe_div(get("market_cap"), get("revenue"))
+
+        # enterprise_value = market_cap + total_liabilities - cash_and_equivalents
+        if metrics.get("enterprise_value") is None:
+            mc = get("market_cap")
+            tl = get("total_liabilities")
+            cash = get("cash_and_equivalents")
+            if mc is not None and tl is not None and cash is not None:
+                metrics["enterprise_value"] = mc + tl - cash
+
+        ev = metrics.get("enterprise_value")
+
+        # enterprise_value_to_revenue_ratio = EV / revenue
+        if metrics.get("enterprise_value_to_revenue_ratio") is None:
+            metrics["enterprise_value_to_revenue_ratio"] = safe_div(ev, get("revenue"))
+
+        # peg_ratio = PE / (earnings_growth_percent) — only for positive growth
+        if metrics.get("peg_ratio") is None:
+            pe = get("price_to_earnings_ratio")
+            eg = get("earnings_growth")
+            if pe is not None and eg is not None and eg > 0:
+                metrics["peg_ratio"] = pe / (eg * 100)
+
+        # return_on_invested_capital = NOPAT / invested_capital
+        # NOPAT = operating_income * (1 - effective_tax_rate=0.25)
+        # invested_capital = equity + total_liabilities - cash
+        if metrics.get("return_on_invested_capital") is None:
+            oi = get("operating_income")
+            eq = get("shareholders_equity")
+            tl = get("total_liabilities")
+            cash = get("cash_and_equivalents")
+            if oi is not None and eq is not None and tl is not None and cash is not None:
+                invested_capital = eq + tl - cash
+                if invested_capital > 0:
+                    metrics["return_on_invested_capital"] = oi * 0.75 / invested_capital
+
+        # debt_to_equity = total_liabilities / shareholders_equity (direct calculation)
+        if metrics.get("debt_to_equity") is None:
+            metrics["debt_to_equity"] = safe_div(get("total_liabilities"), get("shareholders_equity"))
+
     def _extract_value(self, field_data) -> Optional[float]:
         """
         雪球财务数据格式为 [当期值, 同比增长率]，取第一个元素。
@@ -351,7 +417,7 @@ class XueqiuSource(DataSource):
         report_period = self._parse_report_period(indicator.get("report_date") or income.get("report_date") or cash_flow.get("report_date") or balance.get("report_date"))
 
         qv = quote_valuation or {}
-        return {
+        result = {
             "ticker": ticker,
             "report_period": report_period,
             "period": "ttm",
@@ -396,6 +462,8 @@ class XueqiuSource(DataSource):
             "current_assets": ev(balance.get("ca")),
             "current_liabilities": ev(balance.get("clia")),
         }
+        self._compute_derived_metrics(result)
+        return result
 
     def _build_cn_metrics(
         self,
@@ -425,7 +493,7 @@ class XueqiuSource(DataSource):
         report_period = self._parse_report_period(indicator.get("report_date") or income.get("report_date"))
 
         qv = quote_valuation or {}
-        return {
+        result = {
             "ticker": ticker,
             "report_period": report_period,
             "period": "ttm",
@@ -472,3 +540,5 @@ class XueqiuSource(DataSource):
             "current_assets": ev(balance.get("total_current_assets")),
             "current_liabilities": ev(balance.get("total_current_liab")),
         }
+        self._compute_derived_metrics(result)
+        return result

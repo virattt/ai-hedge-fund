@@ -419,3 +419,116 @@ class TestXueqiuSourceHistoricalData:
         source = XueqiuSource()
         result = source.get_historical_financial_data("03690", limit=5)
         assert result is None
+
+
+class TestXueqiuDerivedMetrics:
+    """Tests for computed derived metrics in _compute_derived_metrics."""
+
+    def test_free_cash_flow_yield(self):
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        source = XueqiuSource()
+        metrics = {
+            "free_cash_flow": 43e9,
+            "market_cap": 450e9,
+        }
+        source._compute_derived_metrics(metrics)
+        assert metrics["free_cash_flow_yield"] == pytest.approx(43e9 / 450e9, rel=1e-4)
+
+    def test_free_cash_flow_per_share(self):
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        source = XueqiuSource()
+        metrics = {
+            "free_cash_flow": 43e9,
+            "shares_outstanding": 6174383320.0,
+        }
+        source._compute_derived_metrics(metrics)
+        assert metrics["free_cash_flow_per_share"] == pytest.approx(43e9 / 6174383320.0, rel=1e-4)
+
+    def test_price_to_sales_ratio(self):
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        source = XueqiuSource()
+        metrics = {
+            "market_cap": 450e9,
+            "revenue": 337e9,
+        }
+        source._compute_derived_metrics(metrics)
+        assert metrics["price_to_sales_ratio"] == pytest.approx(450e9 / 337e9, rel=1e-4)
+
+    def test_enterprise_value(self):
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        source = XueqiuSource()
+        metrics = {
+            "market_cap": 450e9,
+            "total_liabilities": 303e9,
+            "cash_and_equivalents": 90e9,
+        }
+        source._compute_derived_metrics(metrics)
+        assert metrics["enterprise_value"] == pytest.approx(450e9 + 303e9 - 90e9, rel=1e-4)
+
+    def test_enterprise_value_to_revenue(self):
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        source = XueqiuSource()
+        metrics = {
+            "market_cap": 450e9,
+            "total_liabilities": 303e9,
+            "cash_and_equivalents": 90e9,
+            "revenue": 337e9,
+        }
+        source._compute_derived_metrics(metrics)
+        ev = 450e9 + 303e9 - 90e9
+        assert metrics["enterprise_value_to_revenue_ratio"] == pytest.approx(ev / 337e9, rel=1e-4)
+
+    def test_peg_ratio_positive_growth(self):
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        source = XueqiuSource()
+        metrics = {
+            "price_to_earnings_ratio": 20.0,
+            "earnings_growth": 0.25,  # 25% growth
+        }
+        source._compute_derived_metrics(metrics)
+        # PEG = PE / (growth_rate_as_percent) = 20 / 25 = 0.8
+        assert metrics["peg_ratio"] == pytest.approx(0.8, rel=1e-4)
+
+    def test_peg_ratio_skipped_for_negative_growth(self):
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        source = XueqiuSource()
+        metrics = {
+            "price_to_earnings_ratio": 20.0,
+            "earnings_growth": -0.10,
+        }
+        source._compute_derived_metrics(metrics)
+        assert metrics.get("peg_ratio") is None
+
+    def test_roic(self):
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        source = XueqiuSource()
+        metrics = {
+            "operating_income": 37e9,
+            "shareholders_equity": 172e9,
+            "total_liabilities": 303e9,
+            "cash_and_equivalents": 90e9,
+        }
+        source._compute_derived_metrics(metrics)
+        invested_capital = 172e9 + 303e9 - 90e9
+        nopat = 37e9 * (1 - 0.25)
+        expected_roic = nopat / invested_capital
+        assert metrics["return_on_invested_capital"] == pytest.approx(expected_roic, rel=1e-4)
+
+    def test_debt_to_equity_direct(self):
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        source = XueqiuSource()
+        metrics = {
+            "total_liabilities": 303e9,
+            "shareholders_equity": 172e9,
+            "debt_to_equity": None,
+        }
+        source._compute_derived_metrics(metrics)
+        assert metrics["debt_to_equity"] == pytest.approx(303e9 / 172e9, rel=1e-4)
+
+    def test_skips_when_missing_inputs(self):
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        source = XueqiuSource()
+        metrics = {}
+        source._compute_derived_metrics(metrics)
+        assert metrics.get("free_cash_flow_yield") is None
+        assert metrics.get("enterprise_value") is None
