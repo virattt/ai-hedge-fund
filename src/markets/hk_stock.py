@@ -8,6 +8,7 @@ from src.markets.sources.akshare_source import AKShareSource
 from src.markets.sources.newsnow_source import NewsNowSource
 from src.markets.sources.akshare_news_source import AKShareNewsSource
 from src.markets.sources.sina_finance_source import SinaFinanceSource
+from src.markets.sources.xueqiu_source import XueqiuSource
 from src.data.validation import DataValidator
 
 logger = logging.getLogger(__name__)
@@ -24,11 +25,13 @@ class HKStockAdapter(MarketAdapter):
             validator: Data validator instance
         """
         # Data sources in priority order (per spec):
-        # 1. Sina Finance - Free, stable, real-time HK quotes
-        # 2. AKShare - Backup source
+        # 1. Xueqiu - Primary for financials: most complete statements
+        # 2. Sina Finance - Primary for prices: free, stable, real-time HK quotes
+        # 3. AKShare - Backup source
         # Note: YFinance disabled (not available in China)
         data_sources = [
-            SinaFinanceSource(),    # Primary: Free, stable
+            XueqiuSource(),         # Primary for financials: most complete statements
+            SinaFinanceSource(),    # Primary for prices: free, stable
             # YFinanceSource(),     # Disabled: Not available in China
             AKShareSource(),        # Fallback: Backup
         ]

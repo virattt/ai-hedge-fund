@@ -150,3 +150,21 @@ class TestHKStockNewsNowIntegration:
 
         assert len(news) > 0
         assert news[0]["source"] == "NewsNow"
+
+
+class TestHKAdapterIncludesXueqiu:
+    def test_xueqiu_source_in_data_sources(self):
+        from src.markets.hk_stock import HKStockAdapter
+        from src.markets.sources.xueqiu_source import XueqiuSource
+
+        adapter = HKStockAdapter()
+        assert any(isinstance(s, XueqiuSource) for s in adapter.data_sources)
+
+    def test_xueqiu_before_akshare_in_priority(self):
+        from src.markets.hk_stock import HKStockAdapter
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        from src.markets.sources.akshare_source import AKShareSource
+
+        adapter = HKStockAdapter()
+        names = [type(s).__name__ for s in adapter.data_sources]
+        assert names.index("XueqiuSource") < names.index("AKShareSource")
