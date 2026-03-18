@@ -6,6 +6,7 @@ from src.markets.base import MarketAdapter
 from src.markets.sources.akshare_source import AKShareSource
 from src.markets.sources.newsnow_source import NewsNowSource
 from src.markets.sources.sina_finance_source import SinaFinanceSource
+from src.markets.sources.xueqiu_source import XueqiuSource
 from src.data.validation import DataValidator
 
 logger = logging.getLogger(__name__)
@@ -28,15 +29,17 @@ class CNStockAdapter(MarketAdapter):
 
         # Data sources in priority order:
         # 1. EastmoneyCurl - Most comprehensive CN market data (uses curl to bypass anti-bot)
-        # 2. Tushare Pro - Most stable for CN market (requires token)
-        # 3. AKShare - Free, good CN market coverage
-        # 4. Sina Finance - Free, stable, real-time quotes
+        # 2. Xueqiu - Complete financial statements
+        # 3. Tushare Pro - Most stable for CN market (requires token)
+        # 4. AKShare - Free, good CN market coverage
+        # 5. Sina Finance - Free, stable, real-time quotes
         # Note: YFinance disabled (not available in China)
         data_sources = [
             EastmoneyCurlSource(),  # Primary: Most comprehensive, bypasses anti-bot
-            TushareSource(),        # Fallback 1: Requires token
-            AKShareSource(),        # Fallback 2: Free, good coverage
-            SinaFinanceSource(),    # Fallback 3: Free, stable
+            XueqiuSource(),  # Secondary: Complete financial statements
+            TushareSource(),  # Fallback 1: Requires token
+            AKShareSource(),  # Fallback 2: Free, good coverage
+            SinaFinanceSource(),  # Fallback 3: Free, stable
             # YFinanceSource(),     # Disabled: Not available in China
         ]
 

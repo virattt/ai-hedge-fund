@@ -46,7 +46,7 @@ class TestCNStockAdapter:
         assert adapter.get_full_ticker("000001") == "SZ000001"
         assert adapter.get_full_ticker("300001") == "SZ300001"
 
-    @patch('src.markets.sources.akshare_source.AKShareSource.get_prices')
+    @patch("src.markets.sources.akshare_source.AKShareSource.get_prices")
     def test_get_prices(self, mock_get_prices):
         """Test getting prices with mocked data source."""
         adapter = CNStockAdapter()
@@ -72,7 +72,7 @@ class TestCNStockAdapter:
         assert isinstance(prices[0], Price)
         mock_get_prices.assert_called_once()
 
-    @patch('src.markets.sources.akshare_source.AKShareSource.get_financial_metrics')
+    @patch("src.markets.sources.akshare_source.AKShareSource.get_financial_metrics")
     def test_get_financial_metrics(self, mock_get_metrics):
         """Test getting financial metrics with mocked data source."""
         adapter = CNStockAdapter()
@@ -94,7 +94,7 @@ class TestCNStockAdapter:
         assert metrics["ticker"] == "000001"
         mock_get_metrics.assert_called_once()
 
-    @patch('src.markets.sources.akshare_source.AKShareSource.get_company_news')
+    @patch("src.markets.sources.akshare_source.AKShareSource.get_company_news")
     def test_get_company_news(self, mock_get_news):
         """Test getting company news with mocked data source."""
         adapter = CNStockAdapter()
@@ -129,19 +129,7 @@ class TestCNStockNewsNowIntegration:
 
         # Mock NewsNow API (财联社 for CN stocks)
         with rm_module.Mocker() as m:
-            m.get(
-                "https://newsnow.busiyi.world/api/s?id=cls",
-                json={
-                    "items": [
-                        {
-                            "id": "1",
-                            "title": "贵州茅台 600519 发布财报",
-                            "url": "https://example.com/1",
-                            "publish_time": "2024-03-15T10:00:00Z"
-                        }
-                    ]
-                }
-            )
+            m.get("https://newsnow.busiyi.world/api/s?id=cls", json={"items": [{"id": "1", "title": "贵州茅台 600519 发布财报", "url": "https://example.com/1", "publish_time": "2024-03-15T10:00:00Z"}]})
             m.get("https://newsnow.busiyi.world/api/s?id=wallstreetcn", json={"items": []})
             m.get("https://newsnow.busiyi.world/api/s?id=xueqiu", json={"items": []})
 
@@ -150,3 +138,21 @@ class TestCNStockNewsNowIntegration:
         # Should get news from NewsNow
         assert len(news) > 0
         assert news[0]["source"] == "NewsNow"
+
+
+class TestCNAdapterIncludesXueqiu:
+    def test_xueqiu_source_in_data_sources(self):
+        from src.markets.cn_stock import CNStockAdapter
+        from src.markets.sources.xueqiu_source import XueqiuSource
+
+        adapter = CNStockAdapter()
+        assert any(isinstance(s, XueqiuSource) for s in adapter.data_sources)
+
+    def test_xueqiu_after_eastmoney_in_priority(self):
+        from src.markets.cn_stock import CNStockAdapter
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        from src.markets.sources.eastmoney_curl_source import EastmoneyCurlSource
+
+        adapter = CNStockAdapter()
+        names = [type(s).__name__ for s in adapter.data_sources]
+        assert names.index("XueqiuSource") > names.index("EastmoneyCurlSource")
