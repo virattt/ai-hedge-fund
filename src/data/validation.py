@@ -297,6 +297,13 @@ class DataValidator:
             "operating_income",
             "research_and_development",
             "operating_cash_flow_per_share",
+            # Absolute financial data (pre-existing fields)
+            "revenue",
+            "net_income",
+            "free_cash_flow",
+            "total_assets",
+            "total_liabilities",
+            "shareholders_equity",
         ]
 
         # Calculate weighted average for each numeric field
