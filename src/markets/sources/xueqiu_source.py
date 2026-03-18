@@ -109,6 +109,38 @@ class XueqiuSource(DataSource):
         except Exception:
             return ""
 
+    def _fetch_quote_valuation(self, symbol: str) -> Dict:
+        """
+        从雪球行情接口获取实时估值数据。
+        财务报表接口不提供估值比率，需单独请求。
+
+        返回字段：
+          pe_ttm      - 滚动市盈率（过去12个月净利润）
+          pe_lyr      - 静态市盈率（最近完整财年净利润）
+          pe_forecast - 动态市盈率（分析师预测）
+          pb          - 市净率
+          ps_ttm      - 市销率TTM（雪球通常为None）
+        """
+        url = "https://stock.xueqiu.com/v5/stock/quote.json"
+        params = {"symbol": symbol, "extend": "detail"}
+        try:
+            r = self.session.get(url, params=params, timeout=10)
+            if r.status_code != 200:
+                self.logger.warning(f"[Xueqiu] quote for {symbol} returned {r.status_code}")
+                return {}
+            data = r.json()
+            quote = data.get("data", {}).get("quote", {})
+            return {
+                "pe_ttm": self._safe_float(quote.get("pe_ttm")),
+                "pe_lyr": self._safe_float(quote.get("pe_lyr")),
+                "pe_forecast": self._safe_float(quote.get("pe_forecast")),
+                "pb": self._safe_float(quote.get("pb")),
+                "ps_ttm": self._safe_float(quote.get("ps_ttm")),
+            }
+        except Exception as e:
+            self.logger.warning(f"[Xueqiu] Error fetching quote for {symbol}: {e}")
+            return {}
+
     def _fetch_financial_data(self, endpoint: str, symbol: str, market: str) -> List[Dict]:
         """
         从雪球财务API获取数据。
@@ -118,6 +150,27 @@ class XueqiuSource(DataSource):
         mkt = market.lower()
         url = f"{self.BASE_URL}/{mkt}/{endpoint}.json"
         params = {"symbol": symbol, "type": "Q4", "is_detail": "true", "count": "5"}
+        try:
+            r = self.session.get(url, params=params, timeout=10)
+            if r.status_code != 200:
+                self.logger.warning(f"[Xueqiu] {endpoint} for {symbol} returned {r.status_code}")
+                return []
+            data = r.json()
+            return data.get("data", {}).get("list", []) or []
+        except Exception as e:
+            self.logger.error(f"[Xueqiu] Error fetching {endpoint} for {symbol}: {e}")
+            return []
+
+    def _fetch_financial_data_multi(
+        self, endpoint: str, symbol: str, market: str, count: str = "10"
+    ) -> List[Dict]:
+        """
+        从雪球财务API获取多期数据（可配置条数）。
+        与 _fetch_financial_data 相同，但 count 参数可自定义。
+        """
+        mkt = market.lower()
+        url = f"{self.BASE_URL}/{mkt}/{endpoint}.json"
+        params = {"symbol": symbol, "type": "Q4", "is_detail": "true", "count": count}
         try:
             r = self.session.get(url, params=params, timeout=10)
             if r.status_code != 200:
@@ -177,14 +230,95 @@ class XueqiuSource(DataSource):
             self.logger.warning(f"[Xueqiu] No financial data available for {symbol}")
             return None
 
+        # Fetch real-time valuation ratios (pe_ttm, pe_lyr, pe_forecast, pb) from quote API
+        # 财务报表接口不含估值比率，需单独请求行情接口获取
+        quote_valuation = self._fetch_quote_valuation(symbol)
+
         if market == "HK":
-            metrics = self._build_hk_metrics(ticker, indicator, income, cash_flow, balance)
+            metrics = self._build_hk_metrics(ticker, indicator, income, cash_flow, balance, quote_valuation)
         else:
-            metrics = self._build_cn_metrics(ticker, indicator, income, cash_flow, balance)
+            metrics = self._build_cn_metrics(ticker, indicator, income, cash_flow, balance, quote_valuation)
 
         non_null = sum(1 for v in metrics.values() if v is not None and v != "")
         self.logger.info(f"[Xueqiu] ✓ Got {market} financial metrics for {symbol}: " f"{non_null}/{len(metrics)} fields populated")
         return metrics
+
+    def get_historical_financial_data(
+        self, ticker: str, limit: int = 10
+    ) -> Optional[List[Dict]]:
+        """
+        获取港股或A股多年历史财务数据，返回按年度排列的指标列表（最新在前）。
+
+        与 get_financial_metrics 不同，此方法返回最多 limit 年的年度数据，
+        用于 search_line_items 的历史多期查询。
+
+        Returns:
+            list of metric dicts (most recent first), or None if no data.
+        """
+        if not self._ensure_token():
+            self.logger.warning("[Xueqiu] Cannot get token, skipping historical data")
+            return None
+
+        market, symbol = self._detect_market_and_symbol(ticker)
+
+        # Fetch up to limit annual periods (type=Q4 = year-end reports)
+        count = str(min(limit, 10))  # Xueqiu caps at ~10
+
+        indicator_list = self._fetch_financial_data_multi("indicator", symbol, market, count)
+        income_list = self._fetch_financial_data_multi("income", symbol, market, count)
+        cash_flow_list = self._fetch_financial_data_multi("cash_flow", symbol, market, count)
+        balance_list = self._fetch_financial_data_multi("balance", symbol, market, count)
+
+        if not any([indicator_list, income_list, cash_flow_list, balance_list]):
+            self.logger.warning(f"[Xueqiu] No historical data for {symbol}")
+            return None
+
+        # Index by report_date for alignment across statement types
+        def index_by_date(rows: List[Dict]) -> Dict[int, Dict]:
+            result = {}
+            for row in rows:
+                rd = row.get("report_date")
+                if rd is not None:
+                    result[int(rd)] = row
+            return result
+
+        indicator_by_date = index_by_date(indicator_list)
+        income_by_date = index_by_date(income_list)
+        cashflow_by_date = index_by_date(cash_flow_list)
+        balance_by_date = index_by_date(balance_list)
+
+        # Use income list as the primary date spine (most likely to be complete)
+        # Fall back to indicator list if income is empty
+        spine = income_list or indicator_list
+        if not spine:
+            return None
+
+        # Fetch valuation ratios once (real-time, applies to most recent only)
+        quote_valuation = self._fetch_quote_valuation(symbol)
+
+        results = []
+        for i, row in enumerate(spine[:limit]):
+            rd = row.get("report_date")
+            if rd is None:
+                continue
+            rd_int = int(rd)
+
+            indicator = indicator_by_date.get(rd_int, {})
+            income = income_by_date.get(rd_int, row)  # row IS income if spine=income_list
+            cash_flow = cashflow_by_date.get(rd_int, {})
+            balance = balance_by_date.get(rd_int, {})
+
+            # Only apply real-time valuation to the most recent period
+            qv = quote_valuation if i == 0 else {}
+
+            if market == "HK":
+                metrics = self._build_hk_metrics(ticker, indicator, income, cash_flow, balance, qv)
+            else:
+                metrics = self._build_cn_metrics(ticker, indicator, income, cash_flow, balance, qv)
+
+            results.append(metrics)
+
+        return results if results else None
 
     def _build_hk_metrics(
         self,
@@ -193,6 +327,7 @@ class XueqiuSource(DataSource):
         income: Dict,
         cash_flow: Dict,
         balance: Dict,
+        quote_valuation: Optional[Dict] = None,
     ) -> Dict:
         """港股四张报表聚合。百分比字段除以100转为小数。"""
         ev = self._extract_value
@@ -208,18 +343,31 @@ class XueqiuSource(DataSource):
         capex = abs(capex_raw) if capex_raw is not None else None
         fcf = (ocf - capex) if (ocf is not None and capex is not None) else None
 
+        # Calculate net_margin from income statement (雪球indicator无直接净利润率字段)
+        net_income_val = ev(income.get("ploashh")) or ev(indicator.get("ploashh"))
+        revenue_val = ev(income.get("tto")) or ev(indicator.get("tto"))
+        net_margin_calc = (net_income_val / revenue_val) if (net_income_val is not None and revenue_val and revenue_val != 0) else None
+
         report_period = self._parse_report_period(indicator.get("report_date") or income.get("report_date") or cash_flow.get("report_date") or balance.get("report_date"))
 
+        qv = quote_valuation or {}
         return {
             "ticker": ticker,
             "report_period": report_period,
             "period": "ttm",
             "currency": "HKD",
+            # Valuation ratios (from real-time quote API)
+            "price_to_earnings_ratio": qv.get("pe_ttm"),       # 滚动市盈率（TTM）
+            "price_to_earnings_ratio_lyr": qv.get("pe_lyr"),   # 静态市盈率（最近完整财年）
+            "price_to_earnings_ratio_forward": qv.get("pe_forecast"),  # 动态市盈率（分析师预测）
+            "price_to_book_ratio": qv.get("pb"),
+            "price_to_sales_ratio": qv.get("ps_ttm"),
             # Profitability (% → decimal)
             "return_on_equity": roe_raw / 100 if roe_raw is not None else None,
             "return_on_assets": roa_raw / 100 if roa_raw is not None else None,
             "gross_margin": gpm_raw / 100 if gpm_raw is not None else None,
             "operating_margin": opm_raw / 100 if opm_raw is not None else None,
+            "net_margin": net_margin_calc,
             # Liquidity & Leverage
             "current_ratio": ev(indicator.get("cro")),
             "quick_ratio": ev(indicator.get("qro")),
@@ -256,6 +404,7 @@ class XueqiuSource(DataSource):
         income: Dict,
         cash_flow: Dict,
         balance: Dict,
+        quote_valuation: Optional[Dict] = None,
     ) -> Dict:
         """A股四张报表聚合。百分比字段除以100转为小数。"""
         ev = self._extract_value
@@ -275,11 +424,18 @@ class XueqiuSource(DataSource):
 
         report_period = self._parse_report_period(indicator.get("report_date") or income.get("report_date"))
 
+        qv = quote_valuation or {}
         return {
             "ticker": ticker,
             "report_period": report_period,
             "period": "ttm",
             "currency": "CNY",
+            # Valuation ratios (from real-time quote API)
+            "price_to_earnings_ratio": qv.get("pe_ttm"),       # 滚动市盈率（TTM）
+            "price_to_earnings_ratio_lyr": qv.get("pe_lyr"),   # 静态市盈率（最近完整财年）
+            "price_to_earnings_ratio_forward": qv.get("pe_forecast"),  # 动态市盈率（分析师预测）
+            "price_to_book_ratio": qv.get("pb"),
+            "price_to_sales_ratio": qv.get("ps_ttm"),
             # Profitability (% → decimal)
             "return_on_equity": roe_raw / 100 if roe_raw is not None else None,
             "return_on_assets": roa_raw / 100 if roa_raw is not None else None,

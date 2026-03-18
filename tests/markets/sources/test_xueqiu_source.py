@@ -278,3 +278,144 @@ class TestXueqiuSourceCNFinancialMetrics:
         source.get_financial_metrics("600519", "2025-01-01")
         assert captured.get("market") == "CN"
         assert captured.get("symbol") == "SH600519"
+
+
+class TestXueqiuSourceHistoricalData:
+    """Tests for multi-year historical financial data."""
+
+    def _make_income_row(self, report_date_ms, revenue, net_income):
+        return {
+            "report_date": report_date_ms,
+            "tto": [revenue, None],
+            "ploashh": [net_income, None],
+            "plobtx": [net_income * 1.1, None],
+            "gp": [revenue * 0.4, None],
+            "rshdevexp": [revenue * 0.05, None],
+        }
+
+    def _make_indicator_row(self, report_date_ms, roe, gpm, opm):
+        return {
+            "report_date": report_date_ms,
+            "roe": [roe, None],
+            "rota": [roe * 0.5, None],
+            "gpm": [gpm, None],
+            "opemg": [opm, None],
+            "tlia_ta": [45.0, None],
+            "beps": [5.0, None],
+            "bps": [28.0, None],
+            "nocfps": [8.0, None],
+            "cro": [1.9, None],
+            "qro": [1.8, None],
+            "ploashh": [None, None],
+            "tto": [None, None],
+        }
+
+    def _make_cashflow_row(self, report_date_ms, ocf, capex):
+        return {
+            "report_date": report_date_ms,
+            "nocf": [ocf, None],
+            "adtfxda": [-abs(capex), None],
+            "ninvcf": [-capex * 0.5, None],
+            "nfcgcf": [-ocf * 0.3, None],
+        }
+
+    def _make_balance_row(self, report_date_ms, total_assets, equity):
+        return {
+            "report_date": report_date_ms,
+            "ta": [total_assets, None],
+            "tlia": [total_assets - equity, None],
+            "shhfd": [equity, None],
+            "cceq": [equity * 0.2, None],
+            "ca": [equity * 0.6, None],
+            "clia": [equity * 0.3, None],
+        }
+
+    @patch('src.markets.sources.xueqiu_source.XueqiuSource._fetch_financial_data_multi')
+    @patch('src.markets.sources.xueqiu_source.XueqiuSource._fetch_quote_valuation')
+    @patch('src.markets.sources.xueqiu_source.XueqiuSource._ensure_token')
+    def test_get_historical_hk_returns_multiple_years(
+        self, mock_token, mock_quote, mock_fetch_multi
+    ):
+        """get_historical_financial_data returns one dict per year, most recent first."""
+        mock_token.return_value = True
+        mock_quote.return_value = {"pe_ttm": 15.0, "pe_lyr": 13.0, "pe_forecast": 14.0, "pb": 2.6, "ps_ttm": None}
+
+        # Two years: 2024 and 2023
+        ts_2024 = 1735603200000  # 2024-12-31
+        ts_2023 = 1703980800000  # 2023-12-31
+
+        def fake_fetch_multi(endpoint, symbol, market, count="10"):
+            if endpoint == "income":
+                return [
+                    self._make_income_row(ts_2024, 337e9, 35e9),
+                    self._make_income_row(ts_2023, 276e9, 13e9),
+                ]
+            if endpoint == "indicator":
+                return [
+                    self._make_indicator_row(ts_2024, 22.0, 36.0, 11.0),
+                    self._make_indicator_row(ts_2023, 8.0, 30.0, 5.0),
+                ]
+            if endpoint == "cash_flow":
+                return [
+                    self._make_cashflow_row(ts_2024, 57e9, 11e9),
+                    self._make_cashflow_row(ts_2023, 40e9, 8e9),
+                ]
+            if endpoint == "balance":
+                return [
+                    self._make_balance_row(ts_2024, 475e9, 172e9),
+                    self._make_balance_row(ts_2023, 400e9, 150e9),
+                ]
+            return []
+
+        mock_fetch_multi.side_effect = fake_fetch_multi
+
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        source = XueqiuSource()
+        results = source.get_historical_financial_data("03690", limit=5)
+
+        assert results is not None
+        assert len(results) == 2
+        # Most recent first
+        assert results[0]["report_period"] == "2024-12-31"
+        assert results[1]["report_period"] == "2023-12-31"
+        # Check data integrity
+        assert abs(results[0]["revenue"] - 337e9) < 1e6
+        assert abs(results[1]["revenue"] - 276e9) < 1e6
+        assert results[0]["return_on_equity"] == pytest.approx(0.22, abs=0.001)
+
+    @patch('src.markets.sources.xueqiu_source.XueqiuSource._fetch_financial_data_multi')
+    @patch('src.markets.sources.xueqiu_source.XueqiuSource._fetch_quote_valuation')
+    @patch('src.markets.sources.xueqiu_source.XueqiuSource._ensure_token')
+    def test_get_historical_respects_limit(
+        self, mock_token, mock_quote, mock_fetch_multi
+    ):
+        """limit parameter caps the number of returned periods."""
+        mock_token.return_value = True
+        mock_quote.return_value = {}
+
+        ts_list = [1735603200000 - i * 31536000000 for i in range(5)]
+
+        def fake_fetch_multi(endpoint, symbol, market, count="10"):
+            if endpoint == "income":
+                return [self._make_income_row(ts, 100e9 - i * 10e9, 10e9) for i, ts in enumerate(ts_list)]
+            return []
+
+        mock_fetch_multi.side_effect = fake_fetch_multi
+
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        source = XueqiuSource()
+        results = source.get_historical_financial_data("03690", limit=3)
+
+        assert len(results) == 3
+
+    @patch('src.markets.sources.xueqiu_source.XueqiuSource._fetch_financial_data_multi')
+    @patch('src.markets.sources.xueqiu_source.XueqiuSource._ensure_token')
+    def test_get_historical_returns_none_on_no_data(self, mock_token, mock_fetch_multi):
+        """Returns None when all fetches fail."""
+        mock_token.return_value = True
+        mock_fetch_multi.return_value = []
+
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        source = XueqiuSource()
+        result = source.get_historical_financial_data("03690", limit=5)
+        assert result is None
