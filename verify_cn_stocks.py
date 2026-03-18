@@ -32,7 +32,7 @@ def verify_ticker(ticker: str, end_date: str = "2024-03-01"):
             ("净利率", m.net_margin, -1, 1),
             ("营业利润率", m.operating_margin, -1, 1),
             ("营收增长率", m.revenue_growth, -1, 5),  # 允许500%增长
-            ("盈利增长率", m.earnings_growth, -1, 5),
+            ("盈利增长率", m.earnings_growth, -10, 5),  # 允许极端亏损（如万科-206%）
         ]
 
         print(f"\n报告期: {m.report_period}")
