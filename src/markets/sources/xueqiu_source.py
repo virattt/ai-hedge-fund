@@ -25,7 +25,7 @@ class XueqiuSource(DataSource):
     """
 
     BASE_URL = "https://stock.xueqiu.com/v5/stock/finance"
-    TOKEN_INIT_URL = "https://xueqiu.com/service/v5/stock/screener/quote/list" "?page=1&size=1&order=desc&orderby=percent&market=CN&type=sh_sz"
+    TOKEN_INIT_URL = "https://xueqiu.com/service/v5/stock/screener/quote/list" "?page=1&size=1&order=desc&order_by=percent&market=CN&type=sh_sz"
 
     def __init__(self):
         super().__init__("Xueqiu")
@@ -52,7 +52,8 @@ class XueqiuSource(DataSource):
             return True
         try:
             r = self.session.get(self.TOKEN_INIT_URL, timeout=10)
-            if r.status_code == 200 and "xq_a_token" in self.session.cookies:
+            # Xueqiu sets cookies even with 400 status, so check cookies first
+            if "xq_a_token" in self.session.cookies:
                 self._token_initialized = True
                 self.logger.debug("[Xueqiu] Token initialized successfully")
                 return True
