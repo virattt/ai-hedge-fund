@@ -70,6 +70,25 @@ class FinancialMetrics(BaseModel):
     dividends: float | None = None
     outstanding_shares: float | None = None
 
+    # Cash flow statement fields
+    operating_cash_flow: float | None = None
+    capital_expenditure: float | None = None
+    investing_cash_flow: float | None = None
+    financing_cash_flow: float | None = None
+
+    # Balance sheet detail fields
+    cash_and_equivalents: float | None = None
+    current_assets: float | None = None
+    current_liabilities: float | None = None
+
+    # Income statement detail fields
+    gross_profit: float | None = None
+    operating_income: float | None = None
+    research_and_development: float | None = None
+
+    # Per share metrics
+    operating_cash_flow_per_share: float | None = None
+
 
 class FinancialMetricsResponse(BaseModel):
     financial_metrics: list[FinancialMetrics]
