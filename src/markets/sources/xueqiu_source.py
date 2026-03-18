@@ -1,5 +1,4 @@
 """雪球(Xueqiu)数据源，支持港股和A股完整财务报表数据。"""
-import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
@@ -143,19 +142,23 @@ class XueqiuSource(DataSource):
         """雪球不提供新闻数据，返回空列表。"""
         return []
 
-    def get_financial_metrics(self, ticker: str, end_date: str, period: str = "ttm", limit: int = 10) -> Optional[Dict]:
-        """获取港股或A股财务指标，聚合四张报表数据。失败返回 None。"""
-        if not self._ensure_token():
-            self.logger.warning("[Xueqiu] Cannot get token, skipping")
-            return None
-
-        # 判断市场：纯6位数字 = CN，SH/SZ前缀 = CN，其他 = HK
+    def _detect_market_and_symbol(self, ticker: str) -> tuple:
+        """根据 ticker 格式判断市场并返回标准化 symbol。"""
         if (len(ticker) == 6 and ticker.isdigit()) or ticker.startswith(("SH", "SZ")):
             market = "CN"
             symbol = ticker if ticker.startswith(("SH", "SZ")) else self._to_xueqiu_symbol(ticker, "CN")
         else:
             market = "HK"
             symbol = ticker.zfill(5)
+        return market, symbol
+
+    def get_financial_metrics(self, ticker: str, end_date: str, period: str = "ttm", limit: int = 10) -> Optional[Dict]:
+        """获取港股或A股财务指标，聚合四张报表数据。失败返回 None。"""
+        if not self._ensure_token():
+            self.logger.warning("[Xueqiu] Cannot get token, skipping")
+            return None
+
+        market, symbol = self._detect_market_and_symbol(ticker)
 
         self.logger.info(f"[Xueqiu] Fetching financial metrics for {symbol} ({market})")
 
