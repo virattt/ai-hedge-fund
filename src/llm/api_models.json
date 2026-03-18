@@ -70,6 +70,16 @@
     "provider": "Azure OpenAI"
   },
   {
+    "display_name": "MiniMax M2.7",
+    "model_name": "MiniMax-M2.7",
+    "provider": "MiniMax"
+  },
+  {
+    "display_name": "MiniMax M2.7 High Speed",
+    "model_name": "MiniMax-M2.7-highspeed",
+    "provider": "MiniMax"
+  },
+  {
     "display_name": "MiniMax M2.5",
     "model_name": "MiniMax-M2.5",
     "provider": "MiniMax"

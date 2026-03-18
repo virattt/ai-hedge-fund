@@ -27,6 +27,27 @@ class TestMiniMaxProviderEnum:
 class TestMiniMaxModelConfig:
     """Test MiniMax model configuration in api_models.json."""
 
+    def test_minimax_m27_in_available_models(self):
+        model = find_model_by_name("MiniMax-M2.7")
+        assert model is not None
+        assert model.display_name == "MiniMax M2.7"
+        assert model.model_name == "MiniMax-M2.7"
+        assert model.provider == ModelProvider.MINIMAX
+
+    def test_minimax_m27_highspeed_in_available_models(self):
+        model = find_model_by_name("MiniMax-M2.7-highspeed")
+        assert model is not None
+        assert model.display_name == "MiniMax M2.7 High Speed"
+        assert model.model_name == "MiniMax-M2.7-highspeed"
+        assert model.provider == ModelProvider.MINIMAX
+
+    def test_minimax_m27_is_default(self):
+        """M2.7 should appear before M2.5 in the model list."""
+        minimax_models = [m for m in AVAILABLE_MODELS if m.provider == ModelProvider.MINIMAX]
+        assert len(minimax_models) >= 2
+        assert minimax_models[0].model_name == "MiniMax-M2.7"
+        assert minimax_models[1].model_name == "MiniMax-M2.7-highspeed"
+
     def test_minimax_m25_in_available_models(self):
         model = find_model_by_name("MiniMax-M2.5")
         assert model is not None
@@ -42,7 +63,7 @@ class TestMiniMaxModelConfig:
         assert model.provider == ModelProvider.MINIMAX
 
     def test_get_model_info_minimax(self):
-        model_info = get_model_info("MiniMax-M2.5", "MiniMax")
+        model_info = get_model_info("MiniMax-M2.7", "MiniMax")
         assert model_info is not None
         assert model_info.provider == ModelProvider.MINIMAX
 
@@ -152,6 +173,42 @@ class TestMiniMaxGetModel:
             model="MiniMax-M2.5",
             api_key="test-key",
             base_url="https://api.minimaxi.com/v1",
+        )
+        assert result == mock_instance
+
+    @patch("src.llm.models.ChatOpenAI")
+    def test_get_model_m27(self, mock_chat_openai):
+        mock_instance = MagicMock()
+        mock_chat_openai.return_value = mock_instance
+
+        result = get_model(
+            "MiniMax-M2.7",
+            ModelProvider.MINIMAX,
+            api_keys={"MINIMAX_API_KEY": "test-key"},
+        )
+
+        mock_chat_openai.assert_called_once_with(
+            model="MiniMax-M2.7",
+            api_key="test-key",
+            base_url="https://api.minimax.io/v1",
+        )
+        assert result == mock_instance
+
+    @patch("src.llm.models.ChatOpenAI")
+    def test_get_model_m27_highspeed(self, mock_chat_openai):
+        mock_instance = MagicMock()
+        mock_chat_openai.return_value = mock_instance
+
+        result = get_model(
+            "MiniMax-M2.7-highspeed",
+            ModelProvider.MINIMAX,
+            api_keys={"MINIMAX_API_KEY": "test-key"},
+        )
+
+        mock_chat_openai.assert_called_once_with(
+            model="MiniMax-M2.7-highspeed",
+            api_key="test-key",
+            base_url="https://api.minimax.io/v1",
         )
         assert result == mock_instance
 

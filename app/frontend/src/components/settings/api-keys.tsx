@@ -76,7 +76,7 @@ const LLM_API_KEYS: ApiKey[] = [
   {
     key: 'MINIMAX_API_KEY',
     label: 'MiniMax API',
-    description: 'For MiniMax models (MiniMax-M2.5, MiniMax-M2.5-highspeed)',
+    description: 'For MiniMax models (MiniMax-M2.7, MiniMax-M2.7-highspeed, MiniMax-M2.5, MiniMax-M2.5-highspeed)',
     url: 'https://platform.minimax.io/',
     placeholder: 'your-minimax-api-key'
   }
