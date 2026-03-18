@@ -183,11 +183,11 @@ class TestEastmoneySource:
         mock_response = Mock()
         mock_response.json.return_value = {
             'data': {
-                'f57': 1000000000000,  # Market cap (1 trillion)
-                'f162': 15.5,          # PE ratio
-                'f167': 1.8,           # PB ratio
-                'f173': 12.5,          # ROE
-                'f187': 35.2,          # Gross margin
+                'f116': 1000000000000,  # Market cap (1 trillion) - f116 is total market cap
+                'f162': 15.5,           # PE ratio
+                'f167': 1.8,            # PB ratio
+                'f173': 12.5,           # ROE
+                'f187': 35.2,           # Gross margin
             }
         }
         mock_get.return_value = mock_response
