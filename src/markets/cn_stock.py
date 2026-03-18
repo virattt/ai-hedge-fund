@@ -1,6 +1,6 @@
 """China A-share market adapter."""
 import logging
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from src.markets.base import MarketAdapter
 from src.markets.sources.akshare_source import AKShareSource
@@ -157,6 +157,28 @@ class CNStockAdapter(MarketAdapter):
         ticker = self.normalize_ticker(ticker)
         exchange = self.detect_exchange(ticker)
         return f"{exchange}{ticker}"
+
+    def get_historical_financial_metrics(
+        self, ticker: str, end_date: str, limit: int = 10
+    ) -> Optional[List[Dict]]:
+        """Get multi-year annual financial data via XueqiuSource."""
+        normalized = self.normalize_ticker(ticker)
+
+        for source in self.active_sources:
+            if source.name == "Xueqiu":
+                try:
+                    results = source.get_historical_financial_data(normalized, limit=limit)
+                    if results:
+                        self.logger.info(
+                            f"[CNStock] ✓ Got {len(results)} historical periods from Xueqiu for {normalized}"
+                        )
+                        return results
+                except Exception as e:
+                    self.logger.warning(f"[CNStock] Xueqiu historical failed for {normalized}: {e}")
+                break
+
+        self.logger.warning(f"[CNStock] Falling back to single-period data for {normalized}")
+        return super().get_historical_financial_metrics(ticker, end_date, limit)
 
     def get_company_news(self, ticker: str, end_date: str, start_date=None, limit: int = 100):
         """

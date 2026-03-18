@@ -227,6 +227,27 @@ class MarketAdapter(ABC):
                 return first_metrics
             return None
 
+    def get_historical_financial_metrics(
+        self, ticker: str, end_date: str, limit: int = 10
+    ) -> Optional[List[Dict]]:
+        """
+        Get multiple years of annual financial metrics.
+
+        Default implementation: returns single-period data wrapped in a list.
+        Subclasses (HKStockAdapter, CNStockAdapter) override this to use
+        XueqiuSource.get_historical_financial_data() for richer history.
+
+        Args:
+            ticker: Stock ticker
+            end_date: End date in YYYY-MM-DD format
+            limit: Number of historical periods to fetch
+
+        Returns:
+            List of financial metrics dictionaries, or None if unavailable
+        """
+        single = self.get_financial_metrics(ticker, end_date)
+        return [single] if single else None
+
     def get_company_news(
         self, ticker: str, end_date: str, start_date: Optional[str] = None, limit: int = 100
     ) -> List[Dict]:

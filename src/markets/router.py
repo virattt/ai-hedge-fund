@@ -71,6 +71,24 @@ class MarketRouter:
 
         raise ValueError(f"未找到支持该ticker的适配器: {ticker}")
 
+    def get_adapter(self, ticker: str) -> MarketAdapter:
+        """
+        Return the adapter for a given ticker, raising ValueError if none found.
+
+        Args:
+            ticker: 股票/商品代码
+
+        Returns:
+            MarketAdapter: 支持该ticker的适配器实例
+
+        Raises:
+            ValueError: 如果没有适配器支持该ticker
+        """
+        for adapter in self.adapters:
+            if hasattr(adapter, 'supports_ticker') and adapter.supports_ticker(ticker):
+                return adapter
+        raise ValueError(f"No adapter found for ticker: {ticker}")
+
     def get_prices(
         self,
         ticker: str,

@@ -5,6 +5,7 @@ API集成测试 - 验证多市场支持
 并且保持向后兼容性（美股行为不变）
 """
 import pytest
+from unittest.mock import patch, MagicMock
 from src.tools import api
 from src.data.models import Price, FinancialMetrics, CompanyNews
 
@@ -143,3 +144,83 @@ class TestMarketRouterFallback:
         assert isinstance(prices, list)
         if len(prices) > 0:
             assert isinstance(prices[0], Price)
+
+
+class TestSearchLineItemsNonUS:
+    """Tests for search_line_items with HK/CN stocks returning historical data."""
+
+    @patch('src.tools.api._get_market_router')
+    def test_hk_search_line_items_annual_returns_multiple_years(self, mock_router):
+        """search_line_items for HK stock with period=annual returns multiple LineItems."""
+        from src.tools.api import search_line_items
+
+        mock_adapter = MagicMock()
+        mock_adapter.get_historical_financial_metrics.return_value = [
+            {
+                "ticker": "03690",
+                "report_period": "2024-12-31",
+                "period": "annual",
+                "currency": "HKD",
+                "revenue": 337e9,
+                "net_income": 35e9,
+                "free_cash_flow": 43e9,
+                "earnings_per_share": 5.85,
+                "operating_margin": 0.11,
+                "debt_to_equity": 0.89,
+            },
+            {
+                "ticker": "03690",
+                "report_period": "2023-12-31",
+                "period": "annual",
+                "currency": "HKD",
+                "revenue": 276e9,
+                "net_income": 13e9,
+                "free_cash_flow": 20e9,
+                "earnings_per_share": 2.2,
+                "operating_margin": 0.05,
+                "debt_to_equity": 0.95,
+            },
+        ]
+        mock_router.return_value.get_adapter.return_value = mock_adapter
+
+        results = search_line_items(
+            "3690.HK",
+            ["revenue", "net_income", "free_cash_flow", "earnings_per_share"],
+            "2026-03-18",
+            period="annual",
+            limit=5,
+        )
+
+        assert len(results) == 2
+        assert results[0].report_period == "2024-12-31"
+        assert results[1].report_period == "2023-12-31"
+        assert abs(results[0].revenue - 337e9) < 1e6
+        assert abs(results[1].revenue - 276e9) < 1e6
+
+    @patch('src.tools.api._get_market_router')
+    def test_hk_search_line_items_ttm_uses_adapter_get_financial_metrics(self, mock_router):
+        """search_line_items for HK stock with period=ttm uses adapter.get_financial_metrics."""
+        from src.tools.api import search_line_items
+
+        mock_adapter = MagicMock()
+        mock_adapter.get_financial_metrics.return_value = {
+            "ticker": "03690",
+            "report_period": "2024-12-31",
+            "period": "ttm",
+            "currency": "HKD",
+            "revenue": 334e9,
+            "net_income": 33e9,
+        }
+        mock_router.return_value.get_adapter.return_value = mock_adapter
+
+        results = search_line_items(
+            "3690.HK",
+            ["revenue", "net_income"],
+            "2026-03-18",
+            period="ttm",
+            limit=1,
+        )
+
+        assert len(results) == 1
+        assert results[0].period == "ttm"
+        assert abs(results[0].revenue - 334e9) < 1e6

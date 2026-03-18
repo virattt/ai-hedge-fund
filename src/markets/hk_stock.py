@@ -1,6 +1,6 @@
 """Hong Kong market adapter."""
 import logging
-from typing import Optional
+from typing import Optional, List, Dict
 
 from src.markets.base import MarketAdapter
 from src.markets.sources.akshare_source import AKShareSource
@@ -26,9 +26,9 @@ class HKStockAdapter(MarketAdapter):
             validator: Data validator instance
         """
         # Data sources in priority order (per spec):
-        # 1. Xueqiu - Primary for financials: most complete statements
+        # 1. Xueqiu - Primary for financials: most complete statements (TTM data)
         # 2. Sina Finance - Primary for prices: free, stable, real-time HK quotes
-        # 3. AKShare - Backup source
+        # 3. AKShare - Backup source (single-period data, lower reliability for financials)
         # Note: YFinance disabled (not available in China)
         data_sources = [
             XueqiuSource(),  # Primary for financials: most complete statements
@@ -37,10 +37,22 @@ class HKStockAdapter(MarketAdapter):
             AKShareSource(),  # Fallback: Backup
         ]
 
+        # Xueqiu provides TTM financial data (more accurate for HK stocks).
+        # AKShare's stock_hk_financial_indicator_em returns single-period data
+        # which can show negative earnings in profitable TTM periods.
+        # Set Xueqiu weight much higher so its data dominates the merge.
+        hk_validator = validator or DataValidator(
+            source_weights={
+                "Xueqiu": 1.0,    # Primary: TTM financials, real-time P/E
+                "AKShare": 0.05,  # Minimal: single-period data, unreliable for financials
+                "SinaFinance": 0.5,
+            }
+        )
+
         super().__init__(
             market="HK",
             data_sources=data_sources,
-            validator=validator,
+            validator=hk_validator,
         )
 
         # News sources in priority order:
@@ -118,6 +130,28 @@ class HKStockAdapter(MarketAdapter):
         ticker = self.normalize_ticker(ticker)
         # YFinance uses 4-digit format with .HK suffix
         return f"{int(ticker):04d}.HK"
+
+    def get_historical_financial_metrics(
+        self, ticker: str, end_date: str, limit: int = 10
+    ) -> Optional[List[Dict]]:
+        """Get multi-year annual financial data via XueqiuSource."""
+        normalized = self.normalize_ticker(ticker)
+
+        for source in self.active_sources:
+            if source.name == "Xueqiu":
+                try:
+                    results = source.get_historical_financial_data(normalized, limit=limit)
+                    if results:
+                        self.logger.info(
+                            f"[HKStock] ✓ Got {len(results)} historical periods from Xueqiu for {normalized}"
+                        )
+                        return results
+                except Exception as e:
+                    self.logger.warning(f"[HKStock] Xueqiu historical failed for {normalized}: {e}")
+                break
+
+        self.logger.warning(f"[HKStock] Falling back to single-period data for {normalized}")
+        return super().get_historical_financial_metrics(ticker, end_date, limit)
 
     def get_company_news(self, ticker: str, end_date: str, start_date=None, limit: int = 100):
         """

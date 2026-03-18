@@ -190,3 +190,26 @@ def test_router_get_financial_metrics_convenience_method():
 
     metrics = router.get_financial_metrics('GC=F', '2024-01-31')
     assert metrics == {}  # 商品无财务指标
+
+
+def test_router_get_adapter():
+    """测试get_adapter方法"""
+    router = MarketRouter()
+    router.adapters = [MockCNAdapter(), MockHKAdapter(), MockCommodityAdapter(), MockUSAdapter()]
+
+    # Test CN stock
+    adapter = router.get_adapter('600000.SH')
+    assert isinstance(adapter, MockCNAdapter)
+
+    # Test HK stock
+    adapter = router.get_adapter('0700.HK')
+    assert isinstance(adapter, MockHKAdapter)
+
+    # Test US stock
+    adapter = router.get_adapter('AAPL')
+    assert isinstance(adapter, MockUSAdapter)
+
+    # Test error case
+    router.adapters = []
+    with pytest.raises(ValueError, match="No adapter found for ticker"):
+        router.get_adapter('INVALID')

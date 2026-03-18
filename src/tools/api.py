@@ -336,45 +336,47 @@ def search_line_items(
 
         return search_results[:limit]
     else:
-        # 非美股：从 financial_metrics 构建 LineItem
-        # 获取多期财务数据
-        metrics_list = get_financial_metrics(ticker, end_date, period=period, limit=limit, api_key=api_key)
-
-        if not metrics_list:
+        # 非美股：使用 MarketRouter
+        try:
+            adapter = _get_market_router().get_adapter(ticker)
+        except Exception as e:
+            logger.warning("No adapter for %s: %s", ticker, e)
             return []
 
-        # 将 FinancialMetrics 转换为 LineItem 格式
+        if period == "annual" and limit > 1:
+            # 历史多期年度数据
+            metrics_list = adapter.get_historical_financial_metrics(ticker, end_date, limit=limit)
+            if not metrics_list:
+                return []
+            period_label = "annual"
+        else:
+            # 单期TTM数据（向后兼容）
+            single = adapter.get_financial_metrics(ticker, end_date)
+            if not single:
+                return []
+            metrics_list = [single]
+            period_label = period
+
+        # 将每个 metrics dict 转换为 LineItem
         line_items_result = []
-        for metric in metrics_list:
-            # 构建 LineItem 对象，将请求的字段映射到 metric 中的对应字段
+        for metrics_dict in metrics_list:
             line_item_dict = {
-                "ticker": metric.ticker,
-                "report_period": metric.report_period or "",
-                "period": metric.period,
-                "currency": metric.currency or "USD",
+                "ticker": metrics_dict.get("ticker", ticker),
+                "report_period": metrics_dict.get("report_period", ""),
+                "period": metrics_dict.get("period", period_label),
+                "currency": metrics_dict.get("currency", "USD"),
             }
-
-            # 映射请求的字段到 metric 中的对应字段
+            # 映射请求的字段（field_mapping 处理别名）
             field_mapping = {
-                "revenue": "revenue",
-                "operating_margin": "operating_margin",
-                "debt_to_equity": "debt_to_equity",
-                "free_cash_flow": "free_cash_flow",
-                "total_assets": "total_assets",
-                "total_liabilities": "total_liabilities",
                 "dividends_and_other_cash_distributions": "dividends",
-                "outstanding_shares": "outstanding_shares",
             }
-
-            # 为所有请求的字段添加值（即使是None），确保字段可访问
             for requested_field in line_items:
-                metric_field = field_mapping.get(requested_field, requested_field)
-                value = getattr(metric, metric_field, None)
-                line_item_dict[requested_field] = value
+                mapped = field_mapping.get(requested_field, requested_field)
+                line_item_dict[requested_field] = metrics_dict.get(mapped)
 
             line_items_result.append(LineItem(**line_item_dict))
 
-        return line_items_result
+        return line_items_result[:limit]
 
 
 def get_insider_trades(
