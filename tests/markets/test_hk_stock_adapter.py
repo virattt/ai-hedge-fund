@@ -33,8 +33,8 @@ class TestHKStockAdapter:
         assert adapter.get_yfinance_ticker("01398") == "1398.HK"
         assert adapter.get_yfinance_ticker("700") == "0700.HK"
 
-    @patch('src.markets.sources.akshare_source.AKShareSource.get_prices')
-    @patch('src.markets.sources.yfinance_source.YFinanceSource.get_prices')
+    @patch("src.markets.sources.akshare_source.AKShareSource.get_prices")
+    @patch("src.markets.sources.yfinance_source.YFinanceSource.get_prices")
     def test_get_prices_multi_source(self, mock_yf_prices, mock_ak_prices):
         """Test getting prices from multiple sources."""
         adapter = HKStockAdapter()
@@ -73,8 +73,8 @@ class TestHKStockAdapter:
         mock_ak_prices.assert_called_once()
         mock_yf_prices.assert_called_once()
 
-    @patch('src.markets.sources.akshare_source.AKShareSource.get_prices')
-    @patch('src.markets.sources.yfinance_source.YFinanceSource.get_prices')
+    @patch("src.markets.sources.akshare_source.AKShareSource.get_prices")
+    @patch("src.markets.sources.yfinance_source.YFinanceSource.get_prices")
     def test_get_prices_fallback(self, mock_yf_prices, mock_ak_prices):
         """Test fallback when primary source fails."""
         adapter = HKStockAdapter()
@@ -101,7 +101,7 @@ class TestHKStockAdapter:
         assert len(prices) > 0
         assert isinstance(prices[0], Price)
 
-    @patch('src.markets.sources.akshare_source.AKShareSource.get_financial_metrics')
+    @patch("src.markets.sources.akshare_source.AKShareSource.get_financial_metrics")
     def test_get_financial_metrics(self, mock_get_metrics):
         """Test getting financial metrics."""
         adapter = HKStockAdapter()
@@ -130,19 +130,7 @@ class TestHKStockNewsNowIntegration:
 
         # Mock NewsNow API - use normalized ticker in title (00700)
         with rm_module.Mocker() as m:
-            m.get(
-                "https://newsnow.busiyi.world/api/s?id=cls",
-                json={
-                    "items": [
-                        {
-                            "id": "1",
-                            "title": "腾讯 00700 股价上涨",
-                            "url": "https://example.com/1",
-                            "publish_time": "2024-03-15T10:00:00Z"
-                        }
-                    ]
-                }
-            )
+            m.get("https://newsnow.busiyi.world/api/s?id=cls", json={"items": [{"id": "1", "title": "腾讯 00700 股价上涨", "url": "https://example.com/1", "publish_time": "2024-03-15T10:00:00Z"}]})
             m.get("https://newsnow.busiyi.world/api/s?id=wallstreetcn", json={"items": []})
             m.get("https://newsnow.busiyi.world/api/s?id=xueqiu", json={"items": []})
 

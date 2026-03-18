@@ -4,6 +4,7 @@ from typing import Optional
 
 from src.markets.base import MarketAdapter
 from src.markets.sources.akshare_source import AKShareSource
+
 # from src.markets.sources.yfinance_source import YFinanceSource  # Disabled: Not available in China
 from src.markets.sources.newsnow_source import NewsNowSource
 from src.markets.sources.akshare_news_source import AKShareNewsSource
@@ -30,10 +31,10 @@ class HKStockAdapter(MarketAdapter):
         # 3. AKShare - Backup source
         # Note: YFinance disabled (not available in China)
         data_sources = [
-            XueqiuSource(),         # Primary for financials: most complete statements
-            SinaFinanceSource(),    # Primary for prices: free, stable
+            XueqiuSource(),  # Primary for financials: most complete statements
+            SinaFinanceSource(),  # Primary for prices: free, stable
             # YFinanceSource(),     # Disabled: Not available in China
-            AKShareSource(),        # Fallback: Backup
+            AKShareSource(),  # Fallback: Backup
         ]
 
         super().__init__(
@@ -48,7 +49,7 @@ class HKStockAdapter(MarketAdapter):
         # Note: YFinance disabled (not available in China)
         self.news_sources = [
             AKShareNewsSource(),  # Primary: Eastmoney news
-            NewsNowSource(),      # Fallback: News aggregator
+            NewsNowSource(),  # Fallback: News aggregator
             # YFinanceSource(),   # Disabled: Not available in China
         ]
 
