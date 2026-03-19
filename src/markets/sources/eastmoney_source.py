@@ -60,8 +60,8 @@ class EastmoneySource(DataSource):
         self.session.cookies.set('mtp', '1', domain='.eastmoney.com')
 
     def supports_market(self, market: str) -> bool:
-        """Eastmoney only supports CN market."""
-        return market.upper() == "CN"
+        """Eastmoney supports CN and HK markets."""
+        return market.upper() in ("CN", "HK")
 
     def _detect_cn_ticker(self, ticker: str) -> bool:
         """
@@ -93,6 +93,37 @@ class EastmoneySource(DataSource):
         # Check for 6-digit code (CN market standard)
         code = ticker.split('.')[0]
         if code.isdigit() and len(code) == 6:
+            return True
+
+        return False
+
+    def _detect_hk_ticker(self, ticker: str) -> bool:
+        """
+        Detect if ticker is HK market format.
+
+        HK market ticker formats:
+        - 0700.HK  (with suffix)
+        - 03690.HK (with suffix)
+        - 00700    (5-digit code)
+        - 03690    (5-digit code)
+        - 0700     (4-digit code)
+
+        Args:
+            ticker: Stock ticker
+
+        Returns:
+            True if HK market ticker
+        """
+        ticker_upper = ticker.upper()
+
+        # Check for .HK suffix
+        if ticker_upper.endswith('.HK'):
+            return True
+
+        # Check for 4-5 digit pure numeric code (HK stock codes)
+        # HKStockAdapter.supports_ticker accepts 4-5 digit codes; we match the same range
+        code = ticker.split('.')[0]
+        if code.isdigit() and 4 <= len(code) <= 5:
             return True
 
         return False
@@ -136,6 +167,32 @@ class EastmoneySource(DataSource):
                 return f"1.{code}"
             else:
                 return f"0.{code}"
+
+    def _to_eastmoney_hk_secid(self, ticker: str) -> str:
+        """
+        Convert HK ticker to Eastmoney secid format.
+
+        HK stocks use prefix 116:
+        - 0700.HK  → 116.00700
+        - 03690.HK → 116.03690
+        - 00700    → 116.00700
+
+        Args:
+            ticker: HK ticker (e.g., '0700.HK', '03690.HK', '00700')
+
+        Returns:
+            Eastmoney secid format (e.g., '116.00700')
+        """
+        # Remove .HK suffix if present
+        ticker_upper = ticker.upper()
+        if ticker_upper.endswith('.HK'):
+            code = ticker[:-3]
+        else:
+            code = ticker.split('.')[0]
+
+        # Ensure 5-digit zero-padded code
+        code = code.zfill(5)
+        return f"116.{code}"
 
     def get_prices(
         self, ticker: str, start_date: str, end_date: str, max_retries: int = 3

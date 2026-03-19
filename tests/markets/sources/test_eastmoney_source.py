@@ -20,7 +20,7 @@ class TestEastmoneySource:
         source = EastmoneySource()
         assert source.supports_market("CN") is True
         assert source.supports_market("cn") is True
-        assert source.supports_market("HK") is False
+        assert source.supports_market("HK") is True
         assert source.supports_market("US") is False
 
     def test_detect_cn_ticker(self):
@@ -60,6 +60,41 @@ class TestEastmoneySource:
         assert source._to_eastmoney_secid("000001") == "0.000001"
         assert source._to_eastmoney_secid("300750.SZ") == "0.300750"
         assert source._to_eastmoney_secid("300750") == "0.300750"
+
+    def test_detect_hk_ticker_with_suffix(self):
+        source = EastmoneySource()
+        assert source._detect_hk_ticker("0700.HK") is True
+        assert source._detect_hk_ticker("03690.HK") is True
+
+    def test_detect_hk_ticker_five_digit(self):
+        source = EastmoneySource()
+        assert source._detect_hk_ticker("00700") is True
+        assert source._detect_hk_ticker("03690") is True
+
+    def test_detect_hk_ticker_four_digit(self):
+        """4-digit codes (e.g., '0700') are also valid HK tickers."""
+        source = EastmoneySource()
+        assert source._detect_hk_ticker("0700") is True
+        assert source._detect_hk_ticker("3690") is True
+
+    def test_detect_hk_ticker_rejects_cn(self):
+        source = EastmoneySource()
+        assert source._detect_hk_ticker("600000.SH") is False
+        assert source._detect_hk_ticker("000001.SZ") is False
+        assert source._detect_hk_ticker("AAPL") is False
+
+    def test_to_eastmoney_hk_secid(self):
+        source = EastmoneySource()
+        assert source._to_eastmoney_hk_secid("0700.HK") == "116.00700"
+        assert source._to_eastmoney_hk_secid("03690.HK") == "116.03690"
+        assert source._to_eastmoney_hk_secid("00700") == "116.00700"
+        assert source._to_eastmoney_hk_secid("03690") == "116.03690"
+
+    def test_supports_market_hk(self):
+        source = EastmoneySource()
+        assert source.supports_market("HK") is True
+        assert source.supports_market("CN") is True
+        assert source.supports_market("US") is False
 
     def test_parse_klines(self):
         """Test K-line parsing."""
