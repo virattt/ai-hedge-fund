@@ -153,6 +153,29 @@ class MarketRouter:
         adapter = self.route(ticker)
         return adapter.get_financial_metrics(ticker, end_date)
 
+    def get_historical_financial_metrics(
+        self,
+        ticker: str,
+        end_date: str,
+        limit: int = 10,
+    ):
+        """
+        便捷方法：获取多年历史财务指标
+
+        自动路由到对应适配器并获取多期数据。
+        支持 HKStockAdapter 和 CNStockAdapter 的 Xueqiu 历史数据。
+
+        Args:
+            ticker: 股票代码
+            end_date: 截止日期 "YYYY-MM-DD"
+            limit: 最大返回期数
+
+        Returns:
+            List[Dict]: 多期财务指标列表，或 None 如果不可用
+        """
+        adapter = self.route(ticker)
+        return adapter.get_historical_financial_metrics(ticker, end_date, limit=limit)
+
     def get_insider_trades(
         self,
         ticker: str,
