@@ -283,12 +283,13 @@ class XueqiuSource(DataSource):
         self.logger.info(f"[Xueqiu] Fetching financial metrics for {symbol} ({market})")
 
         indicator_list = self._fetch_financial_data("indicator", symbol, market)
-        income_list = self._fetch_financial_data("income", symbol, market)
+        income_list = self._fetch_financial_data_multi("income", symbol, market, count="2")
         cash_flow_list = self._fetch_financial_data("cash_flow", symbol, market)
         balance_list = self._fetch_financial_data("balance", symbol, market)
 
         indicator = indicator_list[0] if indicator_list else {}
         income = income_list[0] if income_list else {}
+        prior_income_for_growth = income_list[1] if len(income_list) > 1 else None
         cash_flow = cash_flow_list[0] if cash_flow_list else {}
         balance = balance_list[0] if balance_list else {}
 
@@ -301,9 +302,15 @@ class XueqiuSource(DataSource):
         quote_valuation = self._fetch_quote_valuation(symbol)
 
         if market == "HK":
-            metrics = self._build_hk_metrics(ticker, indicator, income, cash_flow, balance, quote_valuation)
+            metrics = self._build_hk_metrics(
+                ticker, indicator, income, cash_flow, balance, quote_valuation,
+                prior_income=prior_income_for_growth
+            )
         else:
-            metrics = self._build_cn_metrics(ticker, indicator, income, cash_flow, balance, quote_valuation)
+            metrics = self._build_cn_metrics(
+                ticker, indicator, income, cash_flow, balance, quote_valuation,
+                prior_income=prior_income_for_growth
+            )
 
         non_null = sum(1 for v in metrics.values() if v is not None and v != "")
         self.logger.info(f"[Xueqiu] ✓ Got {market} financial metrics for {symbol}: " f"{non_null}/{len(metrics)} fields populated")
@@ -377,10 +384,23 @@ class XueqiuSource(DataSource):
             # Only apply real-time valuation to the most recent period
             qv = quote_valuation if i == 0 else {}
 
+            # Prior year income for YoY growth calculation
+            prior_income_row = None
+            if i + 1 < len(spine):
+                prior_rd = spine[i + 1].get("report_date")
+                if prior_rd:
+                    prior_income_row = income_by_date.get(int(prior_rd))
+
             if market == "HK":
-                metrics = self._build_hk_metrics(ticker, indicator, income, cash_flow, balance, qv)
+                metrics = self._build_hk_metrics(
+                    ticker, indicator, income, cash_flow, balance, qv,
+                    prior_income=prior_income_row
+                )
             else:
-                metrics = self._build_cn_metrics(ticker, indicator, income, cash_flow, balance, qv)
+                metrics = self._build_cn_metrics(
+                    ticker, indicator, income, cash_flow, balance, qv,
+                    prior_income=prior_income_row
+                )
 
             results.append(metrics)
 
@@ -394,6 +414,7 @@ class XueqiuSource(DataSource):
         cash_flow: Dict,
         balance: Dict,
         quote_valuation: Optional[Dict] = None,
+        prior_income: Optional[Dict] = None,
     ) -> Dict:
         """港股四张报表聚合。百分比字段除以100转为小数。"""
         ev = self._extract_value
@@ -409,10 +430,51 @@ class XueqiuSource(DataSource):
         capex = abs(capex_raw) if capex_raw is not None else None
         fcf = (ocf - capex) if (ocf is not None and capex is not None) else None
 
+        # D&A and interest expense from cash flow
+        da = ev(cash_flow.get("da"))
+        interest_exp = ev(cash_flow.get("finexp"))
+
+        # Dividends paid: cdp is typically negative — store as positive amount
+        cdp_raw = ev(cash_flow.get("cdp"))
+        dividends_paid = abs(cdp_raw) if cdp_raw is not None else None
+
+        # Net equity change: csi (positive inflow) + crpcs (negative outflow)
+        csi = ev(cash_flow.get("csi"))
+        crpcs = ev(cash_flow.get("crpcs"))
+        if csi is not None or crpcs is not None:
+            issuance_or_purchase = (csi or 0.0) + (crpcs or 0.0)
+        else:
+            issuance_or_purchase = None
+
+        # Total debt = short-term debt + long-term debt
+        std = ev(balance.get("std"))
+        ltd = ev(balance.get("ltd"))
+        if std is not None or ltd is not None:
+            total_debt = (std or 0.0) + (ltd or 0.0)
+        else:
+            total_debt = None
+
         # Calculate net_margin from income statement (雪球indicator无直接净利润率字段)
         net_income_val = ev(income.get("ploashh")) or ev(indicator.get("ploashh"))
         revenue_val = ev(income.get("tto")) or ev(indicator.get("tto"))
         net_margin_calc = (net_income_val / revenue_val) if (net_income_val is not None and revenue_val and revenue_val != 0) else None
+
+        # YoY growth: requires prior year income data
+        if prior_income:
+            ev_pi = self._extract_value
+            prior_ni = ev_pi(prior_income.get("ploashh"))
+            prior_rev = ev_pi(prior_income.get("tto"))
+            if prior_ni is not None and prior_ni != 0 and net_income_val is not None:
+                earnings_growth_yoy = (net_income_val - prior_ni) / abs(prior_ni)
+            else:
+                earnings_growth_yoy = None
+            if prior_rev is not None and prior_rev != 0 and revenue_val is not None:
+                revenue_growth_yoy = (revenue_val - prior_rev) / abs(prior_rev)
+            else:
+                revenue_growth_yoy = None
+        else:
+            earnings_growth_yoy = None
+            revenue_growth_yoy = None
 
         report_period = self._parse_report_period(indicator.get("report_date") or income.get("report_date") or cash_flow.get("report_date") or balance.get("report_date"))
 
@@ -438,6 +500,9 @@ class XueqiuSource(DataSource):
             "current_ratio": ev(indicator.get("cro")),
             "quick_ratio": ev(indicator.get("qro")),
             "debt_to_assets": debt_to_assets_raw / 100 if debt_to_assets_raw is not None else None,
+            # Growth (YoY)
+            "revenue_growth": revenue_growth_yoy,
+            "earnings_growth": earnings_growth_yoy,
             # Per share
             "earnings_per_share": ev(indicator.get("beps")),
             "book_value_per_share": ev(indicator.get("bps")),
@@ -454,6 +519,12 @@ class XueqiuSource(DataSource):
             "investing_cash_flow": ev(cash_flow.get("ninvcf")),
             "financing_cash_flow": ev(cash_flow.get("nfcgcf")),
             "free_cash_flow": fcf,
+            # Fields for DCF and value investing agents
+            "depreciation_and_amortization": da,
+            "interest_expense": interest_exp,
+            "dividends": dividends_paid,
+            "issuance_or_purchase_of_equity_shares": issuance_or_purchase,
+            "total_debt": total_debt,
             # Balance sheet
             "total_assets": ev(balance.get("ta")),
             "total_liabilities": ev(balance.get("tlia")),
@@ -473,6 +544,7 @@ class XueqiuSource(DataSource):
         cash_flow: Dict,
         balance: Dict,
         quote_valuation: Optional[Dict] = None,
+        prior_income: Optional[Dict] = None,
     ) -> Dict:
         """A股四张报表聚合。百分比字段除以100转为小数。"""
         ev = self._extract_value
@@ -482,13 +554,26 @@ class XueqiuSource(DataSource):
         gpm_raw = ev(indicator.get("gross_selling_rate"))
         npm_raw = ev(indicator.get("net_selling_rate"))
         debt_to_assets_raw = ev(indicator.get("asset_liab_ratio"))
-        rev_growth_raw = ev(indicator.get("operating_income_yoy"))
-        earn_growth_raw = ev(indicator.get("net_profit_atsopc_yoy"))
 
         ocf = ev(cash_flow.get("ncf_from_oa"))
         # A股 cash_paid_for_assets 为正值（支出金额）
         capex = ev(cash_flow.get("cash_paid_for_assets"))
         fcf = (ocf - capex) if (ocf is not None and capex is not None) else None
+
+        # Extract net_income and revenue as local variables for growth calculation
+        net_income_val = ev(income.get("net_profit")) or ev(indicator.get("net_profit_atsopc"))
+        revenue_val = ev(income.get("total_revenue")) or ev(indicator.get("total_revenue"))
+
+        # YoY growth: requires prior year income data
+        if prior_income:
+            ev_pi = self._extract_value
+            prior_ni = ev_pi(prior_income.get("net_profit")) or ev_pi(prior_income.get("net_profit_atsopc"))
+            prior_rev = ev_pi(prior_income.get("total_revenue"))
+            earnings_growth_yoy = (net_income_val - prior_ni) / abs(prior_ni) if (prior_ni and prior_ni != 0 and net_income_val is not None) else None
+            revenue_growth_yoy = (revenue_val - prior_rev) / abs(prior_rev) if (prior_rev and prior_rev != 0 and revenue_val is not None) else None
+        else:
+            earnings_growth_yoy = None
+            revenue_growth_yoy = None
 
         report_period = self._parse_report_period(indicator.get("report_date") or income.get("report_date"))
 
@@ -513,16 +598,16 @@ class XueqiuSource(DataSource):
             "current_ratio": ev(indicator.get("current_ratio")),
             "quick_ratio": ev(indicator.get("quick_ratio")),
             "debt_to_assets": debt_to_assets_raw / 100 if debt_to_assets_raw is not None else None,
-            # Growth (% → decimal)
-            "revenue_growth": rev_growth_raw / 100 if rev_growth_raw is not None else None,
-            "earnings_growth": earn_growth_raw / 100 if earn_growth_raw is not None else None,
+            # Growth (YoY)
+            "revenue_growth": revenue_growth_yoy,
+            "earnings_growth": earnings_growth_yoy,
             # Per share
             "earnings_per_share": ev(indicator.get("basic_eps")),
             "book_value_per_share": ev(indicator.get("np_per_share")),
             "operating_cash_flow_per_share": ev(indicator.get("operate_cash_flow_ps")),
             # Income statement
-            "revenue": ev(income.get("total_revenue")) or ev(indicator.get("total_revenue")),
-            "net_income": ev(income.get("net_profit")) or ev(indicator.get("net_profit_atsopc")),
+            "revenue": revenue_val,
+            "net_income": net_income_val,
             "operating_income": ev(income.get("operate_profit")),
             "gross_profit": ev(income.get("gross_profit")),
             "research_and_development": ev(income.get("research_and_development_costs")),

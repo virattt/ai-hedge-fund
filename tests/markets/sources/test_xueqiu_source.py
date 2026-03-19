@@ -94,6 +94,29 @@ class TestXueqiuSourceHKFinancialMetrics:
         "clia": [107935640000.0, None],
         "report_date": 1735574400000,
     }
+    MOCK_CASH_FLOW_WITH_NEW_FIELDS = {
+        "nocf": [43700000000.0, 0.10],
+        "adtfxda": [-5000000000.0, 0.05],
+        "ninvcf": [-10000000000.0, 0.02],
+        "nfcgcf": [-8000000000.0, 0.01],
+        "da": [3000000000.0, 0.08],
+        "finexp": [1500000000.0, 0.03],
+        "cdp": [-2000000000.0, -0.05],
+        "csi": [500000000.0, 0.01],
+        "crpcs": [-1000000000.0, 0.02],
+        "report_date": 1735574400000,
+    }
+    MOCK_BALANCE_WITH_DEBT = {
+        "ta": [500000000000.0, 0.05],
+        "tlia": [234000000000.0, 0.03],
+        "shhfd": [266000000000.0, 0.07],
+        "cceq": [50000000000.0, 0.10],
+        "ca": [120000000000.0, 0.04],
+        "clia": [62000000000.0, 0.02],
+        "std": [20000000000.0, 0.01],
+        "ltd": [30000000000.0, 0.02],
+        "report_date": 1735574400000,
+    }
 
     def _make_source(self, mocker):
         source = XueqiuSource()
@@ -108,7 +131,44 @@ class TestXueqiuSourceHKFinancialMetrics:
             }
             return mapping.get(endpoint, [])
 
+        def mock_fetch_multi(endpoint, symbol, market, count="10"):
+            mapping = {
+                "indicator": [self.MOCK_INDICATOR],
+                "income": [self.MOCK_INCOME],
+                "cash_flow": [self.MOCK_CASH_FLOW],
+                "balance": [self.MOCK_BALANCE],
+            }
+            return mapping.get(endpoint, [])
+
         mocker.patch.object(source, "_fetch_financial_data", side_effect=mock_fetch)
+        mocker.patch.object(source, "_fetch_financial_data_multi", side_effect=mock_fetch_multi)
+        return source
+
+    def _make_source_with_new_fields(self, mocker):
+        """Like _make_source but uses MOCK_CASH_FLOW_WITH_NEW_FIELDS and MOCK_BALANCE_WITH_DEBT."""
+        source = XueqiuSource()
+        source._token_initialized = True
+
+        def mock_fetch(endpoint, symbol, market):
+            mapping = {
+                "indicator": [self.MOCK_INDICATOR],
+                "income": [self.MOCK_INCOME],
+                "cash_flow": [self.MOCK_CASH_FLOW_WITH_NEW_FIELDS],
+                "balance": [self.MOCK_BALANCE_WITH_DEBT],
+            }
+            return mapping.get(endpoint, [])
+
+        def mock_fetch_multi(endpoint, symbol, market, count="10"):
+            mapping = {
+                "indicator": [self.MOCK_INDICATOR],
+                "income": [self.MOCK_INCOME],
+                "cash_flow": [self.MOCK_CASH_FLOW_WITH_NEW_FIELDS],
+                "balance": [self.MOCK_BALANCE_WITH_DEBT],
+            }
+            return mapping.get(endpoint, [])
+
+        mocker.patch.object(source, "_fetch_financial_data", side_effect=mock_fetch)
+        mocker.patch.object(source, "_fetch_financial_data_multi", side_effect=mock_fetch_multi)
         return source
 
     def test_returns_dict_with_required_fields(self, mocker):
@@ -173,6 +233,28 @@ class TestXueqiuSourceHKFinancialMetrics:
         mocker.patch.object(source, "_fetch_financial_data", return_value=[])
         assert source.get_financial_metrics("03690", "2025-01-01") is None
 
+    def test_hk_metrics_extracts_depreciation(self, mocker):
+        result = self._make_source_with_new_fields(mocker).get_financial_metrics("03690", "2025-01-01")
+        assert result is not None
+        assert result["depreciation_and_amortization"] == pytest.approx(3000000000.0)
+
+    def test_hk_metrics_extracts_interest_expense(self, mocker):
+        result = self._make_source_with_new_fields(mocker).get_financial_metrics("03690", "2025-01-01")
+        assert result["interest_expense"] == pytest.approx(1500000000.0)
+
+    def test_hk_metrics_extracts_total_debt(self, mocker):
+        result = self._make_source_with_new_fields(mocker).get_financial_metrics("03690", "2025-01-01")
+        assert result["total_debt"] == pytest.approx(50000000000.0)  # std(20B) + ltd(30B)
+
+    def test_hk_metrics_extracts_dividends_as_positive(self, mocker):
+        result = self._make_source_with_new_fields(mocker).get_financial_metrics("03690", "2025-01-01")
+        assert result["dividends"] == pytest.approx(2000000000.0)  # abs(cdp=-2B)
+
+    def test_hk_metrics_extracts_equity_change(self, mocker):
+        result = self._make_source_with_new_fields(mocker).get_financial_metrics("03690", "2025-01-01")
+        # csi=500M (positive inflow) + crpcs=-1000M (negative outflow) = -500M net
+        assert result["issuance_or_purchase_of_equity_shares"] == pytest.approx(-500000000.0)
+
 
 class TestXueqiuSourceCNFinancialMetrics:
     MOCK_INDICATOR = {
@@ -230,7 +312,17 @@ class TestXueqiuSourceCNFinancialMetrics:
             }
             return mapping.get(endpoint, [])
 
+        def mock_fetch_multi(endpoint, symbol, market, count="10"):
+            mapping = {
+                "indicator": [self.MOCK_INDICATOR],
+                "income": [self.MOCK_INCOME],
+                "cash_flow": [self.MOCK_CASH_FLOW],
+                "balance": [self.MOCK_BALANCE],
+            }
+            return mapping.get(endpoint, [])
+
         mocker.patch.object(source, "_fetch_financial_data", side_effect=mock_fetch)
+        mocker.patch.object(source, "_fetch_financial_data_multi", side_effect=mock_fetch_multi)
         return source
 
     def test_cn_returns_cny_currency(self, mocker):
@@ -255,9 +347,10 @@ class TestXueqiuSourceCNFinancialMetrics:
         result = self._make_source(mocker).get_financial_metrics("SH600519", "2025-01-01")
         assert result["free_cash_flow"] == pytest.approx(92463692168.43 - 4678712053.56)
 
-    def test_cn_revenue_growth_converted_to_decimal(self, mocker):
+    def test_cn_revenue_growth_none_without_prior_period(self, mocker):
+        """revenue_growth is None when only one income period is available (no YoY comparison)."""
         result = self._make_source(mocker).get_financial_metrics("SH600519", "2025-01-01")
-        assert result["revenue_growth"] == pytest.approx(0.1571, abs=0.001)
+        assert result["revenue_growth"] is None
 
     def test_cn_cash_and_equivalents_from_balance(self, mocker):
         result = self._make_source(mocker).get_financial_metrics("SH600519", "2025-01-01")
@@ -532,3 +625,62 @@ class TestXueqiuDerivedMetrics:
         source._compute_derived_metrics(metrics)
         assert metrics.get("free_cash_flow_yield") is None
         assert metrics.get("enterprise_value") is None
+
+
+class TestXueqiuYoYGrowth:
+    """Tests for year-over-year growth rate calculations."""
+
+    def test_hk_earnings_growth_yoy_positive(self):
+        """earnings_growth is YoY: (current - prior) / abs(prior)."""
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        source = XueqiuSource()
+
+        current_income = {"ploashh": [35e9, None], "tto": [337e9, None]}
+        prior_income = {"ploashh": [13e9, None], "tto": [276e9, None]}
+
+        result = source._build_hk_metrics(
+            "03690", {}, current_income, {}, {},
+            prior_income=prior_income
+        )
+        # earnings_growth = (35e9 - 13e9) / 13e9 ≈ 1.692
+        assert result["earnings_growth"] == pytest.approx((35e9 - 13e9) / 13e9, rel=1e-3)
+
+    def test_hk_revenue_growth_yoy(self):
+        """revenue_growth is YoY: (current_rev - prior_rev) / abs(prior_rev)."""
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        source = XueqiuSource()
+
+        current_income = {"ploashh": [35e9, None], "tto": [337e9, None]}
+        prior_income = {"ploashh": [13e9, None], "tto": [276e9, None]}
+
+        result = source._build_hk_metrics(
+            "03690", {}, current_income, {}, {},
+            prior_income=prior_income
+        )
+        # revenue_growth = (337e9 - 276e9) / 276e9 ≈ 0.221
+        assert result["revenue_growth"] == pytest.approx((337e9 - 276e9) / 276e9, rel=1e-3)
+
+    def test_hk_growth_none_when_no_prior(self):
+        """earnings_growth and revenue_growth are None when prior_income not provided."""
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        source = XueqiuSource()
+
+        current_income = {"ploashh": [35e9, None], "tto": [337e9, None]}
+
+        result = source._build_hk_metrics("03690", {}, current_income, {}, {})
+        assert result["earnings_growth"] is None
+        assert result["revenue_growth"] is None
+
+    def test_hk_growth_handles_prior_zero_revenue(self):
+        """revenue_growth is None when prior revenue is 0."""
+        from src.markets.sources.xueqiu_source import XueqiuSource
+        source = XueqiuSource()
+
+        current_income = {"ploashh": [35e9, None], "tto": [337e9, None]}
+        prior_income = {"ploashh": [0, None], "tto": [0, None]}
+
+        result = source._build_hk_metrics(
+            "03690", {}, current_income, {}, {},
+            prior_income=prior_income
+        )
+        assert result["revenue_growth"] is None
