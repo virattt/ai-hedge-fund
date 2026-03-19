@@ -1,22 +1,43 @@
 """Helper functions for LLM"""
 
 import json
+from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
 from pydantic import BaseModel
 from src.llm.models import get_model, get_model_info
 from src.utils.progress import progress
 from src.graph.state import AgentState
+from src.llm.models import ModelProvider
+
+
+@dataclass
+class ResolvedModelConfig:
+    """Resolved model name and provider string for LLM calls."""
+    model_name: str
+    model_provider: str
+
+
+@runtime_checkable
+class HasAgentModelConfig(Protocol):
+    """Protocol for objects that provide per-agent model configuration."""
+    def get_agent_model_config(self, agent_id: str) -> object: ...
+
+
+@runtime_checkable
+class HasApiKeys(Protocol):
+    """Protocol for objects that expose API keys."""
+    api_keys: dict[str, str] | None
 
 
 def call_llm(
-    prompt: any,
+    prompt: object,
     pydantic_model: type[BaseModel],
     agent_name: str | None = None,
     state: AgentState | None = None,
     max_retries: int = 3,
-    default_factory=None,
+    default_factory: object = None,
 ) -> BaseModel:
-    """
-    Makes an LLM call with retry logic, handling both JSON supported and non-JSON supported models.
+    """Make an LLM call with retry logic, handling JSON and non-JSON supported models.
 
     Args:
         prompt: The prompt to send to the LLM
@@ -29,10 +50,11 @@ def call_llm(
     Returns:
         An instance of the specified Pydantic model
     """
-    
     # Extract model configuration if state is provided and agent_name is available
     if state and agent_name:
-        model_name, model_provider = get_agent_model_config(state, agent_name)
+        resolved = get_agent_model_config(state, agent_name)
+        model_name = resolved.model_name
+        model_provider = resolved.model_provider
     else:
         # Use system defaults when no state or agent_name is provided
         model_name = "gpt-4.1"
@@ -42,7 +64,7 @@ def call_llm(
     api_keys = None
     if state:
         request = state.get("metadata", {}).get("request")
-        if request and hasattr(request, 'api_keys'):
+        if isinstance(request, HasApiKeys):
             api_keys = request.api_keys
 
     model_info = get_model_info(model_name, model_provider)
@@ -58,10 +80,9 @@ def call_llm(
     # Call the LLM with retries
     for attempt in range(max_retries):
         try:
-            # Call the LLM
             result = llm.invoke(prompt)
 
-            # For non-JSON support models, we need to extract and parse the JSON manually
+            # For non-JSON support models, extract and parse the JSON manually
             if model_info and not model_info.has_json_mode():
                 parsed_result = extract_json_from_response(result.content)
                 if parsed_result:
@@ -75,8 +96,7 @@ def call_llm(
 
             if attempt == max_retries - 1:
                 print(f"Error in LLM call after {max_retries} attempts: {e}")
-                # Use default_factory if provided, otherwise create a basic default
-                if default_factory:
+                if callable(default_factory):
                     return default_factory()
                 return create_default_response(pydantic_model)
 
@@ -85,7 +105,7 @@ def call_llm(
 
 
 def create_default_response(model_class: type[BaseModel]) -> BaseModel:
-    """Creates a safe default response based on the model's fields."""
+    """Create a safe default response based on the model's fields."""
     default_values = {}
     for field_name, field in model_class.model_fields.items():
         if field.annotation == str:
@@ -94,24 +114,21 @@ def create_default_response(model_class: type[BaseModel]) -> BaseModel:
             default_values[field_name] = 0.0
         elif field.annotation == int:
             default_values[field_name] = 0
-        elif hasattr(field.annotation, "__origin__") and field.annotation.__origin__ == dict:
+        elif isinstance(field.annotation, type) and issubclass(field.annotation, dict):
             default_values[field_name] = {}
         else:
-            # For other types (like Literal), try to use the first allowed value
-            if hasattr(field.annotation, "__args__"):
-                default_values[field_name] = field.annotation.__args__[0]
-            else:
-                default_values[field_name] = None
+            # For Literal and other complex annotations, fall back to None
+            default_values[field_name] = None
 
     return model_class(**default_values)
 
 
 def extract_json_from_response(content: str) -> dict | None:
-    """Extracts JSON from markdown-formatted response."""
+    """Extract JSON from a markdown-formatted response."""
     try:
         json_start = content.find("```json")
         if json_start != -1:
-            json_text = content[json_start + 7 :]  # Skip past ```json
+            json_text = content[json_start + 7:]  # Skip past ```json
             json_end = json_text.find("```")
             if json_end != -1:
                 json_text = json_text[:json_end].strip()
@@ -121,27 +138,32 @@ def extract_json_from_response(content: str) -> dict | None:
     return None
 
 
-def get_agent_model_config(state, agent_name):
-    """
-    Get model configuration for a specific agent from the state.
+def get_agent_model_config(state: AgentState, agent_name: str) -> ResolvedModelConfig:
+    """Get model configuration for a specific agent from the state.
+
     Falls back to global model configuration if agent-specific config is not available.
-    Always returns valid model_name and model_provider values.
+    Always returns a ResolvedModelConfig with valid string values.
     """
+    from app.backend.models.schemas import AgentModelSelection  # noqa: PLC0415 - deferred to avoid circular import
+
     request = state.get("metadata", {}).get("request")
-    
-    if request and hasattr(request, 'get_agent_model_config'):
-        # Get agent-specific model configuration
-        model_name, model_provider = request.get_agent_model_config(agent_name)
-        # Ensure we have valid values
-        if model_name and model_provider:
-            return model_name, model_provider.value if hasattr(model_provider, 'value') else str(model_provider)
-    
+
+    if isinstance(request, HasAgentModelConfig):
+        selection = request.get_agent_model_config(agent_name)
+        if isinstance(selection, AgentModelSelection) and selection.model_name and selection.model_provider:
+            provider_str = (
+                selection.model_provider.value
+                if isinstance(selection.model_provider, ModelProvider)
+                else str(selection.model_provider)
+            )
+            return ResolvedModelConfig(model_name=selection.model_name, model_provider=provider_str)
+
     # Fall back to global configuration (system defaults)
     model_name = state.get("metadata", {}).get("model_name") or "gpt-4.1"
-    model_provider = state.get("metadata", {}).get("model_provider") or "OPENAI"
-    
-    # Convert enum to string if necessary
-    if hasattr(model_provider, 'value'):
-        model_provider = model_provider.value
-    
-    return model_name, model_provider
+    model_provider_raw = state.get("metadata", {}).get("model_provider") or "OPENAI"
+    provider_str = (
+        model_provider_raw.value
+        if isinstance(model_provider_raw, ModelProvider)
+        else str(model_provider_raw)
+    )
+    return ResolvedModelConfig(model_name=model_name, model_provider=provider_str)

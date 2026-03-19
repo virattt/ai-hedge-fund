@@ -28,6 +28,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-resizable-panels": "^3.0.1",
+    "react-router-dom": "^7.13.1",
     "react-syntax-highlighter": "^15.6.1",
     "shadcn-ui": "^0.9.5",
     "sonner": "^2.0.5",
