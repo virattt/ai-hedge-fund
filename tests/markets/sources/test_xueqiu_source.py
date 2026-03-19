@@ -373,6 +373,101 @@ class TestXueqiuSourceCNFinancialMetrics:
         assert captured.get("symbol") == "SH600519"
 
 
+class TestXueqiuSourceCNNewFields:
+    MOCK_CN_INDICATOR = {
+        "avg_roe": [15.0, 0.05],
+        "net_interest_of_total_assets": [8.0, 0.02],
+        "gross_selling_rate": [45.0, 0.01],
+        "net_selling_rate": [12.0, 0.03],
+        "asset_liab_ratio": [40.0, -0.01],
+        "current_ratio": [2.1, 0.05],
+        "quick_ratio": [1.8, 0.04],
+        "basic_eps": [3.5, 0.10],
+        "np_per_share": [25.0, 0.08],
+        "operate_cash_flow_ps": [5.0, 0.06],
+        "report_date": 1735574400000,
+    }
+    MOCK_CN_INCOME = {
+        "total_revenue": [200000000000.0, 0.15],
+        "net_profit": [24000000000.0, 0.12],
+        "operate_profit": [28000000000.0, 0.10],
+        "gross_profit": [90000000000.0, 0.14],
+        "research_and_development_costs": [5000000000.0, 0.20],
+        "report_date": 1735574400000,
+    }
+    MOCK_CN_CASH_FLOW = {
+        "ncf_from_oa": [30000000000.0, 0.08],
+        "cash_paid_for_assets": [5000000000.0, 0.05],
+        "ncf_from_ia": [-8000000000.0, 0.02],
+        "ncf_from_fa": [-5000000000.0, 0.01],
+        "depreciation_and_amortization": [2000000000.0, 0.06],
+        "interest_expense": [800000000.0, 0.03],
+        "cash_paid_for_dividend_profit": [1500000000.0, -0.02],   # positive outflow
+        "cash_received_from_issuing_shares": [300000000.0, 0.01],  # positive inflow
+        "cash_paid_for_repurchasing_shares": [600000000.0, 0.02],  # positive outflow
+        "report_date": 1735574400000,
+    }
+    MOCK_CN_BALANCE = {
+        "total_assets": [300000000000.0, 0.05],
+        "total_liab": [120000000000.0, 0.03],
+        "total_holders_equity": [180000000000.0, 0.07],
+        "currency_funds": [40000000000.0, 0.10],
+        "total_current_assets": [80000000000.0, 0.04],
+        "total_current_liab": [38000000000.0, 0.02],
+        "short_term_loan": [15000000000.0, 0.01],
+        "long_term_loan": [25000000000.0, 0.02],
+        "report_date": 1735574400000,
+    }
+
+    def _make_cn_source(self, mocker):
+        source = XueqiuSource()
+        source._token_initialized = True
+
+        def mock_fetch(endpoint, symbol, market):
+            mapping = {
+                "indicator": [self.MOCK_CN_INDICATOR],
+                "income": [self.MOCK_CN_INCOME],
+                "cash_flow": [self.MOCK_CN_CASH_FLOW],
+                "balance": [self.MOCK_CN_BALANCE],
+            }
+            return mapping.get(endpoint, [])
+
+        def mock_fetch_multi(endpoint, symbol, market, count="10"):
+            mapping = {
+                "indicator": [self.MOCK_CN_INDICATOR],
+                "income": [self.MOCK_CN_INCOME],
+                "cash_flow": [self.MOCK_CN_CASH_FLOW],
+                "balance": [self.MOCK_CN_BALANCE],
+            }
+            return mapping.get(endpoint, [])
+
+        mocker.patch.object(source, "_fetch_financial_data", side_effect=mock_fetch)
+        mocker.patch.object(source, "_fetch_financial_data_multi", side_effect=mock_fetch_multi)
+        return source
+
+    def test_cn_metrics_extracts_depreciation(self, mocker):
+        result = self._make_cn_source(mocker).get_financial_metrics("600519", "2025-01-01")
+        assert result is not None
+        assert result["depreciation_and_amortization"] == pytest.approx(2000000000.0)
+
+    def test_cn_metrics_extracts_interest_expense(self, mocker):
+        result = self._make_cn_source(mocker).get_financial_metrics("600519", "2025-01-01")
+        assert result["interest_expense"] == pytest.approx(800000000.0)
+
+    def test_cn_metrics_extracts_dividends(self, mocker):
+        result = self._make_cn_source(mocker).get_financial_metrics("600519", "2025-01-01")
+        assert result["dividends"] == pytest.approx(1500000000.0)
+
+    def test_cn_metrics_extracts_total_debt(self, mocker):
+        result = self._make_cn_source(mocker).get_financial_metrics("600519", "2025-01-01")
+        assert result["total_debt"] == pytest.approx(40000000000.0)  # 15B + 25B
+
+    def test_cn_metrics_extracts_equity_change(self, mocker):
+        result = self._make_cn_source(mocker).get_financial_metrics("600519", "2025-01-01")
+        # issued=300M - repurchased=600M = -300M net
+        assert result["issuance_or_purchase_of_equity_shares"] == pytest.approx(-300000000.0)
+
+
 class TestXueqiuSourceHistoricalData:
     """Tests for multi-year historical financial data."""
 

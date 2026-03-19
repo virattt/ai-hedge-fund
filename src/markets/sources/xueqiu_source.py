@@ -560,6 +560,30 @@ class XueqiuSource(DataSource):
         capex = ev(cash_flow.get("cash_paid_for_assets"))
         fcf = (ocf - capex) if (ocf is not None and capex is not None) else None
 
+        # D&A and interest expense from cash flow
+        da = ev(cash_flow.get("depreciation_and_amortization"))
+        interest_exp = ev(cash_flow.get("interest_expense"))
+
+        # Dividends paid (stored as positive outflow amount in CN)
+        dividends_raw = ev(cash_flow.get("cash_paid_for_dividend_profit"))
+        dividends_paid = abs(dividends_raw) if dividends_raw is not None else None
+
+        # Net equity change: issuance (positive inflow) - repurchase (positive outflow)
+        issued = ev(cash_flow.get("cash_received_from_issuing_shares"))
+        repurchased = ev(cash_flow.get("cash_paid_for_repurchasing_shares"))
+        if issued is not None or repurchased is not None:
+            issuance_or_purchase = (issued or 0.0) - (repurchased or 0.0)
+        else:
+            issuance_or_purchase = None
+
+        # Total debt = short-term loan + long-term loan
+        std = ev(balance.get("short_term_loan"))
+        ltd = ev(balance.get("long_term_loan"))
+        if std is not None or ltd is not None:
+            total_debt = (std or 0.0) + (ltd or 0.0)
+        else:
+            total_debt = None
+
         # Extract net_income and revenue as local variables for growth calculation
         net_income_val = ev(income.get("net_profit")) or ev(indicator.get("net_profit_atsopc"))
         revenue_val = ev(income.get("total_revenue")) or ev(indicator.get("total_revenue"))
@@ -617,6 +641,12 @@ class XueqiuSource(DataSource):
             "investing_cash_flow": ev(cash_flow.get("ncf_from_ia")),
             "financing_cash_flow": ev(cash_flow.get("ncf_from_fa")),
             "free_cash_flow": fcf,
+            # Fields for DCF and value investing agents
+            "depreciation_and_amortization": da,
+            "interest_expense": interest_exp,
+            "dividends": dividends_paid,
+            "issuance_or_purchase_of_equity_shares": issuance_or_purchase,
+            "total_debt": total_debt,
             # Balance sheet
             "total_assets": ev(balance.get("total_assets")),
             "total_liabilities": ev(balance.get("total_liab")),
