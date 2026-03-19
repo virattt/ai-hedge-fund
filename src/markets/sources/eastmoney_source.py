@@ -1,4 +1,4 @@
-"""Eastmoney data source for comprehensive CN market data (A股专用深度数据源)."""
+"""Eastmoney data source for CN and HK market data (东方财富数据源)."""
 import json
 import logging
 import time
@@ -22,7 +22,7 @@ class EastmoneySource(DataSource):
     - Zero dependencies, pure HTTP calls
     - Supports complete financial statements
     - Forward-adjusted K-line data (前复权)
-    - CN market only (.SH/.SZ tickers)
+    - Supports CN (.SH/.SZ) and HK markets
     """
 
     # K-line data API (use HTTPS with cookies to bypass anti-bot)
@@ -200,10 +200,8 @@ class EastmoneySource(DataSource):
         """
         Get price data from Eastmoney.
 
-        Implementation in Task 3.2.
-
         Args:
-            ticker: Stock ticker (CN market format)
+            ticker: Stock ticker (CN or HK market format)
             start_date: Start date (YYYY-MM-DD)
             end_date: End date (YYYY-MM-DD)
             max_retries: Maximum retry attempts
@@ -360,7 +358,7 @@ class EastmoneySource(DataSource):
         - Growth: revenue growth, profit growth
 
         Args:
-            ticker: Stock ticker (CN market format)
+            ticker: Stock ticker (CN or HK market format)
             end_date: End date (YYYY-MM-DD)
             period: Period type (ttm, quarterly, annual)
             limit: Number of periods to fetch
@@ -460,7 +458,7 @@ class EastmoneySource(DataSource):
                 "currency": currency,
             }
 
-            # Market cap (f116: total, f117: circulating) - already in CNY
+            # Market cap (f116: total, f117: circulating) - in market's native currency (CNY for CN, HKD for HK)
             metrics["market_cap"] = self._safe_float(data.get("f116"))
 
             # Valuation metrics
