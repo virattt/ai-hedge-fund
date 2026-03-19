@@ -24,6 +24,9 @@ def _make_website(
         url=url,
         name=name,
         scrape_status=scrape_status,
+        max_depth=1,
+        max_pages=10,
+        include_external=False,
     )
     db_session.add(website)
     db_session.commit()
@@ -31,10 +34,15 @@ def _make_website(
     return website
 
 
-def _fake_crawl_result(markdown: str) -> MagicMock:
-    """Return a mock Crawl4AI CrawlResult with .markdown set."""
+def _fake_crawl_result(markdown: str, url: str = "https://example.com") -> MagicMock:
+    """Return a mock Crawl4AI CrawlResult with .markdown, .url, .metadata set."""
     result = MagicMock()
     result.markdown = markdown
+    result.success = True
+    result.status_code = 200
+    result.error_message = None
+    result.url = url
+    result.metadata = {"depth": 0}
     return result
 
 
@@ -169,14 +177,16 @@ async def test_execute_scrape_saves_error_on_exception(db_session):
 
 @pytest.mark.asyncio
 async def test_execute_scrape_skips_if_already_in_progress(db_session):
-    """execute_scrape() returns early without creating a result when status is in_progress."""
+    """execute_scrape() still scrapes when status is in_progress (set by route before background task)."""
     import app.backend.services.scraping_service as svc_module
 
     website = _make_website(db_session, scrape_status="in_progress")
 
+    fake_result = _fake_crawl_result("# In progress content")
+    mock_crawler = AsyncMock()
+    mock_crawler.arun = AsyncMock(return_value=fake_result)
     mock_crawler_ctx = AsyncMock()
-    arun_mock = AsyncMock()
-    mock_crawler_ctx.__aenter__ = AsyncMock(return_value=MagicMock(arun=arun_mock))
+    mock_crawler_ctx.__aenter__ = AsyncMock(return_value=mock_crawler)
     mock_crawler_ctx.__aexit__ = AsyncMock(return_value=False)
 
     with (
@@ -185,11 +195,11 @@ async def test_execute_scrape_skips_if_already_in_progress(db_session):
     ):
         await svc_module.execute_scrape(website.id)
 
-    # No result should have been created
+    # Scrape should have run and produced a result
     results = db_session.query(ScrapeResult).filter(ScrapeResult.website_id == website.id).all()
-    assert len(results) == 0
-    # Crawler should not have been called
-    arun_mock.assert_not_called()
+    assert len(results) == 1
+    assert results[0].status == "success"
+    mock_crawler.arun.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@ import { useState } from 'react';
 export function ScrapingResultsPage() {
   const [selectedWebsite, setSelectedWebsite] = useState<Website | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [editingWebsite, setEditingWebsite] = useState<Website | undefined>(undefined);
   const [listKey, setListKey] = useState(0);
 
   const handleWebsiteAdded = (website: Website) => {
@@ -21,6 +22,16 @@ export function ScrapingResultsPage() {
     if (selectedWebsite) {
       setSelectedWebsite(null);
     }
+  };
+
+  const handleEdit = (website: Website) => {
+    setEditingWebsite(website);
+    setIsAddDialogOpen(true);
+  };
+
+  const handleDialogClose = () => {
+    setIsAddDialogOpen(false);
+    setEditingWebsite(undefined);
   };
 
   return (
@@ -46,6 +57,7 @@ export function ScrapingResultsPage() {
             selectedWebsiteId={selectedWebsite?.id ?? null}
             onSelect={setSelectedWebsite}
             onListChange={handleListChange}
+            onEdit={handleEdit}
           />
         </div>
       </div>
@@ -65,8 +77,9 @@ export function ScrapingResultsPage() {
 
       <AddWebsiteDialog
         isOpen={isAddDialogOpen}
-        onClose={() => setIsAddDialogOpen(false)}
+        onClose={handleDialogClose}
         onWebsiteAdded={handleWebsiteAdded}
+        editingWebsite={editingWebsite}
       />
     </div>
   );

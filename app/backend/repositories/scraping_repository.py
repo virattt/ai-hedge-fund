@@ -2,10 +2,12 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from sqlalchemy import case
+from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
 from app.backend.database.models import ScrapeResult, ScrapingWebsite
-from app.backend.models.schemas import ScrapeResultStatus, ScrapeStatus
+from app.backend.models.schemas import ScrapeResultStatus, ScrapeRunResponse, ScrapeStatus
 
 # Sentinel used to distinguish "not provided" from "explicitly set to None".
 _UNSET: Any = object()
@@ -31,12 +33,18 @@ class ScrapingRepository:
         url: str,
         name: str,
         scrape_interval_minutes: int | None = None,
+        max_depth: int = 1,
+        max_pages: int = 10,
+        include_external: bool = False,
     ) -> ScrapingWebsite:
         """Insert a new website record and return it."""
         website = ScrapingWebsite(
             url=url,
             name=name,
             scrape_interval_minutes=scrape_interval_minutes,
+            max_depth=max_depth,
+            max_pages=max_pages,
+            include_external=include_external,
         )
         self.db.add(website)
         self.db.commit()
@@ -74,6 +82,9 @@ class ScrapingRepository:
         name: str | None = None,
         scrape_interval_minutes: int | None = _UNSET,
         is_active: bool | None = None,
+        max_depth: int | None = None,
+        max_pages: int | None = None,
+        include_external: bool | None = None,
     ) -> ScrapingWebsite | None:
         """Partially update a website with the provided fields.
 
@@ -90,6 +101,12 @@ class ScrapingRepository:
             website.scrape_interval_minutes = scrape_interval_minutes
         if is_active is not None:
             website.is_active = is_active
+        if max_depth is not None:
+            website.max_depth = max_depth
+        if max_pages is not None:
+            website.max_pages = max_pages
+        if include_external is not None:
+            website.include_external = include_external
         self.db.commit()
         self.db.refresh(website)
         return website
@@ -128,6 +145,10 @@ class ScrapingRepository:
         content_length: int,
         status: str,
         error_message: str | None = None,
+        page_url: str | None = None,
+        depth: int = 0,
+        parent_result_id: int | None = None,
+        scrape_run_id: str | None = None,
     ) -> ScrapeResult:
         """Insert a new scrape result and return it."""
         result = ScrapeResult(
@@ -136,6 +157,10 @@ class ScrapingRepository:
             content_length=content_length,
             status=status,
             error_message=error_message,
+            page_url=page_url,
+            depth=depth,
+            parent_result_id=parent_result_id,
+            scrape_run_id=scrape_run_id,
         )
         self.db.add(result)
         self.db.commit()
@@ -245,3 +270,45 @@ class ScrapingRepository:
         if stuck:
             self.db.commit()
         return len(stuck)
+
+    # ------------------------------------------------------------------
+    # Run-based queries
+    # ------------------------------------------------------------------
+
+    def get_results_by_run(self, scrape_run_id: str) -> list[ScrapeResult]:
+        """Return all results for a given run ordered by (depth, id)."""
+        return (
+            self.db.query(ScrapeResult)
+            .filter(ScrapeResult.scrape_run_id == scrape_run_id)
+            .order_by(ScrapeResult.depth, ScrapeResult.id)
+            .all()
+        )
+
+    def get_runs_for_website(self, website_id: int, limit: int = 20) -> list[ScrapeRunResponse]:
+        """Return aggregated run summaries for a website, most-recent first."""
+        rows = (
+            self.db.query(
+                ScrapeResult.scrape_run_id,
+                ScrapeResult.website_id,
+                sa_func.min(ScrapeResult.scraped_at).label("scraped_at"),
+                sa_func.count(ScrapeResult.id).label("total_pages"),
+                sa_func.sum(case((ScrapeResult.status == ScrapeResultStatus.SUCCESS, 1), else_=0)).label("success_count"),
+                sa_func.sum(case((ScrapeResult.status == ScrapeResultStatus.ERROR, 1), else_=0)).label("error_count"),
+            )
+            .filter(ScrapeResult.website_id == website_id, ScrapeResult.scrape_run_id.isnot(None))
+            .group_by(ScrapeResult.scrape_run_id, ScrapeResult.website_id)
+            .order_by(sa_func.min(ScrapeResult.scraped_at).desc())
+            .limit(limit)
+            .all()
+        )
+        return [
+            ScrapeRunResponse(
+                scrape_run_id=r.scrape_run_id,
+                website_id=r.website_id,
+                scraped_at=r.scraped_at,
+                total_pages=r.total_pages,
+                success_count=r.success_count,
+                error_count=r.error_count,
+            )
+            for r in rows
+        ]

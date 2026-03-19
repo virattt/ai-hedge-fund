@@ -4,13 +4,14 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToastManager } from '@/hooks/use-toast-manager';
 import { scrapingService, Website } from '@/services/scraping-api';
-import { Globe, RefreshCw, Trash2 } from 'lucide-react';
+import { Globe, Pencil, RefreshCw, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 interface WebsiteListProps {
   selectedWebsiteId: number | null;
   onSelect: (website: Website) => void;
   onListChange: () => void;
+  onEdit: (website: Website) => void;
 }
 
 function getStatusBadgeVariant(status: string): 'secondary' | 'outline' | 'success' | 'destructive' {
@@ -43,7 +44,7 @@ function getStatusLabel(status: string): string {
   }
 }
 
-export function WebsiteList({ selectedWebsiteId, onSelect, onListChange }: WebsiteListProps) {
+export function WebsiteList({ selectedWebsiteId, onSelect, onListChange, onEdit }: WebsiteListProps) {
   const [websites, setWebsites] = useState<Website[]>([]);
   const [loading, setLoading] = useState(true);
   const [scrapingIds, setScrapingIds] = useState<Set<number>>(new Set());
@@ -141,6 +142,11 @@ export function WebsiteList({ selectedWebsiteId, onSelect, onListChange }: Websi
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground truncate mt-0.5">{website.url}</p>
+              {website.max_depth > 1 && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Depth: {website.max_depth} | Max pages: {website.max_pages}
+                </p>
+              )}
               {website.last_scraped_at && (
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Last scraped: {new Date(website.last_scraped_at).toLocaleString()}
@@ -157,6 +163,18 @@ export function WebsiteList({ selectedWebsiteId, onSelect, onListChange }: Websi
                 onClick={e => handleScrapeNow(e, website)}
               >
                 <RefreshCw className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                title="Edit"
+                onClick={e => {
+                  e.stopPropagation();
+                  onEdit(website);
+                }}
+              >
+                <Pencil className="h-3.5 w-3.5" />
               </Button>
               <Button
                 variant="ghost"

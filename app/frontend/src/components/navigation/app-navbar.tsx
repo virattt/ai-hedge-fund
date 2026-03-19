@@ -1,11 +1,12 @@
 import { cn } from '@/lib/utils';
-import { Home, Newspaper, Workflow } from 'lucide-react';
+import { BookOpen, Home, Newspaper, Workflow } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 const navItems = [
   { to: '/', label: 'Home', icon: Home },
   { to: '/editor', label: 'Editor', icon: Workflow },
   { to: '/scraping', label: 'Scraping Results', icon: Newspaper },
+  { to: '/news', label: 'News', icon: BookOpen },
 ];
 
 export function AppNavbar() {

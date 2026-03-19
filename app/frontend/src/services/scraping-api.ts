@@ -7,6 +7,9 @@ export interface Website {
   scrape_status: string;
   scrape_interval_minutes?: number | null;
   is_active: boolean;
+  max_depth: number;
+  max_pages: number;
+  include_external: boolean;
   last_scraped_at?: string | null;
   created_at: string;
   updated_at?: string | null;
@@ -20,6 +23,10 @@ export interface ScrapeResult {
   content_preview: string;
   status: string;
   error_message?: string | null;
+  page_url?: string | null;
+  depth: number;
+  scrape_run_id?: string | null;
+  parent_result_id?: number | null;
 }
 
 export interface ScrapeResultDetail extends ScrapeResult {
@@ -30,12 +37,27 @@ export interface WebsiteCreateRequest {
   url: string;
   name: string;
   scrape_interval_minutes?: number | null;
+  max_depth?: number;
+  max_pages?: number;
+  include_external?: boolean;
 }
 
 export interface WebsiteUpdateRequest {
   name?: string;
   scrape_interval_minutes?: number | null;
   is_active?: boolean;
+  max_depth?: number;
+  max_pages?: number;
+  include_external?: boolean;
+}
+
+export interface ScrapeRun {
+  scrape_run_id: string;
+  website_id: number;
+  scraped_at: string;
+  total_pages: number;
+  success_count: number;
+  error_count: number;
 }
 
 class ScrapingService {
@@ -142,6 +164,25 @@ class ScrapingService {
         throw new Error('Result not found');
       }
       throw new Error(`Failed to fetch result detail: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  async getRuns(websiteId: number, limit = 20): Promise<ScrapeRun[]> {
+    const response = await fetch(`${this.baseUrl}/websites/${websiteId}/runs?limit=${limit}`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Website not found');
+      }
+      throw new Error(`Failed to fetch runs: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  async getRunResults(runId: string): Promise<ScrapeResult[]> {
+    const response = await fetch(`${this.baseUrl}/runs/${runId}/results`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch run results: ${response.statusText}`);
     }
     return response.json();
   }

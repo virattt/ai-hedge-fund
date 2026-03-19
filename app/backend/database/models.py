@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, JSON, ForeignKey, Index
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import backref, relationship
 from sqlalchemy.sql import func
 from .connection import Base
 
@@ -130,6 +130,11 @@ class ScrapingWebsite(Base):
     scrape_interval_minutes = Column(Integer, nullable=True)  # None means no scheduling
     is_active = Column(Boolean, default=True)
 
+    # Depth crawling configuration
+    max_depth = Column(Integer, nullable=False, default=1)
+    max_pages = Column(Integer, nullable=False, default=10)
+    include_external = Column(Boolean, nullable=False, default=False)
+
     # Last scrape tracking
     last_scraped_at = Column(DateTime(timezone=True), nullable=True)
     last_error = Column(Text, nullable=True)
@@ -157,8 +162,15 @@ class ScrapeResult(Base):
     status = Column(String(50), nullable=False)
     error_message = Column(Text, nullable=True)
 
-    # Relationship back to website
+    # Depth crawling fields
+    page_url = Column(String(2048), nullable=True)  # Actual URL of this page
+    depth = Column(Integer, nullable=False, default=0)  # 0 = root page
+    parent_result_id = Column(Integer, ForeignKey("scrape_results.id"), nullable=True)
+    scrape_run_id = Column(String(36), nullable=True, index=True)  # UUID grouping one execution
+
+    # Relationships
     website = relationship("ScrapingWebsite", back_populates="results")
+    children = relationship("ScrapeResult", backref=backref("parent", remote_side="ScrapeResult.id"))
 
     __table_args__ = (
         Index("ix_scrape_results_website_id_scraped_at", "website_id", "scraped_at"),

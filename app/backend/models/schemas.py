@@ -372,6 +372,9 @@ class WebsiteCreateRequest(BaseModel):
     url: str = Field(..., description="Target URL (http/https only, no private IPs)")
     name: str = Field(..., min_length=1, max_length=200)
     scrape_interval_minutes: int | None = Field(None, gt=0)
+    max_depth: int = Field(1, ge=1, le=5)
+    max_pages: int = Field(10, ge=1, le=100)
+    include_external: bool = Field(False)
 
     @field_validator("url")
     @classmethod
@@ -385,6 +388,9 @@ class WebsiteUpdateRequest(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=200)
     scrape_interval_minutes: int | None = Field(None, gt=0)
     is_active: bool | None = None
+    max_depth: int | None = Field(None, ge=1, le=5)
+    max_pages: int | None = Field(None, ge=1, le=100)
+    include_external: bool | None = None
 
 
 class WebsiteResponse(BaseModel):
@@ -395,6 +401,9 @@ class WebsiteResponse(BaseModel):
     scrape_status: str
     scrape_interval_minutes: int | None
     is_active: bool
+    max_depth: int
+    max_pages: int
+    include_external: bool
     last_scraped_at: datetime | None
     created_at: datetime
     updated_at: datetime | None
@@ -412,6 +421,10 @@ class ScrapeResultResponse(BaseModel):
     content_preview: str
     status: str
     error_message: str | None
+    page_url: str | None = None
+    depth: int = 0
+    scrape_run_id: str | None = None
+    parent_result_id: int | None = None
 
     class Config:
         from_attributes = True
@@ -420,3 +433,13 @@ class ScrapeResultResponse(BaseModel):
 class ScrapeResultDetailResponse(ScrapeResultResponse):
     """Response model for a scrape result including the full content."""
     content: str
+
+
+class ScrapeRunResponse(BaseModel):
+    """Summary of a single scrape run for a website."""
+    scrape_run_id: str
+    website_id: int
+    scraped_at: datetime
+    total_pages: int
+    success_count: int
+    error_count: int

@@ -9,6 +9,7 @@ from app.backend.models.schemas import (
     ErrorResponse,
     ScrapeResultDetailResponse,
     ScrapeResultResponse,
+    ScrapeRunResponse,
     ScrapeStatus,
     WebsiteCreateRequest,
     WebsiteResponse,
@@ -35,6 +36,10 @@ def _build_result_response(result) -> ScrapeResultResponse:
         content_preview=content[:_CONTENT_PREVIEW_LENGTH],
         status=result.status,
         error_message=result.error_message,
+        page_url=result.page_url,
+        depth=result.depth,
+        scrape_run_id=result.scrape_run_id,
+        parent_result_id=result.parent_result_id,
     )
 
 
@@ -50,6 +55,10 @@ def _build_result_detail_response(result) -> ScrapeResultDetailResponse:
         status=result.status,
         error_message=result.error_message,
         content=content,
+        page_url=result.page_url,
+        depth=result.depth,
+        scrape_run_id=result.scrape_run_id,
+        parent_result_id=result.parent_result_id,
     )
 
 
@@ -70,6 +79,9 @@ async def create_website(request: WebsiteCreateRequest, db: Session = Depends(ge
             url=request.url,
             name=request.name,
             scrape_interval_minutes=request.scrape_interval_minutes,
+            max_depth=request.max_depth,
+            max_pages=request.max_pages,
+            include_external=request.include_external,
         )
         return WebsiteResponse.model_validate(website)
     except Exception as e:
@@ -138,6 +150,9 @@ async def update_website(website_id: int, request: WebsiteUpdateRequest, db: Ses
             name=request.name,
             scrape_interval_minutes=request.scrape_interval_minutes,
             is_active=request.is_active,
+            max_depth=request.max_depth,
+            max_pages=request.max_pages,
+            include_external=request.include_external,
         )
         if not website:
             raise HTTPException(status_code=404, detail="Website not found")
@@ -202,6 +217,7 @@ async def trigger_scrape(
         repo.update_website_status(website_id, ScrapeStatus.IN_PROGRESS)
         bg.add_task(scraping_service.execute_scrape, website_id)
         logger.info("trigger_scrape: enqueued background scrape for website %d", website_id)
+        print(f"[SCRAPER] Scrape triggered for website {website_id} ({website.url})", flush=True)
         return {"message": "Scrape task accepted", "website_id": website_id}
     except HTTPException:
         raise
@@ -255,3 +271,44 @@ async def get_result_detail(result_id: int, db: Session = Depends(get_db)) -> Sc
     except Exception as e:
         logger.exception("Failed to get result %d", result_id)
         raise HTTPException(status_code=500, detail=f"Failed to get result: {str(e)}") from e
+
+
+@router.get(
+    "/websites/{website_id}/runs",
+    response_model=list[ScrapeRunResponse],
+    responses={
+        404: {"model": ErrorResponse, "description": "Website not found"},
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+)
+async def get_website_runs(website_id: int, limit: int = 20, db: Session = Depends(get_db)) -> list[ScrapeRunResponse]:
+    """Return scrape run summaries for a website, most-recent first."""
+    try:
+        repo = ScrapingRepository(db)
+        website = repo.get_website_by_id(website_id)
+        if not website:
+            raise HTTPException(status_code=404, detail="Website not found")
+        return repo.get_runs_for_website(website_id, limit=limit)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get runs for website %d", website_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get runs: {str(e)}") from e
+
+
+@router.get(
+    "/runs/{run_id}/results",
+    response_model=list[ScrapeResultResponse],
+    responses={
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+)
+async def get_run_results(run_id: str, db: Session = Depends(get_db)) -> list[ScrapeResultResponse]:
+    """Return all results for a scrape run (for tree view)."""
+    try:
+        repo = ScrapingRepository(db)
+        results = repo.get_results_by_run(run_id)
+        return [_build_result_response(r) for r in results]
+    except Exception as e:
+        logger.exception("Failed to get results for run %s", run_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get run results: {str(e)}") from e
