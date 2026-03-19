@@ -10,6 +10,7 @@ from src.markets.sources.newsnow_source import NewsNowSource
 from src.markets.sources.akshare_news_source import AKShareNewsSource
 from src.markets.sources.sina_finance_source import SinaFinanceSource
 from src.markets.sources.xueqiu_source import XueqiuSource
+from src.markets.sources.eastmoney_source import EastmoneySource
 from src.data.validation import DataValidator
 
 logger = logging.getLogger(__name__)
@@ -28,13 +29,15 @@ class HKStockAdapter(MarketAdapter):
         # Data sources in priority order (per spec):
         # 1. Xueqiu - Primary for financials: most complete statements (TTM data)
         # 2. Sina Finance - Primary for prices: free, stable, real-time HK quotes
-        # 3. AKShare - Backup source (single-period data, lower reliability for financials)
+        # 3. Eastmoney - Backup for prices & financials: same API, HK secid 116.XXXXX
+        # 4. AKShare - Last resort: single-period data, lower reliability for financials
         # Note: YFinance disabled (not available in China)
         data_sources = [
-            XueqiuSource(),  # Primary for financials: most complete statements
+            XueqiuSource(),       # Primary for financials: most complete statements
             SinaFinanceSource(),  # Primary for prices: free, stable
+            EastmoneySource(),    # Backup for prices & financials: same API, HK secid 116.XXXXX
             # YFinanceSource(),     # Disabled: Not available in China
-            AKShareSource(),  # Fallback: Backup
+            AKShareSource(),      # Last resort: single-period data, lower reliability
         ]
 
         # Xueqiu provides TTM financial data (more accurate for HK stocks).
@@ -43,9 +46,10 @@ class HKStockAdapter(MarketAdapter):
         # Set Xueqiu weight much higher so its data dominates the merge.
         hk_validator = validator or DataValidator(
             source_weights={
-                "Xueqiu": 1.0,    # Primary: TTM financials, real-time P/E
-                "AKShare": 0.05,  # Minimal: single-period data, unreliable for financials
-                "SinaFinance": 0.5,
+                "Xueqiu": 1.0,       # Primary: TTM financials, real-time P/E
+                "SinaFinance": 0.5,  # Primary for prices
+                "Eastmoney": 0.4,    # Backup: same API quality as CN, reliable HK data
+                "AKShare": 0.05,     # Minimal: single-period data, unreliable for financials
             }
         )
 
