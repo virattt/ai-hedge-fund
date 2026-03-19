@@ -150,9 +150,17 @@ class XueqiuSource(DataSource):
                 if invested_capital > 0:
                     metrics["return_on_invested_capital"] = oi * 0.75 / invested_capital
 
-        # debt_to_equity = total_liabilities / shareholders_equity (direct calculation)
+        # debt_to_equity: prefer total_debt (financial debt only) over total_liabilities (gross)
+        # total_debt = short-term + long-term interest-bearing debt (more meaningful for investors)
+        # total_liabilities includes operating liabilities (AP, deferred revenue) — overstates leverage
         if metrics.get("debt_to_equity") is None:
-            metrics["debt_to_equity"] = safe_div(get("total_liabilities"), get("shareholders_equity"))
+            td = get("total_debt")
+            eq = get("shareholders_equity")
+            if td is not None and eq is not None:
+                metrics["debt_to_equity"] = safe_div(td, eq)
+            else:
+                # Fall back to gross liabilities when debt breakdown unavailable
+                metrics["debt_to_equity"] = safe_div(get("total_liabilities"), eq)
 
         # ebit = operating_income (pre-interest, pre-tax proxy for HK/CN stocks)
         if metrics.get("ebit") is None:

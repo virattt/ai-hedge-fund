@@ -778,6 +778,38 @@ class TestXueqiuDerivedMetrics:
         # EV = 600B; EBITDA = 38B + 3B = 41B; ratio = 600B / 41B
         assert metrics["enterprise_value_to_ebitda_ratio"] == pytest.approx(600e9 / 41e9, rel=0.01)
 
+    def test_debt_to_equity_uses_total_debt_when_available(self):
+        """When total_debt is present, D/E = total_debt / equity (not total_liabilities / equity)."""
+        source = XueqiuSource()
+        metrics = {
+            "total_debt": 26000000000.0,        # 26B financial debt
+            "total_liabilities": 90000000000.0,  # 90B gross liabilities
+            "shareholders_equity": 100000000000.0,  # 100B equity
+        }
+        source._compute_derived_metrics(metrics)
+        # Should use total_debt: 26B / 100B = 0.26
+        assert metrics["debt_to_equity"] == pytest.approx(0.26)
+
+    def test_debt_to_equity_falls_back_to_total_liabilities_when_no_total_debt(self):
+        """When total_debt is absent, fall back to total_liabilities / equity."""
+        source = XueqiuSource()
+        metrics = {
+            "total_liabilities": 90000000000.0,
+            "shareholders_equity": 100000000000.0,
+        }
+        source._compute_derived_metrics(metrics)
+        # Falls back: 90B / 100B = 0.9
+        assert metrics["debt_to_equity"] == pytest.approx(0.9)
+
+    def test_debt_to_equity_none_when_no_debt_data(self):
+        """When neither total_debt nor total_liabilities is present, D/E is None."""
+        source = XueqiuSource()
+        metrics = {
+            "shareholders_equity": 100000000000.0,
+        }
+        source._compute_derived_metrics(metrics)
+        assert metrics.get("debt_to_equity") is None
+
 
 class TestXueqiuYoYGrowth:
     """Tests for year-over-year growth rate calculations."""
