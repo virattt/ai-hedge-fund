@@ -1,4 +1,4 @@
-"""Eastmoney data source for comprehensive CN market data (A股专用深度数据源)."""
+"""Eastmoney data source for CN and HK market data (东方财富数据源)."""
 import json
 import logging
 import time
@@ -22,7 +22,7 @@ class EastmoneySource(DataSource):
     - Zero dependencies, pure HTTP calls
     - Supports complete financial statements
     - Forward-adjusted K-line data (前复权)
-    - CN market only (.SH/.SZ tickers)
+    - Supports CN (.SH/.SZ) and HK markets
     """
 
     # K-line data API (use HTTPS with cookies to bypass anti-bot)
@@ -60,8 +60,8 @@ class EastmoneySource(DataSource):
         self.session.cookies.set('mtp', '1', domain='.eastmoney.com')
 
     def supports_market(self, market: str) -> bool:
-        """Eastmoney only supports CN market."""
-        return market.upper() == "CN"
+        """Eastmoney supports CN and HK markets."""
+        return market.upper() in ("CN", "HK")
 
     def _detect_cn_ticker(self, ticker: str) -> bool:
         """
@@ -93,6 +93,37 @@ class EastmoneySource(DataSource):
         # Check for 6-digit code (CN market standard)
         code = ticker.split('.')[0]
         if code.isdigit() and len(code) == 6:
+            return True
+
+        return False
+
+    def _detect_hk_ticker(self, ticker: str) -> bool:
+        """
+        Detect if ticker is HK market format.
+
+        HK market ticker formats:
+        - 0700.HK  (with suffix)
+        - 03690.HK (with suffix)
+        - 00700    (5-digit code)
+        - 03690    (5-digit code)
+        - 0700     (4-digit code)
+
+        Args:
+            ticker: Stock ticker
+
+        Returns:
+            True if HK market ticker
+        """
+        ticker_upper = ticker.upper()
+
+        # Check for .HK suffix
+        if ticker_upper.endswith('.HK'):
+            return True
+
+        # Check for 4-5 digit pure numeric code (HK stock codes)
+        # HKStockAdapter.supports_ticker accepts 4-5 digit codes; we match the same range
+        code = ticker.split('.')[0]
+        if code.isdigit() and 4 <= len(code) <= 5:
             return True
 
         return False
@@ -137,16 +168,40 @@ class EastmoneySource(DataSource):
             else:
                 return f"0.{code}"
 
+    def _to_eastmoney_hk_secid(self, ticker: str) -> str:
+        """
+        Convert HK ticker to Eastmoney secid format.
+
+        HK stocks use prefix 116:
+        - 0700.HK  → 116.00700
+        - 03690.HK → 116.03690
+        - 00700    → 116.00700
+
+        Args:
+            ticker: HK ticker (e.g., '0700.HK', '03690.HK', '00700')
+
+        Returns:
+            Eastmoney secid format (e.g., '116.00700')
+        """
+        # Remove .HK suffix if present
+        ticker_upper = ticker.upper()
+        if ticker_upper.endswith('.HK'):
+            code = ticker[:-3]
+        else:
+            code = ticker.split('.')[0]
+
+        # Ensure 5-digit zero-padded code
+        code = code.zfill(5)
+        return f"116.{code}"
+
     def get_prices(
         self, ticker: str, start_date: str, end_date: str, max_retries: int = 3
     ) -> List[Dict]:
         """
         Get price data from Eastmoney.
 
-        Implementation in Task 3.2.
-
         Args:
-            ticker: Stock ticker (CN market format)
+            ticker: Stock ticker (CN or HK market format)
             start_date: Start date (YYYY-MM-DD)
             end_date: End date (YYYY-MM-DD)
             max_retries: Maximum retry attempts
@@ -154,13 +209,14 @@ class EastmoneySource(DataSource):
         Returns:
             List of price dictionaries
         """
-        # Validate CN market ticker
-        if not self._detect_cn_ticker(ticker):
-            self.logger.warning(f"[Eastmoney] Ticker {ticker} is not CN market format")
+        # Detect market and convert to Eastmoney secid
+        if self._detect_cn_ticker(ticker):
+            secid = self._to_eastmoney_secid(ticker)
+        elif self._detect_hk_ticker(ticker):
+            secid = self._to_eastmoney_hk_secid(ticker)
+        else:
+            self.logger.warning(f"[Eastmoney] Ticker {ticker} is not CN or HK market format")
             return []
-
-        # Convert to Eastmoney format
-        secid = self._to_eastmoney_secid(ticker)
 
         for attempt in range(max_retries):
             try:
@@ -302,7 +358,7 @@ class EastmoneySource(DataSource):
         - Growth: revenue growth, profit growth
 
         Args:
-            ticker: Stock ticker (CN market format)
+            ticker: Stock ticker (CN or HK market format)
             end_date: End date (YYYY-MM-DD)
             period: Period type (ttm, quarterly, annual)
             limit: Number of periods to fetch
@@ -310,13 +366,16 @@ class EastmoneySource(DataSource):
         Returns:
             Dictionary with financial metrics
         """
-        # Validate CN market ticker
-        if not self._detect_cn_ticker(ticker):
-            self.logger.warning(f"[Eastmoney] Ticker {ticker} is not CN market format")
+        # Detect market and convert to Eastmoney secid
+        if self._detect_cn_ticker(ticker):
+            secid = self._to_eastmoney_secid(ticker)
+            currency = "CNY"
+        elif self._detect_hk_ticker(ticker):
+            secid = self._to_eastmoney_hk_secid(ticker)
+            currency = "HKD"
+        else:
+            self.logger.warning(f"[Eastmoney] Ticker {ticker} is not CN or HK market format")
             return None
-
-        # Convert to Eastmoney format
-        secid = self._to_eastmoney_secid(ticker)
 
         try:
             # Add delay to avoid rate limiting
@@ -355,7 +414,7 @@ class EastmoneySource(DataSource):
                 return None
 
             # Extract and convert financial metrics
-            metrics = self._parse_financial_metrics(finance_data, ticker, end_date, period)
+            metrics = self._parse_financial_metrics(finance_data, ticker, end_date, period, currency)
 
             if metrics:
                 self.logger.info(f"[Eastmoney] ✓ Retrieved financial metrics for {ticker}")
@@ -368,7 +427,7 @@ class EastmoneySource(DataSource):
             self.logger.error(f"[Eastmoney] Failed to get financial metrics for {ticker}: {e}")
             return None
 
-    def _parse_financial_metrics(self, data: Dict, ticker: str, end_date: str, period: str) -> Optional[Dict]:
+    def _parse_financial_metrics(self, data: Dict, ticker: str, end_date: str, period: str, currency: str = "CNY") -> Optional[Dict]:
         """
         Parse financial metrics from Eastmoney API response.
 
@@ -396,10 +455,10 @@ class EastmoneySource(DataSource):
                 "ticker": ticker,
                 "report_period": end_date,
                 "period": period,
-                "currency": "CNY",  # CN market uses CNY
+                "currency": currency,
             }
 
-            # Market cap (f116: total, f117: circulating) - already in CNY
+            # Market cap (f116: total, f117: circulating) - in market's native currency (CNY for CN, HKD for HK)
             metrics["market_cap"] = self._safe_float(data.get("f116"))
 
             # Valuation metrics

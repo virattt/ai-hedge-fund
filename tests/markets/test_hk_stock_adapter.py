@@ -34,9 +34,10 @@ class TestHKStockAdapter:
         assert adapter.get_yfinance_ticker("700") == "0700.HK"
 
     @patch("src.markets.sources.akshare_source.AKShareSource.get_prices")
+    @patch("src.markets.sources.eastmoney_source.EastmoneySource.get_prices")
     @patch("src.markets.sources.sina_finance_source.SinaFinanceSource.get_prices")
     @patch("src.markets.sources.xueqiu_source.XueqiuSource.get_prices")
-    def test_get_prices_multi_source(self, mock_xq_prices, mock_sina_prices, mock_ak_prices):
+    def test_get_prices_multi_source(self, mock_xq_prices, mock_sina_prices, mock_em_prices, mock_ak_prices):
         """Test getting prices from multiple sources."""
         adapter = HKStockAdapter()
 
@@ -63,6 +64,7 @@ class TestHKStockAdapter:
             }
         ]
 
+        mock_em_prices.return_value = []
         mock_ak_prices.return_value = []
 
         # Get prices (should merge from both sources)

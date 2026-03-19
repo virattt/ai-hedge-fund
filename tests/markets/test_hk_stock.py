@@ -181,3 +181,31 @@ def test_get_financial_metrics_exception(mock_ticker_class):
 
     # 应该返回空字典
     assert metrics == {}
+
+
+# ============== EastmoneySource Integration Tests ==============
+
+
+def test_hk_adapter_includes_eastmoney_source():
+    """EastmoneySource should be in HKStockAdapter's data sources."""
+    adapter = HKStockAdapter()
+    source_names = [s.name for s in adapter.active_sources]
+    assert "Eastmoney" in source_names
+
+
+def test_hk_adapter_eastmoney_after_sina():
+    """EastmoneySource should come after SinaFinance in priority order."""
+    adapter = HKStockAdapter()
+    source_names = [s.name for s in adapter.active_sources]
+    sina_idx = source_names.index("SinaFinance")
+    eastmoney_idx = source_names.index("Eastmoney")
+    assert sina_idx < eastmoney_idx, "SinaFinance should be before Eastmoney"
+
+
+def test_hk_adapter_eastmoney_before_akshare():
+    """EastmoneySource should come before AKShare in priority order."""
+    adapter = HKStockAdapter()
+    source_names = [s.name for s in adapter.active_sources]
+    eastmoney_idx = source_names.index("Eastmoney")
+    akshare_idx = source_names.index("AKShare")
+    assert eastmoney_idx < akshare_idx, "Eastmoney should be before AKShare"
