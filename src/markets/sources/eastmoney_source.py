@@ -211,13 +211,14 @@ class EastmoneySource(DataSource):
         Returns:
             List of price dictionaries
         """
-        # Validate CN market ticker
-        if not self._detect_cn_ticker(ticker):
-            self.logger.warning(f"[Eastmoney] Ticker {ticker} is not CN market format")
+        # Detect market and convert to Eastmoney secid
+        if self._detect_cn_ticker(ticker):
+            secid = self._to_eastmoney_secid(ticker)
+        elif self._detect_hk_ticker(ticker):
+            secid = self._to_eastmoney_hk_secid(ticker)
+        else:
+            self.logger.warning(f"[Eastmoney] Ticker {ticker} is not CN or HK market format")
             return []
-
-        # Convert to Eastmoney format
-        secid = self._to_eastmoney_secid(ticker)
 
         for attempt in range(max_retries):
             try:
@@ -367,13 +368,16 @@ class EastmoneySource(DataSource):
         Returns:
             Dictionary with financial metrics
         """
-        # Validate CN market ticker
-        if not self._detect_cn_ticker(ticker):
-            self.logger.warning(f"[Eastmoney] Ticker {ticker} is not CN market format")
+        # Detect market and convert to Eastmoney secid
+        if self._detect_cn_ticker(ticker):
+            secid = self._to_eastmoney_secid(ticker)
+            currency = "CNY"
+        elif self._detect_hk_ticker(ticker):
+            secid = self._to_eastmoney_hk_secid(ticker)
+            currency = "HKD"
+        else:
+            self.logger.warning(f"[Eastmoney] Ticker {ticker} is not CN or HK market format")
             return None
-
-        # Convert to Eastmoney format
-        secid = self._to_eastmoney_secid(ticker)
 
         try:
             # Add delay to avoid rate limiting
@@ -412,7 +416,7 @@ class EastmoneySource(DataSource):
                 return None
 
             # Extract and convert financial metrics
-            metrics = self._parse_financial_metrics(finance_data, ticker, end_date, period)
+            metrics = self._parse_financial_metrics(finance_data, ticker, end_date, period, currency)
 
             if metrics:
                 self.logger.info(f"[Eastmoney] ✓ Retrieved financial metrics for {ticker}")
@@ -425,7 +429,7 @@ class EastmoneySource(DataSource):
             self.logger.error(f"[Eastmoney] Failed to get financial metrics for {ticker}: {e}")
             return None
 
-    def _parse_financial_metrics(self, data: Dict, ticker: str, end_date: str, period: str) -> Optional[Dict]:
+    def _parse_financial_metrics(self, data: Dict, ticker: str, end_date: str, period: str, currency: str = "CNY") -> Optional[Dict]:
         """
         Parse financial metrics from Eastmoney API response.
 
@@ -453,7 +457,7 @@ class EastmoneySource(DataSource):
                 "ticker": ticker,
                 "report_period": end_date,
                 "period": period,
-                "currency": "CNY",  # CN market uses CNY
+                "currency": currency,
             }
 
             # Market cap (f116: total, f117: circulating) - already in CNY

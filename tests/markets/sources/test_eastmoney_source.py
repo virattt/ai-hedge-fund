@@ -1,6 +1,6 @@
 """Tests for Eastmoney data source."""
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
 
 from src.markets.sources.eastmoney_source import EastmoneySource
@@ -282,6 +282,60 @@ class TestEastmoneySource:
         news = source.get_company_news("600000.SH", "2024-01-31")
 
         assert news == []
+
+    def test_get_prices_hk_uses_hk_secid(self):
+        """Verify HK ticker is converted to 116.XXXXX secid."""
+        source = EastmoneySource()
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'rc': 0,
+            'data': {
+                'klines': ['2024-01-02,100.0,102.0,103.0,99.0,1000000,0,0,0,0,0']
+            }
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(source.session, 'get', return_value=mock_response) as mock_get:
+            prices = source.get_prices("0700.HK", "2024-01-01", "2024-01-31")
+            call_kwargs = mock_get.call_args
+            assert call_kwargs[1]['params']['secid'] == '116.00700'
+            assert len(prices) == 1
+            assert prices[0]['close'] == 102.0
+
+    def test_get_prices_hk_rejects_invalid(self):
+        """Verify non-HK/CN ticker returns empty list."""
+        source = EastmoneySource()
+        prices = source.get_prices("AAPL", "2024-01-01", "2024-01-31")
+        assert prices == []
+
+    def test_get_financial_metrics_hk_uses_hk_secid(self):
+        """Verify HK ticker financial metrics use 116.XXXXX secid."""
+        source = EastmoneySource()
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'data': {'f116': 1000000, 'f162': 15.5, 'f167': 2.0, 'f173': 10.0, 'f187': 25.0}
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(source.session, 'get', return_value=mock_response) as mock_get:
+            metrics = source.get_financial_metrics("03690.HK", "2024-01-31")
+            call_kwargs = mock_get.call_args
+            assert call_kwargs[1]['params']['secid'] == '116.03690'
+            assert metrics is not None
+            assert metrics['currency'] == 'HKD'
+
+    def test_get_financial_metrics_hk_currency_is_hkd(self):
+        """Verify HK financial metrics return HKD currency."""
+        source = EastmoneySource()
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'data': {'f116': 500000, 'f162': 20.0, 'f167': 3.0}
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(source.session, 'get', return_value=mock_response):
+            metrics = source.get_financial_metrics("00700", "2024-01-31")
+            assert metrics['currency'] == 'HKD'
 
 
 @pytest.mark.integration
