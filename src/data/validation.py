@@ -314,6 +314,7 @@ class DataValidator:
             "interest_expense",
             "total_debt",
             "dividends",
+            "issuance_or_purchase_of_equity_shares",
         ]
 
         # Calculate weighted average for each numeric field

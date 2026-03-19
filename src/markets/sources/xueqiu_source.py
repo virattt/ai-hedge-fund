@@ -461,7 +461,8 @@ class XueqiuSource(DataSource):
 
         # D&A and interest expense from cash flow
         da = ev(cash_flow.get("depaz"))
-        interest_exp = ev(cash_flow.get("intp"))  # Interest paid
+        interest_exp_raw = ev(cash_flow.get("intp"))  # Interest paid
+        interest_exp = abs(interest_exp_raw) if interest_exp_raw is not None else None
 
         # Dividends paid: divp is typically negative — store as positive amount
         divp_raw = ev(cash_flow.get("divp"))
@@ -589,7 +590,8 @@ class XueqiuSource(DataSource):
         da = None
 
         # Interest expense from income statement (net financing cost)
-        interest_exp = ev(income.get("financing_expenses"))
+        interest_exp_raw = ev(income.get("financing_expenses"))
+        interest_exp = abs(interest_exp_raw) if interest_exp_raw is not None else None
 
         # Dividends paid (stored as positive outflow amount in CN)
         dividends_raw = ev(cash_flow.get("cash_paid_of_distribution"))
