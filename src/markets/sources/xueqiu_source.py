@@ -154,6 +154,35 @@ class XueqiuSource(DataSource):
         if metrics.get("debt_to_equity") is None:
             metrics["debt_to_equity"] = safe_div(get("total_liabilities"), get("shareholders_equity"))
 
+        # ebit = operating_income (pre-interest, pre-tax proxy for HK/CN stocks)
+        if metrics.get("ebit") is None:
+            oi = get("operating_income")
+            if oi is not None:
+                metrics["ebit"] = oi
+
+        ebit = metrics.get("ebit")
+
+        # ebitda = ebit + depreciation_and_amortization
+        if metrics.get("ebitda") is None:
+            da = get("depreciation_and_amortization")
+            if ebit is not None and da is not None:
+                metrics["ebitda"] = ebit + da
+
+        ebitda = metrics.get("ebitda")
+
+        # enterprise_value_to_ebitda_ratio = EV / EBITDA
+        if metrics.get("enterprise_value_to_ebitda_ratio") is None:
+            metrics["enterprise_value_to_ebitda_ratio"] = safe_div(ev, ebitda)
+
+        # ev_to_ebit = EV / EBIT (Michael Burry's key metric)
+        if metrics.get("ev_to_ebit") is None:
+            metrics["ev_to_ebit"] = safe_div(ev, ebit)
+
+        # interest_coverage = EBIT / interest_expense
+        if metrics.get("interest_coverage") is None:
+            ie = get("interest_expense")
+            metrics["interest_coverage"] = safe_div(ebit, ie)
+
     def _extract_value(self, field_data) -> Optional[float]:
         """
         雪球财务数据格式为 [当期值, 同比增长率]，取第一个元素。

@@ -721,6 +721,61 @@ class TestXueqiuDerivedMetrics:
         assert metrics.get("free_cash_flow_yield") is None
         assert metrics.get("enterprise_value") is None
 
+    def test_ebit_computed_from_operating_income(self):
+        source = XueqiuSource()
+        metrics = {"operating_income": 38000000000.0}
+        source._compute_derived_metrics(metrics)
+        assert metrics["ebit"] == pytest.approx(38000000000.0)
+
+    def test_ebit_not_overwritten_if_already_set(self):
+        source = XueqiuSource()
+        metrics = {"ebit": 99.0, "operating_income": 38000000000.0}
+        source._compute_derived_metrics(metrics)
+        assert metrics["ebit"] == pytest.approx(99.0)  # not overwritten
+
+    def test_ebitda_computed_from_ebit_and_da(self):
+        source = XueqiuSource()
+        metrics = {"operating_income": 38000000000.0, "depreciation_and_amortization": 3000000000.0}
+        source._compute_derived_metrics(metrics)
+        assert metrics["ebitda"] == pytest.approx(41000000000.0)
+
+    def test_ev_to_ebit_computed(self):
+        source = XueqiuSource()
+        metrics = {
+            "market_cap": 500000000000.0,
+            "total_liabilities": 150000000000.0,
+            "cash_and_equivalents": 50000000000.0,
+            "operating_income": 38000000000.0,
+        }
+        source._compute_derived_metrics(metrics)
+        # EV = 500B + 150B - 50B = 600B; ev_to_ebit = 600B / 38B ≈ 15.79
+        assert metrics["ev_to_ebit"] == pytest.approx(600000000000.0 / 38000000000.0, rel=0.01)
+
+    def test_interest_coverage_computed(self):
+        source = XueqiuSource()
+        metrics = {"operating_income": 38000000000.0, "interest_expense": 1500000000.0}
+        source._compute_derived_metrics(metrics)
+        assert metrics["interest_coverage"] == pytest.approx(38000000000.0 / 1500000000.0, rel=0.01)
+
+    def test_interest_coverage_none_when_no_interest(self):
+        source = XueqiuSource()
+        metrics = {"operating_income": 38000000000.0}
+        source._compute_derived_metrics(metrics)
+        assert metrics.get("interest_coverage") is None
+
+    def test_ev_to_ebitda_computed(self):
+        source = XueqiuSource()
+        metrics = {
+            "market_cap": 500000000000.0,
+            "total_liabilities": 150000000000.0,
+            "cash_and_equivalents": 50000000000.0,
+            "operating_income": 38000000000.0,
+            "depreciation_and_amortization": 3000000000.0,
+        }
+        source._compute_derived_metrics(metrics)
+        # EV = 600B; EBITDA = 38B + 3B = 41B; ratio = 600B / 41B
+        assert metrics["enterprise_value_to_ebitda_ratio"] == pytest.approx(600e9 / 41e9, rel=0.01)
+
 
 class TestXueqiuYoYGrowth:
     """Tests for year-over-year growth rate calculations."""
