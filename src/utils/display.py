@@ -1,8 +1,10 @@
 from colorama import Fore, Style
 from tabulate import tabulate
 from .analysts import ANALYST_ORDER
+from .progress import console
 import os
 import json
+import sys
 
 
 def sort_agent_signals(signals):
@@ -21,6 +23,9 @@ def print_trading_output(result: dict) -> None:
     Args:
         result (dict): Dictionary containing decisions and analyst signals for multiple tickers
     """
+    # Force Rich console to flush its internal buffer before using plain print()
+    console.file.flush()
+
     decisions = result.get("decisions")
     if not decisions:
         print(f"{Fore.RED}No trading decisions available{Style.RESET_ALL}")

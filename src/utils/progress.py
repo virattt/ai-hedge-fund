@@ -18,7 +18,9 @@ class AgentProgress:
     def __init__(self, min_update_interval: float = 0.5):
         self.agent_status: Dict[str, Dict[str, str]] = {}
         self.table = Table(show_header=False, box=None, padding=(0, 1))
-        self.live = Live(self.table, console=console, refresh_per_second=4)
+        # redirect_stdout=False: don't intercept print() calls so that
+        # output after Live.stop() is not lost or buffered by Rich
+        self.live = Live(self.table, console=console, refresh_per_second=4, redirect_stdout=False, redirect_stderr=False)
         self.started = False
         self.update_handlers: List[Callable[[str, Optional[str], str], None]] = []
         self.min_update_interval = min_update_interval  # Minimum seconds between updates for same agent
