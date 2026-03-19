@@ -89,6 +89,15 @@ class FinancialMetrics(BaseModel):
     # Per share metrics
     operating_cash_flow_per_share: float | None = None
 
+    # Fields needed by Buffett, Damodaran, Burry, Graham agents
+    depreciation_and_amortization: float | None = None
+    ebit: float | None = None
+    ebitda: float | None = None
+    ev_to_ebit: float | None = None
+    interest_expense: float | None = None
+    total_debt: float | None = None
+    issuance_or_purchase_of_equity_shares: float | None = None
+
 
 class FinancialMetricsResponse(BaseModel):
     financial_metrics: list[FinancialMetrics]

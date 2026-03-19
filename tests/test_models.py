@@ -60,3 +60,23 @@ def test_financial_metrics_new_fields_default_to_none():
     assert m.cash_and_equivalents is None
     assert m.gross_profit is None
     assert m.research_and_development is None
+
+
+def test_financial_metrics_has_new_fields():
+    m = FinancialMetrics(ticker="TEST", report_period="2024-12-31", period="annual", currency="HKD")
+    # New fields added in this task
+    assert hasattr(m, "depreciation_and_amortization")
+    assert hasattr(m, "ebit")
+    assert hasattr(m, "ebitda")
+    assert hasattr(m, "interest_expense")
+    assert hasattr(m, "total_debt")
+    assert hasattr(m, "issuance_or_purchase_of_equity_shares")
+    assert hasattr(m, "ev_to_ebit")
+    # All default to None
+    assert m.depreciation_and_amortization is None
+    assert m.ebit is None
+    assert m.ebitda is None
+    assert m.ev_to_ebit is None
+    assert m.interest_expense is None
+    assert m.total_debt is None
+    assert m.issuance_or_purchase_of_equity_shares is None
