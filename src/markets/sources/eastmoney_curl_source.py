@@ -165,8 +165,9 @@ class EastmoneyCurlSource(DataSource):
                 "period": period,
                 "currency": "CNY",
                 "market_cap": self._safe_float(finance_data.get("f116")),
-                "price_to_earnings_ratio": self._safe_float(finance_data.get("f162")),
-                "price_to_book_ratio": self._safe_float(finance_data.get("f167")),
+                # f162/f167 are stored as integers scaled by 100 (same as f43 price field)
+                "price_to_earnings_ratio": self._safe_float(finance_data.get("f162")) / 100 if self._safe_float(finance_data.get("f162")) is not None else None,
+                "price_to_book_ratio": self._safe_float(finance_data.get("f167")) / 100 if self._safe_float(finance_data.get("f167")) is not None else None,
                 "price_to_sales_ratio": None,
                 "enterprise_value_to_ebitda_ratio": None,
                 "enterprise_value_to_revenue_ratio": None,

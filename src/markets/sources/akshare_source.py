@@ -459,7 +459,9 @@ class AKShareSource(DataSource):
                 "currency": "HKD",
 
                 # Valuation metrics (direct from API)
-                "price_to_earnings_ratio": self._safe_float(latest.get("市盈率")),
+                # NOTE: 东财的市盈率基于单期EPS而非TTM，对亏损季度会产生负值，不可靠，故排除。
+                # P/E TTM 由雪球行情接口提供（更准确）。P/B 相对稳定可保留。
+                "price_to_earnings_ratio": None,
                 "price_to_book_ratio": self._safe_float(latest.get("市净率")),
                 "dividend_yield": self._safe_float(latest.get("股息率TTM(%)")),
                 "market_cap": self._safe_float(latest.get("总市值(港元)")),

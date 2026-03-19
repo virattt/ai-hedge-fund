@@ -250,6 +250,8 @@ class DataValidator:
             "market_cap",
             "enterprise_value",
             "price_to_earnings_ratio",
+            "price_to_earnings_ratio_lyr",
+            "price_to_earnings_ratio_forward",
             "price_to_book_ratio",
             "price_to_sales_ratio",
             "enterprise_value_to_ebitda_ratio",
@@ -304,6 +306,14 @@ class DataValidator:
             "total_assets",
             "total_liabilities",
             "shareholders_equity",
+            # New fields for DCF and value investing agents
+            "depreciation_and_amortization",
+            "ebit",
+            "ebitda",
+            "ev_to_ebit",
+            "interest_expense",
+            "total_debt",
+            "dividends",
         ]
 
         # Calculate weighted average for each numeric field

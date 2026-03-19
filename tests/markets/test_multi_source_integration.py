@@ -175,8 +175,8 @@ class TestMultiSourceIntegration:
         assert hk_adapter.normalize_ticker("00700") == "00700"
 
     @patch('src.markets.sources.akshare_source.AKShareSource.get_financial_metrics')
-    @patch('src.markets.sources.yfinance_source.YFinanceSource.get_financial_metrics')
-    def test_financial_metrics_merging(self, mock_yf_metrics, mock_ak_metrics):
+    @patch('src.markets.sources.xueqiu_source.XueqiuSource.get_financial_metrics')
+    def test_financial_metrics_merging(self, mock_xq_metrics, mock_ak_metrics):
         """Test merging of financial metrics from multiple sources."""
         # Mock AKShare metrics
         mock_ak_metrics.return_value = {
@@ -186,8 +186,8 @@ class TestMultiSourceIntegration:
             "gross_margin": 0.45,
         }
 
-        # Mock YFinance metrics
-        mock_yf_metrics.return_value = {
+        # Mock Xueqiu metrics
+        mock_xq_metrics.return_value = {
             "ticker": "00700",
             "price_to_earnings_ratio": 26.0,
             "return_on_equity": 0.22,
@@ -198,7 +198,7 @@ class TestMultiSourceIntegration:
         validator = DataValidator(
             source_weights={
                 "AKShare": 1.0,
-                "YFinance": 0.8,
+                "Xueqiu": 0.8,
             }
         )
         adapter = HKStockAdapter(validator=validator)
@@ -208,7 +208,8 @@ class TestMultiSourceIntegration:
 
         # Verify merging
         assert metrics is not None
-        # Should be weighted average
+        # Should be weighted average of AKShare(25.0, w=1.0) and Xueqiu(26.0, w=0.8)
+        # = (25*1.0 + 26*0.8) / (1.0+0.8) = 45.8/1.8 = 25.44
         assert 25.0 <= metrics["price_to_earnings_ratio"] <= 26.0
         assert 0.20 <= metrics["return_on_equity"] <= 0.22
         # Should include metadata

@@ -460,24 +460,20 @@ class XueqiuSource(DataSource):
         fcf = (ocf - capex) if (ocf is not None and capex is not None) else None
 
         # D&A and interest expense from cash flow
-        da = ev(cash_flow.get("da"))
-        interest_exp = ev(cash_flow.get("finexp"))
+        da = ev(cash_flow.get("depaz"))
+        interest_exp = ev(cash_flow.get("intp"))  # Interest paid
 
-        # Dividends paid: cdp is typically negative — store as positive amount
-        cdp_raw = ev(cash_flow.get("cdp"))
-        dividends_paid = abs(cdp_raw) if cdp_raw is not None else None
+        # Dividends paid: divp is typically negative — store as positive amount
+        divp_raw = ev(cash_flow.get("divp"))
+        dividends_paid = abs(divp_raw) if divp_raw is not None else None
 
-        # Net equity change: csi (positive inflow) + crpcs (negative outflow)
-        csi = ev(cash_flow.get("csi"))
-        crpcs = ev(cash_flow.get("crpcs"))
-        if csi is not None or crpcs is not None:
-            issuance_or_purchase = (csi or 0.0) + (crpcs or 0.0)
-        else:
-            issuance_or_purchase = None
+        # Net equity change: eqyfin (equity financing, can be positive or negative)
+        eqyfin = ev(cash_flow.get("eqyfin"))
+        issuance_or_purchase = eqyfin
 
         # Total debt = short-term debt + long-term debt
-        std = ev(balance.get("std"))
-        ltd = ev(balance.get("ltd"))
+        std = ev(balance.get("stdt"))
+        ltd = ev(balance.get("ltdt"))
         if std is not None or ltd is not None:
             total_debt = (std or 0.0) + (ltd or 0.0)
         else:
@@ -539,7 +535,7 @@ class XueqiuSource(DataSource):
             # Income statement
             "revenue": ev(income.get("tto")) or ev(indicator.get("tto")),
             "net_income": ev(income.get("ploashh")) or ev(indicator.get("ploashh")),
-            "operating_income": ev(income.get("plobtx")),
+            "operating_income": ev(income.get("opeplo")),  # Operating profit
             "gross_profit": ev(income.get("gp")),
             "research_and_development": ev(income.get("rshdevexp")),
             # Cash flow
@@ -589,25 +585,23 @@ class XueqiuSource(DataSource):
         capex = ev(cash_flow.get("cash_paid_for_assets"))
         fcf = (ocf - capex) if (ocf is not None and capex is not None) else None
 
-        # D&A and interest expense from cash flow
-        da = ev(cash_flow.get("depreciation_and_amortization"))
-        interest_exp = ev(cash_flow.get("interest_expense"))
+        # D&A: Not available in CN Xueqiu API cash flow/income statements
+        da = None
+
+        # Interest expense from income statement (net financing cost)
+        interest_exp = ev(income.get("financing_expenses"))
 
         # Dividends paid (stored as positive outflow amount in CN)
-        dividends_raw = ev(cash_flow.get("cash_paid_for_dividend_profit"))
+        dividends_raw = ev(cash_flow.get("cash_paid_of_distribution"))
         dividends_paid = abs(dividends_raw) if dividends_raw is not None else None
 
-        # Net equity change: issuance (positive inflow) - repurchase (positive outflow)
-        issued = ev(cash_flow.get("cash_received_from_issuing_shares"))
-        repurchased = ev(cash_flow.get("cash_paid_for_repurchasing_shares"))
-        if issued is not None or repurchased is not None:
-            issuance_or_purchase = (issued or 0.0) - (repurchased or 0.0)
-        else:
-            issuance_or_purchase = None
+        # Net equity change: issuance (positive inflow) - no explicit repurchase field in CN API
+        issued = ev(cash_flow.get("cash_received_of_absorb_invest"))
+        issuance_or_purchase = issued
 
         # Total debt = short-term loan + long-term loan
-        std = ev(balance.get("short_term_loan"))
-        ltd = ev(balance.get("long_term_loan"))
+        std = ev(balance.get("st_loan"))
+        ltd = ev(balance.get("lt_loan"))
         if std is not None or ltd is not None:
             total_debt = (std or 0.0) + (ltd or 0.0)
         else:
@@ -661,7 +655,7 @@ class XueqiuSource(DataSource):
             # Income statement
             "revenue": revenue_val,
             "net_income": net_income_val,
-            "operating_income": ev(income.get("operate_profit")),
+            "operating_income": ev(income.get("op")),  # Operating profit
             "gross_profit": ev(income.get("gross_profit")),
             "research_and_development": ev(income.get("research_and_development_costs")),
             # Cash flow

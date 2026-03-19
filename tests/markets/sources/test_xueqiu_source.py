@@ -99,11 +99,10 @@ class TestXueqiuSourceHKFinancialMetrics:
         "adtfxda": [-5000000000.0, 0.05],
         "ninvcf": [-10000000000.0, 0.02],
         "nfcgcf": [-8000000000.0, 0.01],
-        "da": [3000000000.0, 0.08],
-        "finexp": [1500000000.0, 0.03],
-        "cdp": [-2000000000.0, -0.05],
-        "csi": [500000000.0, 0.01],
-        "crpcs": [-1000000000.0, 0.02],
+        "depaz": [3000000000.0, 0.08],  # Correct HK field name for depreciation
+        "intp": [1500000000.0, 0.03],  # Correct HK field name for interest paid
+        "divp": [-2000000000.0, -0.05],  # Correct HK field name for dividends paid
+        "eqyfin": [-500000000.0, 0.01],  # Correct HK field name for equity financing (net)
         "report_date": 1735574400000,
     }
     MOCK_BALANCE_WITH_DEBT = {
@@ -113,8 +112,8 @@ class TestXueqiuSourceHKFinancialMetrics:
         "cceq": [50000000000.0, 0.10],
         "ca": [120000000000.0, 0.04],
         "clia": [62000000000.0, 0.02],
-        "std": [20000000000.0, 0.01],
-        "ltd": [30000000000.0, 0.02],
+        "stdt": [20000000000.0, 0.01],  # Correct HK field name for short-term debt
+        "ltdt": [30000000000.0, 0.02],  # Correct HK field name for long-term debt
         "report_date": 1735574400000,
     }
 
@@ -252,7 +251,7 @@ class TestXueqiuSourceHKFinancialMetrics:
 
     def test_hk_metrics_extracts_equity_change(self, mocker):
         result = self._make_source_with_new_fields(mocker).get_financial_metrics("03690", "2025-01-01")
-        # csi=500M (positive inflow) + crpcs=-1000M (negative outflow) = -500M net
+        # eqyfin=-500M (net equity financing, negative means net outflow)
         assert result["issuance_or_purchase_of_equity_shares"] == pytest.approx(-500000000.0)
 
 
@@ -390,9 +389,10 @@ class TestXueqiuSourceCNNewFields:
     MOCK_CN_INCOME = {
         "total_revenue": [200000000000.0, 0.15],
         "net_profit": [24000000000.0, 0.12],
-        "operate_profit": [28000000000.0, 0.10],
+        "op": [28000000000.0, 0.10],  # Correct CN field name for operating profit
         "gross_profit": [90000000000.0, 0.14],
         "research_and_development_costs": [5000000000.0, 0.20],
+        "financing_expenses": [800000000.0, 0.03],  # Correct CN field name for net interest expense
         "report_date": 1735574400000,
     }
     MOCK_CN_CASH_FLOW = {
@@ -400,11 +400,9 @@ class TestXueqiuSourceCNNewFields:
         "cash_paid_for_assets": [5000000000.0, 0.05],
         "ncf_from_ia": [-8000000000.0, 0.02],
         "ncf_from_fa": [-5000000000.0, 0.01],
-        "depreciation_and_amortization": [2000000000.0, 0.06],
-        "interest_expense": [800000000.0, 0.03],
-        "cash_paid_for_dividend_profit": [1500000000.0, -0.02],   # positive outflow
-        "cash_received_from_issuing_shares": [300000000.0, 0.01],  # positive inflow
-        "cash_paid_for_repurchasing_shares": [600000000.0, 0.02],  # positive outflow
+        # Note: D&A not available in CN Xueqiu API
+        "cash_paid_of_distribution": [1500000000.0, -0.02],  # Correct CN field name for dividends paid
+        "cash_received_of_absorb_invest": [300000000.0, 0.01],  # Correct CN field name for equity issuance
         "report_date": 1735574400000,
     }
     MOCK_CN_BALANCE = {
@@ -414,8 +412,8 @@ class TestXueqiuSourceCNNewFields:
         "currency_funds": [40000000000.0, 0.10],
         "total_current_assets": [80000000000.0, 0.04],
         "total_current_liab": [38000000000.0, 0.02],
-        "short_term_loan": [15000000000.0, 0.01],
-        "long_term_loan": [25000000000.0, 0.02],
+        "st_loan": [15000000000.0, 0.01],  # Correct CN field name for short-term loan
+        "lt_loan": [25000000000.0, 0.02],  # Correct CN field name for long-term loan
         "report_date": 1735574400000,
     }
 
@@ -448,24 +446,28 @@ class TestXueqiuSourceCNNewFields:
     def test_cn_metrics_extracts_depreciation(self, mocker):
         result = self._make_cn_source(mocker).get_financial_metrics("600519", "2025-01-01")
         assert result is not None
-        assert result["depreciation_and_amortization"] == pytest.approx(2000000000.0)
+        # D&A not available in CN Xueqiu API
+        assert result["depreciation_and_amortization"] is None
 
     def test_cn_metrics_extracts_interest_expense(self, mocker):
         result = self._make_cn_source(mocker).get_financial_metrics("600519", "2025-01-01")
+        # financing_expenses from income statement
         assert result["interest_expense"] == pytest.approx(800000000.0)
 
     def test_cn_metrics_extracts_dividends(self, mocker):
         result = self._make_cn_source(mocker).get_financial_metrics("600519", "2025-01-01")
+        # cash_paid_of_distribution from cash flow
         assert result["dividends"] == pytest.approx(1500000000.0)
 
     def test_cn_metrics_extracts_total_debt(self, mocker):
         result = self._make_cn_source(mocker).get_financial_metrics("600519", "2025-01-01")
+        # st_loan + lt_loan from balance sheet
         assert result["total_debt"] == pytest.approx(40000000000.0)  # 15B + 25B
 
     def test_cn_metrics_extracts_equity_change(self, mocker):
         result = self._make_cn_source(mocker).get_financial_metrics("600519", "2025-01-01")
-        # issued=300M - repurchased=600M = -300M net
-        assert result["issuance_or_purchase_of_equity_shares"] == pytest.approx(-300000000.0)
+        # cash_received_of_absorb_invest (positive inflow only, no explicit repurchase field)
+        assert result["issuance_or_purchase_of_equity_shares"] == pytest.approx(300000000.0)
 
 
 class TestXueqiuSourceHistoricalData:
