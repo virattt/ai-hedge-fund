@@ -266,20 +266,45 @@ def get_financial_metrics(
     else:
         # 非美股：使用 MarketRouter
         try:
-            metrics_dict = _get_market_router().get_financial_metrics(ticker, end_date)
+            if period == "annual" and limit > 1:
+                # 多期年度数据：使用历史数据接口（与 search_line_items 相同的路径）
+                metrics_list = _get_market_router().get_historical_financial_metrics(
+                    ticker, end_date, limit=limit
+                )
+                if not metrics_list:
+                    return []
 
-            if not metrics_dict:
-                return []
+                # 将每个 dict 转换为 Pydantic 模型
+                result = []
+                for metrics_dict in metrics_list:
+                    try:
+                        result.append(FinancialMetrics(**metrics_dict))
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to parse historical metrics for %s period %s: %s",
+                            ticker, metrics_dict.get("report_period", "?"), e
+                        )
+                if not result:
+                    return []
 
-            # 将字典转换为 Pydantic 模型
-            # 注意：需要确保字段匹配
-            metric = FinancialMetrics(**metrics_dict)
-            metrics = [metric]
+                # Cache the results in dual-layer cache (L1 + L2)
+                _get_dual_cache().set_financial_metrics(ticker, end_date, period, limit, result)
+                return result
+            else:
+                # 单期 TTM 数据（向后兼容）
+                metrics_dict = _get_market_router().get_financial_metrics(ticker, end_date)
 
-            # Cache the results in dual-layer cache (L1 + L2)
-            _get_dual_cache().set_financial_metrics(ticker, end_date, period, limit, metrics)
+                if not metrics_dict:
+                    return []
 
-            return metrics
+                # 将字典转换为 Pydantic 模型
+                metric = FinancialMetrics(**metrics_dict)
+                metrics = [metric]
+
+                # Cache the results in dual-layer cache (L1 + L2)
+                _get_dual_cache().set_financial_metrics(ticker, end_date, period, limit, metrics)
+
+                return metrics
         except ValueError as e:
             # 未找到支持该ticker的适配器
             logger.warning("MarketRouter error for %s: %s", ticker, e)
