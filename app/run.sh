@@ -250,7 +250,7 @@ start_services() {
     print_status "Starting backend server..."
     # Run from the app directory (parent of backend) to ensure proper Python imports
     cd ..
-    poetry run uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000 > "$LOG_DIR/backend.log" 2>&1 &
+    poetry run uvicorn app.backend.main:app --reload --host 0.0.0.0 --port 10000 > "$LOG_DIR/backend.log" 2>&1 &
     BACKEND_PID=$!
     cd app
     
@@ -306,8 +306,8 @@ start_services() {
     print_success "🌐 Browser should open automatically to http://localhost:5173"
     echo ""
     print_status "Frontend (Web Interface): http://localhost:5173"
-    print_status "Backend (API): http://localhost:8000"
-    print_status "API Documentation: http://localhost:8000/docs"
+    print_status "Backend (API): http://localhost:10000"
+    print_status "API Documentation: http://localhost:10000/docs"
     print_status "Database: SQLite (hedge_fund.db in project root)"
     echo ""
     print_status "Press Ctrl+C to stop both services"
@@ -368,8 +368,8 @@ if [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
     echo ""
     echo "After running, you can access:"
     echo "  - Frontend: http://localhost:5173"
-    echo "  - Backend API: http://localhost:8000"
-    echo "  - API Docs: http://localhost:8000/docs"
+    echo "  - Backend API: http://localhost:10000"
+    echo "  - API Docs: http://localhost:10000/docs"
     echo "  - Database: SQLite file (hedge_fund.db) in project root"
     echo ""
     exit 0
