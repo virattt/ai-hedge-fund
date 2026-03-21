@@ -12,6 +12,15 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Load environment variables from .env if it exists
+if [[ -f "../.env" ]]; then
+    export $(grep -v '^#' ../.env | xargs)
+fi
+
+# Set default port values if not specified
+export BACKEND_PORT=${BACKEND_PORT:-10000}
+export FRONTEND_PORT=${FRONTEND_PORT:-5173}
+
 # Function to print colored output
 print_status() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -31,10 +40,10 @@ print_error() {
 
 # Function to stop backend server
 stop_backend() {
-    print_status "Stopping backend server..."
+    print_status "Stopping backend server (port: $BACKEND_PORT)..."
     
     # Find uvicorn processes running the AI Hedge Fund backend
-    local backend_pids=$(ps aux | grep -E "uvicorn.*app\.backend\.main:app|uvicorn.*main:app.*--port.*10000" | grep -v grep | awk '{print $2}')
+    local backend_pids=$(ps aux | grep -E "uvicorn.*app\.backend\.main:app|uvicorn.*main:app.*--port.*$BACKEND_PORT" | grep -v grep | awk '{print $2}')
     
     if [[ -z "$backend_pids" ]]; then
         print_warning "No backend server processes found"
@@ -58,10 +67,10 @@ stop_backend() {
 
 # Function to stop frontend server
 stop_frontend() {
-    print_status "Stopping frontend server..."
+    print_status "Stopping frontend server (port: $FRONTEND_PORT)..."
     
     # Find npm/vite processes running the frontend dev server
-    local frontend_pids=$(ps aux | grep -E "vite|npm run dev" | grep -E "frontend|5173" | grep -v grep | awk '{print $2}')
+    local frontend_pids=$(ps aux | grep -E "vite|npm run dev" | grep -E "frontend|$FRONTEND_PORT" | grep -v grep | awk '{print $2}')
     
     if [[ -z "$frontend_pids" ]]; then
         print_warning "No frontend server processes found"
@@ -87,8 +96,8 @@ stop_frontend() {
 check_services() {
     print_status "Checking if services are stopped..."
     
-    local backend_running=$(ps aux | grep -E "uvicorn.*app\.backend\.main:app|uvicorn.*main:app.*--port.*10000" | grep -v grep | wc -l)
-    local frontend_running=$(ps aux | grep -E "vite|npm run dev" | grep -E "frontend|5173" | grep -v grep | wc -l)
+    local backend_running=$(ps aux | grep -E "uvicorn.*app\.backend\.main:app|uvicorn.*main:app.*--port.*$BACKEND_PORT" | grep -v grep | wc -l)
+    local frontend_running=$(ps aux | grep -E "vite|npm run dev" | grep -E "frontend|$FRONTEND_PORT" | grep -v grep | wc -l)
     
     if [[ $backend_running -gt 0 ]]; then
         print_warning "Backend server may still be running ($backend_running process(es))"
@@ -144,8 +153,8 @@ main() {
     stop_frontend
     
     # Also try to stop by port numbers (as a fallback)
-    stop_by_port 10000  # Backend port
-    stop_by_port 5173   # Frontend port
+    stop_by_port $BACKEND_PORT  # Backend port
+    stop_by_port $FRONTEND_PORT # Frontend port
     
     # Give processes time to terminate
     sleep 1
@@ -167,12 +176,17 @@ if [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
     echo "This script will:"
     echo "  1. Find and stop the backend API server (uvicorn)"
     echo "  2. Find and stop the frontend development server (vite/npm)"
-    echo "  3. Stop any processes on ports 10000 (backend) and 5173 (frontend)"
+    echo "  3. Stop any processes on configured ports (from .env)"
     echo "  4. Verify all services are stopped"
     echo ""
+    echo "Configuration:"
+    echo "  Ports are read from .env file in the project root:"
+    echo "  - BACKEND_PORT (default: 10000)"
+    echo "  - FRONTEND_PORT (default: 5173)"
+    echo ""
     echo "Services that will be stopped:"
-    echo "  - Backend API server (port 10000)"
-    echo "  - Frontend development server (port 5173)"
+    echo "  - Backend API server (configured port)"
+    echo "  - Frontend development server (configured port)"
     echo ""
     exit 0
 fi

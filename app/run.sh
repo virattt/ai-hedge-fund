@@ -150,6 +150,23 @@ setup_environment() {
     else
         print_success "Environment file (.env) found!"
     fi
+    
+    # Load environment variables from .env
+    if [[ -f "../.env" ]]; then
+        export $(grep -v '^#' ../.env | xargs)
+    fi
+    
+    # Set default port values if not specified
+    export BACKEND_PORT=${BACKEND_PORT:-10000}
+    export FRONTEND_PORT=${FRONTEND_PORT:-5173}
+    
+    print_status "Backend port: $BACKEND_PORT"
+    print_status "Frontend port: $FRONTEND_PORT"
+    
+    # Generate frontend .env file with correct backend URL
+    print_status "Configuring frontend API URL..."
+    echo "VITE_API_URL=http://localhost:$BACKEND_PORT" > frontend/.env
+    print_success "Frontend configured to use backend at http://localhost:$BACKEND_PORT"
 }
 
 # Function to setup database
@@ -250,7 +267,7 @@ start_services() {
     print_status "Starting backend server..."
     # Run from the app directory (parent of backend) to ensure proper Python imports
     cd ..
-    poetry run uvicorn app.backend.main:app --reload --host 0.0.0.0 --port 10000 > "$LOG_DIR/backend.log" 2>&1 &
+    poetry run uvicorn app.backend.main:app --reload --host 0.0.0.0 --port $BACKEND_PORT > "$LOG_DIR/backend.log" 2>&1 &
     BACKEND_PID=$!
     cd app
     
@@ -299,15 +316,15 @@ start_services() {
     # Open browser after frontend is running
     print_status "Opening web browser..."
     sleep 2  # Give frontend a moment to fully start
-    open_browser "http://localhost:5173"
+    open_browser "http://localhost:$FRONTEND_PORT"
     
     echo ""
     print_success "🚀 AI Hedge Fund web application is now running!"
-    print_success "🌐 Browser should open automatically to http://localhost:5173"
+    print_success "🌐 Browser should open automatically to http://localhost:$FRONTEND_PORT"
     echo ""
-    print_status "Frontend (Web Interface): http://localhost:5173"
-    print_status "Backend (API): http://localhost:10000"
-    print_status "API Documentation: http://localhost:10000/docs"
+    print_status "Frontend (Web Interface): http://localhost:$FRONTEND_PORT"
+    print_status "Backend (API): http://localhost:$BACKEND_PORT"
+    print_status "API Documentation: http://localhost:$BACKEND_PORT/docs"
     print_status "Database: SQLite (hedge_fund.db in project root)"
     echo ""
     print_status "Press Ctrl+C to stop both services"
@@ -366,7 +383,12 @@ if [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
     echo "  - Python 3 (https://python.org/)"
     echo "  - Poetry (https://python-poetry.org/)"
     echo ""
-    echo "After running, you can access:"
+    echo "Configuration:"
+    echo "  Ports can be configured in the .env file in the project root:"
+    echo "  - BACKEND_PORT (default: 10000)"
+    echo "  - FRONTEND_PORT (default: 5173)"
+    echo ""
+    echo "After running, you can access (with default ports):"
     echo "  - Frontend: http://localhost:5173"
     echo "  - Backend API: http://localhost:10000"
     echo "  - API Docs: http://localhost:10000/docs"
