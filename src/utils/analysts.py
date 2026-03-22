@@ -19,6 +19,7 @@ from src.agents.rakesh_jhunjhunwala import rakesh_jhunjhunwala_agent
 from src.agents.mohnish_pabrai import mohnish_pabrai_agent
 from src.agents.news_sentiment import news_sentiment_agent
 from src.agents.growth_agent import growth_analyst_agent
+from src.agents.rentec import rentec_agent
 
 # Define analyst configuration - single source of truth
 ANALYST_CONFIG = {
@@ -165,6 +166,14 @@ ANALYST_CONFIG = {
         "agent_func": valuation_analyst_agent,
         "type": "analyst",
         "order": 16,
+    },
+    "rentec": {
+        "display_name": "RenTec",
+        "description": "The Quant Prediction Machine",
+        "investing_style": "Applies five quantitative formulas from the Polymarket quant playbook — Kelly Criterion, Expected Value Gap scanning, KL-Divergence, Bayesian Updating, and LMSR market impact — to identify statistically mispriced equities with measurable edge.",
+        "agent_func": rentec_agent,
+        "type": "analyst",
+        "order": 17,
     },
 }
 
