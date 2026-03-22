@@ -39,7 +39,8 @@ export function StockAnalyzerNode({
   selected,
   id,
   isConnectable,
-}: NodeProps<StockAnalyzerNode>) {
+  onRemove,
+}: NodeProps<StockAnalyzerNode> & { onRemove?: () => void }) {
   // Calculate default dates
   const today = new Date();
   const threeMonthsAgo = new Date(today);
@@ -246,6 +247,7 @@ export function StockAnalyzerNode({
         name={data.name || "Stock Analyzer"}
         description={data.description}
         hasLeftHandle={false}
+        onRemove={onRemove}
       >
         <CardContent className="p-0">
           <div className="border-t border-border p-3">

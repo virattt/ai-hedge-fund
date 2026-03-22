@@ -16,7 +16,8 @@ export function InvestmentReportNode({
   selected,
   id,
   isConnectable,
-}: NodeProps<InvestmentReportNode>) {  
+  onRemove,
+}: NodeProps<InvestmentReportNode> & { onRemove?: () => void }) {  
   const { currentFlowId } = useFlowContext();
   const { getOutputNodeDataForFlow } = useNodeContext();
   
@@ -45,6 +46,7 @@ export function InvestmentReportNode({
         description={data.description}
         hasRightHandle={false}
         status={status}
+        onRemove={onRemove}
       >
         <CardContent className="p-0">
           <div className="border-t border-border p-3">

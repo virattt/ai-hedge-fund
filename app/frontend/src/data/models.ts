@@ -6,25 +6,35 @@ export interface LanguageModel {
   provider: "Anthropic" | "DeepSeek" | "Google" | "Groq" | "OpenAI";
 }
 
-// Cache for models to avoid repeated API calls
+// Resolved cache and in-flight promise — prevents duplicate API calls
+// when multiple nodes mount at the same time.
 let languageModels: LanguageModel[] | null = null;
+let pendingFetch: Promise<LanguageModel[]> | null = null;
 
 /**
- * Get the list of models from the backend API
- * Uses caching to avoid repeated API calls
+ * Get the list of models from the backend API.
+ * Multiple concurrent callers share a single in-flight request.
  */
 export const getModels = async (): Promise<LanguageModel[]> => {
   if (languageModels) {
     return languageModels;
   }
-  
-  try {
-    languageModels = await api.getLanguageModels();
-    return languageModels;
-  } catch (error) {
-    console.error('Failed to fetch models:', error);
-    throw error; // Let the calling component handle the error
+
+  if (pendingFetch) {
+    return pendingFetch;
   }
+
+  pendingFetch = api.getLanguageModels().then((models) => {
+    languageModels = models;
+    pendingFetch = null;
+    return models;
+  }).catch((error) => {
+    pendingFetch = null;
+    console.error('Failed to fetch models:', error);
+    throw error;
+  });
+
+  return pendingFetch;
 };
 
 /**

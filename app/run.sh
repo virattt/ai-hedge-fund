@@ -12,21 +12,36 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Function to print colored output
+# Log file (persists after the script exits)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_DIR_PERSISTENT="$SCRIPT_DIR/logs"
+mkdir -p "$LOG_DIR_PERSISTENT"
+LOG_FILE="$LOG_DIR_PERSISTENT/run_$(date +%Y%m%d_%H%M%S).log"
+
+# Internal helper: write a plain timestamped line to the log file
+_log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Function to print colored output (and log to file)
 print_status() {
     echo -e "${BLUE}[INFO]${NC} $1"
+    _log "[INFO] $1"
 }
 
 print_success() {
     echo -e "${GREEN}[SUCCESS]${NC} $1"
+    _log "[SUCCESS] $1"
 }
 
 print_warning() {
     echo -e "${YELLOW}[WARNING]${NC} $1"
+    _log "[WARNING] $1"
 }
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+    _log "[ERROR] $1"
 }
 
 # Function to check if a command exists
@@ -267,7 +282,7 @@ start_services() {
     print_status "Starting backend server..."
     # Run from the app directory (parent of backend) to ensure proper Python imports
     cd ..
-    poetry run uvicorn app.backend.main:app --reload --host 0.0.0.0 --port $BACKEND_PORT > "$LOG_DIR/backend.log" 2>&1 &
+    poetry run uvicorn app.backend.main:app --reload --host 0.0.0.0 --port $BACKEND_PORT 2>&1 | tee "$LOG_DIR/backend.log" >> "$LOG_FILE" &
     BACKEND_PID=$!
     cd app
     
@@ -296,7 +311,7 @@ start_services() {
     # Start frontend
     print_status "Starting frontend development server..."
     cd frontend
-    npm run dev > "$FRONTEND_LOG" 2>&1 &
+    npm run dev 2>&1 | tee "$FRONTEND_LOG" >> "$LOG_FILE" &
     FRONTEND_PID=$!
     cd ..
     
@@ -354,6 +369,7 @@ main() {
     echo ""
     print_status "🚀 AI Hedge Fund Web Application Setup"
     print_status "This script will install dependencies and start both frontend and backend services"
+    print_status "Log file: $LOG_FILE"
     echo ""
     
     check_directory

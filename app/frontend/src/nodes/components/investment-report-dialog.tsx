@@ -71,6 +71,14 @@ export function InvestmentReportDialog({
     }
   };
 
+  const getActionColor = (action: string) => {
+    const a = action?.toLowerCase();
+    if (a === 'buy' || a === 'long' || a === 'cover') return 'text-green-500';
+    if (a === 'sell' || a === 'short') return 'text-red-500';
+    if (a === 'hold') return 'text-yellow-500';
+    return 'text-foreground';
+  };
+
   const getSignalBadge = (signal: string) => {
     const variant = signal === 'bullish' ? 'success' :
                    signal === 'bearish' ? 'destructive' : 'outline';
@@ -146,7 +154,7 @@ export function InvestmentReportDialog({
                           <TableCell>
                             <div className="flex items-center gap-2">
                               {getActionIcon(decision.action as ActionType)}
-                              <span className="capitalize">{decision.action}</span>
+                              <span className={`capitalize font-medium ${getActionColor(decision.action)}`}>{decision.action}</span>
                             </div>
                           </TableCell>
                           <TableCell>{decision.quantity}</TableCell>
@@ -170,7 +178,7 @@ export function InvestmentReportDialog({
                       {ticker}
                       <div className="flex items-center gap-1">
                         {getActionIcon(outputNodeData.decisions[ticker].action as ActionType)}
-                        <span className="text-sm font-normal text-muted-foreground">
+                        <span className={`text-sm font-normal capitalize ${getActionColor(outputNodeData.decisions[ticker].action)}`}>
                           {outputNodeData.decisions[ticker].action} {outputNodeData.decisions[ticker].quantity} shares
                         </span>
                       </div>
