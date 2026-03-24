@@ -7,8 +7,8 @@ import time
 
 logger = logging.getLogger(__name__)
 
-from data.cache import get_cache
-from data.models import (
+from src.data.cache import get_cache
+from src.data.models import (
     CompanyNews,
     CompanyNewsResponse,
     FinancialMetrics,
