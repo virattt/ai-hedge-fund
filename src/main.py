@@ -50,7 +50,7 @@ def run_hedge_fund(
     portfolio: dict,
     show_reasoning: bool = False,
     selected_analysts: list[str] = [],
-    model_name: str = "gpt-4.1",
+    model_name: str = "MiniMax-M2.7-highspeed",
     model_provider: str = "OpenAI",
 ):
     # Start progress tracking

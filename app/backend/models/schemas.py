@@ -63,7 +63,7 @@ class BaseHedgeFundRequest(BaseModel):
     graph_nodes: List[GraphNode]
     graph_edges: List[GraphEdge]
     agent_models: Optional[List[AgentModelConfig]] = None
-    model_name: Optional[str] = "gpt-4.1"
+    model_name: Optional[str] = "MiniMax-M2.7-highspeed"
     model_provider: Optional[ModelProvider] = ModelProvider.OPENAI
     margin_requirement: float = 0.0
     portfolio_positions: Optional[List[PortfolioPosition]] = None

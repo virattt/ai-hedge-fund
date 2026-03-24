@@ -1,5 +1,10 @@
 [
   {
+    "display_name": "MiniMax M2.7 Highspeed",
+    "model_name": "MiniMax-M2.7-highspeed",
+    "provider": "OpenAI"
+  },
+  {
     "display_name": "Grok 4",
     "model_name": "grok-4-0709",
     "provider": "xAI"

@@ -28,12 +28,12 @@ export const getModels = async (): Promise<LanguageModel[]> => {
 };
 
 /**
- * Get the default model (GPT-4.1) from the models list
+ * Get the default model (MiniMax-M2.7-highspeed) from the models list
  */
 export const getDefaultModel = async (): Promise<LanguageModel | null> => {
   try {
     const models = await getModels();
-    return models.find(model => model.model_name === "gpt-4.1") || models[0] || null;
+    return models.find(model => model.model_name === "MiniMax-M2.7-highspeed") || models[0] || null;
   } catch (error) {
     console.error('Failed to get default model:', error);
     return null;
