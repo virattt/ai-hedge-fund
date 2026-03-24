@@ -1,23 +1,8 @@
 [
   {
-    "display_name": "Grok 4 (xAI)",
+    "display_name": "Grok 4",
     "model_name": "grok-4-0709",
     "provider": "xAI"
-  },
-  {
-    "display_name": "Llama 3.1 70B (Groq)",
-    "model_name": "llama-3.1-70b-versatile",
-    "provider": "Groq"
-  },
-  {
-    "display_name": "Llama 3.1 8B (Groq)",
-    "model_name": "llama-3.1-8b-instant",
-    "provider": "Groq"
-  },
-  {
-    "display_name": "Mixtral 8x7B (Groq)",
-    "model_name": "mixtral-8x7b-32768",
-    "provider": "Groq"
   },
   {
     "display_name": "GPT-5.2",
