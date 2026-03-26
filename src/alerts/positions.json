@@ -1,0 +1,16 @@
+{
+  "positions": [
+    {
+      "ticker": "UNG",
+      "type": "straddle",
+      "legs": [
+        {"side": "call", "strike": 12.00, "expiry": "2026-04-01", "contracts": 22, "entry_price": 0.38},
+        {"side": "put", "strike": 12.00, "expiry": "2026-04-01", "contracts": 22, "entry_price": 0.37}
+      ],
+      "total_cost_per_share": 0.75,
+      "total_cost": 1650.00,
+      "entered": "2026-03-26",
+      "notes": "Weekly UNG straddle — Hormuz thesis"
+    }
+  ]
+}
