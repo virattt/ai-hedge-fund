@@ -88,6 +88,30 @@ export interface InsiderDetailResponse {
   derivative_trades_count: number;
 }
 
+/** One row from the ownership changes endpoint. */
+export interface OwnershipChangeRecord {
+  filing_date: string;
+  accession_no: string;
+  insider_name: string;
+  position: string;
+  shares_before: number | null;
+  shares_after: number | null;
+  net_change: number;
+  form_type: string;
+}
+
+/**
+ * Top-level response from GET /insider/ownership.
+ * Includes records list, deduplicated insiders list, total count, and skipped_count.
+ */
+export interface OwnershipChangesResponse {
+  ticker: string;
+  records: OwnershipChangeRecord[];
+  insiders: string[];
+  total: number;
+  skipped_count: number;
+}
+
 class InsiderService {
   private baseUrl = `${API_BASE_URL}/insider`;
 
@@ -133,6 +157,29 @@ class InsiderService {
     if (!response.ok) {
       const body = await response.json().catch(() => null);
       throw new Error(body?.detail || `Failed to fetch insider detail: ${response.statusText}`);
+    }
+    return response.json();
+  }
+  /**
+   * Fetch ownership change records for a ticker.
+   * Maps to GET /insider/ownership.
+   */
+  async getOwnership(
+    ticker: string,
+    formType: string = '4',
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<OwnershipChangesResponse> {
+    const params = new URLSearchParams({
+      ticker: ticker,
+      form_type: formType,
+      limit: String(limit),
+      offset: String(offset),
+    });
+    const response = await fetch(`${this.baseUrl}/ownership?${params.toString()}`);
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.detail || `Failed to fetch ownership changes: ${response.statusText}`);
     }
     return response.json();
   }

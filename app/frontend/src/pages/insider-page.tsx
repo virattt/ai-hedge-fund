@@ -307,22 +307,6 @@ function LoadingSkeleton() {
 // Sub-page stubs
 // ---------------------------------------------------------------------------
 
-export function InsiderOwnershipPage() {
-  return (
-    <div className="flex-1 overflow-auto p-6 space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Ownership Changes</h1>
-        <p className="text-sm text-muted-foreground">
-          Position history and ownership change log from Form 3/4/5 filings.
-        </p>
-      </div>
-      <div className="text-center py-20 text-muted-foreground text-sm">
-        This sub-page is coming soon.
-      </div>
-    </div>
-  );
-}
-
 export function InsiderGrantsPage() {
   return (
     <div className="flex-1 overflow-auto p-6 space-y-4">
