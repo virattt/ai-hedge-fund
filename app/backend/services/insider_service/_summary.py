@@ -204,7 +204,7 @@ async def get_insider_summary(ticker: str, form_type: str = "4", limit: int = 50
     """Async entry point for filing summaries. Checks LRU+TTL cache first."""
     from app.backend.services.insider_service import _cache_get, _cache_put  # lazy import avoids circular dep
 
-    cache_key = f"summary:{ticker.upper()}:{form_type}"
+    cache_key = f"summary:{ticker.upper()}:{form_type}:{limit}:{offset}"
     cached = _cache_get(cache_key)
     if isinstance(cached, InsiderSummaryResponse):
         return cached

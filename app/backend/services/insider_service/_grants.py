@@ -45,8 +45,8 @@ def _fetch_grants(ticker: str, form_type: str, limit: int, offset: int) -> Grant
                 if isinstance(summary, TransactionSummaryProtocol):
                     insider_name = str(summary.insider_name) if isinstance(summary.insider_name, str) else ""
                     position = str(summary.position) if isinstance(summary.position, str) else ""
-            except Exception:
-                pass  # Identity unavailable; leave empty strings.
+            except Exception as exc:
+                logger.debug("Could not extract insider identity for %s: %s", accession_no, exc)
 
             derivative_df = form4.derivative_trades
             if not isinstance(derivative_df, pd.DataFrame) or derivative_df.empty:

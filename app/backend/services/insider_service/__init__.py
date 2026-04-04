@@ -17,10 +17,10 @@ import asyncio
 import time
 from collections import OrderedDict
 
-from app.backend.models.insider_schemas import GrantsResponse, OwnershipChangesResponse
-from app.backend.services.insider_service._detail import _fetch_detail, _parse_trade_rows, get_insider_detail
-from app.backend.services.insider_service._grants import _fetch_grants
-from app.backend.services.insider_service._helpers import (
+from app.backend.models.insider_schemas import GrantsResponse, OwnershipChangesResponse  # noqa: F401
+from app.backend.services.insider_service._detail import _fetch_detail, _parse_trade_rows, get_insider_detail  # noqa: F401
+from app.backend.services.insider_service._grants import _fetch_grants  # noqa: F401
+from app.backend.services.insider_service._helpers import (  # noqa: F401
     InitialOwnershipSummaryProtocol,
     TransactionSummaryProtocol,
     _classify_transaction_type,
@@ -29,8 +29,8 @@ from app.backend.services.insider_service._helpers import (
     _ensure_identity,
     _iter_parsed_filings,
 )
-from app.backend.services.insider_service._ownership import _fetch_ownership_changes
-from app.backend.services.insider_service._summary import (
+from app.backend.services.insider_service._ownership import _fetch_ownership_changes  # noqa: F401
+from app.backend.services.insider_service._summary import (  # noqa: F401
     _build_filing_summary,
     _build_filing_summary_from_initial,
     _build_filing_summary_from_transaction,
@@ -83,7 +83,7 @@ def _cache_put(cache_key: str, response: object) -> None:
 
 async def get_ownership_changes(ticker: str, form_type: str = "4", limit: int = 50, offset: int = 0) -> OwnershipChangesResponse:
     """Async entry point for ownership changes. Checks LRU+TTL cache first."""
-    cache_key = f"ownership:{ticker.upper()}:{form_type}"
+    cache_key = f"ownership:{ticker.upper()}:{form_type}:{limit}:{offset}"
     cached = _cache_get(cache_key)
     if isinstance(cached, OwnershipChangesResponse):
         return cached
@@ -99,7 +99,7 @@ async def get_ownership_changes(ticker: str, form_type: str = "4", limit: int = 
 
 async def get_insider_grants(ticker: str, form_type: str = "4", limit: int = 50, offset: int = 0) -> GrantsResponse:
     """Async entry point for grants & exercises. Checks LRU+TTL cache first."""
-    cache_key = f"grants:{ticker.upper()}:{form_type}"
+    cache_key = f"grants:{ticker.upper()}:{form_type}:{limit}:{offset}"
     cached = _cache_get(cache_key)
     if isinstance(cached, GrantsResponse):
         return cached

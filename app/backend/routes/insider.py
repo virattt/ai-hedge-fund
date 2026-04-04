@@ -32,7 +32,7 @@ router = APIRouter(prefix="/insider", tags=["insider"])
 )
 async def insider_summary(
     ticker: str = Query(..., pattern=r"^[A-Z]{1,5}$", description="Stock ticker symbol (1-5 uppercase letters)"),
-    form_type: str = Query("4", description="SEC form type: '3', '4', or '5'"),
+    form_type: str = Query("4", pattern=r"^[345]$", description="SEC form type: '3', '4', or '5'"),
     limit: int = Query(50, ge=1, le=200, description="Maximum number of filings to process"),
     offset: int = Query(0, ge=0, le=10000, description="Number of filings to skip before processing"),
 ) -> InsiderSummaryResponse:
@@ -62,7 +62,7 @@ async def insider_summary(
 )
 async def insider_detail(
     ticker: str = Query(..., pattern=r"^[A-Z]{1,5}$", description="Stock ticker symbol (1-5 uppercase letters)"),
-    form_type: str = Query("4", description="SEC form type: '3', '4', or '5'"),
+    form_type: str = Query("4", pattern=r"^[345]$", description="SEC form type: '3', '4', or '5'"),
     accession_no: str = Query(..., description="SEC accession number (e.g. '0000320193-24-000081')"),
 ) -> InsiderDetailResponse:
     """Return per-transaction drill-down for a specific SEC filing.
@@ -93,7 +93,7 @@ async def insider_detail(
 )
 async def insider_ownership(
     ticker: str = Query(..., pattern=r"^[A-Z]{1,5}$", description="Stock ticker symbol (1-5 uppercase letters)"),
-    form_type: str = Query("4", description="SEC form type: '3', '4', or '5'"),
+    form_type: str = Query("4", pattern=r"^[345]$", description="SEC form type: '3', '4', or '5'"),
     limit: int = Query(50, ge=1, le=200, description="Maximum number of filings to process"),
     offset: int = Query(0, ge=0, le=10000, description="Number of filings to skip before processing"),
 ) -> OwnershipChangesResponse:
@@ -122,7 +122,7 @@ async def insider_ownership(
 )
 async def insider_grants(
     ticker: str = Query(..., pattern=r"^[A-Z]{1,5}$", description="Stock ticker symbol (1-5 uppercase letters)"),
-    form_type: str = Query("4", description="SEC form type: '3', '4', or '5'"),
+    form_type: str = Query("4", pattern=r"^[345]$", description="SEC form type: '3', '4', or '5'"),
     limit: int = Query(50, ge=1, le=200, description="Maximum number of filings to process"),
     offset: int = Query(0, ge=0, le=10000, description="Number of filings to skip before processing"),
 ) -> GrantsResponse:

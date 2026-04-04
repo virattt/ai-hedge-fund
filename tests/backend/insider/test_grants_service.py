@@ -328,7 +328,7 @@ class TestGetInsiderGrants:
     async def test_cache_miss_calls_fetch_and_stores_result(self) -> None:
         """On cache miss, _fetch_grants is called and result is cached."""
         import app.backend.services.insider_service as svc
-        cache_key = "grants:TSLA:4"
+        cache_key = "grants:TSLA:4:50:0"
         svc._insider_cache.pop(cache_key, None)
 
         expected = self._make_grants_response("TSLA")
@@ -344,7 +344,7 @@ class TestGetInsiderGrants:
     async def test_cache_hit_returns_cached_without_fetching(self) -> None:
         """On cache hit, _fetch_grants is NOT called."""
         import app.backend.services.insider_service as svc
-        cache_key = "grants:MSFT:4"
+        cache_key = "grants:MSFT:4:50:0"
         cached_response = self._make_grants_response("MSFT")
         svc._cache_put(cache_key, cached_response)
 

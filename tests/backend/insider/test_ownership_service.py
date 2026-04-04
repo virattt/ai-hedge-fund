@@ -224,7 +224,7 @@ class TestGetOwnershipChanges:
         """On cache miss, _fetch_ownership_changes is called and result is cached."""
         from app.backend.services.insider_service import _insider_cache, get_ownership_changes
 
-        cache_key = "ownership:TSLA:4"
+        cache_key = "ownership:TSLA:4:50:0"
         _insider_cache.pop(cache_key, None)
 
         expected = self._make_ownership_response("TSLA")
@@ -242,7 +242,7 @@ class TestGetOwnershipChanges:
         """On cache hit, _fetch_ownership_changes is NOT called."""
         from app.backend.services.insider_service import _cache_put, _insider_cache, get_ownership_changes
 
-        cache_key = "ownership:MSFT:4"
+        cache_key = "ownership:MSFT:4:50:0"
         cached_response = self._make_ownership_response("MSFT")
         _cache_put(cache_key, cached_response)
 
