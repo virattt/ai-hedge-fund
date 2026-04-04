@@ -6,18 +6,20 @@ so that existing tests using patch.object(insider_service, "_CACHE_TTL_SECONDS")
 continue to work: the patched name and the running code share the same module
 globals.
 
-get_ownership_changes is defined here so that tests patching
-insider_service._fetch_ownership_changes intercept the call correctly.
+get_ownership_changes and get_insider_grants are defined here so that tests
+patching insider_service._fetch_ownership_changes and
+insider_service._grants._fetch_grants intercept the calls correctly.
 
-All other logic lives in sub-modules (_summary, _detail, _ownership, _helpers)
-and is imported here for backwards-compatible access.
+All other logic lives in sub-modules (_summary, _detail, _ownership, _grants,
+_helpers) and is imported here for backwards-compatible access.
 """
 import asyncio
 import time
 from collections import OrderedDict
 
-from app.backend.models.insider_schemas import OwnershipChangesResponse
+from app.backend.models.insider_schemas import GrantsResponse, OwnershipChangesResponse
 from app.backend.services.insider_service._detail import _fetch_detail, get_insider_detail
+from app.backend.services.insider_service._grants import _fetch_grants
 from app.backend.services.insider_service._helpers import (
     InitialOwnershipSummaryProtocol,
     TransactionSummaryProtocol,
@@ -36,6 +38,7 @@ from app.backend.services.insider_service._summary import (
     _fetch_summaries,
     get_insider_summary,
 )
+from app.backend.services.insider_service import _grants
 
 # ---------------------------------------------------------------------------
 # LRU+TTL cache — defined here so patch.object(insider_service, "_CACHE_TTL_SECONDS")
@@ -84,5 +87,21 @@ async def get_ownership_changes(ticker: str, form_type: str = "4", limit: int = 
     if isinstance(cached, OwnershipChangesResponse):
         return cached
     result = await asyncio.to_thread(_fetch_ownership_changes, ticker, form_type, limit, offset)
+    _cache_put(cache_key, result)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Grants async entry point — defined here so cache helpers are shared.
+# ---------------------------------------------------------------------------
+
+
+async def get_insider_grants(ticker: str, form_type: str = "4", limit: int = 50, offset: int = 0) -> GrantsResponse:
+    """Async entry point for grants & exercises. Checks LRU+TTL cache first."""
+    cache_key = f"grants:{ticker.upper()}:{form_type}"
+    cached = _cache_get(cache_key)
+    if isinstance(cached, GrantsResponse):
+        return cached
+    result = await asyncio.to_thread(_grants._fetch_grants, ticker, form_type, limit, offset)
     _cache_put(cache_key, result)
     return result

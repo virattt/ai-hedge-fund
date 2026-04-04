@@ -135,3 +135,37 @@ class OwnershipChangesResponse(BaseModel):
     insiders: list[str]
     total: int
     skipped_count: int = 0
+
+
+class GrantRecord(BaseModel):
+    """One row per derivative trade (grant, exercise, or conversion) from a Form 4 filing.
+
+    Maps to a single row in the form4.derivative_trades DataFrame.
+    Optional fields default to None when the filing does not include those columns.
+    """
+
+    filing_date: str
+    accession_no: str
+    insider_name: str
+    position: str
+    transaction_type: str
+    security_title: str
+    exercise_price: float | None = None
+    expiration_date: str | None = None
+    shares: int | None = None
+    underlying_security: str | None = None
+    acquired_disposed: str
+    code: str
+
+
+class GrantsResponse(BaseModel):
+    """Top-level response for the grants & exercises endpoint.
+
+    records is a flat list of derivative trade rows across all processed filings.
+    skipped_count reports how many filings failed to parse.
+    """
+
+    ticker: str
+    records: list[GrantRecord]
+    total: int
+    skipped_count: int = 0
