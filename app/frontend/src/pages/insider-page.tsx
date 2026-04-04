@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ChevronDown, ChevronUp, Loader2, Search } from 'lucide-react';
 import {
@@ -528,9 +528,8 @@ export function InsiderPage() {
                     const isExpanded = expandedRow === filing.accession_no;
                     const detail = detailMap[filing.accession_no];
                     return (
-                      <>
+                      <Fragment key={filing.accession_no}>
                         <TableRow
-                          key={filing.accession_no}
                           className="cursor-pointer hover:bg-accent/30"
                           onClick={() => handleRowClick(filing)}
                         >
@@ -566,7 +565,7 @@ export function InsiderPage() {
 
                         {/* Expandable detail row */}
                         {isExpanded && (
-                          <TableRow key={`${filing.accession_no}-detail`}>
+                          <TableRow>
                             <TableCell colSpan={10} className="p-3 bg-muted/10">
                               {detail === 'loading' && (
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
@@ -588,7 +587,7 @@ export function InsiderPage() {
                             </TableCell>
                           </TableRow>
                         )}
-                      </>
+                      </Fragment>
                     );
                   })}
                 </TableBody>
