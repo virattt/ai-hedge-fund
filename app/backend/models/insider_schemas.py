@@ -101,3 +101,37 @@ class InsiderDetailResponse(BaseModel):
     transactions: list[InsiderTransactionDetail]
     market_trades_count: int = 0
     derivative_trades_count: int = 0
+
+
+class OwnershipChangeRecord(BaseModel):
+    """One row per Form 4 filing showing an insider's ownership change.
+
+    shares_before is computed as remaining_shares - net_change. It is None
+    when remaining_shares is not available in the filing.
+    shares_after mirrors remaining_shares as reported to the SEC.
+    """
+
+    filing_date: str
+    accession_no: str
+    insider_name: str
+    position: str
+    shares_before: int | None = None
+    shares_after: int | None = None
+    net_change: int
+    form_type: str
+
+
+class OwnershipChangesResponse(BaseModel):
+    """Top-level response for the ownership changes endpoint.
+
+    records are ordered by filing_date ascending (oldest first) for chart rendering.
+    insiders is a deduplicated list sorted by activity count (most active first),
+    limited to top 10, used by the frontend to choose which lines to render.
+    skipped_count reports how many filings failed to parse.
+    """
+
+    ticker: str
+    records: list[OwnershipChangeRecord]
+    insiders: list[str]
+    total: int
+    skipped_count: int = 0
