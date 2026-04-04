@@ -6,6 +6,8 @@ import { Toaster } from './components/ui/sonner';
 import { HomePage } from './pages/home-page';
 import { NewsPage } from './pages/news-page';
 import { ScrapingResultsPage } from './pages/scraping-results-page';
+import { ScreenerPage } from './pages/screener-page';
+import { InsiderGrantsPage, InsiderOwnershipPage, InsiderPage } from './pages/insider-page';
 
 export default function App() {
   return (
@@ -17,6 +19,10 @@ export default function App() {
           <Route path="/editor" element={<Layout />} />
           <Route path="/scraping" element={<ScrapingResultsPage />} />
           <Route path="/news" element={<NewsPage />} />
+          <Route path="/screener" element={<ScreenerPage />} />
+          <Route path="/insider" element={<InsiderPage />} />
+          <Route path="/insider/ownership" element={<InsiderOwnershipPage />} />
+          <Route path="/insider/grants" element={<InsiderGrantsPage />} />
         </Routes>
       </div>
       <Toaster />
