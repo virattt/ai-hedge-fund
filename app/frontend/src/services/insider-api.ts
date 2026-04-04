@@ -112,6 +112,33 @@ export interface OwnershipChangesResponse {
   skipped_count: number;
 }
 
+/** One derivative trade row from the grants endpoint. */
+export interface GrantRecord {
+  filing_date: string;
+  accession_no: string;
+  insider_name: string;
+  position: string;
+  transaction_type: string;
+  security_title: string;
+  exercise_price: number | null;
+  expiration_date: string | null;
+  shares: number | null;
+  underlying_security: string | null;
+  acquired_disposed: string;
+  code: string;
+}
+
+/**
+ * Top-level response from GET /insider/grants.
+ * Includes records list, total count, and skipped_count for error reporting.
+ */
+export interface GrantsResponse {
+  ticker: string;
+  records: GrantRecord[];
+  total: number;
+  skipped_count: number;
+}
+
 class InsiderService {
   private baseUrl = `${API_BASE_URL}/insider`;
 
@@ -160,6 +187,7 @@ class InsiderService {
     }
     return response.json();
   }
+
   /**
    * Fetch ownership change records for a ticker.
    * Maps to GET /insider/ownership.
@@ -180,6 +208,30 @@ class InsiderService {
     if (!response.ok) {
       const body = await response.json().catch(() => null);
       throw new Error(body?.detail || `Failed to fetch ownership changes: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Fetch derivative grants and exercises records for a ticker.
+   * Maps to GET /insider/grants.
+   */
+  async getGrants(
+    ticker: string,
+    formType: string = '4',
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<GrantsResponse> {
+    const params = new URLSearchParams({
+      ticker: ticker,
+      form_type: formType,
+      limit: String(limit),
+      offset: String(offset),
+    });
+    const response = await fetch(`${this.baseUrl}/grants?${params.toString()}`);
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.detail || `Failed to fetch grants data: ${response.statusText}`);
     }
     return response.json();
   }

@@ -304,26 +304,6 @@ function LoadingSkeleton() {
 }
 
 // ---------------------------------------------------------------------------
-// Sub-page stubs
-// ---------------------------------------------------------------------------
-
-export function InsiderGrantsPage() {
-  return (
-    <div className="flex-1 overflow-auto p-6 space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Grants &amp; Exercises</h1>
-        <p className="text-sm text-muted-foreground">
-          Derivative trades, option grants and exercises from SEC filings.
-        </p>
-      </div>
-      <div className="text-center py-20 text-muted-foreground text-sm">
-        This sub-page is coming soon.
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Sub-nav link helper
 // ---------------------------------------------------------------------------
 
