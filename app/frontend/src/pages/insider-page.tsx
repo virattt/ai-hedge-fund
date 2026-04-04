@@ -1,5 +1,4 @@
 import { Fragment, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
 import { ChevronDown, ChevronUp, Loader2, Search } from 'lucide-react';
 import {
   Bar,
@@ -23,6 +22,9 @@ import {
   type InsiderFilingSummary,
   type InsiderSummaryResponse,
 } from '@/services/insider-api';
+import { SubNavLink } from '@/components/insider/insider-sub-nav';
+import { SkippedCountBanner } from '@/components/insider/skipped-count-banner';
+import { formatNumber, formatValue } from '@/utils/format';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,19 +36,6 @@ type ActivityFilter = 'all' | 'purchases' | 'sales' | 'option_exercises' | 'disc
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const formatNumber = (n: number | null | undefined): string => {
-  if (n === null || n === undefined) return '—';
-  return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
-};
-
-const formatValue = (n: number | null | undefined): string => {
-  if (n === null || n === undefined) return '—';
-  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}B`;
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
-  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
 
 const formatPercent = (n: number): string => `${(n * 100).toFixed(1)}%`;
 
@@ -304,27 +293,6 @@ function LoadingSkeleton() {
 }
 
 // ---------------------------------------------------------------------------
-// Sub-nav link helper
-// ---------------------------------------------------------------------------
-
-function SubNavLink({ to, label }: { to: string; label: string }) {
-  const location = useLocation();
-  const isActive = location.pathname === to;
-  return (
-    <Link
-      to={to}
-      className={`text-sm px-3 py-1 rounded-md transition-colors ${
-        isActive
-          ? 'bg-accent text-accent-foreground font-medium'
-          : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-      }`}
-    >
-      {label}
-    </Link>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Main InsiderPage
 // ---------------------------------------------------------------------------
 
@@ -445,11 +413,12 @@ export function InsiderPage() {
           <ActivityChart data={data} />
 
           {/* Skipped count notice */}
-          {data.skipped_count > 0 && (
-            <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400">
-              Showing {data.filings.length} of {data.total} filings ({data.skipped_count} could not be parsed)
-            </div>
-          )}
+          <SkippedCountBanner
+            skippedCount={data.skipped_count}
+            shownCount={data.filings.length}
+            totalCount={data.total}
+            itemLabel="filings"
+          />
 
           {/* Filter buttons */}
           <div className="flex flex-wrap gap-1">

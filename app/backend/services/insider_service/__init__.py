@@ -18,7 +18,7 @@ import time
 from collections import OrderedDict
 
 from app.backend.models.insider_schemas import GrantsResponse, OwnershipChangesResponse
-from app.backend.services.insider_service._detail import _fetch_detail, get_insider_detail
+from app.backend.services.insider_service._detail import _fetch_detail, _parse_trade_rows, get_insider_detail
 from app.backend.services.insider_service._grants import _fetch_grants
 from app.backend.services.insider_service._helpers import (
     InitialOwnershipSummaryProtocol,
@@ -27,6 +27,7 @@ from app.backend.services.insider_service._helpers import (
     _coerce_float,
     _coerce_int,
     _ensure_identity,
+    _iter_parsed_filings,
 )
 from app.backend.services.insider_service._ownership import _fetch_ownership_changes
 from app.backend.services.insider_service._summary import (

@@ -6,7 +6,7 @@ from app.backend.models.insider_schemas import OwnershipChangeRecord, OwnershipC
 from app.backend.services.insider_service._helpers import (
     TransactionSummaryProtocol,
     _coerce_int,
-    _ensure_identity,
+    _iter_parsed_filings,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,32 +24,13 @@ def _fetch_ownership_changes(ticker: str, form_type: str, limit: int, offset: in
     Filings that raise during obj() or get_ownership_summary() are skipped and
     increment skipped_count without aborting the response.
     """
-    from edgar import Company
-
-    _ensure_identity()
-    company = Company(ticker)
-    filings_iter = company.get_filings(form=form_type)
-
     records: list[OwnershipChangeRecord] = []
-    skipped_count = 0
-    processed = 0
-    skipped_offset = 0
+    skipped: list[int] = [0]
 
-    for filing in filings_iter:
-        if skipped_offset < offset:
-            skipped_offset += 1
-            continue
-        if processed >= limit:
-            break
-
-        accession_no = str(filing.accession_no)
-        filing_date = str(filing.filing_date)
-
+    for ownership, filing_date, accession_no in _iter_parsed_filings(ticker, form_type, limit, offset, skipped):
         try:
-            ownership = filing.obj()
             summary = ownership.get_ownership_summary()
             if not isinstance(summary, TransactionSummaryProtocol):
-                processed += 1
                 continue
 
             remaining = _coerce_int(summary.remaining_shares)
@@ -66,10 +47,9 @@ def _fetch_ownership_changes(ticker: str, form_type: str, limit: int, offset: in
                 net_change=net_change,
                 form_type=form_type,
             ))
-            processed += 1
         except Exception as exc:
-            logger.warning("Skipping ownership filing %s for %s: %s", accession_no, ticker, exc)
-            skipped_count += 1
+            logger.warning("Skipping ownership record %s for %s: %s", accession_no, ticker, exc)
+            skipped[0] += 1
 
     records.sort(key=lambda r: r.filing_date)
 
@@ -81,5 +61,5 @@ def _fetch_ownership_changes(ticker: str, form_type: str, limit: int, offset: in
         records=records,
         insiders=insiders,
         total=len(records),
-        skipped_count=skipped_count,
+        skipped_count=skipped[0],
     )

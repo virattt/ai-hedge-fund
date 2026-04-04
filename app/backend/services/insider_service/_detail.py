@@ -2,6 +2,8 @@
 import asyncio
 import logging
 
+import pandas as pd
+
 from app.backend.models.insider_schemas import InsiderDetailResponse, InsiderTransactionDetail
 from app.backend.services.insider_service._helpers import (
     InitialOwnershipSummaryProtocol,
@@ -12,6 +14,44 @@ from app.backend.services.insider_service._helpers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_trade_rows(df: object, *, is_derivative: bool) -> list[InsiderTransactionDetail]:
+    """Parse a market_trades or derivative_trades DataFrame into InsiderTransactionDetail objects.
+
+    Args:
+        df: The DataFrame from ``ownership.market_trades`` or ``ownership.derivative_trades``.
+            Accepts ``object`` because edgartools returns untyped DataFrames; the function
+            checks for an empty DataFrame before iterating.
+        is_derivative: ``True`` for derivative trades, ``False`` for market (non-derivative) trades.
+
+    Returns:
+        List of parsed :class:`InsiderTransactionDetail` instances. Empty list if *df* is
+        ``None``, not a DataFrame, or empty.
+    """
+    security_type = "derivative" if is_derivative else "non-derivative"
+    results: list[InsiderTransactionDetail] = []
+
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        return results
+
+    for _, row in df.iterrows():
+        code = str(row.get("Code") or "")
+        ad = str(row.get("AcquiredDisposed") or "")
+        shares = _coerce_float(row.get("Shares"))
+        price = _coerce_float(row.get("Price"))
+        results.append(InsiderTransactionDetail(
+            transaction_type=_classify_transaction_type(code, ad),
+            code=code,
+            shares=shares,
+            price_per_share=price,
+            value=round(shares * price, 2) if shares is not None and price is not None else None,
+            security_title=str(row.get("Security") or ""),
+            security_type=security_type,
+            is_derivative=is_derivative,
+        ))
+
+    return results
 
 
 def _fetch_detail(ticker: str, form_type: str, accession_no: str) -> InsiderDetailResponse:
@@ -49,46 +89,16 @@ def _fetch_detail(ticker: str, form_type: str, accession_no: str) -> InsiderDeta
     derivative_trades_count = 0
 
     try:
-        market_df = ownership.market_trades
-        if market_df is not None and not market_df.empty:
-            for _, row in market_df.iterrows():
-                code = str(row.get("Code") or "")
-                ad = str(row.get("AcquiredDisposed") or "")
-                shares = _coerce_float(row.get("Shares"))
-                price = _coerce_float(row.get("Price"))
-                transactions.append(InsiderTransactionDetail(
-                    transaction_type=_classify_transaction_type(code, ad),
-                    code=code,
-                    shares=shares,
-                    price_per_share=price,
-                    value=round(shares * price, 2) if shares is not None and price is not None else None,
-                    security_title=str(row.get("Security") or ""),
-                    security_type="non-derivative",
-                    is_derivative=False,
-                ))
-                market_trades_count += 1
+        market_rows = _parse_trade_rows(ownership.market_trades, is_derivative=False)
+        transactions.extend(market_rows)
+        market_trades_count = len(market_rows)
     except Exception as exc:
         logger.debug("Could not parse market_trades for %s: %s", accession_no, exc)
 
     try:
-        deriv_df = ownership.derivative_trades
-        if deriv_df is not None and not deriv_df.empty:
-            for _, row in deriv_df.iterrows():
-                code = str(row.get("Code") or "")
-                ad = str(row.get("AcquiredDisposed") or "")
-                shares = _coerce_float(row.get("Shares"))
-                price = _coerce_float(row.get("Price"))
-                transactions.append(InsiderTransactionDetail(
-                    transaction_type=_classify_transaction_type(code, ad),
-                    code=code,
-                    shares=shares,
-                    price_per_share=price,
-                    value=round(shares * price, 2) if shares is not None and price is not None else None,
-                    security_title=str(row.get("Security") or ""),
-                    security_type="derivative",
-                    is_derivative=True,
-                ))
-                derivative_trades_count += 1
+        deriv_rows = _parse_trade_rows(ownership.derivative_trades, is_derivative=True)
+        transactions.extend(deriv_rows)
+        derivative_trades_count = len(deriv_rows)
     except Exception as exc:
         logger.debug("Could not parse derivative_trades for %s: %s", accession_no, exc)
 

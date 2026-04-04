@@ -9,7 +9,7 @@ from app.backend.services.insider_service._helpers import (
     _classify_transaction_type,
     _coerce_float,
     _coerce_int,
-    _ensure_identity,
+    _iter_parsed_filings,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,30 +32,11 @@ def _fetch_grants(ticker: str, form_type: str, limit: int, offset: int) -> Grant
     Returns:
         GrantsResponse with all parsed records, total count, and skipped_count.
     """
-    from edgar import Company
-
-    _ensure_identity()
-    company = Company(ticker)
-    filings_iter = company.get_filings(form=form_type)
-
     records: list[GrantRecord] = []
-    skipped_count = 0
-    processed = 0
-    skipped_offset = 0
+    skipped: list[int] = [0]
 
-    for filing in filings_iter:
-        if skipped_offset < offset:
-            skipped_offset += 1
-            continue
-        if processed >= limit:
-            break
-
-        accession_no = str(filing.accession_no)
-        filing_date = str(filing.filing_date)
-
+    for form4, filing_date, accession_no in _iter_parsed_filings(ticker, form_type, limit, offset, skipped):
         try:
-            form4 = filing.obj()
-
             # Resolve insider identity from ownership summary when available.
             insider_name = ""
             position = ""
@@ -69,7 +50,6 @@ def _fetch_grants(ticker: str, form_type: str, limit: int, offset: int) -> Grant
 
             derivative_df = form4.derivative_trades
             if not isinstance(derivative_df, pd.DataFrame) or derivative_df.empty:
-                processed += 1
                 continue
 
             for _, row in derivative_df.iterrows():
@@ -92,16 +72,15 @@ def _fetch_grants(ticker: str, form_type: str, limit: int, offset: int) -> Grant
                     code=code,
                 ))
 
-            processed += 1
         except Exception as exc:
             logger.warning("Skipping grants filing %s for %s: %s", accession_no, ticker, exc)
-            skipped_count += 1
+            skipped[0] += 1
 
     return GrantsResponse(
         ticker=ticker.upper(),
         records=records,
         total=len(records),
-        skipped_count=skipped_count,
+        skipped_count=skipped[0],
     )
 
 

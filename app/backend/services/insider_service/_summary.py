@@ -8,13 +8,12 @@ from app.backend.models.insider_schemas import (
     InsiderFilingSummary,
     InsiderSummaryResponse,
 )
-from app.backend.services.insider_service._cache import _cache_get, _cache_put
 from app.backend.services.insider_service._helpers import (
     InitialOwnershipSummaryProtocol,
     TransactionSummaryProtocol,
     _coerce_float,
     _coerce_int,
-    _ensure_identity,
+    _iter_parsed_filings,
 )
 
 logger = logging.getLogger(__name__)
@@ -179,34 +178,17 @@ def _fetch_summaries(ticker: str, form_type: str, limit: int, offset: int) -> In
     Skips filings that fail to parse rather than aborting the entire request.
     Applies offset before counting toward limit.
     """
-    from edgar import Company
-
-    _ensure_identity()
-    company = Company(ticker)
-    filings_iter = company.get_filings(form=form_type)
-
     summaries: list[InsiderFilingSummary] = []
-    skipped_count = 0
-    processed = 0
-    skipped_offset = 0
+    skipped: list[int] = [0]
 
-    for filing in filings_iter:
-        if skipped_offset < offset:
-            skipped_offset += 1
-            continue
-        if processed >= limit:
-            break
-        accession_no = str(filing.accession_no)
-        filing_date = str(filing.filing_date)
+    for ownership, filing_date, accession_no in _iter_parsed_filings(ticker, form_type, limit, offset, skipped):
         try:
-            ownership = filing.obj()
             ownership_summary = ownership.get_ownership_summary()
             summary = _build_filing_summary(ownership_summary, filing_date=filing_date, accession_no=accession_no, form_type=form_type)
             summaries.append(summary)
-            processed += 1
         except Exception as exc:
-            logger.warning("Skipping filing %s for %s: %s", accession_no, ticker, exc)
-            skipped_count += 1
+            logger.warning("Skipping summary build %s for %s: %s", accession_no, ticker, exc)
+            skipped[0] += 1
 
     return InsiderSummaryResponse(
         ticker=ticker.upper(),
@@ -214,12 +196,14 @@ def _fetch_summaries(ticker: str, form_type: str, limit: int, offset: int) -> In
         filings=summaries,
         aggregates=_compute_aggregates(summaries, form_type),
         total=len(summaries),
-        skipped_count=skipped_count,
+        skipped_count=skipped[0],
     )
 
 
 async def get_insider_summary(ticker: str, form_type: str = "4", limit: int = 50, offset: int = 0) -> InsiderSummaryResponse:
     """Async entry point for filing summaries. Checks LRU+TTL cache first."""
+    from app.backend.services.insider_service import _cache_get, _cache_put  # lazy import avoids circular dep
+
     cache_key = f"summary:{ticker.upper()}:{form_type}"
     cached = _cache_get(cache_key)
     if isinstance(cached, InsiderSummaryResponse):

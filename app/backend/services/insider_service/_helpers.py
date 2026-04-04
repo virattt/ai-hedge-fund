@@ -1,6 +1,7 @@
 """Shared helpers: edgartools protocols, identity, type coercions, transaction classifier."""
 import os
 import logging
+from collections.abc import Generator
 from typing import Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
@@ -105,3 +106,65 @@ def _classify_transaction_type(code: str, acquired_disposed: str) -> str:
     if code == "C":
         return "Conversion"
     return code or "Unknown"
+
+
+# ---------------------------------------------------------------------------
+# Shared filing iteration helper
+# ---------------------------------------------------------------------------
+
+
+def _iter_parsed_filings(
+    ticker: str,
+    form_type: str,
+    limit: int,
+    offset: int,
+    skipped: list[int],
+) -> Generator[tuple[object, str, str], None, None]:
+    """Yield (ownership_obj, filing_date, accession_no) tuples, skipping failures.
+
+    Iterates company filings of *form_type* for *ticker*, skipping the first
+    *offset* entries and stopping after *limit* successfully processed filings.
+    Filings that raise during ``filing.obj()`` are skipped; each failure
+    increments ``skipped[0]`` so callers can report a ``skipped_count`` without
+    managing the iteration boilerplate themselves.
+
+    The *skipped* argument must be a single-element list, e.g. ``[0]``. Using
+    a mutable container allows the generator to communicate the skip count back
+    to the caller without requiring a wrapper class or a second pass.
+
+    Args:
+        ticker: Stock ticker symbol.
+        form_type: SEC form type string (e.g. ``'4'``).
+        limit: Maximum number of *successfully parsed* filings to yield.
+        offset: Number of filings to skip before processing.
+        skipped: Single-element list used as a mutable counter for failures.
+
+    Yields:
+        3-tuples of (ownership_obj, filing_date, accession_no).
+    """
+    from edgar import Company
+
+    _ensure_identity()
+    company = Company(ticker)
+    filings_iter = company.get_filings(form=form_type)
+
+    processed = 0
+    skipped_offset = 0
+
+    for filing in filings_iter:
+        if skipped_offset < offset:
+            skipped_offset += 1
+            continue
+        if processed >= limit:
+            break
+
+        accession_no = str(filing.accession_no)
+        filing_date = str(filing.filing_date)
+
+        try:
+            ownership = filing.obj()
+            yield ownership, filing_date, accession_no
+            processed += 1
+        except Exception as exc:
+            logger.warning("Skipping filing %s for %s: %s", accession_no, ticker, exc)
+            skipped[0] += 1

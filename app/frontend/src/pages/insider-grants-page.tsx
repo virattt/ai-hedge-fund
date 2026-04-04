@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
 import { Loader2, Search } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -12,26 +11,15 @@ import {
   type GrantRecord,
   type GrantsResponse,
 } from '@/services/insider-api';
+import { SubNavLink } from '@/components/insider/insider-sub-nav';
+import { SkippedCountBanner } from '@/components/insider/skipped-count-banner';
+import { formatNumber, formatPrice } from '@/utils/format';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 type TransactionFilter = 'all' | 'grant' | 'exercise' | 'conversion';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const formatNumber = (n: number | null | undefined): string => {
-  if (n === null || n === undefined) return '—';
-  return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
-};
-
-const formatPrice = (n: number | null | undefined): string => {
-  if (n === null || n === undefined) return '—';
-  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
 
 // ---------------------------------------------------------------------------
 // Transaction type badge (color-coded)
@@ -87,27 +75,6 @@ function AcquiredDisposedBadge({ value }: { value: string }) {
     );
   }
   return <span className="text-xs font-mono">{value}</span>;
-}
-
-// ---------------------------------------------------------------------------
-// Sub-nav link helper (mirrors insider-page.tsx pattern)
-// ---------------------------------------------------------------------------
-
-function SubNavLink({ to, label }: { to: string; label: string }) {
-  const location = useLocation();
-  const isActive = location.pathname === to;
-  return (
-    <Link
-      to={to}
-      className={`text-sm px-3 py-1 rounded-md transition-colors ${
-        isActive
-          ? 'bg-accent text-accent-foreground font-medium'
-          : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-      }`}
-    >
-      {label}
-    </Link>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -283,11 +250,12 @@ export function InsiderGrantsPage() {
       {data && !loading && (
         <>
           {/* Skipped count notice */}
-          {data.skipped_count > 0 && (
-            <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400">
-              Showing {data.records.length} of {data.total} records ({data.skipped_count} could not be parsed)
-            </div>
-          )}
+          <SkippedCountBanner
+            skippedCount={data.skipped_count}
+            shownCount={data.records.length}
+            totalCount={data.total}
+            itemLabel="records"
+          />
 
           {/* Filter buttons */}
           <div className="flex flex-wrap gap-1">
