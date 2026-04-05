@@ -30,12 +30,13 @@ class TestBuildFilingSummary:
         result = _build_filing_summary(ts, filing_date="2024-01-01", accession_no="0001234567-24-000001", form_type="4")
         assert result.accession_no == "0001234567-24-000001"
 
-    def test_none_net_value_is_allowed(self) -> None:
+    def test_zero_value_transactions(self) -> None:
+        """When transactions have zero value, net_value is 0.0."""
         from app.backend.services.insider_service import _build_filing_summary
 
-        ts = make_transaction_summary(net_value=None)
+        ts = make_transaction_summary(net_change=0, net_value=0, transaction_count=1)
         result = _build_filing_summary(ts, filing_date="2024-03-15", accession_no="ACC1", form_type="4")
-        assert result.net_value is None
+        assert result.net_value == 0.0
 
     def test_none_remaining_shares_is_allowed(self) -> None:
         from app.backend.services.insider_service import _build_filing_summary

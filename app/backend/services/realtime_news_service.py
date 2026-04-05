@@ -127,6 +127,120 @@ async def fetch_yfinance_news(tickers: list[str] | None = None) -> list[Realtime
     return await asyncio.to_thread(_fetch)
 
 
+POPULAR_STOCKS = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "JPM", "V", "UNH"]
+POPULAR_ETFS = ["SPY", "QQQ", "DIA", "IWM", "VTI", "VOO", "VEA", "VWO", "GLD", "TLT"]
+MARKET_INDICES = ["SPY", "QQQ", "DIA", "IWM"]
+
+
+async def fetch_blog_news() -> list[RealtimeNewsItem]:
+    """Fetch only blog posts from finviz."""
+    try:
+        items = await fetch_finviz_news()
+        return [item for item in items if item.category == "blogs"]
+    except Exception as exc:
+        logger.warning("Failed to fetch blog news: %s", exc)
+        return []
+
+
+async def fetch_ticker_news(tickers: list[str]) -> list[RealtimeNewsItem]:
+    """Fetch news for specific tickers using finvizfinance per-ticker, falling back to yfinance."""
+    def _fetch() -> list[RealtimeNewsItem]:
+        items: list[RealtimeNewsItem] = []
+        seen_links: set[str] = set()
+
+        for ticker_symbol in tickers:
+            # Try finvizfinance per-ticker first
+            try:
+                from finvizfinance.quote import finvizfinance
+                fvz = finvizfinance(ticker_symbol)
+                df = fvz.ticker_news()
+                if df is not None and not df.empty:
+                    for _, row in df.iterrows():
+                        link = str(row.get("Link", ""))
+                        if link and link not in seen_links:
+                            seen_links.add(link)
+                            items.append(RealtimeNewsItem(
+                                title=str(row.get("Title", "")),
+                                link=link,
+                                source=str(row.get("Source", "")),
+                                date=str(row.get("Date", "")),
+                                category="news",
+                                provider="finviz",
+                            ))
+                    continue  # Got finviz data, skip yfinance for this ticker
+            except Exception as exc:
+                logger.debug("finvizfinance ticker_news failed for %s: %s", ticker_symbol, exc)
+
+            # Fallback to yfinance
+            try:
+                import yfinance as yf
+                ticker = yf.Ticker(ticker_symbol)
+                news_list = ticker.news or []
+                for article in news_list:
+                    parsed = _parse_yfinance_article(article)
+                    if parsed is None:
+                        continue
+                    title, link, source, date_str = parsed
+                    if link in seen_links:
+                        continue
+                    seen_links.add(link)
+                    items.append(RealtimeNewsItem(
+                        title=title,
+                        link=link,
+                        source=source,
+                        date=date_str,
+                        category="news",
+                        provider="yfinance",
+                    ))
+            except Exception as exc:
+                logger.warning("yfinance news failed for %s: %s", ticker_symbol, exc)
+
+        # Filter out paywalled sources
+        _BLOCKED_SOURCES = {"bloomberg.com", "www.bloomberg.com"}
+        items = [item for item in items if not any(b in item.source.lower() for b in _BLOCKED_SOURCES) and not any(b in item.link.lower() for b in _BLOCKED_SOURCES)]
+        return items
+
+    return await asyncio.to_thread(_fetch)
+
+
+async def fetch_stocks_news() -> list[RealtimeNewsItem]:
+    """Fetch news for popular individual stocks."""
+    return await fetch_ticker_news(POPULAR_STOCKS)
+
+
+async def fetch_etf_news() -> list[RealtimeNewsItem]:
+    """Fetch news for popular ETFs."""
+    return await fetch_ticker_news(POPULAR_ETFS)
+
+
+async def fetch_market_pulse() -> dict:
+    """Fetch market index data + related news for major indices."""
+    def _fetch_indices() -> list[dict]:
+        import yfinance as yf
+        indices = []
+        index_names = {"SPY": "S&P 500", "QQQ": "Nasdaq 100", "DIA": "Dow Jones", "IWM": "Russell 2000"}
+        for symbol in MARKET_INDICES:
+            try:
+                info = yf.Ticker(symbol).info
+                indices.append({
+                    "symbol": symbol,
+                    "name": index_names.get(symbol, symbol),
+                    "price": info.get("currentPrice") or info.get("regularMarketPrice", 0),
+                    "change": info.get("regularMarketChange", 0),
+                    "change_percent": info.get("regularMarketChangePercent", 0),
+                })
+            except Exception as exc:
+                logger.warning("Failed to fetch index data for %s: %s", symbol, exc)
+                indices.append({"symbol": symbol, "name": index_names.get(symbol, symbol), "price": 0, "change": 0, "change_percent": 0})
+        return indices
+
+    indices, news = await asyncio.gather(
+        asyncio.to_thread(_fetch_indices),
+        fetch_ticker_news(MARKET_INDICES),
+    )
+    return {"indices": indices, "news": news}
+
+
 async def fetch_all_realtime_news() -> list[RealtimeNewsItem]:
     """Fetch news from all available sources, merged and deduplicated."""
     results: list[RealtimeNewsItem] = []
@@ -149,5 +263,9 @@ async def fetch_all_realtime_news() -> list[RealtimeNewsItem]:
                 existing_links.add(item.link)
     except Exception as exc:
         logger.warning("Failed to fetch yfinance news: %s", exc)
+
+    # Filter out paywalled sources
+    _BLOCKED_SOURCES = {"bloomberg.com", "www.bloomberg.com"}
+    results = [item for item in results if not any(b in item.source.lower() for b in _BLOCKED_SOURCES) and not any(b in item.link.lower() for b in _BLOCKED_SOURCES)]
 
     return results

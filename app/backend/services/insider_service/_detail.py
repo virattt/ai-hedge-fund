@@ -6,8 +6,8 @@ import pandas as pd
 
 from app.backend.models.insider_schemas import InsiderDetailResponse, InsiderTransactionDetail
 from app.backend.services.insider_service._helpers import (
-    InitialOwnershipSummaryProtocol,
-    TransactionSummaryProtocol,
+    InitialOwnershipSummary,
+    TransactionSummary,
     _classify_transaction_type,
     _coerce_float,
     _ensure_identity,
@@ -78,7 +78,7 @@ def _fetch_detail(ticker: str, form_type: str, accession_no: str) -> InsiderDeta
     position = ""
     try:
         summary = ownership.get_ownership_summary()
-        if isinstance(summary, (TransactionSummaryProtocol, InitialOwnershipSummaryProtocol)):
+        if isinstance(summary, (TransactionSummary, InitialOwnershipSummary)):
             insider_name = summary.insider_name
             position = summary.position
     except Exception as exc:

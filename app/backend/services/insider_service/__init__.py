@@ -21,8 +21,8 @@ from app.backend.models.insider_schemas import GrantsResponse, OwnershipChangesR
 from app.backend.services.insider_service._detail import _fetch_detail, _parse_trade_rows, get_insider_detail  # noqa: F401
 from app.backend.services.insider_service._grants import _fetch_grants  # noqa: F401
 from app.backend.services.insider_service._helpers import (  # noqa: F401
-    InitialOwnershipSummaryProtocol,
-    TransactionSummaryProtocol,
+    InitialOwnershipSummary,
+    TransactionSummary,
     _classify_transaction_type,
     _coerce_float,
     _coerce_int,

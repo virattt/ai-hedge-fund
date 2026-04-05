@@ -10,13 +10,12 @@ Verifies:
 - get_insider_grants() cache miss triggers fetch and stores result
 """
 import asyncio
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 
-from tests.backend.insider.conftest import make_filing
+from tests.backend.insider.conftest import make_filing, make_transaction_summary
 
 
 _COMPANY_PATCH = "edgar.Company"
@@ -276,7 +275,7 @@ class TestFetchGrants:
         form4 = MagicMock()
         form4.derivative_trades = _make_derivative_df()
 
-        summary = SimpleNamespace(
+        summary = make_transaction_summary(
             insider_name="Luca Maestri",
             position="CFO",
             primary_activity="Exercise",
@@ -284,7 +283,6 @@ class TestFetchGrants:
             net_value=None,
             remaining_shares=None,
             has_10b5_1_plan=None,
-            transaction_types=["Exercise"],
             transaction_count=1,
         )
         form4.get_ownership_summary.return_value = summary

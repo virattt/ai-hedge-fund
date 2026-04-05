@@ -10,7 +10,6 @@ Verifies:
 - get_ownership_changes() cache miss triggers fetch and stores result
 """
 import asyncio
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -178,7 +177,7 @@ class TestFetchOwnershipChanges:
     def test_shares_before_computed_correctly_for_purchase(self) -> None:
         """For a purchase (positive net_change): shares_before = remaining - net_change."""
         # remaining=5000, net_change=1000 → shares_before = 5000 - 1000 = 4000
-        ts = make_transaction_summary(remaining_shares=5000, net_change=1000)
+        ts = make_transaction_summary(remaining_shares=5000, net_change=1000, primary_activity="Purchase")
         filing = make_filing(summary_result=ts)
 
         with patch("app.backend.services.insider_service._ensure_identity"):

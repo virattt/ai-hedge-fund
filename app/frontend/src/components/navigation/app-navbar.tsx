@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { BookOpen, Home, Newspaper, Workflow } from 'lucide-react';
+import { BarChart3, BookOpen, Home, Newspaper, UserCheck, Workflow } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 const navItems = [
@@ -7,6 +7,8 @@ const navItems = [
   { to: '/editor', label: 'Editor', icon: Workflow },
   { to: '/scraping', label: 'Scraping Results', icon: Newspaper },
   { to: '/news', label: 'News', icon: BookOpen },
+  { to: '/screener', label: 'Screener', icon: BarChart3 },
+  { to: '/insider', label: 'Insiders', icon: UserCheck },
 ];
 
 export function AppNavbar() {

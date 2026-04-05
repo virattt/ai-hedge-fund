@@ -5,7 +5,7 @@ import pandas as pd
 
 from app.backend.models.insider_schemas import GrantRecord, GrantsResponse
 from app.backend.services.insider_service._helpers import (
-    TransactionSummaryProtocol,
+    TransactionSummary,
     _classify_transaction_type,
     _coerce_float,
     _coerce_int,
@@ -42,7 +42,7 @@ def _fetch_grants(ticker: str, form_type: str, limit: int, offset: int) -> Grant
             position = ""
             try:
                 summary = form4.get_ownership_summary()
-                if isinstance(summary, TransactionSummaryProtocol):
+                if isinstance(summary, TransactionSummary):
                     insider_name = str(summary.insider_name) if isinstance(summary.insider_name, str) else ""
                     position = str(summary.position) if isinstance(summary.position, str) else ""
             except Exception as exc:

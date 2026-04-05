@@ -9,8 +9,8 @@ from app.backend.models.insider_schemas import (
     InsiderSummaryResponse,
 )
 from app.backend.services.insider_service._helpers import (
-    InitialOwnershipSummaryProtocol,
-    TransactionSummaryProtocol,
+    InitialOwnershipSummary,
+    TransactionSummary,
     _coerce_float,
     _coerce_int,
     _iter_parsed_filings,
@@ -25,13 +25,14 @@ logger = logging.getLogger(__name__)
 
 
 def _build_filing_summary_from_initial(
-    summary: InitialOwnershipSummaryProtocol,
+    summary: InitialOwnershipSummary,
     *,
     filing_date: str,
     accession_no: str,
     form_type: str,
 ) -> InsiderFilingSummary:
     """Build a filing summary from a Form 3 InitialOwnershipSummary."""
+    total_shares = _coerce_int(summary.total_shares) if not summary.no_securities else 0
     return InsiderFilingSummary(
         filing_date=filing_date,
         accession_no=accession_no,
@@ -40,18 +41,18 @@ def _build_filing_summary_from_initial(
         primary_activity="Initial Holdings",
         net_change=0,
         net_value=None,
-        remaining_shares=_coerce_int(summary.total_holdings),
+        remaining_shares=total_shares,
         has_10b5_1_plan=None,
         transaction_types=[],
         transaction_count=0,
         form_type=form_type,
-        total_holdings=_coerce_int(summary.total_holdings),
+        total_holdings=total_shares,
         has_derivatives=summary.has_derivatives,
     )
 
 
 def _build_filing_summary_from_transaction(
-    summary: TransactionSummaryProtocol,
+    summary: TransactionSummary,
     *,
     filing_date: str,
     accession_no: str,
@@ -59,6 +60,8 @@ def _build_filing_summary_from_transaction(
 ) -> InsiderFilingSummary:
     """Build a filing summary from a Form 4/5 TransactionSummary."""
     tx_types: list[str] = list(summary.transaction_types) if summary.transaction_types else []
+    tx_count = len(summary.transactions) if summary.transactions else 0
+    raw_net_value = _coerce_float(summary.net_value)
     return InsiderFilingSummary(
         filing_date=filing_date,
         accession_no=accession_no,
@@ -66,11 +69,11 @@ def _build_filing_summary_from_transaction(
         position=summary.position,
         primary_activity=summary.primary_activity,
         net_change=int(summary.net_change or 0),
-        net_value=_coerce_float(summary.net_value),
+        net_value=abs(raw_net_value) if raw_net_value is not None else None,
         remaining_shares=_coerce_int(summary.remaining_shares),
         has_10b5_1_plan=summary.has_10b5_1_plan,
         transaction_types=tx_types,
-        transaction_count=int(summary.transaction_count or 0),
+        transaction_count=tx_count,
         form_type=form_type,
     )
 
@@ -84,17 +87,17 @@ def _build_filing_summary(
 ) -> InsiderFilingSummary:
     """Dispatch to the correct builder based on the summary type.
 
-    Form 3 objects implement InitialOwnershipSummaryProtocol (have total_holdings).
-    Form 4/5 objects implement TransactionSummaryProtocol (have primary_activity etc.).
+    Form 3 objects are InitialOwnershipSummary (have total_shares).
+    Form 4/5 objects are TransactionSummary (have primary_activity etc.).
     """
-    if isinstance(ownership_summary, InitialOwnershipSummaryProtocol):
+    if isinstance(ownership_summary, InitialOwnershipSummary):
         return _build_filing_summary_from_initial(
             ownership_summary,
             filing_date=filing_date,
             accession_no=accession_no,
             form_type=form_type,
         )
-    if isinstance(ownership_summary, TransactionSummaryProtocol):
+    if isinstance(ownership_summary, TransactionSummary):
         return _build_filing_summary_from_transaction(
             ownership_summary,
             filing_date=filing_date,

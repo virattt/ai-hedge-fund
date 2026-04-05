@@ -50,7 +50,7 @@ ALLOWED_CUSTOM_KEYS: frozenset[str] = frozenset(
     },
 )
 async def openinsider_screener(
-    preset: Literal["ceo_cfo_conviction", "cluster_buy", "significant_increase", "custom"] = Query(
+    preset: Literal["ceo_cfo_conviction", "cluster_buy", "cluster_sell", "significant_increase", "screener", "custom"] = Query(
         ..., description="Screener preset or 'custom' for manual filter configuration"
     ),
     ticker: str | None = Query(

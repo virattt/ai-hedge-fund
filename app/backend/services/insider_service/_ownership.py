@@ -4,7 +4,7 @@ from collections import Counter
 
 from app.backend.models.insider_schemas import OwnershipChangeRecord, OwnershipChangesResponse
 from app.backend.services.insider_service._helpers import (
-    TransactionSummaryProtocol,
+    TransactionSummary,
     _coerce_int,
     _iter_parsed_filings,
 )
@@ -30,7 +30,7 @@ def _fetch_ownership_changes(ticker: str, form_type: str, limit: int, offset: in
     for ownership, filing_date, accession_no in _iter_parsed_filings(ticker, form_type, limit, offset, skipped):
         try:
             summary = ownership.get_ownership_summary()
-            if not isinstance(summary, TransactionSummaryProtocol):
+            if not isinstance(summary, TransactionSummary):
                 continue
 
             remaining = _coerce_int(summary.remaining_shares)

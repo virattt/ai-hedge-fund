@@ -1,42 +1,13 @@
-"""Shared helpers: edgartools protocols, identity, type coercions, transaction classifier."""
+"""Shared helpers: edgartools imports, identity, type coercions, transaction classifier."""
 import os
 import logging
 from collections.abc import Generator
-from typing import Protocol, runtime_checkable
+
+from edgar.ownership.ownershipforms import TransactionSummary, InitialOwnershipSummary
 
 logger = logging.getLogger(__name__)
 
 _identity_set = False
-
-
-# ---------------------------------------------------------------------------
-# Protocols for edgartools ownership summary objects
-# ---------------------------------------------------------------------------
-
-
-@runtime_checkable
-class TransactionSummaryProtocol(Protocol):
-    """Protocol for edgartools TransactionSummary (Form 4 / Form 5)."""
-
-    insider_name: str
-    position: str
-    primary_activity: str
-    net_change: int | float
-    net_value: float | None
-    remaining_shares: int | None
-    has_10b5_1_plan: bool | None
-    transaction_types: list[str]
-    transaction_count: int
-
-
-@runtime_checkable
-class InitialOwnershipSummaryProtocol(Protocol):
-    """Protocol for edgartools InitialOwnershipSummary (Form 3)."""
-
-    insider_name: str
-    position: str
-    total_holdings: int | None
-    has_derivatives: bool | None
 
 
 # ---------------------------------------------------------------------------

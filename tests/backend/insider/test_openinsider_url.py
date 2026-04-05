@@ -121,34 +121,57 @@ _ATTENTION_REQUIRED_HTML = """
 class TestBuildScreenerUrlPresets:
     """Tests for preset URL construction."""
 
-    def test_build_url_ceo_cfo_preset_includes_purchase_and_min_value(self) -> None:
-        """CEO/CFO conviction preset URL contains xp=1, vl=100000, fd=30."""
+    def test_build_url_ceo_cfo_preset_includes_all_trades_and_min_value(self) -> None:
+        """CEO/CFO conviction preset URL contains xp=1, xs=1 (both), vl=100, fd=30."""
         from app.backend.services.openinsider_service import build_screener_url
 
         url = build_screener_url("ceo_cfo_conviction", None)
 
         assert "xp=1" in url
-        assert "vl=100000" in url
+        assert "xs=1" in url
+        assert "vl=100" in url
         assert "fd=30" in url
 
     def test_build_url_cluster_buy_preset_includes_cluster_count(self) -> None:
-        """Cluster buy preset URL contains isc=3, vl=25000, fd=90."""
+        """Cluster buy preset URL contains isc=3, vl=25, fd=90."""
         from app.backend.services.openinsider_service import build_screener_url
 
         url = build_screener_url("cluster_buy", None)
 
         assert "isc=3" in url
-        assert "vl=25000" in url
+        assert "vl=25" in url
+        assert "fd=90" in url
+
+    def test_build_url_cluster_sell_preset_includes_sales_and_cluster_count(self) -> None:
+        """Cluster sell preset URL contains xs=1 (sales only), isc=3, vl=25, fd=90."""
+        from app.backend.services.openinsider_service import build_screener_url
+
+        url = build_screener_url("cluster_sell", None)
+
+        assert "xs=1" in url
+        assert "xp=1" not in url  # no purchases
+        assert "isc=3" in url
+        assert "vl=25" in url
         assert "fd=90" in url
 
     def test_build_url_significant_increase_preset_includes_holdings_change(self) -> None:
-        """Significant increase preset URL contains fdlyl=20, fd=90."""
+        """Significant increase preset URL contains ocl=20, fd=90."""
         from app.backend.services.openinsider_service import build_screener_url
 
         url = build_screener_url("significant_increase", None)
 
-        assert "fdlyl=20" in url
+        assert "ocl=20" in url
         assert "fd=90" in url
+
+    def test_build_url_screener_preset_shows_all_trades(self) -> None:
+        """Screener preset URL sets xp=1 and xs=1 to show both buys and sells."""
+        from app.backend.services.openinsider_service import build_screener_url
+
+        url = build_screener_url("screener", None)
+
+        assert "fd=30" in url
+        assert "xp=1" in url
+        assert "xs=1" in url
 
     def test_build_url_preset_ignores_custom_params(self) -> None:
         """Non-custom preset mode ignores any custom_params dict passed in."""
@@ -156,10 +179,23 @@ class TestBuildScreenerUrlPresets:
 
         url = build_screener_url("cluster_buy", {"vl": "999999", "s": "ZZZZ"})
 
-        assert "vl=25000" in url
+        assert "vl=25" in url
         assert "isc=3" in url
         assert "vl=999999" not in url
         assert "s=ZZZZ" not in url
+
+    def test_build_url_preset_includes_all_base_params(self) -> None:
+        """Preset URLs include all base form params (full form submission format)."""
+        from app.backend.services.openinsider_service import build_screener_url
+
+        url = build_screener_url("ceo_cfo_conviction", None)
+
+        # All base params should be present in the URL
+        assert "s=" in url
+        assert "o=" in url
+        assert "pl=" in url
+        assert "ph=" in url
+        assert "cnt=" in url
 
 
 # ---------------------------------------------------------------------------
@@ -204,25 +240,27 @@ class TestBuildScreenerUrlCustom:
         assert "s=MSFT" in url
         assert "vl=100000" in url
         assert "fd=30" in url
-        assert "fdlyl=10" in url
+        assert "ocl=10" in url
         assert "isc=3" in url
         assert "xp=1" in url
 
-    def test_build_url_custom_transaction_type_sale_maps_to_xp_2(self) -> None:
-        """transaction_type=sale translates to xp=2 in the URL."""
+    def test_build_url_custom_transaction_type_sale_maps_to_xs_1(self) -> None:
+        """transaction_type=sale translates to xs=1 in the URL."""
         from app.backend.services.openinsider_service import build_screener_url
 
         url = build_screener_url("custom", {"transaction_type": "sale"})
 
-        assert "xp=2" in url
+        assert "xs=1" in url
+        assert "xp=1" not in url
 
-    def test_build_url_custom_transaction_type_all_omitted_from_url(self) -> None:
-        """transaction_type=all produces no xp param in the URL (no filter)."""
+    def test_build_url_custom_transaction_type_all_enables_both(self) -> None:
+        """transaction_type=all sets both xp=1 and xs=1."""
         from app.backend.services.openinsider_service import build_screener_url
 
         url = build_screener_url("custom", {"transaction_type": "all"})
 
-        assert "xp=" not in url
+        assert "xp=1" in url
+        assert "xs=1" in url
 
     def test_build_url_custom_officer_filter_not_in_url(self) -> None:
         """officer_filter has no direct OI URL param and is excluded from the URL."""
@@ -233,13 +271,15 @@ class TestBuildScreenerUrlCustom:
         assert "officer_filter=" not in url
         assert "vl=50000" in url
 
-    def test_build_url_custom_empty_params_returns_base_url(self) -> None:
-        """Custom mode with empty dict returns the base URL."""
+    def test_build_url_custom_empty_params_returns_base_with_defaults(self) -> None:
+        """Custom mode with empty dict returns full URL with base default params."""
         from app.backend.services.openinsider_service import _BASE_URL, build_screener_url
 
         url = build_screener_url("custom", {})
 
         assert url.startswith(_BASE_URL)
+        assert "s=" in url
+        assert "cnt=" in url
 
 
 # ---------------------------------------------------------------------------

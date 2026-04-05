@@ -22,15 +22,23 @@ import { formatNumber, formatPrice, formatValue } from '@/utils/format';
 const PRESETS: Record<string, { label: string; description: string }> = {
   ceo_cfo_conviction: {
     label: 'CEO/CFO Conviction',
-    description: 'Purchases ≥ $100K by CEOs and CFOs in the last 30 days.',
+    description: 'Buys & sells ≥ $100K by CEOs and CFOs in the last 30 days.',
   },
   cluster_buy: {
     label: 'Cluster Buy',
     description: 'Tickers with ≥ 3 insiders buying ≥ $25K each in the last 90 days.',
   },
+  cluster_sell: {
+    label: 'Cluster Sell',
+    description: 'Tickers with ≥ 3 insiders selling ≥ $25K each in the last 90 days.',
+  },
   significant_increase: {
     label: 'Significant Increase',
     description: 'Insiders increasing holdings by ≥ 20% in the last 90 days.',
+  },
+  screener: {
+    label: 'Screener',
+    description: 'All insider trades (buys & sells) in the last 30 days.',
   },
 };
 

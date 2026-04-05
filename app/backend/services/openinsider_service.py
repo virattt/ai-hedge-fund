@@ -39,69 +39,114 @@ _USER_AGENT: str = (
 )
 
 # ---------------------------------------------------------------------------
-# Preset configurations
+# OpenInsider screener URL format
+# ---------------------------------------------------------------------------
+# openinsider.com requires a full form-submission URL with ALL parameters
+# present (even empty ones). The base template contains every form field
+# with empty defaults. Presets and custom mode override specific fields.
+
+_BASE_PARAMS: dict[str, str] = {
+    "s": "",       # ticker symbol
+    "o": "",       # owner type
+    "pl": "",      # price low
+    "ph": "",      # price high
+    "ll": "",      # market cap low
+    "lh": "",      # market cap high
+    "fd": "0",     # filing date range (days: 0=all, 1,2,3,7,14,30,60,90,180,360)
+    "td": "0",     # trade date range
+    "tdr": "",     # trade date range type
+    "fdlyl": "",   # delta own % low
+    "fdlyh": "",   # delta own % high
+    "dtefrom": "", # date from
+    "dteto": "",   # date to
+    "xp": "",      # checkbox: P - Purchase (1=checked)
+    "xs": "",      # checkbox: S - Sale (1=checked)
+    "vl": "",      # value low
+    "vh": "",      # value high
+    "ocl": "",     # ownership change % low
+    "och": "",     # ownership change % high
+    "session": "", # session
+    "isc": "1",    # insider count minimum
+    "cnt": "100",  # results count
+    "sortcol": "0",
+    "sortdir": "1",
+}
+
+# ---------------------------------------------------------------------------
+# Preset configurations (overrides on top of _BASE_PARAMS)
 # ---------------------------------------------------------------------------
 
 PRESET_CONFIGS: dict[str, dict[str, str]] = {
-    "ceo_cfo_conviction": {"fd": "30", "xp": "1", "vl": "100000"},
-    "cluster_buy": {"fd": "90", "xp": "1", "vl": "25000", "isc": "3"},
-    "significant_increase": {"fd": "90", "xp": "1", "fdlyl": "20"},
+    # CEO/CFO Conviction: buys + sells > $100k, last 30 days
+    "ceo_cfo_conviction": {
+        "fd": "30",
+        "xp": "1", "xs": "1",  # purchases + sales
+        "vl": "100",
+        "cnt": "100",
+    },
+    # Cluster Buy: purchases > $25k, last 90 days, 3+ insiders
+    "cluster_buy": {
+        "fd": "90",
+        "xp": "1",  # purchases only
+        "vl": "25",
+        "isc": "3",
+        "cnt": "100",
+    },
+    # Cluster Sell: sales > $25k, last 90 days, 3+ insiders
+    "cluster_sell": {
+        "fd": "90",
+        "xs": "1",  # sales only
+        "vl": "25",
+        "isc": "3",
+        "cnt": "100",
+    },
+    # Significant Increase: purchases, >20% ownership change, last 90 days
+    "significant_increase": {
+        "fd": "90",
+        "xp": "1",  # purchases only
+        "ocl": "20",
+        "cnt": "100",
+    },
+    # Screener: all trades (buys + sells), last 30 days
+    "screener": {
+        "fd": "30",
+        "xp": "1", "xs": "1",  # purchases + sales
+        "cnt": "100",
+    },
 }
 
 # ---------------------------------------------------------------------------
 # Parameter name mapping: API keys → openinsider.com URL parameter names
 # ---------------------------------------------------------------------------
 
-# Maps API-level parameter names (as received from the route handler) to the
-# corresponding openinsider.com query string parameter names. Keys absent from
-# this dict (e.g. officer_filter) have no direct URL counterpart and are handled
-# via post-processing on the results instead.
 _API_TO_OI_PARAMS: dict[str, str] = {
     "ticker": "s",
     "min_value": "vl",
     "filing_days": "fd",
-    "min_delta_own": "fdlyl",
+    "min_delta_own": "ocl",
     "min_insiders": "isc",
-    "transaction_type": "xp",
 }
 
-# Maps the transaction_type API value to the openinsider.com xp parameter value.
-# purchase → "1" (purchases only), sale → "2" (sales only), all → "" (no filter).
-_TRANSACTION_TYPE_TO_XP: dict[str, str] = {
-    "purchase": "1",
-    "sale": "2",
-    "all": "",
+# transaction_type maps to xp/xs checkbox params
+_TRANSACTION_TYPE_MAP: dict[str, dict[str, str]] = {
+    "purchase": {"xp": "1"},
+    "sale": {"xs": "1"},
+    "all": {"xp": "1", "xs": "1"},
 }
 
 
 def _translate_custom_params(api_params: dict[str, str]) -> dict[str, str]:
-    """Translate API-level parameter names and values to openinsider.com URL parameters.
-
-    Applies ``_API_TO_OI_PARAMS`` to rename keys and ``_TRANSACTION_TYPE_TO_XP``
-    to convert ``transaction_type`` values. Parameters with no OI mapping (e.g.
-    ``officer_filter``) are silently dropped -- they must be handled via
-    post-processing on the results. Empty-string values are also dropped to avoid
-    sending ``?xp=`` when ``transaction_type=all`` is requested.
-
-    Args:
-        api_params: Custom params dict with API-level keys (e.g. ``min_value``).
-
-    Returns:
-        Dict with openinsider.com URL keys (e.g. ``vl``) and translated values.
-    """
+    """Translate API-level parameter names/values to openinsider.com URL parameters."""
     result: dict[str, str] = {}
     for api_key, value in api_params.items():
-        oi_key = _API_TO_OI_PARAMS.get(api_key)
-        if oi_key is None:
-            # No direct OI URL parameter (e.g. officer_filter) -- skip
-            continue
         if api_key == "transaction_type":
-            translated_value = _TRANSACTION_TYPE_TO_XP.get(value, "")
-            if translated_value:
-                result[oi_key] = translated_value
-        else:
+            result.update(_TRANSACTION_TYPE_MAP.get(value, {"xp": "1"}))
+            continue
+        oi_key = _API_TO_OI_PARAMS.get(api_key)
+        if oi_key is not None:
             result[oi_key] = value
     return result
+
 
 # ---------------------------------------------------------------------------
 # LRU+TTL cache
@@ -154,32 +199,16 @@ class OpenInsiderFetchError(Exception):
 
 
 def build_screener_url(preset: str, custom_params: dict[str, str] | None) -> str:
-    """Construct the full openinsider.com screener URL.
+    """Construct the full openinsider.com screener URL with all form fields.
 
-    For named presets (ceo_cfo_conviction, cluster_buy, significant_increase),
-    uses the preset configuration from PRESET_CONFIGS. Any custom_params passed
-    alongside a named preset are ignored.
-
-    For preset="custom", translates API-level keys in custom_params to
-    openinsider.com URL parameter names via ``_translate_custom_params()``
-    before URL-encoding. Parameters with no direct OI mapping (e.g.
-    ``officer_filter``) are dropped from the URL.
-
-    Args:
-        preset: Screener mode name or "custom".
-        custom_params: Custom params with API-level keys for custom mode;
-            ignored for named presets.
-
-    Returns:
-        Full URL string ready for httpx.get.
+    Starts from _BASE_PARAMS (all fields with empty defaults), then applies
+    preset overrides or translated custom params on top.
     """
+    params = dict(_BASE_PARAMS)
     if preset in PRESET_CONFIGS:
-        params = PRESET_CONFIGS[preset]
+        params.update(PRESET_CONFIGS[preset])
     else:
-        raw = custom_params or {}
-        params = _translate_custom_params(raw)
-    if not params:
-        return _BASE_URL
+        params.update(_translate_custom_params(custom_params or {}))
     return f"{_BASE_URL}?{urlencode(params)}"
 
 

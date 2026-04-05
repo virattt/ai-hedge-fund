@@ -11,13 +11,13 @@ Covers:
 - get_insider_detail: async entry point delegates to _fetch_detail via asyncio.to_thread
 - get_insider_detail: propagates ValueError from _fetch_detail
 """
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 
 from app.backend.models.insider_schemas import InsiderDetailResponse, InsiderTransactionDetail
+from tests.backend.insider.conftest import make_transaction_summary
 
 
 # ---------------------------------------------------------------------------
@@ -41,29 +41,11 @@ def _make_derivative_df(rows: list[dict] | None = None) -> pd.DataFrame:
     return pd.DataFrame([dict(defaults, **row) for row in rows])
 
 
-def _make_transaction_summary(
-    insider_name: str = "Tim Cook",
-    position: str = "CEO",
-) -> SimpleNamespace:
-    """Build a fake TransactionSummary-compatible namespace."""
-    return SimpleNamespace(
-        insider_name=insider_name,
-        position=position,
-        primary_activity="Sale",
-        net_change=-25000,
-        net_value=4375000.0,
-        remaining_shares=3000000,
-        has_10b5_1_plan=True,
-        transaction_types=["Sale"],
-        transaction_count=1,
-    )
-
-
 def _make_ownership_mock(
     *,
     market_df: pd.DataFrame | None = None,
     derivative_df: pd.DataFrame | None = None,
-    summary: SimpleNamespace | None = None,
+    summary: object | None = None,
     raise_on_summary: Exception | None = None,
 ) -> MagicMock:
     """Build a mock ownership object returned by filing.obj()."""
@@ -108,7 +90,7 @@ class TestFetchDetail:
         ownership = _make_ownership_mock(
             market_df=_make_market_df(),
             derivative_df=_make_derivative_df(),
-            summary=_make_transaction_summary(),
+            summary=make_transaction_summary(),
         )
         filing = _make_filing_mock(ownership=ownership)
 
