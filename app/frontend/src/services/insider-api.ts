@@ -139,6 +139,33 @@ export interface GrantsResponse {
   skipped_count: number;
 }
 
+/** One row from the OpenInsider screener table. */
+export interface OpenInsiderRecord {
+  filing_date: string;
+  trade_date: string;
+  ticker: string;
+  company_name: string;
+  insider_name: string;
+  title: string;
+  trade_type: string;
+  price: number | null;
+  qty: number | null;
+  owned: number | null;
+  delta_own: string | null;
+  value: number | null;
+}
+
+/**
+ * Top-level response from GET /insider/openinsider/screener.
+ * Includes screener records, total count, preset name, and cache status.
+ */
+export interface OpenInsiderResponse {
+  preset: string;
+  records: OpenInsiderRecord[];
+  total: number;
+  cached: boolean;
+}
+
 class InsiderService {
   private baseUrl = `${API_BASE_URL}/insider`;
 
@@ -232,6 +259,29 @@ class InsiderService {
     if (!response.ok) {
       const body = await response.json().catch(() => null);
       throw new Error(body?.detail || `Failed to fetch grants data: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Fetch insider trading records from openinsider.com via the screener endpoint.
+   * Maps to GET /insider/openinsider/screener.
+   * For preset modes (ceo_cfo_conviction, cluster_buy, significant_increase), customParams are ignored by the backend.
+   */
+  async getOpenInsiderScreener(
+    preset: string,
+    customParams?: Record<string, string>
+  ): Promise<OpenInsiderResponse> {
+    const params = new URLSearchParams({ preset });
+    if (customParams) {
+      Object.entries(customParams).forEach(([key, value]) => {
+        params.set(key, value);
+      });
+    }
+    const response = await fetch(`${this.baseUrl}/openinsider/screener?${params.toString()}`);
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.detail || `Failed to fetch OpenInsider screener data: ${response.statusText}`);
     }
     return response.json();
   }
