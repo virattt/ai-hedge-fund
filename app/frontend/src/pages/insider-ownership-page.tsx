@@ -271,6 +271,7 @@ export function InsiderOwnershipPage() {
           <SubNavLink to="/insider" label="Dashboard" />
           <SubNavLink to="/insider/ownership" label="Ownership" />
           <SubNavLink to="/insider/grants" label="Grants" />
+          <SubNavLink to="/insider/openinsider" label="OpenInsider" />
         </div>
       </div>
 

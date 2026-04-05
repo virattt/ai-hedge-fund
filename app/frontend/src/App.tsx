@@ -10,6 +10,7 @@ import { ScreenerPage } from './pages/screener-page';
 import { InsiderPage } from './pages/insider-page';
 import { InsiderOwnershipPage } from './pages/insider-ownership-page';
 import { InsiderGrantsPage } from './pages/insider-grants-page';
+import { InsiderOpeninsiderPage } from './pages/insider-openinsider-page';
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="/insider" element={<InsiderPage />} />
           <Route path="/insider/ownership" element={<InsiderOwnershipPage />} />
           <Route path="/insider/grants" element={<InsiderGrantsPage />} />
+          <Route path="/insider/openinsider" element={<InsiderOpeninsiderPage />} />
         </Routes>
       </div>
       <Toaster />
