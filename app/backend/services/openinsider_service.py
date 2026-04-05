@@ -49,6 +49,61 @@ PRESET_CONFIGS: dict[str, dict[str, str]] = {
 }
 
 # ---------------------------------------------------------------------------
+# Parameter name mapping: API keys → openinsider.com URL parameter names
+# ---------------------------------------------------------------------------
+
+# Maps API-level parameter names (as received from the route handler) to the
+# corresponding openinsider.com query string parameter names. Keys absent from
+# this dict (e.g. officer_filter) have no direct URL counterpart and are handled
+# via post-processing on the results instead.
+_API_TO_OI_PARAMS: dict[str, str] = {
+    "ticker": "s",
+    "min_value": "vl",
+    "filing_days": "fd",
+    "min_delta_own": "fdlyl",
+    "min_insiders": "isc",
+    "transaction_type": "xp",
+}
+
+# Maps the transaction_type API value to the openinsider.com xp parameter value.
+# purchase → "1" (purchases only), sale → "2" (sales only), all → "" (no filter).
+_TRANSACTION_TYPE_TO_XP: dict[str, str] = {
+    "purchase": "1",
+    "sale": "2",
+    "all": "",
+}
+
+
+def _translate_custom_params(api_params: dict[str, str]) -> dict[str, str]:
+    """Translate API-level parameter names and values to openinsider.com URL parameters.
+
+    Applies ``_API_TO_OI_PARAMS`` to rename keys and ``_TRANSACTION_TYPE_TO_XP``
+    to convert ``transaction_type`` values. Parameters with no OI mapping (e.g.
+    ``officer_filter``) are silently dropped -- they must be handled via
+    post-processing on the results. Empty-string values are also dropped to avoid
+    sending ``?xp=`` when ``transaction_type=all`` is requested.
+
+    Args:
+        api_params: Custom params dict with API-level keys (e.g. ``min_value``).
+
+    Returns:
+        Dict with openinsider.com URL keys (e.g. ``vl``) and translated values.
+    """
+    result: dict[str, str] = {}
+    for api_key, value in api_params.items():
+        oi_key = _API_TO_OI_PARAMS.get(api_key)
+        if oi_key is None:
+            # No direct OI URL parameter (e.g. officer_filter) -- skip
+            continue
+        if api_key == "transaction_type":
+            translated_value = _TRANSACTION_TYPE_TO_XP.get(value, "")
+            if translated_value:
+                result[oi_key] = translated_value
+        else:
+            result[oi_key] = value
+    return result
+
+# ---------------------------------------------------------------------------
 # LRU+TTL cache
 # ---------------------------------------------------------------------------
 
@@ -105,11 +160,15 @@ def build_screener_url(preset: str, custom_params: dict[str, str] | None) -> str
     uses the preset configuration from PRESET_CONFIGS. Any custom_params passed
     alongside a named preset are ignored.
 
-    For preset="custom", encodes custom_params directly as query string.
+    For preset="custom", translates API-level keys in custom_params to
+    openinsider.com URL parameter names via ``_translate_custom_params()``
+    before URL-encoding. Parameters with no direct OI mapping (e.g.
+    ``officer_filter``) are dropped from the URL.
 
     Args:
         preset: Screener mode name or "custom".
-        custom_params: URL parameters for custom mode; ignored for named presets.
+        custom_params: Custom params with API-level keys for custom mode;
+            ignored for named presets.
 
     Returns:
         Full URL string ready for httpx.get.
@@ -117,7 +176,8 @@ def build_screener_url(preset: str, custom_params: dict[str, str] | None) -> str
     if preset in PRESET_CONFIGS:
         params = PRESET_CONFIGS[preset]
     else:
-        params = custom_params or {}
+        raw = custom_params or {}
+        params = _translate_custom_params(raw)
     if not params:
         return _BASE_URL
     return f"{_BASE_URL}?{urlencode(params)}"
