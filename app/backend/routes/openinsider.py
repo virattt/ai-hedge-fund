@@ -43,6 +43,7 @@ ALLOWED_CUSTOM_KEYS: frozenset[str] = frozenset(
     "/screener",
     response_model=OpenInsiderResponse,
     responses={
+        400: {"description": "Invalid parameter values (e.g. bad preset combination)"},
         422: {"description": "Invalid query parameters (preset, ticker regex, out-of-range values, or unknown enum value)"},
         502: {"description": "Failed to fetch data from openinsider.com after retry"},
         500: {"description": "Internal server error"},
@@ -120,6 +121,9 @@ async def openinsider_screener(
 
     try:
         return await get_openinsider_screener(preset=preset, custom_params=custom_params)
+    except ValueError as exc:
+        logger.warning("Invalid parameters for openinsider screener preset=%s: %s", preset, exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except OpenInsiderFetchError as exc:
         logger.warning("OpenInsider fetch failed for preset=%s: %s", preset, exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc

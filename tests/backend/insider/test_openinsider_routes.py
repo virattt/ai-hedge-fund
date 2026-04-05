@@ -134,6 +134,19 @@ async def test_screener_service_error_returns_502(client: httpx.AsyncClient) -> 
 
 
 @pytest.mark.asyncio
+async def test_screener_value_error_returns_400(client: httpx.AsyncClient) -> None:
+    """ValueError from service is converted to HTTP 400."""
+    with patch(
+        "app.backend.routes.openinsider.get_openinsider_screener",
+        new_callable=AsyncMock,
+        side_effect=ValueError("invalid parameter combination"),
+    ):
+        response = await client.get("/insider/openinsider/screener?preset=ceo_cfo_conviction")
+
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_screener_generic_exception_returns_500(client: httpx.AsyncClient) -> None:
     """Unhandled exception from service is converted to HTTP 500."""
     with patch(
