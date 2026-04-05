@@ -50,11 +50,11 @@ class LLMModel(BaseModel):
 
     def has_json_mode(self) -> bool:
         """Check if the model supports JSON mode"""
+        # All Ollama models support JSON mode via format="json"
+        if self.is_ollama():
+            return True
         if self.is_deepseek() or self.is_gemini():
             return False
-        # Only certain Ollama models support JSON mode
-        if self.is_ollama():
-            return "llama3" in self.model_name or "neural-chat" in self.model_name
         # OpenRouter models generally support JSON mode
         if self.provider == ModelProvider.OPENROUTER:
             return True

@@ -6,13 +6,23 @@ from collections import OrderedDict
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from crawl4ai import AsyncWebCrawler
+
 from app.backend.database import get_db
 from app.backend.database.models import ScrapeResult, ScrapingWebsite
-from app.backend.models.news_schemas import NewsArticleResponse, NewsSummarizeRequest
+from app.backend.models.news_schemas import (
+    AnalyzeArticleInput,
+    AnalyzeArticlesRequest,
+    AnalyzedArticleResponse,
+    NewsArticleResponse,
+    NewsSummarizeRequest,
+    RankRelevanceRequest,
+    RankedNewsItem,
+)
 from app.backend.repositories.scraping_repository import ScrapingRepository
 from app.backend.services.api_key_service import ApiKeyService
-from app.backend.services.news_service import summarize_scrape_result
-from app.backend.services.realtime_news_service import RealtimeNewsItem, fetch_all_realtime_news
+from app.backend.services.news_service import crawl_and_analyze_article, rank_news_relevance, summarize_scrape_result
+from app.backend.services.realtime_news_service import RealtimeNewsItem, fetch_all_realtime_news, fetch_blog_news, fetch_stocks_news, fetch_etf_news, fetch_market_pulse
 
 logger = logging.getLogger(__name__)
 
@@ -148,3 +158,117 @@ async def get_realtime_news() -> list[RealtimeNewsItem]:
     except Exception as e:
         logger.exception("Failed to fetch realtime news")
         raise HTTPException(status_code=500, detail=f"Failed to fetch realtime news: {str(e)}") from e
+
+
+@router.post(
+    "/rank-relevance",
+    response_model=list[RankedNewsItem],
+    responses={500: {"description": "Internal server error"}},
+)
+async def rank_relevance(request: RankRelevanceRequest, db: Session = Depends(get_db)) -> list[RankedNewsItem]:
+    """Rank news titles by market relevance using an LLM (titles-only, fast)."""
+    try:
+        api_keys = ApiKeyService(db).get_api_keys_dict()
+        result = await rank_news_relevance(
+            titles=request.titles,
+            model_name=request.model_name,
+            model_provider=request.model_provider,
+            api_keys=api_keys,
+        )
+        return result.ranked_items
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to rank news relevance")
+        raise HTTPException(status_code=500, detail=f"Failed to rank news: {str(e)}") from e
+
+
+@router.post(
+    "/analyze-articles",
+    response_model=list[AnalyzedArticleResponse],
+    responses={500: {"description": "Internal server error"}},
+)
+async def analyze_articles(request: AnalyzeArticlesRequest, db: Session = Depends(get_db)) -> list[AnalyzedArticleResponse]:
+    """Crawl news article URLs with crawl4ai and analyze with LLM."""
+    try:
+        api_keys = ApiKeyService(db).get_api_keys_dict()
+        sem = asyncio.Semaphore(_CONCURRENCY_LIMIT)
+        results: list[AnalyzedArticleResponse | None] = [None] * len(request.articles)
+
+        async with AsyncWebCrawler() as crawler:
+            async def _process(idx: int, article: AnalyzeArticleInput) -> None:
+                async with sem:
+                    results[idx] = await crawl_and_analyze_article(
+                        url=article.url,
+                        title=article.title,
+                        source=article.source,
+                        model_name=request.model_name,
+                        model_provider=request.model_provider,
+                        api_keys=api_keys,
+                        crawler=crawler,
+                    )
+
+            tasks = [_process(i, a) for i, a in enumerate(request.articles)]
+            await asyncio.gather(*tasks)
+
+        return [r for r in results if r is not None]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to analyze articles")
+        raise HTTPException(status_code=500, detail=f"Failed to analyze articles: {str(e)}") from e
+
+
+@router.get(
+    "/blogs",
+    response_model=list[RealtimeNewsItem],
+    responses={500: {"description": "Internal server error"}},
+)
+async def get_blog_news() -> list[RealtimeNewsItem]:
+    """Fetch blog posts from finviz."""
+    try:
+        return await fetch_blog_news()
+    except Exception as e:
+        logger.exception("Failed to fetch blog news")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch blog news: {str(e)}") from e
+
+
+@router.get(
+    "/stocks",
+    response_model=list[RealtimeNewsItem],
+    responses={500: {"description": "Internal server error"}},
+)
+async def get_stocks_news() -> list[RealtimeNewsItem]:
+    """Fetch news for popular individual stocks."""
+    try:
+        return await fetch_stocks_news()
+    except Exception as e:
+        logger.exception("Failed to fetch stocks news")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch stocks news: {str(e)}") from e
+
+
+@router.get(
+    "/etf",
+    response_model=list[RealtimeNewsItem],
+    responses={500: {"description": "Internal server error"}},
+)
+async def get_etf_news() -> list[RealtimeNewsItem]:
+    """Fetch news for popular ETFs."""
+    try:
+        return await fetch_etf_news()
+    except Exception as e:
+        logger.exception("Failed to fetch ETF news")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch ETF news: {str(e)}") from e
+
+
+@router.get(
+    "/market-pulse",
+    responses={500: {"description": "Internal server error"}},
+)
+async def get_market_pulse():
+    """Fetch market index data and related news."""
+    try:
+        return await fetch_market_pulse()
+    except Exception as e:
+        logger.exception("Failed to fetch market pulse")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch market pulse: {str(e)}") from e

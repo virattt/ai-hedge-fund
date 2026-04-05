@@ -10,6 +10,9 @@ from app.backend.routes.language_models import router as language_models_router
 from app.backend.routes.api_keys import router as api_keys_router
 from app.backend.routes.scraping import router as scraping_router
 from app.backend.routes.news import router as news_router
+from app.backend.routes.screener import router as screener_router
+from app.backend.routes.insider import router as insider_router
+from app.backend.routes.openinsider import router as openinsider_router
 
 # Main API router
 api_router = APIRouter()
@@ -25,3 +28,6 @@ api_router.include_router(language_models_router, tags=["language-models"])
 api_router.include_router(api_keys_router, tags=["api-keys"])
 api_router.include_router(scraping_router, tags=["scraping"])
 api_router.include_router(news_router, tags=["news"])
+api_router.include_router(screener_router, tags=["screener"])
+api_router.include_router(insider_router, tags=["insider"])
+api_router.include_router(openinsider_router, tags=["openinsider"])

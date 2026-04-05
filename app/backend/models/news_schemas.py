@@ -37,3 +37,71 @@ class NewsSummarizeRequest(BaseModel):
     result_ids: list[int] | None = None
     website_ids: list[int] | None = None
     limit: int = 20
+
+
+# ---------------------------------------------------------------------------
+# Rank relevance (titles-only LLM call)
+# ---------------------------------------------------------------------------
+
+
+class RankRelevanceRequest(BaseModel):
+    titles: list[str]
+    model_name: str
+    model_provider: str
+
+
+class RankedNewsItem(BaseModel):
+    index: int
+    relevance_score: float
+    reason: str
+
+
+class RankRelevanceResponse(BaseModel):
+    """LLM structured output for ranking news by market relevance."""
+    ranked_items: list[RankedNewsItem]
+
+
+# ---------------------------------------------------------------------------
+# Article crawl + analysis
+# ---------------------------------------------------------------------------
+
+
+class AnalyzeArticleInput(BaseModel):
+    url: str
+    title: str
+    source: str
+
+
+class AnalyzeArticlesRequest(BaseModel):
+    articles: list[AnalyzeArticleInput]
+    model_name: str
+    model_provider: str
+
+
+class AnalyzedArticleResponse(BaseModel):
+    url: str
+    title: str
+    summary: str
+    market_insight: str
+    sentiment: str
+    tickers_mentioned: list[str]
+    source_name: str
+    analyzed_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Market Pulse
+# ---------------------------------------------------------------------------
+
+
+class MarketIndex(BaseModel):
+    symbol: str
+    name: str
+    price: float
+    change: float
+    change_percent: float
+
+
+class MarketPulseResponse(BaseModel):
+    indices: list[MarketIndex]
+    news: list  # list of RealtimeNewsItem dicts
