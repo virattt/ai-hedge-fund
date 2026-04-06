@@ -173,19 +173,21 @@ async def insider_thirteenf(
     offset: int = Query(0, ge=0, le=100000, description="Number of filings to skip before the current page"),
     year: int | None = Query(None, description="Optional filing year filter"),
     quarter: int | None = Query(None, ge=1, le=4, description="Optional filing quarter filter (1–4)"),
+    company_name: str | None = Query(None, min_length=2, max_length=100, description="Optional company name for fuzzy search"),
 ) -> ThirteenFListResponse:
     """Return a paginated listing of 13F-HR filings across all companies.
 
     No ticker is required. ``year`` and ``quarter`` are optional filters forwarded
-    to ``get_filings(form='13F-HR')``. ``has_more`` signals whether additional
-    pages exist beyond the current offset.
+    to ``get_filings(form='13F-HR')``. ``company_name`` enables fuzzy search via
+    ``Filings.find()`` which combines company lookup and CIK filtering internally.
+    ``has_more`` signals whether additional pages exist beyond the current offset.
     """
     try:
-        return await get_thirteenf_filings(limit=limit, offset=offset, year=year, quarter=quarter)
+        return await get_thirteenf_filings(limit=limit, offset=offset, year=year, quarter=quarter, company_name=company_name)
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("Failed to fetch 13F-HR filings limit=%d offset=%d year=%s quarter=%s", limit, offset, year, quarter)
+        logger.exception("Failed to fetch 13F-HR filings limit=%d offset=%d year=%s quarter=%s company_name=%s", limit, offset, year, quarter, company_name)
         raise HTTPException(status_code=500, detail=f"Failed to fetch 13F-HR filings: {exc}") from exc
 
 

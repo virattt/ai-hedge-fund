@@ -150,7 +150,44 @@ async def test_thirteenf_listing_passes_year_quarter_params(client: httpx.AsyncC
     ) as mock_svc:
         await client.get("/insider/thirteenf?limit=20&offset=0&year=2026&quarter=1")
 
-    mock_svc.assert_called_once_with(limit=20, offset=0, year=2026, quarter=1)
+    mock_svc.assert_called_once_with(limit=20, offset=0, year=2026, quarter=1, company_name=None)
+
+
+@pytest.mark.asyncio
+async def test_thirteenf_with_company_name_passes_param(client: httpx.AsyncClient) -> None:
+    """company_name query param is forwarded to get_thirteenf_filings."""
+    mock_response = _make_list_response()
+    with patch(
+        "app.backend.routes.insider.get_thirteenf_filings",
+        new_callable=AsyncMock,
+        return_value=mock_response,
+    ) as mock_svc:
+        response = await client.get("/insider/thirteenf?company_name=Berkshire")
+
+    assert response.status_code == 200
+    mock_svc.assert_called_once_with(limit=20, offset=0, year=None, quarter=None, company_name="Berkshire")
+
+
+@pytest.mark.asyncio
+async def test_thirteenf_company_name_too_short_returns_422(client: httpx.AsyncClient) -> None:
+    """company_name shorter than min_length=2 triggers FastAPI validation (422)."""
+    response = await client.get("/insider/thirteenf?company_name=B")
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_thirteenf_without_company_name_passes_none(client: httpx.AsyncClient) -> None:
+    """When company_name is omitted, get_thirteenf_filings receives company_name=None."""
+    mock_response = _make_list_response()
+    with patch(
+        "app.backend.routes.insider.get_thirteenf_filings",
+        new_callable=AsyncMock,
+        return_value=mock_response,
+    ) as mock_svc:
+        await client.get("/insider/thirteenf")
+
+    _, kwargs = mock_svc.call_args
+    assert kwargs["company_name"] is None
 
 
 @pytest.mark.asyncio
@@ -167,6 +204,7 @@ async def test_thirteenf_listing_defaults_no_year_quarter(client: httpx.AsyncCli
     _, kwargs = mock_svc.call_args
     assert kwargs["year"] is None
     assert kwargs["quarter"] is None
+    assert kwargs.get("company_name") is None
 
 
 @pytest.mark.asyncio
