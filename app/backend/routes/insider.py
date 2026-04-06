@@ -1,21 +1,40 @@
 """FastAPI routes for insider trading data.
 
-Exposes four endpoints:
+Exposes endpoints:
 - GET /insider/summary  -- filing-level summaries for the dashboard table and cards
 - GET /insider/detail   -- per-transaction drill-down for a specific SEC filing
 - GET /insider/ownership -- per-insider ownership change history for the ownership sub-page
 - GET /insider/grants   -- derivative trades (grants, exercises, conversions) sub-page
+- GET /insider/thirteenf -- paginated listing of 13F-HR filings across all companies
+- GET /insider/thirteenf/compare -- quarter-over-quarter holding comparison for a single filing
+- GET /insider/thirteenf/history -- multi-period holding history for a single filing
 
-All endpoints validate the ``ticker`` query parameter against ``^[A-Z]{1,5}$``
-using FastAPI's ``Query`` validator to prevent malformed values from reaching
-the edgartools backend.
+Ticker-based endpoints validate the ``ticker`` parameter against ``^[A-Z]{1,5}$``.
+13F-HR endpoints validate ``accession_no`` against ``^\\d{10}-\\d{2}-\\d{6}$`` using
+FastAPI's ``Query`` validator to reject malformed values before they reach the service layer.
 """
 import logging
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.backend.models.insider_schemas import GrantsResponse, InsiderDetailResponse, InsiderSummaryResponse, OwnershipChangesResponse
-from app.backend.services.insider_service import get_insider_detail, get_insider_grants, get_insider_summary, get_ownership_changes
+from app.backend.models.insider_schemas import (
+    CompareHoldingsResponse,
+    GrantsResponse,
+    HoldingHistoryResponse,
+    InsiderDetailResponse,
+    InsiderSummaryResponse,
+    OwnershipChangesResponse,
+    ThirteenFListResponse,
+)
+from app.backend.services.insider_service import (
+    get_compare_holdings,
+    get_holding_history,
+    get_insider_detail,
+    get_insider_grants,
+    get_insider_summary,
+    get_ownership_changes,
+    get_thirteenf_filings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -139,3 +158,92 @@ async def insider_grants(
     except Exception as exc:
         logger.exception("Failed to fetch insider grants for ticker=%s", ticker)
         raise HTTPException(status_code=500, detail=f"Failed to fetch insider grants: {exc}") from exc
+
+
+@router.get(
+    "/thirteenf",
+    response_model=ThirteenFListResponse,
+    responses={
+        422: {"description": "Invalid query parameters"},
+        500: {"description": "Internal server error"},
+    },
+)
+async def insider_thirteenf(
+    limit: int = Query(20, ge=1, le=100, description="Maximum number of filings to return (page size)"),
+    offset: int = Query(0, ge=0, le=100000, description="Number of filings to skip before the current page"),
+    year: int | None = Query(None, description="Optional filing year filter"),
+    quarter: int | None = Query(None, ge=1, le=4, description="Optional filing quarter filter (1–4)"),
+) -> ThirteenFListResponse:
+    """Return a paginated listing of 13F-HR filings across all companies.
+
+    No ticker is required. ``year`` and ``quarter`` are optional filters forwarded
+    to ``get_filings(form='13F-HR')``. ``has_more`` signals whether additional
+    pages exist beyond the current offset.
+    """
+    try:
+        return await get_thirteenf_filings(limit=limit, offset=offset, year=year, quarter=quarter)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to fetch 13F-HR filings limit=%d offset=%d year=%s quarter=%s", limit, offset, year, quarter)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch 13F-HR filings: {exc}") from exc
+
+
+@router.get(
+    "/thirteenf/compare",
+    response_model=CompareHoldingsResponse,
+    responses={
+        404: {"description": "No comparison data available (no previous quarter found)"},
+        422: {"description": "Malformed accession_no (must match \\d{10}-\\d{2}-\\d{6})"},
+        500: {"description": "Internal server error"},
+    },
+)
+async def insider_thirteenf_compare(
+    accession_no: str = Query(..., pattern=r"^\d{10}-\d{2}-\d{6}$", description="SEC accession number (e.g. '0001234567-26-000001')"),
+) -> CompareHoldingsResponse:
+    """Return quarter-over-quarter holding comparison for a single 13F-HR filing.
+
+    ``accession_no`` must match ``\\d{10}-\\d{2}-\\d{6}`` — FastAPI returns 422
+    automatically for malformed values. Returns 404 when no previous quarter is
+    available for comparison.
+    """
+    try:
+        return await get_compare_holdings(accession_no=accession_no)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to fetch compare holdings for accession_no=%s", accession_no)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch compare holdings: {exc}") from exc
+
+
+@router.get(
+    "/thirteenf/history",
+    response_model=HoldingHistoryResponse,
+    responses={
+        404: {"description": "No holding history available for this filing"},
+        422: {"description": "Malformed accession_no (must match \\d{10}-\\d{2}-\\d{6})"},
+        500: {"description": "Internal server error"},
+    },
+)
+async def insider_thirteenf_history(
+    accession_no: str = Query(..., pattern=r"^\d{10}-\d{2}-\d{6}$", description="SEC accession number (e.g. '0001234567-26-000001')"),
+    periods: int = Query(4, ge=1, le=8, description="Number of historical periods to include"),
+) -> HoldingHistoryResponse:
+    """Return multi-period holding history for a single 13F-HR filing.
+
+    ``accession_no`` must match ``\\d{10}-\\d{2}-\\d{6}`` — FastAPI returns 422
+    automatically for malformed values. Returns 404 when no history data is
+    available. ``periods`` controls how many quarters of history are returned
+    (default 4, max 8).
+    """
+    try:
+        return await get_holding_history(accession_no=accession_no, periods=periods)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to fetch holding history for accession_no=%s periods=%d", accession_no, periods)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch holding history: {exc}") from exc
