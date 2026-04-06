@@ -2,6 +2,7 @@
 
 Defines all request/response models for the insider trading dashboard,
 supporting Forms 3, 4, and 5 from the SEC EDGAR edgartools API.
+Also defines schemas for the 13F-HR institutional holdings tab.
 """
 from pydantic import BaseModel
 
@@ -169,3 +170,95 @@ class GrantsResponse(BaseModel):
     records: list[GrantRecord]
     total: int
     skipped_count: int = 0
+
+
+class ThirteenFFilingListItem(BaseModel):
+    """Lightweight filing entry for the paginated 13-F listing.
+
+    Populated from PyArrow-backed Filings index attributes only — no
+    ``filing.obj()`` call is made, keeping the listing endpoint fast.
+    """
+
+    filing_date: str
+    accession_no: str
+    company: str
+    cik: int
+    form: str
+
+
+class ThirteenFListResponse(BaseModel):
+    """Paginated response for GET /insider/thirteenf.
+
+    has_more signals whether additional pages exist beyond the current offset.
+    skipped_count reports filings that could not be parsed during extraction.
+    """
+
+    filings: list[ThirteenFFilingListItem]
+    total: int
+    has_more: bool
+    skipped_count: int = 0
+
+
+class CompareHoldingsRecord(BaseModel):
+    """One row from the compare_holdings() DataFrame for quarter-over-quarter diff.
+
+    All numeric fields are optional because a filing's first appearance has no
+    previous quarter values (status='NEW') and a closed position has no current
+    quarter values (status='CLOSED').
+    """
+
+    cusip: str
+    ticker: str | None = None
+    issuer: str
+    shares: int | None = None
+    prev_shares: int | None = None
+    value: int | None = None
+    prev_value: int | None = None
+    share_change: int | None = None
+    share_change_pct: float | None = None
+    value_change: int | None = None
+    value_change_pct: float | None = None
+    status: str
+
+
+class CompareHoldingsResponse(BaseModel):
+    """Response for GET /insider/thirteenf/compare.
+
+    Returns quarter-over-quarter holding comparison for a single filing
+    identified by accession_no.
+    """
+
+    accession_no: str
+    current_period: str
+    previous_period: str
+    manager_name: str
+    records: list[CompareHoldingsRecord]
+    total: int
+
+
+class HoldingHistoryRecord(BaseModel):
+    """One row from the holding_history() DataFrame for multi-period view.
+
+    periods_data maps period date strings (e.g. '2025-12-31') to share counts
+    or None when the holding was absent in that period. Using a nested dict
+    avoids top-level dynamic keys and provides clean TypeScript typing.
+    """
+
+    cusip: str
+    ticker: str | None = None
+    issuer: str
+    periods_data: dict[str, int | None]
+
+
+class HoldingHistoryResponse(BaseModel):
+    """Response for GET /insider/thirteenf/history.
+
+    periods lists the date strings used as keys in each record's periods_data,
+    ordered oldest-to-newest, enabling the frontend to render ordered columns.
+    """
+
+    accession_no: str
+    manager_name: str
+    periods: list[str]
+    records: list[HoldingHistoryRecord]
+    total: int

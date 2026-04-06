@@ -12,6 +12,10 @@ insider_service._grants._fetch_grants intercept the calls correctly.
 
 All other logic lives in sub-modules (_summary, _detail, _ownership, _grants,
 _helpers) and is imported here for backwards-compatible access.
+
+The 13F-HR entry points (get_thirteenf_filings, get_compare_holdings,
+get_holding_history) will be added in Phase 2.2 once the worker functions
+in _thirteenf.py are implemented.
 """
 import asyncio
 import time
