@@ -160,7 +160,7 @@ function CompareHoldingsSection({ accessionNo }: { accessionNo: string }) {
       })
       .catch((e) => {
         setError(e instanceof Error ? e.message : 'Failed to load compare holdings');
-        setLoaded(true);
+        // Keep loaded=false on error so user can retry
       })
       .finally(() => {
         setLoading(false);
@@ -269,7 +269,7 @@ function HoldingHistorySection({ accessionNo }: { accessionNo: string }) {
       })
       .catch((e) => {
         setError(e instanceof Error ? e.message : 'Failed to load holding history');
-        setLoaded(true);
+        // Keep loaded=false on error so user can retry
       })
       .finally(() => {
         setLoading(false);
