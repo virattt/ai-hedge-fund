@@ -10,18 +10,31 @@ get_ownership_changes and get_insider_grants are defined here so that tests
 patching insider_service._fetch_ownership_changes and
 insider_service._grants._fetch_grants intercept the calls correctly.
 
-All other logic lives in sub-modules (_summary, _detail, _ownership, _grants,
-_helpers) and is imported here for backwards-compatible access.
-
 The 13F-HR entry points (get_thirteenf_filings, get_compare_holdings,
-get_holding_history) will be added in Phase 2.2 once the worker functions
-in _thirteenf.py are implemented.
+get_holding_history) are also defined here so that tests can patch
+insider_service._fetch_thirteenf_filings, insider_service._fetch_compare_holdings,
+and insider_service._fetch_holding_history to intercept the calls correctly.
+
+All other logic lives in sub-modules (_summary, _detail, _ownership, _grants,
+_helpers, _thirteenf) and is imported here for backwards-compatible access.
 """
 import asyncio
 import time
 from collections import OrderedDict
+from datetime import date
 
-from app.backend.models.insider_schemas import GrantsResponse, OwnershipChangesResponse  # noqa: F401
+from app.backend.models.insider_schemas import (  # noqa: F401
+    CompareHoldingsResponse,
+    GrantsResponse,
+    HoldingHistoryResponse,
+    OwnershipChangesResponse,
+    ThirteenFListResponse,
+)
+from app.backend.services.insider_service._thirteenf import (  # noqa: F401
+    _fetch_compare_holdings,
+    _fetch_holding_history,
+    _fetch_thirteenf_filings,
+)
 from app.backend.services.insider_service._detail import _fetch_detail, _parse_trade_rows, get_insider_detail  # noqa: F401
 from app.backend.services.insider_service._grants import _fetch_grants  # noqa: F401
 from app.backend.services.insider_service._helpers import (  # noqa: F401
@@ -108,5 +121,91 @@ async def get_insider_grants(ticker: str, form_type: str = "4", limit: int = 50,
     if isinstance(cached, GrantsResponse):
         return cached
     result = await asyncio.to_thread(_grants._fetch_grants, ticker, form_type, limit, offset)
+    _cache_put(cache_key, result)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# 13F-HR async entry points — defined here so tests can patch
+# insider_service._fetch_thirteenf_filings etc. to intercept calls.
+# ---------------------------------------------------------------------------
+
+
+async def get_thirteenf_filings(
+    limit: int,
+    offset: int,
+    year: int | None,
+    quarter: int | None,
+) -> ThirteenFListResponse:
+    """Async entry point for paginated 13F-HR filing listing. Checks LRU+TTL cache first.
+
+    The cache key includes today's date (``date.today().isoformat()``) so that
+    the listing expires daily and new SEC filings are picked up automatically.
+
+    Args:
+        limit: Maximum number of filings to return (page size).
+        offset: Number of filings to skip before the current page.
+        year: Optional filing year filter; forwarded to the worker when not None.
+        quarter: Optional filing quarter filter (1–4); forwarded when not None.
+
+    Returns:
+        ThirteenFListResponse with filings, total count, has_more, and skipped_count.
+    """
+    cache_key = f"thirteenf:filings:{date.today().isoformat()}:{year}:{quarter}:{limit}:{offset}"
+    cached = _cache_get(cache_key)
+    if isinstance(cached, ThirteenFListResponse):
+        return cached
+    result = await asyncio.to_thread(_fetch_thirteenf_filings, limit, offset, year, quarter)
+    _cache_put(cache_key, result)
+    return result
+
+
+async def get_compare_holdings(accession_no: str) -> CompareHoldingsResponse:
+    """Async entry point for quarter-over-quarter holding comparison. Checks LRU+TTL cache first.
+
+    ValueError from the worker (no comparison data, filing not found) is not
+    caught here — it propagates to the route handler for 404 mapping.
+
+    Args:
+        accession_no: SEC accession number in ``NNNNNNNNNN-YY-NNNNNN`` format.
+
+    Returns:
+        CompareHoldingsResponse with records and period metadata.
+
+    Raises:
+        ValueError: Propagated from worker when comparison data is unavailable.
+        RuntimeError: Propagated from worker on SEC API errors.
+    """
+    cache_key = f"thirteenf:compare:{accession_no}"
+    cached = _cache_get(cache_key)
+    if isinstance(cached, CompareHoldingsResponse):
+        return cached
+    result = await asyncio.to_thread(_fetch_compare_holdings, accession_no)
+    _cache_put(cache_key, result)
+    return result
+
+
+async def get_holding_history(accession_no: str, periods: int) -> HoldingHistoryResponse:
+    """Async entry point for multi-period holding history. Checks LRU+TTL cache first.
+
+    ValueError from the worker (no history data, filing not found) is not
+    caught here — it propagates to the route handler for 404 mapping.
+
+    Args:
+        accession_no: SEC accession number in ``NNNNNNNNNN-YY-NNNNNN`` format.
+        periods: Number of historical periods to include.
+
+    Returns:
+        HoldingHistoryResponse with records and ordered period list.
+
+    Raises:
+        ValueError: Propagated from worker when history data is unavailable.
+        RuntimeError: Propagated from worker on SEC API errors.
+    """
+    cache_key = f"thirteenf:history:{accession_no}:{periods}"
+    cached = _cache_get(cache_key)
+    if isinstance(cached, HoldingHistoryResponse):
+        return cached
+    result = await asyncio.to_thread(_fetch_holding_history, accession_no, periods)
     _cache_put(cache_key, result)
     return result
