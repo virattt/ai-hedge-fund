@@ -139,6 +139,72 @@ export interface GrantsResponse {
   skipped_count: number;
 }
 
+/** Lightweight filing entry for the 13F-HR listing. */
+export interface ThirteenFFilingListItem {
+  filing_date: string;
+  accession_no: string;
+  company: string;
+  cik: number;
+  form: string;
+}
+
+/** Paginated response from GET /insider/thirteenf. */
+export interface ThirteenFListResponse {
+  filings: ThirteenFFilingListItem[];
+  total: number;
+  has_more: boolean;
+  skipped_count: number;
+}
+
+/** One row from the compare_holdings DataFrame. */
+export interface CompareHoldingsRecord {
+  cusip: string;
+  ticker: string | null;
+  issuer: string;
+  shares: number | null;
+  prev_shares: number | null;
+  value: number | null;
+  prev_value: number | null;
+  share_change: number | null;
+  share_change_pct: number | null;
+  value_change: number | null;
+  value_change_pct: number | null;
+  status: string;
+}
+
+/**
+ * Response from GET /insider/thirteenf/compare.
+ * Contains quarter-over-quarter holding comparison for a specific filing.
+ */
+export interface CompareHoldingsResponse {
+  accession_no: string;
+  current_period: string;
+  previous_period: string;
+  manager_name: string;
+  records: CompareHoldingsRecord[];
+  total: number;
+}
+
+/** One row from the holding_history DataFrame. Dynamic period columns nested under periods_data. */
+export interface HoldingHistoryRecord {
+  cusip: string;
+  ticker: string | null;
+  issuer: string;
+  periods_data: Record<string, number | null>;
+}
+
+/**
+ * Response from GET /insider/thirteenf/history.
+ * Contains multi-period holding history for a specific filing.
+ */
+export interface HoldingHistoryResponse {
+  accession_no: string;
+  manager_name: string;
+  periods: string[];
+  records: HoldingHistoryRecord[];
+  total: number;
+}
+
 /** One row from the OpenInsider screener table. */
 export interface OpenInsiderRecord {
   filing_date: string;
@@ -282,6 +348,61 @@ class InsiderService {
     if (!response.ok) {
       const body = await response.json().catch(() => null);
       throw new Error(body?.detail || `Failed to fetch OpenInsider screener data: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Fetch paginated 13F-HR filings across all companies.
+   * Maps to GET /insider/thirteenf.
+   */
+  async getThirteenFFilings(
+    limit?: number,
+    offset?: number,
+    year?: number,
+    quarter?: number
+  ): Promise<ThirteenFListResponse> {
+    const params = new URLSearchParams();
+    if (limit !== undefined) params.set('limit', String(limit));
+    if (offset !== undefined) params.set('offset', String(offset));
+    if (year !== undefined) params.set('year', String(year));
+    if (quarter !== undefined) params.set('quarter', String(quarter));
+    const response = await fetch(`${this.baseUrl}/thirteenf?${params.toString()}`);
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.detail || `Failed to fetch 13F filings: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Fetch quarter-over-quarter holding comparison for a specific 13F-HR filing.
+   * Maps to GET /insider/thirteenf/compare.
+   */
+  async getCompareHoldings(accessionNo: string): Promise<CompareHoldingsResponse> {
+    const params = new URLSearchParams({ accession_no: accessionNo });
+    const response = await fetch(`${this.baseUrl}/thirteenf/compare?${params.toString()}`);
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.detail || `Failed to fetch compare holdings: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Fetch multi-period holding history for a specific 13F-HR filing.
+   * Maps to GET /insider/thirteenf/history.
+   */
+  async getHoldingHistory(
+    accessionNo: string,
+    periods?: number
+  ): Promise<HoldingHistoryResponse> {
+    const params = new URLSearchParams({ accession_no: accessionNo });
+    if (periods !== undefined) params.set('periods', String(periods));
+    const response = await fetch(`${this.baseUrl}/thirteenf/history?${params.toString()}`);
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.detail || `Failed to fetch holding history: ${response.statusText}`);
     }
     return response.json();
   }
