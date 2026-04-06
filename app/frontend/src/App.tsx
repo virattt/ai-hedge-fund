@@ -8,8 +8,6 @@ import { NewsPage } from './pages/news-page';
 import { ScrapingResultsPage } from './pages/scraping-results-page';
 import { ScreenerPage } from './pages/screener-page';
 import { InsiderPage } from './pages/insider-page';
-import { InsiderOwnershipPage } from './pages/insider-ownership-page';
-import { InsiderGrantsPage } from './pages/insider-grants-page';
 import { InsiderOpeninsiderPage } from './pages/insider-openinsider-page';
 
 export default function App() {
@@ -24,8 +22,6 @@ export default function App() {
           <Route path="/news" element={<NewsPage />} />
           <Route path="/screener" element={<ScreenerPage />} />
           <Route path="/insider" element={<InsiderPage />} />
-          <Route path="/insider/ownership" element={<InsiderOwnershipPage />} />
-          <Route path="/insider/grants" element={<InsiderGrantsPage />} />
           <Route path="/insider/openinsider" element={<InsiderOpeninsiderPage />} />
         </Routes>
       </div>

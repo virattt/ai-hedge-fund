@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, RefreshCw } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -75,10 +75,81 @@ function TradeTypeBadge({ tradeType }: { tradeType: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Results table
+// Sortable results table
 // ---------------------------------------------------------------------------
 
+type SortKey = keyof OpenInsiderRecord;
+type SortDir = 'asc' | 'desc';
+
+function parseNumericDelta(raw: string | null): number | null {
+  if (!raw) return null;
+  const n = parseFloat(raw.replace(/[^0-9.\-+]/g, ''));
+  return isNaN(n) ? null : n;
+}
+
+function compareFn(a: OpenInsiderRecord, b: OpenInsiderRecord, key: SortKey, dir: SortDir): number {
+  let av: string | number | null;
+  let bv: string | number | null;
+  if (key === 'delta_own') {
+    av = parseNumericDelta(a.delta_own);
+    bv = parseNumericDelta(b.delta_own);
+  } else {
+    av = a[key];
+    bv = b[key];
+  }
+  if (av == null && bv == null) return 0;
+  if (av == null) return 1;
+  if (bv == null) return -1;
+  const cmp = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv));
+  return dir === 'asc' ? cmp : -cmp;
+}
+
+interface SortableHeadProps {
+  label: string;
+  sortKey: SortKey;
+  activeKey: SortKey | null;
+  dir: SortDir;
+  onSort: (key: SortKey) => void;
+  className?: string;
+}
+
+function SortableHead({ label, sortKey, activeKey, dir, onSort, className = '' }: SortableHeadProps) {
+  const active = activeKey === sortKey;
+  return (
+    <TableHead
+      className={`cursor-pointer select-none hover:bg-muted/50 ${className}`}
+      onClick={() => onSort(sortKey)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {active ? (
+          dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-30" />
+        )}
+      </span>
+    </TableHead>
+  );
+}
+
 function OpenInsiderTable({ records }: { records: OpenInsiderRecord[] }) {
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('desc');
+    }
+  };
+
+  const sorted = useMemo(() => {
+    if (!sortKey) return records;
+    return [...records].sort((a, b) => compareFn(a, b, sortKey, sortDir));
+  }, [records, sortKey, sortDir]);
+
   if (records.length === 0) {
     return (
       <div className="text-center py-12 text-muted-foreground text-sm">
@@ -87,27 +158,29 @@ function OpenInsiderTable({ records }: { records: OpenInsiderRecord[] }) {
     );
   }
 
+  const hp = { activeKey: sortKey, dir: sortDir, onSort: handleSort };
+
   return (
     <div className="rounded-md border overflow-auto">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[105px]">Filing Date</TableHead>
-            <TableHead className="w-[105px]">Trade Date</TableHead>
-            <TableHead className="w-[70px]">Ticker</TableHead>
-            <TableHead>Company</TableHead>
-            <TableHead>Insider</TableHead>
-            <TableHead>Title</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead className="text-right">Price</TableHead>
-            <TableHead className="text-right">Qty</TableHead>
-            <TableHead className="text-right">Value</TableHead>
-            <TableHead className="text-right">Owned</TableHead>
-            <TableHead className="text-right">ΔOwn</TableHead>
+            <SortableHead label="Filing Date" sortKey="filing_date" className="w-[105px]" {...hp} />
+            <SortableHead label="Trade Date" sortKey="trade_date" className="w-[105px]" {...hp} />
+            <SortableHead label="Ticker" sortKey="ticker" className="w-[70px]" {...hp} />
+            <SortableHead label="Company" sortKey="company_name" {...hp} />
+            <SortableHead label="Insider" sortKey="insider_name" {...hp} />
+            <SortableHead label="Title" sortKey="title" {...hp} />
+            <SortableHead label="Type" sortKey="trade_type" {...hp} />
+            <SortableHead label="Price" sortKey="price" className="text-right" {...hp} />
+            <SortableHead label="Qty" sortKey="qty" className="text-right" {...hp} />
+            <SortableHead label="Value" sortKey="value" className="text-right" {...hp} />
+            <SortableHead label="Owned" sortKey="owned" className="text-right" {...hp} />
+            <SortableHead label="ΔOwn" sortKey="delta_own" className="text-right" {...hp} />
           </TableRow>
         </TableHeader>
         <TableBody>
-          {records.map((rec, i) => (
+          {sorted.map((rec, i) => (
             <TableRow key={`${rec.ticker}-${rec.filing_date}-${i}`}>
               <TableCell className="text-xs whitespace-nowrap">{rec.filing_date}</TableCell>
               <TableCell className="text-xs whitespace-nowrap">{rec.trade_date}</TableCell>
@@ -349,9 +422,7 @@ export function InsiderOpeninsiderPage() {
           </p>
         </div>
         <div className="flex items-center gap-1">
-          <SubNavLink to="/insider" label="Dashboard" />
-          <SubNavLink to="/insider/ownership" label="Ownership" />
-          <SubNavLink to="/insider/grants" label="Grants" />
+          <SubNavLink to="/insider" label="Edgar Insider" />
           <SubNavLink to="/insider/openinsider" label="OpenInsider" />
         </div>
       </div>
