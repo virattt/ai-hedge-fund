@@ -56,6 +56,8 @@ class _FilingsProto(Protocol):
     def __len__(self) -> int: ...
     def __iter__(self) -> "_FilingsIterProto": ...
     def __getitem__(self, s: slice) -> "_FilingsProto": ...
+    def filter(self, *, cik: object = None) -> "_FilingsProto": ...
+    def find(self, name: str) -> "_FilingsProto": ...
 
 
 class _FilingsIterProto(Protocol):
@@ -157,28 +159,34 @@ def _fetch_thirteenf_filings(
     offset: int,
     year: int | None,
     quarter: int | None,
+    company_name: str | None = None,
 ) -> ThirteenFListResponse:
     """Fetch a paginated slice of 13F-HR filings from SEC EDGAR.
 
     Calls _ensure_identity() first, then invokes edgar.get_filings() with
-    ``form="13F-HR"`` and optional year/quarter filters. Slices the PyArrow-
-    backed Filings index directly — no filing.obj() calls — keeping this
+    ``form="13F-HR"`` and optional year/quarter filters. When ``company_name``
+    is provided, calls ``filings.find(company_name)`` which combines
+    find_company() fuzzy matching with CIK filtering internally. Slices the
+    resulting collection directly — no filing.obj() calls — keeping this
     function fast for listing purposes.
 
     Args:
         limit: Maximum number of filings to return (page size).
         offset: Number of filings to skip before the current page.
         year: Optional filing year filter; passed to get_filings() when not None.
-        quarter: Optional filing quarter filter (1–4); passed when not None.
+        quarter: Optional filing quarter filter (1-4); passed when not None.
+        company_name: Optional company name for fuzzy search via filings.find().
+            When provided, only filings from matching companies are returned.
 
     Returns:
         ThirteenFListResponse with lightweight filing entries, total count,
         has_more flag, and skipped_count (always 0 for this endpoint).
 
     Raises:
-        RuntimeError: If edgar.get_filings() raises an unexpected SEC API error.
+        RuntimeError: If edgar.get_filings() raises an unexpected SEC API error,
+            or if filings.find() raises during company search.
     """
-    logger.debug("Fetching 13F-HR filings limit=%d offset=%d year=%s quarter=%s", limit, offset, year, quarter)
+    logger.debug("Fetching 13F-HR filings limit=%d offset=%d year=%s quarter=%s company_name=%s", limit, offset, year, quarter, company_name)
     _ensure_identity()
 
     kwargs: dict[str, object] = {"form": "13F-HR"}
@@ -193,6 +201,14 @@ def _fetch_thirteenf_filings(
         raise RuntimeError(
             f"SEC API error while fetching 13F-HR filings: {exc}"
         ) from exc
+
+    if company_name is not None:
+        try:
+            filings = filings.find(company_name)
+        except Exception as exc:
+            raise RuntimeError(
+                f"SEC company search error for '{company_name}': {exc}"
+            ) from exc
 
     total = len(filings)
     logger.debug("13F-HR filings total=%d returning slice offset=%d limit=%d", total, offset, limit)
