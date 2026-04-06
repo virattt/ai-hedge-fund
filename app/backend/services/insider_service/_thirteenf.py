@@ -64,14 +64,15 @@ class _FilingsIterProto(Protocol):
 
 
 class _HoldingsComparisonProto(Protocol):
-    df: pd.DataFrame
+    data: pd.DataFrame
     current_period: str
     previous_period: str
     manager_name: str
 
 
 class _HoldingsHistoryProto(Protocol):
-    df: pd.DataFrame
+    data: pd.DataFrame
+    periods: list[str]
     manager_name: str
 
 
@@ -252,7 +253,7 @@ def _fetch_compare_holdings(accession_no: str) -> CompareHoldingsResponse:
             f"No comparison data available for filing {accession_no} (no previous quarter found)"
         )
 
-    raw_records = _sanitize_dataframe_records(comparison.df)
+    raw_records = _sanitize_dataframe_records(comparison.data)
     records: list[CompareHoldingsRecord] = [
         CompareHoldingsRecord(
             cusip=str(row.get("Cusip", "")),
@@ -320,7 +321,7 @@ def _fetch_holding_history(accession_no: str, periods: int) -> HoldingHistoryRes
             f"No holding history available for filing {accession_no}"
         )
 
-    df = history.df
+    df = history.data
     # Identify period columns: all columns not in the fixed set
     all_cols: list[str] = list(df.columns)
     period_cols = [c for c in all_cols if c not in _HISTORY_FIXED_COLS]

@@ -286,7 +286,7 @@ class TestFetchCompareHoldings:
 
         mock_report = MagicMock()
         mock_compare = MagicMock()
-        mock_compare.df = _make_compare_df()
+        mock_compare.data = _make_compare_df()
         mock_compare.current_period = "2025-12-31"
         mock_compare.previous_period = "2025-09-30"
         mock_compare.manager_name = "BERKSHIRE HATHAWAY INC"
@@ -338,7 +338,7 @@ class TestFetchHoldingHistory:
 
         mock_report = MagicMock()
         mock_history = MagicMock()
-        mock_history.df = _make_history_df()
+        mock_history.data = _make_history_df()
         mock_history.manager_name = "BERKSHIRE HATHAWAY INC"
         mock_report.holding_history.return_value = mock_history
 
@@ -363,7 +363,7 @@ class TestFetchHoldingHistory:
 
         mock_report = MagicMock()
         mock_history = MagicMock()
-        mock_history.df = _make_history_df()
+        mock_history.data = _make_history_df()
         mock_history.manager_name = "TEST MANAGER"
         mock_report.holding_history.return_value = mock_history
 
