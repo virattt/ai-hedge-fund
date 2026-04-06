@@ -3,11 +3,39 @@ import os
 import logging
 from collections.abc import Generator
 
+import pandas as pd
+
 from edgar.ownership.ownershipforms import TransactionSummary, InitialOwnershipSummary
 
 logger = logging.getLogger(__name__)
 
 _identity_set = False
+
+
+# ---------------------------------------------------------------------------
+# NaN sanitization
+# ---------------------------------------------------------------------------
+
+
+def _sanitize_dataframe_records(df: pd.DataFrame) -> list[dict]:
+    """Convert a DataFrame to a list of dicts with NaN replaced by None.
+
+    Pandas serializes NaN as ``float('nan')``, which is not valid JSON.
+    This helper replaces every NaN cell with ``None`` before converting to
+    dicts so callers can safely pass the result to Pydantic models or
+    ``json.dumps()``.
+
+    Args:
+        df: DataFrame to convert. May be empty.
+
+    Returns:
+        List of row dicts with NaN values replaced by None.
+    """
+    if df.empty:
+        return []
+    # Cast to object dtype so NaN cells can hold Python None instead of
+    # float('nan'), which is not valid JSON.
+    return df.astype(object).where(df.notna(), other=None).to_dict(orient="records")
 
 
 # ---------------------------------------------------------------------------
