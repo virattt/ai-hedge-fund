@@ -199,7 +199,7 @@ function CompareHoldingsSection({ accessionNo }: { accessionNo: string }) {
           <p className="text-xs text-muted-foreground">
             {data.manager_name} &middot; {data.current_period} vs {data.previous_period} &middot; {data.total} holdings
           </p>
-          <div className="rounded-md border overflow-auto max-h-[400px]">
+          <div className="rounded-md border overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -308,7 +308,7 @@ function HoldingHistorySection({ accessionNo }: { accessionNo: string }) {
           <p className="text-xs text-muted-foreground">
             {data.manager_name} &middot; {data.periods.length} periods &middot; {data.total} holdings
           </p>
-          <div className="rounded-md border overflow-auto max-h-[400px]">
+          <div className="rounded-md border overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -353,7 +353,7 @@ interface FilingDetailSheetProps {
 function FilingDetailSheet({ filing, open, onOpenChange }: FilingDetailSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-[800px] sm:max-w-[800px] overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-full overflow-y-auto">
         {filing && (
           <>
             <SheetHeader className="mb-6">
