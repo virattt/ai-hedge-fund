@@ -81,7 +81,7 @@ class TestGetThirteenFFilings:
             result = await insider_service.get_thirteenf_filings(20, 0, None, None)
 
         assert result == expected
-        mock_worker.assert_called_once_with(20, 0, None, None)
+        mock_worker.assert_called_once_with(20, 0, None, None, None)
 
     @pytest.mark.asyncio
     async def test_cache_hit_returns_cached(self) -> None:
@@ -142,7 +142,83 @@ class TestGetThirteenFFilings:
         ) as mock_worker:
             await insider_service.get_thirteenf_filings(10, 0, 2025, 4)
 
-        mock_worker.assert_called_once_with(10, 0, 2025, 4)
+        mock_worker.assert_called_once_with(10, 0, 2025, 4, None)
+
+    @pytest.mark.asyncio
+    async def test_cache_key_includes_company_name(self) -> None:
+        """company_name is included in cache key, producing distinct entries."""
+        expected = _make_list_response()
+        with patch.object(
+            insider_service,
+            "_fetch_thirteenf_filings",
+            return_value=expected,
+        ) as mock_worker:
+            # First call with company_name populates a keyed entry.
+            await insider_service.get_thirteenf_filings(20, 0, None, None, company_name="Berkshire")
+            # Second call with same params hits the cache — worker not called again.
+            await insider_service.get_thirteenf_filings(20, 0, None, None, company_name="Berkshire")
+
+        assert mock_worker.call_count == 1
+
+        matching_keys = [k for k in insider_service._insider_cache if "Berkshire" in k]
+        assert len(matching_keys) == 1
+
+    @pytest.mark.asyncio
+    async def test_different_company_names_produce_different_cache_keys(self) -> None:
+        """Different company_name values result in separate cache entries (cache misses)."""
+        expected = _make_list_response()
+        with patch.object(
+            insider_service,
+            "_fetch_thirteenf_filings",
+            return_value=expected,
+        ) as mock_worker:
+            await insider_service.get_thirteenf_filings(20, 0, None, None, company_name="Berkshire")
+            await insider_service.get_thirteenf_filings(20, 0, None, None, company_name="BlackRock")
+
+        assert mock_worker.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_empty_company_name_normalized_to_none(self) -> None:
+        """Empty string company_name is normalized to None before cache key construction."""
+        expected = _make_list_response()
+        with patch.object(
+            insider_service,
+            "_fetch_thirteenf_filings",
+            return_value=expected,
+        ) as mock_worker:
+            await insider_service.get_thirteenf_filings(20, 0, None, None, company_name="")
+            # Should hit the same cache entry as company_name=None.
+            await insider_service.get_thirteenf_filings(20, 0, None, None, company_name=None)
+
+        assert mock_worker.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_whitespace_company_name_normalized_to_none(self) -> None:
+        """Whitespace-only company_name is normalized to None before cache key construction."""
+        expected = _make_list_response()
+        with patch.object(
+            insider_service,
+            "_fetch_thirteenf_filings",
+            return_value=expected,
+        ) as mock_worker:
+            await insider_service.get_thirteenf_filings(20, 0, None, None, company_name="   ")
+            # Should hit the same cache entry as company_name=None.
+            await insider_service.get_thirteenf_filings(20, 0, None, None, company_name=None)
+
+        assert mock_worker.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_company_name_passed_through_to_worker(self) -> None:
+        """Normalized company_name is forwarded to _fetch_thirteenf_filings."""
+        expected = _make_list_response()
+        with patch.object(
+            insider_service,
+            "_fetch_thirteenf_filings",
+            return_value=expected,
+        ) as mock_worker:
+            await insider_service.get_thirteenf_filings(20, 0, None, None, company_name="Berkshire")
+
+        mock_worker.assert_called_once_with(20, 0, None, None, "Berkshire")
 
 
 # ---------------------------------------------------------------------------

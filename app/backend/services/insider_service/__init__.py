@@ -136,26 +136,33 @@ async def get_thirteenf_filings(
     offset: int,
     year: int | None,
     quarter: int | None,
+    company_name: str | None = None,
 ) -> ThirteenFListResponse:
     """Async entry point for paginated 13F-HR filing listing. Checks LRU+TTL cache first.
 
     The cache key includes today's date (``date.today().isoformat()``) so that
     the listing expires daily and new SEC filings are picked up automatically.
+    Empty or whitespace-only ``company_name`` values are normalized to ``None``
+    before cache key construction so they produce the same cache entry as no
+    company filter.
 
     Args:
         limit: Maximum number of filings to return (page size).
         offset: Number of filings to skip before the current page.
         year: Optional filing year filter; forwarded to the worker when not None.
         quarter: Optional filing quarter filter (1–4); forwarded when not None.
+        company_name: Optional company name for fuzzy search. Empty or
+            whitespace-only values are normalized to None.
 
     Returns:
         ThirteenFListResponse with filings, total count, has_more, and skipped_count.
     """
-    cache_key = f"thirteenf:filings:{date.today().isoformat()}:{year}:{quarter}:{limit}:{offset}"
+    company_name = company_name.strip() or None if company_name else None
+    cache_key = f"thirteenf:filings:{date.today().isoformat()}:{year}:{quarter}:{company_name}:{limit}:{offset}"
     cached = _cache_get(cache_key)
     if isinstance(cached, ThirteenFListResponse):
         return cached
-    result = await asyncio.to_thread(_fetch_thirteenf_filings, limit, offset, year, quarter)
+    result = await asyncio.to_thread(_fetch_thirteenf_filings, limit, offset, year, quarter, company_name)
     _cache_put(cache_key, result)
     return result
 
