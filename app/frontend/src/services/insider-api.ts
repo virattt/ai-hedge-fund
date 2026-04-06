@@ -355,18 +355,21 @@ class InsiderService {
   /**
    * Fetch paginated 13F-HR filings across all companies.
    * Maps to GET /insider/thirteenf.
+   * When companyName is provided, filters filings by fuzzy company name match via the backend.
    */
   async getThirteenFFilings(
     limit?: number,
     offset?: number,
     year?: number,
-    quarter?: number
+    quarter?: number,
+    companyName?: string
   ): Promise<ThirteenFListResponse> {
     const params = new URLSearchParams();
     if (limit !== undefined) params.set('limit', String(limit));
     if (offset !== undefined) params.set('offset', String(offset));
     if (year !== undefined) params.set('year', String(year));
     if (quarter !== undefined) params.set('quarter', String(quarter));
+    if (companyName) params.set('company_name', companyName);
     const response = await fetch(`${this.baseUrl}/thirteenf?${params.toString()}`);
     if (!response.ok) {
       const body = await response.json().catch(() => null);
