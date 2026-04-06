@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -382,6 +383,7 @@ function FilingDetailSheet({ filing, open, onOpenChange }: FilingDetailSheetProp
 /**
  * InsiderThirteenFContent renders a paginated list of 13F-HR filings across
  * all companies. Filings are loaded on mount without requiring a ticker search.
+ * A company name search input with 400ms debounce enables fuzzy filtering.
  * Clicking a row opens a Sheet side panel with two independently lazy-loaded
  * sections: Compare Holdings and Holding History.
  */
@@ -395,14 +397,25 @@ export function InsiderThirteenFContent() {
   const [offset, setOffset] = useState(0);
   const [selectedFiling, setSelectedFiling] = useState<ThirteenFFilingListItem | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [companySearch, setCompanySearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
-  // Initial load on mount
+  // Debounce company search input by 400ms
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(companySearch);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [companySearch]);
+
+  // Reload filings when debounced search changes (reset offset)
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setOffset(0);
     insiderService
-      .getThirteenFFilings(PAGE_SIZE, 0)
+      .getThirteenFFilings(PAGE_SIZE, 0, undefined, undefined, debouncedSearch || undefined)
       .then((result) => {
         if (cancelled) return;
         setFilings(result.filings);
@@ -418,12 +431,12 @@ export function InsiderThirteenFContent() {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [debouncedSearch]);
 
   const handleLoadMore = () => {
     setLoadingMore(true);
     insiderService
-      .getThirteenFFilings(PAGE_SIZE, offset)
+      .getThirteenFFilings(PAGE_SIZE, offset, undefined, undefined, debouncedSearch || undefined)
       .then((result) => {
         setFilings((prev) => [...prev, ...result.filings]);
         setTotal(result.total);
@@ -443,6 +456,10 @@ export function InsiderThirteenFContent() {
     setSheetOpen(true);
   };
 
+  const handleClearSearch = () => {
+    setCompanySearch('');
+  };
+
   if (loading) return <ThirteenFSkeleton />;
 
   if (error) {
@@ -451,6 +468,26 @@ export function InsiderThirteenFContent() {
 
   return (
     <div className="space-y-3">
+      <div className="relative max-w-sm">
+        <Input
+          type="text"
+          placeholder="Search by company name..."
+          value={companySearch}
+          onChange={(e) => setCompanySearch(e.target.value)}
+          className="pr-8"
+        />
+        {companySearch && (
+          <button
+            type="button"
+            onClick={handleClearSearch}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            aria-label="Clear search"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
       {total > 0 && (
         <p className="text-xs text-muted-foreground">
           Showing {filings.length} of {formatNumber(total)} filings. Click a row to view holdings detail.
