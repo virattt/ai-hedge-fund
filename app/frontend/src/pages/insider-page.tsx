@@ -566,19 +566,21 @@ export function InsiderPage() {
         </div>
       </div>
 
-      {/* Search bar */}
-      <div className="flex gap-2 max-w-md">
-        <Input
-          placeholder="Enter ticker (e.g. AAPL)"
-          value={ticker}
-          onChange={(e) => setTicker(e.target.value.toUpperCase())}
-          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-        />
-        <Button onClick={() => handleSearch()} disabled={loading || !ticker.trim()}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-          Search
-        </Button>
-      </div>
+      {/* Search bar -- hidden when 13-F tab is active (13-F loads independently without ticker context) */}
+      {activeTab !== 'thirteenf' && (
+        <div className="flex gap-2 max-w-md">
+          <Input
+            placeholder="Enter ticker (e.g. AAPL)"
+            value={ticker}
+            onChange={(e) => setTicker(e.target.value.toUpperCase())}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+          />
+          <Button onClick={() => handleSearch()} disabled={loading || !ticker.trim()}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+            Search
+          </Button>
+        </div>
+      )}
 
       {/* Tabs: Filings | Ownership | Grants */}
       <Tabs value={activeTab} onValueChange={handleTabChange}>
