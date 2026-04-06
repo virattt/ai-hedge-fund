@@ -177,6 +177,7 @@ def _fetch_thirteenf_filings(
     Raises:
         RuntimeError: If edgar.get_filings() raises an unexpected SEC API error.
     """
+    logger.debug("Fetching 13F-HR filings limit=%d offset=%d year=%s quarter=%s", limit, offset, year, quarter)
     _ensure_identity()
 
     kwargs: dict[str, object] = {"form": "13F-HR"}
@@ -193,6 +194,7 @@ def _fetch_thirteenf_filings(
         ) from exc
 
     total = len(filings)
+    logger.debug("13F-HR filings total=%d returning slice offset=%d limit=%d", total, offset, limit)
     page = filings[offset: offset + limit]
     has_more = (offset + limit) < total
 
@@ -240,10 +242,12 @@ def _fetch_compare_holdings(accession_no: str) -> CompareHoldingsResponse:
             compare_holdings() returns None (no previous quarter available).
         RuntimeError: Propagated from _load_thirteenf_report on SEC API errors.
     """
+    logger.debug("Fetching compare holdings for filing %s", accession_no)
     report = _load_thirteenf_report(accession_no)
     comparison = report.compare_holdings()
 
     if comparison is None:
+        logger.warning("compare_holdings() returned None for filing %s (no previous quarter available)", accession_no)
         raise ValueError(
             f"No comparison data available for filing {accession_no} (no previous quarter found)"
         )
@@ -267,6 +271,7 @@ def _fetch_compare_holdings(accession_no: str) -> CompareHoldingsResponse:
         for row in raw_records
     ]
 
+    logger.debug("compare_holdings built %d records for filing %s (%s vs %s)", len(records), accession_no, comparison.current_period, comparison.previous_period)
     return CompareHoldingsResponse(
         accession_no=accession_no,
         current_period=str(comparison.current_period),
@@ -305,10 +310,12 @@ def _fetch_holding_history(accession_no: str, periods: int) -> HoldingHistoryRes
             holding_history() returns None.
         RuntimeError: Propagated from _load_thirteenf_report on SEC API errors.
     """
+    logger.debug("Fetching holding history for filing %s periods=%d", accession_no, periods)
     report = _load_thirteenf_report(accession_no)
     history = report.holding_history(periods=periods)
 
     if history is None:
+        logger.warning("holding_history() returned None for filing %s", accession_no)
         raise ValueError(
             f"No holding history available for filing {accession_no}"
         )
@@ -329,6 +336,7 @@ def _fetch_holding_history(accession_no: str, periods: int) -> HoldingHistoryRes
         for row in raw_records
     ]
 
+    logger.debug("holding_history built %d records across %d periods for filing %s", len(records), len(period_cols), accession_no)
     return HoldingHistoryResponse(
         accession_no=accession_no,
         manager_name=str(history.manager_name),
