@@ -109,10 +109,11 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
 
                     # Either get a progress update or wait a bit
                     try:
-                        event = await asyncio.wait_for(progress_queue.get(), timeout=1.0)
+                        event = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
                         yield event.to_sse()
                     except asyncio.TimeoutError:
-                        # Just continue the loop
+                        # Send a comment as keep-alive to prevent connection timeout
+                        yield ": keep-alive\n\n"
                         pass
 
                 # Get the final result
@@ -120,6 +121,12 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
                     result = await run_task
                 except asyncio.CancelledError:
                     print("Task was cancelled")
+                    return
+                except Exception as e:
+                    print(f"Error during hedge fund execution: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    yield ErrorEvent(message=f"Hedge fund execution failed: {str(e)}").to_sse()
                     return
 
                 if not result or not result.get("messages"):
@@ -139,6 +146,12 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
             except asyncio.CancelledError:
                 print("Event generator cancelled")
                 return
+            except Exception as e:
+                print(f"Unexpected error in event generator: {e}")
+                import traceback
+                traceback.print_exc()
+                yield ErrorEvent(message=f"Stream error: {str(e)}").to_sse()
+                return
             finally:
                 # Clean up
                 progress.unregister_handler(progress_handler)
@@ -151,8 +164,16 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
                 if disconnect_task and not disconnect_task.done():
                     disconnect_task.cancel()
 
-        # Return a streaming response
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+        # Return a streaming response with proper SSE headers
+        return StreamingResponse(
+            event_generator(), 
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            }
+        )
 
     except HTTPException as e:
         raise e
@@ -327,8 +348,16 @@ async def backtest(request_data: BacktestRequest, request: Request, db: Session 
                 if disconnect_task and not disconnect_task.done():
                     disconnect_task.cancel()
 
-        # Return a streaming response
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+        # Return a streaming response with proper SSE headers
+        return StreamingResponse(
+            event_generator(), 
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            }
+        )
 
     except HTTPException as e:
         raise e

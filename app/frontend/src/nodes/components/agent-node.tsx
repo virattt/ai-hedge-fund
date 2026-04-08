@@ -1,6 +1,6 @@
 import { type NodeProps } from '@xyflow/react';
 import { Bot } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { CardContent } from '@/components/ui/card';
@@ -20,7 +20,8 @@ export function AgentNode({
   selected,
   id,
   isConnectable,
-}: NodeProps<AgentNode>) {
+  onRemove,
+}: NodeProps<AgentNode> & { onRemove?: () => void }) {
   const { currentFlowId } = useFlowContext();
   const { getAgentNodeDataForFlow, setAgentModel, getAgentModel } = useNodeContext();
   
@@ -38,23 +39,18 @@ export function AgentNode({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
   // Use persistent state hooks
-  const [availableModels, setAvailableModels] = useNodeState<LanguageModel[]>(id, 'availableModels', []);
+  const [availableModels, setAvailableModels] = useState<LanguageModel[]>([]);
   const [selectedModel, setSelectedModel] = useNodeState<LanguageModel | null>(id, 'selectedModel', null);
 
-  // Load models on mount
+  // Load models once on mount — shared fetch, no per-node persistence needed
+  const mountedRef = useRef(true);
   useEffect(() => {
-    const loadModels = async () => {
-      try {
-        const models = await getModels();
-        setAvailableModels(models);
-      } catch (error) {
-        console.error('Failed to load models:', error);
-        // Keep empty array as fallback
-      }
-    };
-    
-    loadModels();
-  }, [setAvailableModels]);
+    mountedRef.current = true;
+    getModels()
+      .then((models) => { if (mountedRef.current) setAvailableModels(models); })
+      .catch(() => {});
+    return () => { mountedRef.current = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update the node context when the model changes
   useEffect(() => {
@@ -83,6 +79,7 @@ export function AgentNode({
       name={data.name || "Agent"}
       description={data.description}
       status={status}
+      onRemove={onRemove}
     >
       <CardContent className="p-0">
         <div className="border-t border-border p-3">

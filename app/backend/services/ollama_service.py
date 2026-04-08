@@ -1,13 +1,9 @@
 import asyncio
 import os
-import sys
 import platform
 import subprocess
 import time
-import re
 import json
-import queue
-import threading
 from pathlib import Path
 from typing import Dict, List, Optional, AsyncGenerator
 import logging
@@ -22,10 +18,17 @@ class OllamaService:
     def __init__(self):
         self._download_progress = {}
         self._download_processes = {}
-        
-        # Initialize async client
-        self._async_client = ollama.AsyncClient()
-        self._sync_client = ollama.Client()
+
+        # Read Ollama configuration from environment
+        self._base_url = os.getenv("OLLAMA_BASE_URL", "").strip()
+        self._is_configured = bool(self._base_url)
+
+        if self._is_configured:
+            self._async_client = ollama.AsyncClient(host=self._base_url)
+            self._sync_client = ollama.Client(host=self._base_url)
+        else:
+            self._async_client = None
+            self._sync_client = None
     
     # =============================================================================
     # PUBLIC API METHODS
@@ -33,23 +36,25 @@ class OllamaService:
     
     async def check_ollama_status(self) -> Dict[str, any]:
         """Check Ollama installation and server status."""
+        if not self._is_configured:
+            return self._create_error_status("OLLAMA_BASE_URL is not set in environment")
+
         try:
-            is_installed = await self._check_installation()
             is_running = await self._check_server_running()
             models, server_url = await self._get_server_info(is_running)
-            
+
             status = {
-                "installed": is_installed,
+                "installed": is_running,
                 "running": is_running,
                 "server_running": is_running,  # Backward compatibility
                 "available_models": models,
-                "server_url": server_url,
+                "server_url": server_url or self._base_url,
                 "error": None
             }
-            
-            logger.debug(f"Ollama status: installed={is_installed}, running={is_running}, models={len(models)}")
+
+            logger.debug(f"Ollama status: running={is_running}, models={len(models)}")
             return status
-            
+
         except Exception as e:
             logger.error(f"Error checking Ollama status: {e}")
             return self._create_error_status(str(e))
@@ -187,25 +192,10 @@ class OllamaService:
             "error": error
         }
     
-    async def _check_installation(self) -> bool:
-        """Check if Ollama CLI is installed."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._is_ollama_installed)
-    
-    def _is_ollama_installed(self) -> bool:
-        """Check if Ollama is installed on the system."""
-        system = platform.system().lower()
-        command = ["which", "ollama"] if system in ["darwin", "linux"] else ["where", "ollama"]
-        shell = system == "windows"
-        
-        try:
-            result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=shell)
-            return result.returncode == 0
-        except Exception:
-            return False
-    
     async def _check_server_running(self) -> bool:
         """Check if the Ollama server is running using the ollama client."""
+        if not self._is_configured or self._async_client is None:
+            return False
         try:
             await self._async_client.list()
             logger.debug("Ollama server confirmed running via client")
@@ -218,7 +208,7 @@ class OllamaService:
         """Get server information (models and URL) if server is running."""
         if not is_running:
             return [], ""
-        
+
         try:
             response = await self._async_client.list()
             models = [model.model for model in response.models]
@@ -228,9 +218,11 @@ class OllamaService:
         except Exception as e:
             logger.debug(f"Failed to get server info: {e}")
             return [], ""
-    
+
     async def _execute_server_start(self) -> bool:
         """Execute server start operation."""
+        if not self._is_configured or self._sync_client is None:
+            return False
         # Check if already running
         try:
             self._sync_client.list()
@@ -276,6 +268,8 @@ class OllamaService:
     
     async def _execute_server_stop(self) -> bool:
         """Execute server stop operation."""
+        if not self._is_configured or self._sync_client is None:
+            return False
         # Check if already stopped
         try:
             self._sync_client.list()

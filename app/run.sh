@@ -12,21 +12,36 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Function to print colored output
+# Log file (persists after the script exits)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_DIR_PERSISTENT="$SCRIPT_DIR/logs"
+mkdir -p "$LOG_DIR_PERSISTENT"
+LOG_FILE="$LOG_DIR_PERSISTENT/run_$(date +%Y%m%d_%H%M%S).log"
+
+# Internal helper: write a plain timestamped line to the log file
+_log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Function to print colored output (and log to file)
 print_status() {
     echo -e "${BLUE}[INFO]${NC} $1"
+    _log "[INFO] $1"
 }
 
 print_success() {
     echo -e "${GREEN}[SUCCESS]${NC} $1"
+    _log "[SUCCESS] $1"
 }
 
 print_warning() {
     echo -e "${YELLOW}[WARNING]${NC} $1"
+    _log "[WARNING] $1"
 }
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+    _log "[ERROR] $1"
 }
 
 # Function to check if a command exists
@@ -150,6 +165,23 @@ setup_environment() {
     else
         print_success "Environment file (.env) found!"
     fi
+    
+    # Load environment variables from .env
+    if [[ -f "../.env" ]]; then
+        export $(grep -v '^#' ../.env | xargs)
+    fi
+    
+    # Set default port values if not specified
+    export BACKEND_PORT=${BACKEND_PORT:-10000}
+    export FRONTEND_PORT=${FRONTEND_PORT:-5173}
+    
+    print_status "Backend port: $BACKEND_PORT"
+    print_status "Frontend port: $FRONTEND_PORT"
+    
+    # Generate frontend .env file with correct backend URL
+    print_status "Configuring frontend API URL..."
+    echo "VITE_API_URL=http://localhost:$BACKEND_PORT" > frontend/.env
+    print_success "Frontend configured to use backend at http://localhost:$BACKEND_PORT"
 }
 
 # Function to setup database
@@ -250,7 +282,7 @@ start_services() {
     print_status "Starting backend server..."
     # Run from the app directory (parent of backend) to ensure proper Python imports
     cd ..
-    poetry run uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000 > "$LOG_DIR/backend.log" 2>&1 &
+    poetry run uvicorn app.backend.main:app --reload --host 0.0.0.0 --port $BACKEND_PORT 2>&1 | tee "$LOG_DIR/backend.log" >> "$LOG_FILE" &
     BACKEND_PID=$!
     cd app
     
@@ -279,7 +311,7 @@ start_services() {
     # Start frontend
     print_status "Starting frontend development server..."
     cd frontend
-    npm run dev > "$FRONTEND_LOG" 2>&1 &
+    npm run dev 2>&1 | tee "$FRONTEND_LOG" >> "$LOG_FILE" &
     FRONTEND_PID=$!
     cd ..
     
@@ -299,15 +331,15 @@ start_services() {
     # Open browser after frontend is running
     print_status "Opening web browser..."
     sleep 2  # Give frontend a moment to fully start
-    open_browser "http://localhost:5173"
+    open_browser "http://localhost:$FRONTEND_PORT"
     
     echo ""
     print_success "🚀 AI Hedge Fund web application is now running!"
-    print_success "🌐 Browser should open automatically to http://localhost:5173"
+    print_success "🌐 Browser should open automatically to http://localhost:$FRONTEND_PORT"
     echo ""
-    print_status "Frontend (Web Interface): http://localhost:5173"
-    print_status "Backend (API): http://localhost:8000"
-    print_status "API Documentation: http://localhost:8000/docs"
+    print_status "Frontend (Web Interface): http://localhost:$FRONTEND_PORT"
+    print_status "Backend (API): http://localhost:$BACKEND_PORT"
+    print_status "API Documentation: http://localhost:$BACKEND_PORT/docs"
     print_status "Database: SQLite (hedge_fund.db in project root)"
     echo ""
     print_status "Press Ctrl+C to stop both services"
@@ -337,6 +369,7 @@ main() {
     echo ""
     print_status "🚀 AI Hedge Fund Web Application Setup"
     print_status "This script will install dependencies and start both frontend and backend services"
+    print_status "Log file: $LOG_FILE"
     echo ""
     
     check_directory
@@ -366,10 +399,15 @@ if [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
     echo "  - Python 3 (https://python.org/)"
     echo "  - Poetry (https://python-poetry.org/)"
     echo ""
-    echo "After running, you can access:"
+    echo "Configuration:"
+    echo "  Ports can be configured in the .env file in the project root:"
+    echo "  - BACKEND_PORT (default: 10000)"
+    echo "  - FRONTEND_PORT (default: 5173)"
+    echo ""
+    echo "After running, you can access (with default ports):"
     echo "  - Frontend: http://localhost:5173"
-    echo "  - Backend API: http://localhost:8000"
-    echo "  - API Docs: http://localhost:8000/docs"
+    echo "  - Backend API: http://localhost:10000"
+    echo "  - API Docs: http://localhost:10000/docs"
     echo "  - Database: SQLite file (hedge_fund.db) in project root"
     echo ""
     exit 0

@@ -2,6 +2,7 @@ import { Card, CardHeader } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { Handle, Position } from '@xyflow/react';
 import { ReactNode } from 'react';
+import { RemoveNodeButton } from './RemoveNodeButton';
 
 export interface NodeShellProps {
   id: string;
@@ -16,6 +17,7 @@ export interface NodeShellProps {
   hasRightHandle?: boolean;
   status?: string;
   width?: string;
+  onRemove?: () => void;
 }
 
 export function NodeShell({
@@ -31,12 +33,13 @@ export function NodeShell({
   hasRightHandle = true,
   status = 'IDLE',
   width = 'w-64',
+  onRemove,
 }: NodeShellProps) {
   const isInProgress = status === 'IN_PROGRESS';
   return (
     <div
       className={cn(
-        "react-flow__node-default relative select-none cursor-pointer p-0 rounded-lg border border-node transition-all duration-200",
+        "react-flow__node-default group relative select-none cursor-pointer p-0 rounded-lg border border-node transition-all duration-200",
         width,
         !selected && "hover:border-node-hover hover:shadow-lg",
         selected && "border-node-selected shadow-xl",
@@ -77,6 +80,7 @@ export function NodeShell({
           {children}
         </Card>
       </div>
+      <RemoveNodeButton nodeId={id} onRemove={onRemove} />
       {hasRightHandle && (
         <Handle
           type="source"

@@ -44,7 +44,8 @@ export function PortfolioStartNode({
   selected,
   id,
   isConnectable,
-}: NodeProps<PortfolioStartNode>) {
+  onRemove,
+}: NodeProps<PortfolioStartNode> & { onRemove?: () => void }) {
   // Calculate default dates
   const today = new Date();
   const threeMonthsAgo = new Date(today);
@@ -269,6 +270,7 @@ export function PortfolioStartNode({
         description={data.description}
         hasLeftHandle={false}
         width="w-80"
+        onRemove={onRemove}
       >
         <CardContent className="p-0">
           <div className="border-t border-border p-3">

@@ -21,7 +21,8 @@ export function PortfolioManagerNode({
   selected,
   id,
   isConnectable,
-}: NodeProps<PortfolioManagerNode>) {
+  onRemove,
+}: NodeProps<PortfolioManagerNode> & { onRemove?: () => void }) {
   const { currentFlowId } = useFlowContext();
   const { getAgentNodeDataForFlow, setAgentModel, getAgentModel, getOutputNodeDataForFlow } = useNodeContext();
 
@@ -103,6 +104,7 @@ export function PortfolioManagerNode({
         description={data.description}
         hasRightHandle={false}
         status={status}
+        onRemove={onRemove}
       >
         <CardContent className="p-0">
           <div className="border-t border-border p-3">
