@@ -10,6 +10,7 @@ import statistics
 from langchain_core.messages import HumanMessage
 from src.graph.state import AgentState, show_agent_reasoning
 from src.utils.progress import progress
+from src.utils.formatting import _reasoning_to_text
 from src.utils.api_key import get_api_key_from_state
 from src.tools.api import (
     get_financial_metrics,
@@ -29,6 +30,8 @@ def growth_analyst_agent(state: AgentState, agent_id: str = "growth_analyst_agen
         progress.update_status(agent_id, ticker, "Fetching financial data")
 
         # --- Historical financial metrics ---
+        # Try TTM first (Financial Datasets returns up to 12); fall back to annual
+        # if the provider returns too few TTM records (e.g. Yahoo Finance returns 1).
         financial_metrics = get_financial_metrics(
             ticker=ticker,
             end_date=end_date,
@@ -36,8 +39,16 @@ def growth_analyst_agent(state: AgentState, agent_id: str = "growth_analyst_agen
             limit=12, # 3 years of ttm data
             api_key=api_key,
         )
-        if not financial_metrics or len(financial_metrics) < 4:
-            progress.update_status(agent_id, ticker, "Failed: Not enough financial metrics")
+        if not financial_metrics or len(financial_metrics) < 2:
+            financial_metrics = get_financial_metrics(
+                ticker=ticker,
+                end_date=end_date,
+                period="annual",
+                limit=5,
+                api_key=api_key,
+            )
+        if not financial_metrics:
+            progress.update_status(agent_id, ticker, "Failed: No financial metrics found")
             continue
         
         most_recent_metrics = financial_metrics[0]
@@ -115,9 +126,9 @@ def growth_analyst_agent(state: AgentState, agent_id: str = "growth_analyst_agen
         growth_analysis[ticker] = {
             "signal": signal,
             "confidence": confidence,
-            "reasoning": reasoning,
+            "reasoning": _reasoning_to_text(reasoning),
         }
-        progress.update_status(agent_id, ticker, "Done", analysis=json.dumps(reasoning, indent=4))
+        progress.update_status(agent_id, ticker, "Done", analysis=growth_analysis[ticker]["reasoning"])
 
     # ---- Emit message (for LLM tool chain) ----
     msg = HumanMessage(content=json.dumps(growth_analysis), name=agent_id)
@@ -282,8 +293,8 @@ def analyze_margin_trends(metrics: list) -> dict:
 def analyze_insider_conviction(trades: list) -> dict:
     """Analyzes insider trading activity."""
     
-    buys = sum(t.transaction_value for t in trades if t.transaction_value and t.transaction_shares > 0)
-    sells = sum(abs(t.transaction_value) for t in trades if t.transaction_value and t.transaction_shares < 0)
+    buys = sum(t.transaction_value for t in trades if t.transaction_value and t.transaction_shares is not None and t.transaction_shares > 0)
+    sells = sum(abs(t.transaction_value) for t in trades if t.transaction_value and t.transaction_shares is not None and t.transaction_shares < 0)
     
     if (buys + sells) == 0:
         net_flow_ratio = 0

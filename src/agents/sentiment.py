@@ -1,6 +1,7 @@
 from langchain_core.messages import HumanMessage
 from src.graph.state import AgentState, show_agent_reasoning
 from src.utils.progress import progress
+from src.utils.formatting import _reasoning_to_text
 import pandas as pd
 import numpy as np
 import json
@@ -112,10 +113,10 @@ def sentiment_analyst_agent(state: AgentState, agent_id: str = "sentiment_analys
         sentiment_analysis[ticker] = {
             "signal": overall_signal,
             "confidence": confidence,
-            "reasoning": reasoning,
+            "reasoning": _reasoning_to_text(reasoning),
         }
 
-        progress.update_status(agent_id, ticker, "Done", analysis=json.dumps(reasoning, indent=4))
+        progress.update_status(agent_id, ticker, "Done", analysis=sentiment_analysis[ticker]["reasoning"])
 
     # Create the sentiment message
     message = HumanMessage(

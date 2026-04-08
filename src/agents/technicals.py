@@ -10,6 +10,7 @@ import numpy as np
 
 from src.tools.api import get_prices, prices_to_df
 from src.utils.progress import progress
+from src.utils.formatting import _reasoning_to_text
 
 
 def safe_float(value, default=0.0):
@@ -104,38 +105,39 @@ def technical_analyst_agent(state: AgentState, agent_id: str = "technical_analys
         )
 
         # Generate detailed analysis report for this ticker
+        ticker_reasoning = {
+            "trend_following": {
+                "signal": trend_signals["signal"],
+                "confidence": round(trend_signals["confidence"] * 100),
+                "metrics": normalize_pandas(trend_signals["metrics"]),
+            },
+            "mean_reversion": {
+                "signal": mean_reversion_signals["signal"],
+                "confidence": round(mean_reversion_signals["confidence"] * 100),
+                "metrics": normalize_pandas(mean_reversion_signals["metrics"]),
+            },
+            "momentum": {
+                "signal": momentum_signals["signal"],
+                "confidence": round(momentum_signals["confidence"] * 100),
+                "metrics": normalize_pandas(momentum_signals["metrics"]),
+            },
+            "volatility": {
+                "signal": volatility_signals["signal"],
+                "confidence": round(volatility_signals["confidence"] * 100),
+                "metrics": normalize_pandas(volatility_signals["metrics"]),
+            },
+            "statistical_arbitrage": {
+                "signal": stat_arb_signals["signal"],
+                "confidence": round(stat_arb_signals["confidence"] * 100),
+                "metrics": normalize_pandas(stat_arb_signals["metrics"]),
+            },
+        }
         technical_analysis[ticker] = {
             "signal": combined_signal["signal"],
             "confidence": round(combined_signal["confidence"] * 100),
-            "reasoning": {
-                "trend_following": {
-                    "signal": trend_signals["signal"],
-                    "confidence": round(trend_signals["confidence"] * 100),
-                    "metrics": normalize_pandas(trend_signals["metrics"]),
-                },
-                "mean_reversion": {
-                    "signal": mean_reversion_signals["signal"],
-                    "confidence": round(mean_reversion_signals["confidence"] * 100),
-                    "metrics": normalize_pandas(mean_reversion_signals["metrics"]),
-                },
-                "momentum": {
-                    "signal": momentum_signals["signal"],
-                    "confidence": round(momentum_signals["confidence"] * 100),
-                    "metrics": normalize_pandas(momentum_signals["metrics"]),
-                },
-                "volatility": {
-                    "signal": volatility_signals["signal"],
-                    "confidence": round(volatility_signals["confidence"] * 100),
-                    "metrics": normalize_pandas(volatility_signals["metrics"]),
-                },
-                "statistical_arbitrage": {
-                    "signal": stat_arb_signals["signal"],
-                    "confidence": round(stat_arb_signals["confidence"] * 100),
-                    "metrics": normalize_pandas(stat_arb_signals["metrics"]),
-                },
-            },
+            "reasoning": _reasoning_to_text(ticker_reasoning),
         }
-        progress.update_status(agent_id, ticker, "Done", analysis=json.dumps(technical_analysis, indent=4))
+        progress.update_status(agent_id, ticker, "Done", analysis=technical_analysis[ticker]["reasoning"])
 
     # Create the technical analyst message
     message = HumanMessage(

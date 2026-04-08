@@ -1,6 +1,7 @@
 from colorama import Fore, Style
 from tabulate import tabulate
 from .analysts import ANALYST_ORDER
+from .formatting import _label, _reasoning_to_text
 import os
 import json
 
@@ -61,8 +62,7 @@ def print_trading_output(result: dict) -> None:
                 if isinstance(reasoning, str):
                     reasoning_str = reasoning
                 elif isinstance(reasoning, dict):
-                    # Convert dict to string representation
-                    reasoning_str = json.dumps(reasoning, indent=2)
+                    reasoning_str = _reasoning_to_text(reasoning)
                 else:
                     # Convert any other type to string
                     reasoning_str = str(reasoning)

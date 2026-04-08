@@ -1,7 +1,7 @@
 
 
 from langchain_core.messages import HumanMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from src.data.models import CompanyNews
 import pandas as pd
 import numpy as np
@@ -12,6 +12,7 @@ from src.tools.api import get_company_news
 from src.utils.api_key import get_api_key_from_state
 from src.utils.llm import call_llm
 from src.utils.progress import progress
+from src.utils.formatting import _reasoning_to_text
 from typing_extensions import Literal
 
 
@@ -19,7 +20,15 @@ class Sentiment(BaseModel):
     """Represents the sentiment of a news article."""
 
     sentiment: Literal["positive", "negative", "neutral"]
-    confidence: int = Field(description="Confidence 0-100")
+    confidence: int = Field(default=0, description="Confidence 0-100")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_confidence_score_alias(cls, data):
+        """Accept 'confidence_score' as an alias for 'confidence' (some LLMs use this name)."""
+        if isinstance(data, dict) and "confidence" not in data and "confidence_score" in data:
+            data = {**data, "confidence": data["confidence_score"]}
+        return data
 
 
 def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agent"):
@@ -54,14 +63,14 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
 
         news_signals = []
         sentiment_confidences = {}  # Store confidence scores for each article
-        
+        sentiments_classified_by_llm = 0
+
         if company_news:
             # Check the 10 most recent articles
             recent_articles = company_news[:10]
             articles_without_sentiment = [news for news in recent_articles if news.sentiment is None]
             
             # Analyze only the 5 most recent articles without sentiment to reduce LLM calls
-            sentiments_classified_by_llm = 0
             if articles_without_sentiment:
               # We only take the first 5 articles, but this is configurable
               num_articles_to_analyze = 5
@@ -138,10 +147,10 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
         sentiment_analysis[ticker] = {
             "signal": overall_signal,
             "confidence": confidence,
-            "reasoning": reasoning,
+            "reasoning": _reasoning_to_text(reasoning),
         }
 
-        progress.update_status(agent_id, ticker, "Done", analysis=json.dumps(reasoning, indent=4))
+        progress.update_status(agent_id, ticker, "Done", analysis=sentiment_analysis[ticker]["reasoning"])
 
     message = HumanMessage(
         content=json.dumps(sentiment_analysis),
