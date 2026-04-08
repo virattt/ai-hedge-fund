@@ -1,4 +1,4 @@
-from src.backtesting.engine import BacktestEngine
+from backtesting.engine import BacktestEngine
 from tests.backtesting.integration.mocks import MockConfigurableAgent
 
 
@@ -61,7 +61,7 @@ def test_short_only_strategy_shorts_and_covers():
     final_portfolio_value = portfolio_values[-1]["Portfolio Value"]
     final_cash = final_portfolio["cash"]
 
-    from src.backtesting.valuation import compute_portfolio_summary
+    from backtesting.valuation import compute_portfolio_summary
 
     portfolio_summary = compute_portfolio_summary(
         portfolio=engine._portfolio,
@@ -145,7 +145,7 @@ def test_short_only_strategy_full_cover_cycle():
     final_portfolio_value = portfolio_values[-1]["Portfolio Value"]
     final_cash = final_portfolio["cash"]
 
-    from src.backtesting.valuation import compute_portfolio_summary
+    from backtesting.valuation import compute_portfolio_summary
 
     portfolio_summary = compute_portfolio_summary(
         portfolio=engine._portfolio,
@@ -219,7 +219,7 @@ def test_short_only_strategy_multiple_short_cover_cycles():
     final_portfolio_value = portfolio_values[-1]["Portfolio Value"]
     final_cash = final_portfolio["cash"]
 
-    from src.backtesting.valuation import compute_portfolio_summary
+    from backtesting.valuation import compute_portfolio_summary
 
     portfolio_summary = compute_portfolio_summary(
         portfolio=engine._portfolio,
@@ -308,7 +308,7 @@ def test_short_only_strategy_portfolio_rebalancing():
     final_portfolio_value = portfolio_values[-1]["Portfolio Value"]
     final_cash = final_portfolio["cash"]
 
-    from src.backtesting.valuation import compute_portfolio_summary
+    from backtesting.valuation import compute_portfolio_summary
 
     portfolio_summary = compute_portfolio_summary(
         portfolio=engine._portfolio,
@@ -384,7 +384,7 @@ def test_short_only_strategy_dollar_cost_averaging_on_short():
     final_portfolio_value = portfolio_values[-1]["Portfolio Value"]
     final_cash = final_portfolio["cash"]
 
-    from src.backtesting.valuation import compute_portfolio_summary
+    from backtesting.valuation import compute_portfolio_summary
 
     portfolio_summary = compute_portfolio_summary(
         portfolio=engine._portfolio,

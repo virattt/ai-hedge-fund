@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 
 import numpy as np
 
-from src.backtesting.metrics import PerformanceMetricsCalculator
+from backtesting.metrics import PerformanceMetricsCalculator
 
 
 def _build_values(values: list[float]):

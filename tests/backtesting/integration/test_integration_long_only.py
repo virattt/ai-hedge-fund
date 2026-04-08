@@ -1,4 +1,4 @@
-from src.backtesting.engine import BacktestEngine
+from backtesting.engine import BacktestEngine
 from tests.backtesting.integration.mocks import MockConfigurableAgent
 
 def test_long_only_strategy_buys_and_sells():
@@ -73,7 +73,7 @@ def test_long_only_strategy_buys_and_sells():
     final_portfolio_value = portfolio_values[-1]["Portfolio Value"]
     final_cash = final_portfolio["cash"]
     
-    from src.backtesting.valuation import compute_portfolio_summary
+    from backtesting.valuation import compute_portfolio_summary
     portfolio_summary = compute_portfolio_summary(
         portfolio=engine._portfolio,
         total_value=final_portfolio_value,
@@ -170,7 +170,7 @@ def test_long_only_strategy_full_liquidation_cycle():
     final_portfolio_value = portfolio_values[-1]["Portfolio Value"]
     final_cash = final_portfolio["cash"]
     
-    from src.backtesting.valuation import compute_portfolio_summary
+    from backtesting.valuation import compute_portfolio_summary
     portfolio_summary = compute_portfolio_summary(
         portfolio=engine._portfolio,
         total_value=final_portfolio_value,
@@ -281,7 +281,7 @@ def test_long_only_strategy_portfolio_rebalancing():
     final_portfolio_value = portfolio_values[-1]["Portfolio Value"]
     final_cash = final_portfolio["cash"]
     
-    from src.backtesting.valuation import compute_portfolio_summary
+    from backtesting.valuation import compute_portfolio_summary
     portfolio_summary = compute_portfolio_summary(
         portfolio=engine._portfolio,
         total_value=final_portfolio_value,
@@ -382,7 +382,7 @@ def test_long_only_strategy_multiple_entry_exit_cycles():
     final_portfolio_value = portfolio_values[-1]["Portfolio Value"]
     final_cash = final_portfolio["cash"]
     
-    from src.backtesting.valuation import compute_portfolio_summary
+    from backtesting.valuation import compute_portfolio_summary
     portfolio_summary = compute_portfolio_summary(
         portfolio=engine._portfolio,
         total_value=final_portfolio_value,

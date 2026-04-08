@@ -2,7 +2,7 @@ import os
 import pytest
 from unittest.mock import Mock, patch, call
 
-from src.tools.api import _make_api_request, get_prices
+from tools.api import _make_api_request, get_prices
 
 class TestRateLimiting:
     """Test suite for API rate limiting functionality."""

@@ -1,4 +1,4 @@
-from src.backtesting.engine import BacktestEngine
+from backtesting.engine import BacktestEngine
 from tests.backtesting.integration.mocks import MockConfigurableAgent
 
 
@@ -64,7 +64,7 @@ def test_long_short_strategy_partial_exits():
     final_portfolio_value = portfolio_values[-1]["Portfolio Value"]
     final_cash = final_portfolio["cash"]
 
-    from src.backtesting.valuation import compute_portfolio_summary
+    from backtesting.valuation import compute_portfolio_summary
 
     portfolio_summary = compute_portfolio_summary(
         portfolio=engine._portfolio,
@@ -139,7 +139,7 @@ def test_long_short_strategy_full_liquidation_to_cash():
     final_portfolio_value = portfolio_values[-1]["Portfolio Value"]
     final_cash = final_portfolio["cash"]
 
-    from src.backtesting.valuation import compute_portfolio_summary
+    from backtesting.valuation import compute_portfolio_summary
 
     portfolio_summary = compute_portfolio_summary(
         portfolio=engine._portfolio,
@@ -218,7 +218,7 @@ def test_long_short_strategy_directional_flip_on_ticker():
     final_portfolio_value = portfolio_values[-1]["Portfolio Value"]
     final_cash = final_portfolio["cash"]
 
-    from src.backtesting.valuation import compute_portfolio_summary
+    from backtesting.valuation import compute_portfolio_summary
 
     portfolio_summary = compute_portfolio_summary(
         portfolio=engine._portfolio,
@@ -293,7 +293,7 @@ def test_long_short_strategy_dca_both_sides():
     final_portfolio_value = portfolio_values[-1]["Portfolio Value"]
     final_cash = final_portfolio["cash"]
 
-    from src.backtesting.valuation import compute_portfolio_summary
+    from backtesting.valuation import compute_portfolio_summary
 
     portfolio_summary = compute_portfolio_summary(
         portfolio=engine._portfolio,

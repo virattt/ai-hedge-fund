@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from src.backtesting.portfolio import Portfolio
+from backtesting.portfolio import Portfolio
 
 def test_apply_long_buy_basic(portfolio: Portfolio) -> None:
     executed = portfolio.apply_long_buy("AAPL", quantity=100, price=50.0)

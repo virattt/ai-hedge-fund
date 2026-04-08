@@ -1,4 +1,4 @@
-from src.backtesting.controller import AgentController
+from backtesting.controller import AgentController
 
 
 def dummy_agent(**kwargs):
