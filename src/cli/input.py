@@ -5,9 +5,9 @@ import argparse
 import questionary
 from colorama import Fore, Style
 
-from src.utils.analysts import ANALYST_ORDER
-from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider, find_model_by_name
-from src.utils.ollama import ensure_ollama_and_model
+from utils.analysts import ANALYST_ORDER
+from llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider, find_model_by_name
+from utils.ollama import ensure_ollama_and_model
 
 from dataclasses import dataclass
 from typing import Optional
@@ -284,5 +284,3 @@ def parse_cli_inputs(
         show_agent_graph=getattr(args, "show_agent_graph", False),
         raw_args=args,
     )
-
-

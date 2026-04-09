@@ -1,13 +1,13 @@
-from src.graph.state import AgentState, show_agent_reasoning
+from graph.state import AgentState, show_agent_reasoning
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 import json
 from typing_extensions import Literal
-from src.tools.api import get_financial_metrics, get_market_cap, search_line_items
-from src.utils.llm import call_llm
-from src.utils.progress import progress
-from src.utils.api_key import get_api_key_from_state
+from tools.api import get_financial_metrics, get_market_cap, search_line_items
+from utils.llm import call_llm
+from utils.progress import progress
+from utils.api_key import get_api_key_from_state
 
 
 class WarrenBuffettSignal(BaseModel):
@@ -447,7 +447,7 @@ def calculate_owner_earnings(financial_line_items: list) -> dict[str, any]:
             "depreciation": depreciation,
             "maintenance_capex": maintenance_capex,
             "working_capital_change": working_capital_change,
-            "total_capex": abs(capex) if capex else 0
+            "total_capex": abs(capex)
         },
         "details": details,
     }
@@ -455,372 +455,253 @@ def calculate_owner_earnings(financial_line_items: list) -> dict[str, any]:
 
 def estimate_maintenance_capex(financial_line_items: list) -> float:
     """
-    Estimate maintenance capital expenditure using multiple approaches.
-    Buffett considers this crucial for understanding true owner earnings.
+    Estimate maintenance capital expenditure using historical data.
+    Uses multi-year average of capex relative to depreciation and revenue.
     """
-    if not financial_line_items:
-        return 0
-
-    # Approach 1: Historical average as % of revenue
-    capex_ratios = []
-    depreciation_values = []
-
-    for item in financial_line_items[:5]:  # Last 5 periods
-        if hasattr(item, 'capital_expenditure') and hasattr(item, 'revenue'):
-            if item.capital_expenditure and item.revenue and item.revenue > 0:
-                capex_ratio = abs(item.capital_expenditure) / item.revenue
-                capex_ratios.append(capex_ratio)
-
-        if hasattr(item, 'depreciation_and_amortization') and item.depreciation_and_amortization:
-            depreciation_values.append(item.depreciation_and_amortization)
-
-    # Approach 2: Percentage of depreciation (typically 80-120% for maintenance)
-    latest_depreciation = financial_line_items[0].depreciation_and_amortization if financial_line_items[
-        0].depreciation_and_amortization else 0
-
-    # Approach 3: Industry-specific heuristics
-    latest_capex = abs(financial_line_items[0].capital_expenditure) if financial_line_items[
-        0].capital_expenditure else 0
-
-    # Conservative estimate: Use the higher of:
-    # 1. 85% of total capex (assuming 15% is growth capex)
-    # 2. 100% of depreciation (replacement of worn-out assets)
-    # 3. Historical average if stable
-
-    method_1 = latest_capex * 0.85  # 85% of total capex
-    method_2 = latest_depreciation  # 100% of depreciation
-
-    # If we have historical data, use average capex ratio
-    if len(capex_ratios) >= 3:
-        avg_capex_ratio = sum(capex_ratios) / len(capex_ratios)
-        latest_revenue = financial_line_items[0].revenue if hasattr(financial_line_items[0], 'revenue') and \
-                                                            financial_line_items[0].revenue else 0
-        method_3 = avg_capex_ratio * latest_revenue if latest_revenue else 0
-
-        # Use the median of the three approaches for conservatism
-        estimates = sorted([method_1, method_2, method_3])
-        return estimates[1]  # Median
-    else:
-        # Use the higher of method 1 and 2
-        return max(method_1, method_2)
-
-
-def calculate_intrinsic_value(financial_line_items: list) -> dict[str, any]:
-    """
-    Calculate intrinsic value using enhanced DCF with owner earnings.
-    Uses more sophisticated assumptions and conservative approach like Buffett.
-    """
-    if not financial_line_items or len(financial_line_items) < 3:
-        return {"intrinsic_value": None, "details": ["Insufficient data for reliable valuation"]}
-
-    # Calculate owner earnings with better methodology
-    earnings_data = calculate_owner_earnings(financial_line_items)
-    if not earnings_data["owner_earnings"]:
-        return {"intrinsic_value": None, "details": earnings_data["details"]}
-
-    owner_earnings = earnings_data["owner_earnings"]
-    latest_financial_line_items = financial_line_items[0]
-    shares_outstanding = latest_financial_line_items.outstanding_shares
-
-    if not shares_outstanding or shares_outstanding <= 0:
-        return {"intrinsic_value": None, "details": ["Missing or invalid shares outstanding data"]}
-
-    # Enhanced DCF with more realistic assumptions
-    details = []
-
-    # Estimate growth rate based on historical performance (more conservative)
-    historical_earnings = []
-    for item in financial_line_items[:5]:  # Last 5 years
-        if hasattr(item, 'net_income') and item.net_income:
-            historical_earnings.append(item.net_income)
-
-    # Calculate historical growth rate
-    if len(historical_earnings) >= 3:
-        oldest_earnings = historical_earnings[-1]
-        latest_earnings = historical_earnings[0]
-        years = len(historical_earnings) - 1
-
-        if oldest_earnings > 0:
-            historical_growth = ((latest_earnings / oldest_earnings) ** (1 / years)) - 1
-            # Conservative adjustment - cap growth and apply haircut
-            historical_growth = max(-0.05, min(historical_growth, 0.15))  # Cap between -5% and 15%
-            conservative_growth = historical_growth * 0.7  # Apply 30% haircut for conservatism
-        else:
-            conservative_growth = 0.03  # Default 3% if negative base
-    else:
-        conservative_growth = 0.03  # Default conservative growth
-
-    # Buffett's conservative assumptions
-    stage1_growth = min(conservative_growth, 0.08)  # Stage 1: cap at 8%
-    stage2_growth = min(conservative_growth * 0.5, 0.04)  # Stage 2: half of stage 1, cap at 4%
-    terminal_growth = 0.025  # Long-term GDP growth rate
-
-    # Risk-adjusted discount rate based on business quality
-    base_discount_rate = 0.09  # Base 9%
-
-    # Adjust based on analysis scores (if available in calling context)
-    # For now, use conservative 10%
-    discount_rate = 0.10
-
-    # Three-stage DCF model
-    stage1_years = 5  # High growth phase
-    stage2_years = 5  # Transition phase
-
-    present_value = 0
-    details.append(
-        f"Using three-stage DCF: Stage 1 ({stage1_growth:.1%}, {stage1_years}y), Stage 2 ({stage2_growth:.1%}, {stage2_years}y), Terminal ({terminal_growth:.1%})")
-
-    # Stage 1: Higher growth
-    stage1_pv = 0
-    for year in range(1, stage1_years + 1):
-        future_earnings = owner_earnings * (1 + stage1_growth) ** year
-        pv = future_earnings / (1 + discount_rate) ** year
-        stage1_pv += pv
-
-    # Stage 2: Transition growth
-    stage2_pv = 0
-    stage1_final_earnings = owner_earnings * (1 + stage1_growth) ** stage1_years
-    for year in range(1, stage2_years + 1):
-        future_earnings = stage1_final_earnings * (1 + stage2_growth) ** year
-        pv = future_earnings / (1 + discount_rate) ** (stage1_years + year)
-        stage2_pv += pv
-
-    # Terminal value using Gordon Growth Model
-    final_earnings = stage1_final_earnings * (1 + stage2_growth) ** stage2_years
-    terminal_earnings = final_earnings * (1 + terminal_growth)
-    terminal_value = terminal_earnings / (discount_rate - terminal_growth)
-    terminal_pv = terminal_value / (1 + discount_rate) ** (stage1_years + stage2_years)
-
-    # Total intrinsic value
-    intrinsic_value = stage1_pv + stage2_pv + terminal_pv
-
-    # Apply additional margin of safety (Buffett's conservatism)
-    conservative_intrinsic_value = intrinsic_value * 0.85  # 15% additional haircut
-
-    details.extend([
-        f"Stage 1 PV: ${stage1_pv:,.0f}",
-        f"Stage 2 PV: ${stage2_pv:,.0f}",
-        f"Terminal PV: ${terminal_pv:,.0f}",
-        f"Total IV: ${intrinsic_value:,.0f}",
-        f"Conservative IV (15% haircut): ${conservative_intrinsic_value:,.0f}",
-        f"Owner earnings: ${owner_earnings:,.0f}",
-        f"Discount rate: {discount_rate:.1%}"
-    ])
-
-    return {
-        "intrinsic_value": conservative_intrinsic_value,
-        "raw_intrinsic_value": intrinsic_value,
-        "owner_earnings": owner_earnings,
-        "assumptions": {
-            "stage1_growth": stage1_growth,
-            "stage2_growth": stage2_growth,
-            "terminal_growth": terminal_growth,
-            "discount_rate": discount_rate,
-            "stage1_years": stage1_years,
-            "stage2_years": stage2_years,
-            "historical_growth": conservative_growth if 'conservative_growth' in locals() else None,
-        },
-        "details": details,
-    }
-
-
-def analyze_book_value_growth(financial_line_items: list) -> dict[str, any]:
-    """Analyze book value per share growth - a key Buffett metric."""
     if len(financial_line_items) < 3:
-        return {"score": 0, "details": "Insufficient data for book value analysis"}
+        # Fallback: use latest period's depreciation as proxy
+        latest = financial_line_items[0]
+        if hasattr(latest, 'depreciation_and_amortization') and latest.depreciation_and_amortization:
+            return abs(latest.depreciation_and_amortization)
+        return 0.0
 
-    # Extract book values per share
-    book_values = [
-        item.shareholders_equity / item.outstanding_shares
-        for item in financial_line_items
-        if hasattr(item, 'shareholders_equity') and hasattr(item, 'outstanding_shares')
-        and item.shareholders_equity and item.outstanding_shares
-    ]
+    # Calculate historical capex-to-depreciation ratios
+    capex_ratios = []
+    for item in financial_line_items[:5]:  # Use last 5 periods if available
+        if (item.capital_expenditure is not None and 
+            item.depreciation_and_amortization is not None and 
+            item.depreciation_and_amortization != 0):
+            ratio = abs(item.capital_expenditure) / abs(item.depreciation_and_amortization)
+            capex_ratios.append(ratio)
 
-    if len(book_values) < 3:
-        return {"score": 0, "details": "Insufficient book value data for growth analysis"}
+    if not capex_ratios:
+        # Fallback to current depreciation
+        latest = financial_line_items[0]
+        return abs(latest.depreciation_and_amortization) if latest.depreciation_and_amortization else 0.0
 
-    score = 0
-    reasoning = []
-
-    # Analyze growth consistency
-    growth_periods = sum(1 for i in range(len(book_values) - 1) if book_values[i] > book_values[i + 1])
-    growth_rate = growth_periods / (len(book_values) - 1)
-
-    # Score based on consistency
-    if growth_rate >= 0.8:
-        score += 3
-        reasoning.append("Consistent book value per share growth (Buffett's favorite metric)")
-    elif growth_rate >= 0.6:
-        score += 2
-        reasoning.append("Good book value per share growth pattern")
-    elif growth_rate >= 0.4:
-        score += 1
-        reasoning.append("Moderate book value per share growth")
-    else:
-        reasoning.append("Inconsistent book value per share growth")
-
-    # Calculate and score CAGR
-    cagr_score, cagr_reason = _calculate_book_value_cagr(book_values)
-    score += cagr_score
-    reasoning.append(cagr_reason)
-
-    return {"score": score, "details": "; ".join(reasoning)}
-
-
-def _calculate_book_value_cagr(book_values: list) -> tuple[int, str]:
-    """Helper function to safely calculate book value CAGR and return score + reasoning."""
-    if len(book_values) < 2:
-        return 0, "Insufficient data for CAGR calculation"
-
-    oldest_bv, latest_bv = book_values[-1], book_values[0]
-    years = len(book_values) - 1
-
-    # Handle different scenarios
-    if oldest_bv > 0 and latest_bv > 0:
-        cagr = ((latest_bv / oldest_bv) ** (1 / years)) - 1
-        if cagr > 0.15:
-            return 2, f"Excellent book value CAGR: {cagr:.1%}"
-        elif cagr > 0.1:
-            return 1, f"Good book value CAGR: {cagr:.1%}"
-        else:
-            return 0, f"Book value CAGR: {cagr:.1%}"
-    elif oldest_bv < 0 < latest_bv:
-        return 3, "Excellent: Company improved from negative to positive book value"
-    elif oldest_bv > 0 > latest_bv:
-        return 0, "Warning: Company declined from positive to negative book value"
-    else:
-        return 0, "Unable to calculate meaningful book value CAGR due to negative values"
+    # Use median ratio to avoid outlier bias, apply to current depreciation
+    capex_ratios.sort()
+    median_ratio = capex_ratios[len(capex_ratios) // 2]
+    
+    # Cap the ratio to reasonable bounds (0.5x to 3x depreciation)
+    median_ratio = max(0.5, min(3.0, median_ratio))
+    
+    latest = financial_line_items[0]
+    current_depreciation = abs(latest.depreciation_and_amortization) if latest.depreciation_and_amortization else 0.0
+    
+    return current_depreciation * median_ratio
 
 
 def analyze_pricing_power(financial_line_items: list, metrics: list) -> dict[str, any]:
-    """
-    Analyze pricing power - Buffett's key indicator of a business moat.
-    Looks at ability to raise prices without losing customers (margin expansion during inflation).
-    """
-    if not financial_line_items or not metrics:
+    """Analyze pricing power through margin trends and revenue growth during inflationary periods."""
+    if len(financial_line_items) < 3 or not metrics:
         return {"score": 0, "details": "Insufficient data for pricing power analysis"}
 
     score = 0
     reasoning = []
 
-    # Check gross margin trends (ability to maintain/expand margins)
+    # Check gross margin trends (pricing power indicator)
     gross_margins = []
-    for item in financial_line_items:
-        if hasattr(item, 'gross_margin') and item.gross_margin is not None:
-            gross_margins.append(item.gross_margin)
+    for item in financial_line_items[:5]:  # Last 5 periods
+        if item.revenue and item.gross_profit:
+            margin = item.gross_profit / item.revenue
+            gross_margins.append(margin)
 
     if len(gross_margins) >= 3:
-        # Check margin stability/improvement
-        recent_avg = sum(gross_margins[:2]) / 2 if len(gross_margins) >= 2 else gross_margins[0]
-        older_avg = sum(gross_margins[-2:]) / 2 if len(gross_margins) >= 2 else gross_margins[-1]
-
-        if recent_avg > older_avg + 0.02:  # 2%+ improvement
-            score += 3
-            reasoning.append("Expanding gross margins indicate strong pricing power")
-        elif recent_avg > older_avg:
+        # Check if margins are stable or improving
+        recent_margin = sum(gross_margins[:2]) / 2  # Average of last 2 periods
+        older_margin = sum(gross_margins[-2:]) / 2  # Average of oldest 2 periods
+        
+        if recent_margin >= older_margin and recent_margin > 0.3:  # Stable/improving and >30%
             score += 2
-            reasoning.append("Improving gross margins suggest good pricing power")
-        elif abs(recent_avg - older_avg) < 0.01:  # Stable within 1%
+            reasoning.append(f"Strong pricing power: gross margin stable/improving at {recent_margin:.1%}")
+        elif recent_margin >= older_margin:
             score += 1
-            reasoning.append("Stable gross margins during economic uncertainty")
+            reasoning.append(f"Some pricing power: gross margin stable/improving at {recent_margin:.1%}")
         else:
-            reasoning.append("Declining gross margins may indicate pricing pressure")
+            reasoning.append(f"Declining pricing power: gross margin falling from {older_margin:.1%} to {recent_margin:.1%}")
 
-    # Check if company has been able to maintain high margins consistently
-    if gross_margins:
-        avg_margin = sum(gross_margins) / len(gross_margins)
-        if avg_margin > 0.5:  # 50%+ gross margins
-            score += 2
-            reasoning.append(f"Consistently high gross margins ({avg_margin:.1%}) indicate strong pricing power")
-        elif avg_margin > 0.3:  # 30%+ gross margins
+    # Check operating margin stability
+    if metrics and len(metrics) >= 3:
+        operating_margins = [m.operating_margin for m in metrics[:3] if m.operating_margin is not None]
+        if len(operating_margins) >= 3:
+            if all(margin > 0.15 for margin in operating_margins):  # Consistently high operating margins
+                score += 1
+                reasoning.append("Consistent high operating margins suggest strong pricing power")
+
+    # Check revenue growth consistency (ability to raise prices)
+    revenue_growth_rates = []
+    for i in range(len(financial_line_items) - 1):
+        current = financial_line_items[i]
+        previous = financial_line_items[i + 1]
+        if current.revenue and previous.revenue and previous.revenue != 0:
+            growth_rate = (current.revenue - previous.revenue) / previous.revenue
+            revenue_growth_rates.append(growth_rate)
+
+    if len(revenue_growth_rates) >= 3:
+        avg_growth = sum(revenue_growth_rates) / len(revenue_growth_rates)
+        if avg_growth > 0.05:  # >5% average revenue growth
             score += 1
-            reasoning.append(f"Good gross margins ({avg_margin:.1%}) suggest decent pricing power")
+            reasoning.append(f"Strong revenue growth ({avg_growth:.1%} avg) suggests pricing power")
+        elif avg_growth > 0:
+            reasoning.append(f"Modest revenue growth ({avg_growth:.1%} avg)")
+        else:
+            score -= 1
+            reasoning.append(f"Declining revenue ({avg_growth:.1%} avg) suggests weak pricing power")
+
+    # Ensure score doesn't go negative
+    score = max(0, score)
 
     return {
         "score": score,
-        "details": "; ".join(reasoning) if reasoning else "Limited pricing power analysis available"
+        "details": "; ".join(reasoning) if reasoning else "Limited pricing power analysis",
+    }
+
+
+def analyze_book_value_growth(financial_line_items: list) -> dict[str, any]:
+    """Analyze book value per share growth over time."""
+    if len(financial_line_items) < 4:
+        return {"score": 0, "details": "Insufficient data for book value analysis"}
+
+    score = 0
+    reasoning = []
+
+    # Calculate book value growth (shareholders equity / shares outstanding)
+    book_values = []
+    for item in financial_line_items[:5]:  # Last 5 periods
+        if item.shareholders_equity and item.outstanding_shares and item.outstanding_shares > 0:
+            bv_per_share = item.shareholders_equity / item.outstanding_shares
+            book_values.append(bv_per_share)
+
+    if len(book_values) >= 4:
+        # Check for consistent book value growth
+        growth_periods = 0
+        for i in range(len(book_values) - 1):
+            if book_values[i] > book_values[i + 1]:
+                growth_periods += 1
+
+        growth_rate = growth_periods / (len(book_values) - 1)
+        if growth_rate >= 0.75:  # 75%+ of periods showing growth
+            score += 3
+            total_growth = (book_values[0] - book_values[-1]) / book_values[-1] if book_values[-1] != 0 else 0
+            reasoning.append(f"Excellent book value growth: {growth_periods}/{len(book_values)-1} periods positive (total: {total_growth:.1%})")
+        elif growth_rate >= 0.5:
+            score += 2
+            reasoning.append(f"Good book value growth: {growth_periods}/{len(book_values)-1} periods positive")
+        else:
+            score += 1
+            reasoning.append(f"Inconsistent book value growth: {growth_periods}/{len(book_values)-1} periods positive")
+    else:
+        reasoning.append("Insufficient data for book value per share analysis")
+
+    return {
+        "score": score,
+        "details": "; ".join(reasoning),
+    }
+
+
+def calculate_intrinsic_value(financial_line_items: list) -> dict[str, any]:
+    """Calculate intrinsic value using owner earnings and growth estimates."""
+    owner_earnings_analysis = calculate_owner_earnings(financial_line_items)
+    
+    if not owner_earnings_analysis.get("owner_earnings"):
+        return {
+            "intrinsic_value": None,
+            "details": "Cannot calculate intrinsic value without owner earnings",
+        }
+
+    owner_earnings = owner_earnings_analysis["owner_earnings"]
+    
+    # Simple perpetuity model with conservative assumptions
+    # IV = Owner Earnings / (Discount Rate - Growth Rate)
+    discount_rate = 0.10  # 10% required return (Buffett typically uses 10-15%)
+    growth_rate = 0.03   # Conservative 3% long-term growth
+    
+    # Safety check - growth rate must be less than discount rate
+    if growth_rate >= discount_rate:
+        growth_rate = discount_rate - 0.01
+    
+    intrinsic_value = owner_earnings / (discount_rate - growth_rate)
+    
+    # Apply additional conservatism - reduce by 25% for margin of safety
+    conservative_intrinsic_value = intrinsic_value * 0.75
+    
+    return {
+        "intrinsic_value": conservative_intrinsic_value,
+        "base_calculation": intrinsic_value,
+        "owner_earnings": owner_earnings,
+        "assumptions": {
+            "discount_rate": discount_rate,
+            "growth_rate": growth_rate,
+            "conservatism_factor": 0.75
+        },
+        "details": f"Intrinsic value: ${conservative_intrinsic_value:,.0f} (base: ${intrinsic_value:,.0f}) using {discount_rate:.1%} discount rate, {growth_rate:.1%} growth",
     }
 
 
 def generate_buffett_output(
-        ticker: str,
-        analysis_data: dict[str, any],
-        state: AgentState,
-        agent_id: str = "warren_buffett_agent",
+    ticker: str,
+    analysis_data: dict,
+    state: AgentState,
+    agent_id: str,
 ) -> WarrenBuffettSignal:
-    """Get investment decision from LLM with a compact prompt."""
-
-    # --- Build compact facts here ---
-    facts = {
-        "score": analysis_data.get("score"),
-        "max_score": analysis_data.get("max_score"),
-        "fundamentals": analysis_data.get("fundamental_analysis", {}).get("details"),
-        "consistency": analysis_data.get("consistency_analysis", {}).get("details"),
-        "moat": analysis_data.get("moat_analysis", {}).get("details"),
-        "pricing_power": analysis_data.get("pricing_power_analysis", {}).get("details"),
-        "book_value": analysis_data.get("book_value_analysis", {}).get("details"),
-        "management": analysis_data.get("management_analysis", {}).get("details"),
-        "intrinsic_value": analysis_data.get("intrinsic_value_analysis", {}).get("intrinsic_value"),
-        "market_cap": analysis_data.get("market_cap"),
-        "margin_of_safety": analysis_data.get("margin_of_safety"),
-    }
-
-    template = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                "You are Warren Buffett. Decide bullish, bearish, or neutral using only the provided facts.\n"
-                "\n"
-                "Checklist for decision:\n"
-                "- Circle of competence\n"
-                "- Competitive moat\n"
-                "- Management quality\n"
-                "- Financial strength\n"
-                "- Valuation vs intrinsic value\n"
-                "- Long-term prospects\n"
-                "\n"
-                "Signal rules:\n"
-                "- Bullish: strong business AND margin_of_safety > 0.\n"
-                "- Bearish: poor business OR clearly overvalued.\n"
-                "- Neutral: good business but margin_of_safety <= 0, or mixed evidence.\n"
-                "\n"
-                "Confidence scale:\n"
-                "- 90-100%: Exceptional business within my circle, trading at attractive price\n"
-                "- 70-89%: Good business with decent moat, fair valuation\n"
-                "- 50-69%: Mixed signals, would need more information or better price\n"
-                "- 30-49%: Outside my expertise or concerning fundamentals\n"
-                "- 10-29%: Poor business or significantly overvalued\n"
-                "\n"
-                "Keep reasoning under 120 characters. Do not invent data. Return JSON only."
-            ),
-            (
-                "human",
-                "Ticker: {ticker}\n"
-                "Facts:\n{facts}\n\n"
-                "Return exactly:\n"
-                "{{\n"
-                '  "signal": "bullish" | "bearish" | "neutral",\n'
-                '  "confidence": int,\n'
-                '  "reasoning": "short justification"\n'
-                "}}"
-            ),
-        ]
-    )
-
+    """Generate final Buffett analysis using LLM with all the quantitative analysis."""
+    
+    template = ChatPromptTemplate.from_messages([
+        ("system", 
+         "You are Warren Buffett analyzing a stock investment opportunity. "
+         "You have been provided with comprehensive fundamental analysis data. "
+         "Make your final investment decision based on your value investing principles: "
+         "look for companies with strong moats, excellent management, consistent earnings, "
+         "reasonable valuation, and businesses you understand. "
+         "Consider the margin of safety principle - only invest when the price is "
+         "significantly below intrinsic value."),
+        ("human",
+         "Analyze this investment opportunity for {ticker}:\n\n"
+         "FUNDAMENTAL ANALYSIS:\n{fundamental_analysis}\n\n"
+         "CONSISTENCY ANALYSIS:\n{consistency_analysis}\n\n"
+         "COMPETITIVE MOAT ANALYSIS:\n{moat_analysis}\n\n"
+         "MANAGEMENT QUALITY:\n{management_analysis}\n\n"
+         "PRICING POWER:\n{pricing_power_analysis}\n\n"
+         "BOOK VALUE GROWTH:\n{book_value_analysis}\n\n"
+         "INTRINSIC VALUE:\n{intrinsic_value_analysis}\n\n"
+         "MARKET CAP: ${market_cap:,}\n"
+         "MARGIN OF SAFETY: {margin_of_safety}\n\n"
+         "QUANTITATIVE SCORE: {score}/{max_score}\n\n"
+         "Provide your investment signal (bullish/bearish/neutral), "
+         "confidence level (0-100), and concise reasoning focusing on "
+         "the most important Buffett-style factors.")
+    ])
+    
+    # Format margin of safety for display
+    margin_of_safety_str = f"{analysis_data['margin_of_safety']:.1%}" if analysis_data['margin_of_safety'] is not None else "Cannot calculate (missing market cap or intrinsic value)"
+    
     prompt = template.invoke({
-        "facts": json.dumps(facts, separators=(",", ":"), ensure_ascii=False),
         "ticker": ticker,
+        "fundamental_analysis": analysis_data["fundamental_analysis"]["details"],
+        "consistency_analysis": analysis_data["consistency_analysis"]["details"],
+        "moat_analysis": analysis_data["moat_analysis"]["details"],
+        "management_analysis": analysis_data["management_analysis"]["details"],
+        "pricing_power_analysis": analysis_data["pricing_power_analysis"]["details"],
+        "book_value_analysis": analysis_data["book_value_analysis"]["details"],
+        "intrinsic_value_analysis": analysis_data["intrinsic_value_analysis"]["details"],
+        "market_cap": analysis_data["market_cap"] or 0,
+        "margin_of_safety": margin_of_safety_str,
+        "score": analysis_data["score"],
+        "max_score": analysis_data["max_score"]
     })
-
-    # Default fallback uses int confidence to match schema and avoid parse retries
-    def create_default_warren_buffett_signal():
-        return WarrenBuffettSignal(signal="neutral", confidence=50, reasoning="Insufficient data")
-
+    
+    def default_factory():
+        return WarrenBuffettSignal(
+            signal="neutral",
+            confidence=50,
+            reasoning="Unable to generate analysis - using neutral default"
+        )
+    
     return call_llm(
         prompt=prompt,
         pydantic_model=WarrenBuffettSignal,
         agent_name=agent_id,
         state=state,
-        default_factory=create_default_warren_buffett_signal,
+        default_factory=default_factory
     )
