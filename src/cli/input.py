@@ -41,6 +41,20 @@ def add_common_args(
     if include_ollama:
         parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
     parser.add_argument("--model", type=str, required=False, help="Model name to use (e.g., gpt-4o)")
+    parser.add_argument(
+        "--data-source",
+        dest="data_source",
+        type=str,
+        default="auto",
+        choices=["auto", "financialdatasets", "yfinance"],
+        help=(
+            "Financial data source: 'auto' (default) uses financialdatasets.ai for free tickers "
+            "(AAPL/GOOGL/MSFT/NVDA/TSLA) or when FINANCIAL_DATASETS_API_KEY is set, "
+            "and falls back to yfinance for all other tickers. "
+            "'yfinance' forces Yahoo Finance for all tickers (free, no key needed). "
+            "'financialdatasets' forces financialdatasets.ai (requires API key for non-free tickers)."
+        ),
+    )
     return parser
 
 
@@ -221,6 +235,7 @@ class CLIInputs:
     margin_requirement: float
     show_reasoning: bool = False
     show_agent_graph: bool = False
+    data_source: str = "auto"
     raw_args: Optional[argparse.Namespace] = None
 
 
@@ -282,6 +297,7 @@ def parse_cli_inputs(
         margin_requirement=getattr(args, "margin_requirement", 0.0),
         show_reasoning=getattr(args, "show_reasoning", False),
         show_agent_graph=getattr(args, "show_agent_graph", False),
+        data_source=getattr(args, "data_source", "auto"),
         raw_args=args,
     )
 

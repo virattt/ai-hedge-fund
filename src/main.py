@@ -8,6 +8,7 @@ import questionary
 from src.agents.portfolio_manager import portfolio_management_agent
 from src.agents.risk_manager import risk_management_agent
 from src.graph.state import AgentState
+from src.tools.api import set_default_data_source
 from src.utils.display import print_trading_output
 from src.utils.analysts import ANALYST_ORDER, get_analyst_nodes
 from src.utils.progress import progress
@@ -52,7 +53,11 @@ def run_hedge_fund(
     selected_analysts: list[str] = [],
     model_name: str = "gpt-4.1",
     model_provider: str = "OpenAI",
+    data_source: str = "auto",
 ):
+    # Ensure module-level global is set so library callers (not just __main__) get the right source
+    set_default_data_source(data_source)
+
     # Start progress tracking
     progress.start()
 
@@ -74,6 +79,7 @@ def run_hedge_fund(
                     "start_date": start_date,
                     "end_date": end_date,
                     "analyst_signals": {},
+                    "data_source": data_source,
                 },
                 "metadata": {
                     "show_reasoning": show_reasoning,
@@ -139,6 +145,9 @@ if __name__ == "__main__":
         include_reasoning_flag=True,
     )
 
+    # Configure data source globally so all agents pick it up automatically
+    set_default_data_source(inputs.data_source)
+
     tickers = inputs.tickers
     selected_analysts = inputs.selected_analysts
 
@@ -175,5 +184,6 @@ if __name__ == "__main__":
         selected_analysts=inputs.selected_analysts,
         model_name=inputs.model_name,
         model_provider=inputs.model_provider,
+        data_source=inputs.data_source,
     )
     print_trading_output(result)
