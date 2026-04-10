@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, JSON, ForeignKey, Index
+from sqlalchemy.orm import backref, relationship
 from sqlalchemy.sql import func
 from .connection import Base
 
@@ -112,4 +113,65 @@ class ApiKey(Base):
     last_used = Column(DateTime(timezone=True), nullable=True)  # Track usage
 
 
- 
+class ScrapingWebsite(Base):
+    """Table to store target websites for scraping with scheduling configuration."""
+    __tablename__ = "scraping_websites"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Website configuration
+    url = Column(String(2048), nullable=False)
+    name = Column(String(200), nullable=False)
+
+    # Scrape status: idle, in_progress, completed, error
+    scrape_status = Column(String(50), nullable=False, default="idle")
+    scrape_interval_minutes = Column(Integer, nullable=True)  # None means no scheduling
+    is_active = Column(Boolean, default=True)
+
+    # Depth crawling configuration
+    max_depth = Column(Integer, nullable=False, default=1)
+    max_pages = Column(Integer, nullable=False, default=10)
+    include_external = Column(Boolean, nullable=False, default=False)
+
+    # Last scrape tracking
+    last_scraped_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(Text, nullable=True)
+
+    # Relationship to results with cascade delete
+    results = relationship("ScrapeResult", back_populates="website", cascade="all, delete-orphan")
+
+
+class ScrapeResult(Base):
+    """Table to store individual scrape results for a website."""
+    __tablename__ = "scrape_results"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Foreign key to the website
+    website_id = Column(Integer, ForeignKey("scraping_websites.id"), nullable=False, index=True)
+    scraped_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Scraped content (truncated to 1MB)
+    content = Column(Text, nullable=True)
+    content_length = Column(Integer, default=0)  # Original length before truncation
+
+    # Result status: success, error
+    status = Column(String(50), nullable=False)
+    error_message = Column(Text, nullable=True)
+
+    # Depth crawling fields
+    page_url = Column(String(2048), nullable=True)  # Actual URL of this page
+    depth = Column(Integer, nullable=False, default=0)  # 0 = root page
+    parent_result_id = Column(Integer, ForeignKey("scrape_results.id"), nullable=True)
+    scrape_run_id = Column(String(36), nullable=True, index=True)  # UUID grouping one execution
+
+    # Relationships
+    website = relationship("ScrapingWebsite", back_populates="results")
+    children = relationship("ScrapeResult", backref=backref("parent", remote_side="ScrapeResult.id"))
+
+    __table_args__ = (
+        Index("ix_scrape_results_website_id_scraped_at", "website_id", "scraped_at"),
+    )
