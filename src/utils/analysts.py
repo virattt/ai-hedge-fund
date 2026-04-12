@@ -3,6 +3,7 @@
 from src.agents import portfolio_manager
 from src.agents.aswath_damodaran import aswath_damodaran_agent
 from src.agents.ben_graham import ben_graham_agent
+from src.agents.exa_news import exa_news_agent
 from src.agents.bill_ackman import bill_ackman_agent
 from src.agents.cathie_wood import cathie_wood_agent
 from src.agents.charlie_munger import charlie_munger_agent
@@ -174,6 +175,14 @@ ANALYST_CONFIG = {
         "agent_func": valuation_analyst_agent,
         "type": "analyst",
         "order": 18,
+    },
+    "exa_news_analyst": {
+        "display_name": "Exa Web Search Analyst",
+        "description": "AI-Powered Web Sentiment Specialist",
+        "investing_style": "Uses Exa AI-powered web search to find and analyze recent news, articles, and commentary about stocks, extracting market sentiment from web content.",
+        "agent_func": exa_news_agent,
+        "type": "analyst",
+        "order": 19,
     },
 }
 
