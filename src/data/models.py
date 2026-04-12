@@ -169,6 +169,14 @@ class AgentStateData(BaseModel):
     ticker_analyses: dict[str, TickerAnalysis]  # ticker -> analysis mapping
 
 
+class ExaSearchResult(BaseModel):
+    title: str
+    url: str
+    snippet: str
+    published_date: str | None = None
+    author: str | None = None
+
+
 class AgentStateMetadata(BaseModel):
     show_reasoning: bool = False
     model_config = {"extra": "allow"}
