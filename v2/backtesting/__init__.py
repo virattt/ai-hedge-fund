@@ -1,1 +1,1 @@
-"""v2 backtesting — to be built in Week 3."""
+"""v2 backtesting — engine, costs, and simulation utilities."""

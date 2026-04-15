@@ -1,1 +1,1 @@
-"""v2 portfolio construction — to be built in Week 7."""
+"""v2 portfolio construction — optimization and target weights."""

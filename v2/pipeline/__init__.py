@@ -1,1 +1,1 @@
-"""v2 pipeline — to be built in Weeks 9-11."""
+"""v2 pipeline — end-to-end orchestration (data through execution)."""

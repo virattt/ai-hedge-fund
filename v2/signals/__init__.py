@@ -1,6 +1,6 @@
 """Quantitative signal registry.
 
-Signals will be added here as they are built during the learning path.
+Concrete signals register here as they are implemented.
 See v2/signals/base.py for the BaseSignal ABC.
 """
 

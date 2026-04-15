@@ -1,1 +1,1 @@
-"""v2 risk management — to be built in Week 8."""
+"""v2 risk management — limits, sizing, and monitoring."""
