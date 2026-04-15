@@ -40,6 +40,21 @@
     "provider": "DeepSeek"
   },
   {
+    "display_name": "Kimi K2",
+    "model_name": "kimi-k2-0905-preview",
+    "provider": "Kimi"
+  },
+  {
+    "display_name": "Kimi Latest (128k)",
+    "model_name": "kimi-latest",
+    "provider": "Kimi"
+  },
+  {
+    "display_name": "Moonshot v1 128k",
+    "model_name": "moonshot-v1-128k",
+    "provider": "Kimi"
+  },
+  {
     "display_name": "Gemini 3 Pro",
     "model_name": "gemini-3-pro-preview",
     "provider": "Google"
