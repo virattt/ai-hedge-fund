@@ -1,5 +1,27 @@
-"""v2 data pipeline utilities.
+"""v2 data pipeline — FD API client and response models."""
 
-FD API data pipeline, price/filing/metric fetching,
-data exploration and basic utilities.
-"""
+from v2.data.client import FDClient
+from v2.data.models import (
+    AnalystEstimate,
+    CompanyFacts,
+    CompanyNews,
+    Earnings,
+    EarningsData,
+    Filing,
+    FinancialMetrics,
+    InsiderTrade,
+    Price,
+)
+
+__all__ = [
+    "AnalystEstimate",
+    "CompanyFacts",
+    "CompanyNews",
+    "Earnings",
+    "EarningsData",
+    "FDClient",
+    "Filing",
+    "FinancialMetrics",
+    "InsiderTrade",
+    "Price",
+]
