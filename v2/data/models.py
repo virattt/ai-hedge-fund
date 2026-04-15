@@ -17,7 +17,7 @@ _IGNORE = {"extra": "ignore"}
 # ---------------------------------------------------------------------------
 
 class Price(BaseModel):
-    """Single OHLC bar from /prices. Volume is not exposed by the API."""
+    """Single OHLCV bar from /prices."""
 
     model_config = _IGNORE
 
@@ -25,6 +25,7 @@ class Price(BaseModel):
     close: float
     high: float
     low: float
+    volume: int
     time: str
 
 
