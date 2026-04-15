@@ -152,6 +152,12 @@ Please see detailed instructions on how to install and run the web application [
 
 If you have a feature request, please open an [issue](https://github.com/virattt/ai-hedge-fund/issues) and make sure it is tagged with `enhancement`.
 
+## Community Tools
+
+Projects built by the community on top of ai-hedge-fund:
+
+- **[market-sages](https://github.com/hyhmrright/market-sages)** — A Claude Code skill that summons 13 legendary investors (Buffett, Munger, Graham, Burry, Taleb, and more) to analyze any stock, directly inside your terminal. Works with Claude Code, Gemini CLI, and Codex CLI. Real-time data via web search. No API keys, no setup — just `/sages AAPL`.
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
