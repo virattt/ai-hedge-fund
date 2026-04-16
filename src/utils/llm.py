@@ -36,7 +36,7 @@ def call_llm(
     else:
         # Use system defaults when no state or agent_name is provided
         model_name = "gpt-4.1"
-        model_provider = "OPENAI"
+        model_provider = "OpenAI"
 
     # Extract API keys from state if available
     api_keys = None
@@ -138,7 +138,7 @@ def get_agent_model_config(state, agent_name):
     
     # Fall back to global configuration (system defaults)
     model_name = state.get("metadata", {}).get("model_name") or "gpt-4.1"
-    model_provider = state.get("metadata", {}).get("model_provider") or "OPENAI"
+    model_provider = state.get("metadata", {}).get("model_provider") or "OpenAI"
     
     # Convert enum to string if necessary
     if hasattr(model_provider, 'value'):
