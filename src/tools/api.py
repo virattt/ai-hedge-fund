@@ -373,7 +373,7 @@ def get_price_data(ticker: str, start_date: str, end_date: str, api_key: str = N
 # Financial Datasets.  When not set, defaults to Financial Datasets (original).
 #
 # Usage:
-#   DATA_PROVIDER=yfinance   # Free, no API key needed
+#   DATA_PROVIDER=yfinance           # Free, no API key needed
 #   DATA_PROVIDER=financial_datasets  # Default, requires FINANCIAL_DATASETS_API_KEY
 # ---------------------------------------------------------------------------
 
@@ -391,7 +391,6 @@ if _DATA_PROVIDER == "yfinance":
         get_price_data as _yf_get_price_data,
     )
     logger.info("Data provider: yfinance (free, no API key required)")
-    # Override the functions defined above
     get_prices = _yf_get_prices
     get_financial_metrics = _yf_get_financial_metrics
     search_line_items = _yf_search_line_items
