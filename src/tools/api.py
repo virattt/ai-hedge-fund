@@ -1,9 +1,11 @@
 import datetime
+import json
 import logging
 import os
 import pandas as pd
 import requests
 import time
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -26,20 +28,116 @@ from src.data.models import (
 _cache = get_cache()
 
 
+def _default_financial_metric_payload(ticker: str, report_period: str, period: str) -> dict:
+    """Return a complete FinancialMetrics payload with safe defaults."""
+    return {
+        "ticker": ticker,
+        "report_period": report_period,
+        "period": period,
+        "currency": "USD",
+        "market_cap": None,
+        "enterprise_value": None,
+        "price_to_earnings_ratio": None,
+        "price_to_book_ratio": None,
+        "price_to_sales_ratio": None,
+        "enterprise_value_to_ebitda_ratio": None,
+        "enterprise_value_to_revenue_ratio": None,
+        "free_cash_flow_yield": None,
+        "peg_ratio": None,
+        "gross_margin": None,
+        "operating_margin": None,
+        "net_margin": None,
+        "return_on_equity": None,
+        "return_on_assets": None,
+        "return_on_invested_capital": None,
+        "asset_turnover": None,
+        "inventory_turnover": None,
+        "receivables_turnover": None,
+        "days_sales_outstanding": None,
+        "operating_cycle": None,
+        "working_capital_turnover": None,
+        "current_ratio": None,
+        "quick_ratio": None,
+        "cash_ratio": None,
+        "operating_cash_flow_ratio": None,
+        "debt_to_equity": None,
+        "debt_to_assets": None,
+        "interest_coverage": None,
+        "revenue_growth": None,
+        "earnings_growth": None,
+        "book_value_growth": None,
+        "earnings_per_share_growth": None,
+        "free_cash_flow_growth": None,
+        "operating_income_growth": None,
+        "ebitda_growth": None,
+        "payout_ratio": None,
+        "earnings_per_share": None,
+        "book_value_per_share": None,
+        "free_cash_flow_per_share": None,
+    }
+
+
+def _load_local_aapl_financial_metrics(period: str, end_date: str, limit: int) -> list[FinancialMetrics] | None:
+    """Load local AAPL financial metrics from text file for fast debugging."""
+    project_root = Path(__file__).resolve().parents[2]
+    local_file = Path(os.environ.get("AAPL_METRICS_FILE", project_root / "debug" / "aapl_financial_metrics.txt"))
+
+    if not local_file.exists():
+        return None
+
+    try:
+        raw_text = local_file.read_text(encoding="utf-8").strip()
+        if not raw_text:
+            return None
+
+        raw_data = json.loads(raw_text)
+        records = raw_data.get("records", []) if isinstance(raw_data, dict) else raw_data
+        if not isinstance(records, list) or not records:
+            return None
+
+        parsed: list[FinancialMetrics] = []
+        for row in records:
+            if not isinstance(row, dict):
+                continue
+
+            report_period = row.get("report_period") or end_date
+            payload = _default_financial_metric_payload("AAPL", report_period, period)
+            payload.update(row)
+
+            # Force the request's period/ticker so every agent call can reuse this stub.
+            payload["ticker"] = "AAPL"
+            payload["period"] = period
+            parsed.append(FinancialMetrics(**payload))
+
+        if not parsed:
+            return None
+
+        # Keep only rows not newer than requested end_date.
+        filtered = [m for m in parsed if m.report_period <= end_date]
+        if not filtered:
+            filtered = parsed
+
+        filtered.sort(key=lambda m: m.report_period, reverse=True)
+        return filtered[:limit]
+    except Exception as e:
+        logger.warning("Failed to load local AAPL financial metrics from %s: %s", local_file, e)
+        return None
+
+
 def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: dict = None, max_retries: int = 3) -> requests.Response:
     """
     Make an API request with rate limiting handling and moderate backoff.
-    
+
     Args:
         url: The URL to request
         headers: Headers to include in the request
         method: HTTP method (GET or POST)
         json_data: JSON data for POST requests
         max_retries: Maximum number of retries (default: 3)
-    
+
     Returns:
         requests.Response: The response object
-    
+
     Raises:
         Exception: If the request fails with a non-429 error
     """
@@ -48,14 +146,14 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
             response = requests.post(url, headers=headers, json=json_data)
         else:
             response = requests.get(url, headers=headers)
-        
+
         if response.status_code == 429 and attempt < max_retries:
             # Linear backoff: 60s, 90s, 120s, 150s...
             delay = 60 + (30 * attempt)
             print(f"Rate limited (429). Attempt {attempt + 1}/{max_retries + 1}. Waiting {delay}s before retrying...")
             time.sleep(delay)
             continue
-        
+
         # Return the response (whether success, other errors, or final 429)
         return response
 
@@ -64,7 +162,7 @@ def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None)
     """Fetch price data from cache or API."""
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date}_{end_date}"
-    
+
     # Check cache first - simple exact match
     if cached_data := _cache.get_prices(cache_key):
         return [Price(**price) for price in cached_data]
@@ -104,9 +202,14 @@ def get_financial_metrics(
     api_key: str = None,
 ) -> list[FinancialMetrics]:
     """Fetch financial metrics from cache or API."""
+    # For quick debugging, allow AAPL metrics to come from a local text file.
+    if ticker.upper() == "AAPL":
+        if local_metrics := _load_local_aapl_financial_metrics(period=period, end_date=end_date, limit=limit):
+            return local_metrics
+
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{period}_{end_date}_{limit}"
-    
+
     # Check cache first - simple exact match
     if cached_data := _cache.get_financial_metrics(cache_key):
         return [FinancialMetrics(**metric) for metric in cached_data]
@@ -165,7 +268,7 @@ def search_line_items(
     response = _make_api_request(url, headers, method="POST", json_data=body)
     if response.status_code != 200:
         return []
-    
+
     try:
         data = response.json()
         response_model = LineItemResponse(**data)
@@ -190,7 +293,7 @@ def get_insider_trades(
     """Fetch insider trades from cache or API."""
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
-    
+
     # Check cache first - simple exact match
     if cached_data := _cache.get_insider_trades(cache_key):
         return [InsiderTrade(**trade) for trade in cached_data]
@@ -256,7 +359,7 @@ def get_company_news(
     """Fetch company news from cache or API."""
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
-    
+
     # Check cache first - simple exact match
     if cached_data := _cache.get_company_news(cache_key):
         return [CompanyNews(**news) for news in cached_data]
