@@ -1,10 +1,14 @@
 """Helper functions for LLM"""
 
 import json
+import logging
+import time
 from pydantic import BaseModel
 from src.llm.models import get_model, get_model_info
 from src.utils.progress import progress
 from src.graph.state import AgentState
+
+logger = logging.getLogger(__name__)
 
 
 def call_llm(
@@ -47,6 +51,7 @@ def call_llm(
 
     model_info = get_model_info(model_name, model_provider)
     llm = get_model(model_name, model_provider, api_keys)
+    logger.info("LLM call: model=%s, provider=%s", model_name, model_provider)
 
     # For non-JSON support models, we can use structured output
     if not (model_info and not model_info.has_json_mode()):
@@ -56,6 +61,7 @@ def call_llm(
         )
 
     # Call the LLM with retries
+    call_started_at = time.time()
     for attempt in range(max_retries):
         try:
             # Call the LLM
@@ -65,16 +71,20 @@ def call_llm(
             if model_info and not model_info.has_json_mode():
                 parsed_result = extract_json_from_response(result.content)
                 if parsed_result:
+                    logger.info("LLM call succeeded: model=%s, duration=%.2fs", model_name, time.time() - call_started_at)
                     return pydantic_model(**parsed_result)
             else:
+                logger.info("LLM call succeeded: model=%s, duration=%.2fs", model_name, time.time() - call_started_at)
                 return result
 
         except Exception as e:
             if agent_name:
                 progress.update_status(agent_name, None, f"Error - retry {attempt + 1}/{max_retries}")
 
+            logger.error("LLM call failed: model=%s, attempt=%d/%d, error=%s", model_name, attempt + 1, max_retries, e)
+
             if attempt == max_retries - 1:
-                print(f"Error in LLM call after {max_retries} attempts: {e}")
+                logger.error("LLM call failed after %d attempts: %s", max_retries, e)
                 # Use default_factory if provided, otherwise create a basic default
                 if default_factory:
                     return default_factory()
@@ -117,7 +127,7 @@ def extract_json_from_response(content: str) -> dict | None:
                 json_text = json_text[:json_end].strip()
                 return json.loads(json_text)
     except Exception as e:
-        print(f"Error extracting JSON from response: {e}")
+        logger.error("Error extracting JSON from response: %s", e)
     return None
 
 

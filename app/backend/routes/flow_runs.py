@@ -1,6 +1,9 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app.backend.database import get_db
 from app.backend.repositories.flow_run_repository import FlowRunRepository
@@ -48,7 +51,8 @@ async def create_flow_run(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create flow run: {str(e)}")
+        logger.error("Failed to create flow run: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to process flow run request")
 
 
 @router.get(
@@ -80,7 +84,8 @@ async def get_flow_runs(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve flow runs: {str(e)}")
+        logger.error("Failed to retrieve flow runs: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to process flow run request")
 
 
 @router.get(
@@ -107,7 +112,8 @@ async def get_active_flow_run(flow_id: int, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve active flow run: {str(e)}")
+        logger.error("Failed to retrieve active flow run: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to process flow run request")
 
 
 @router.get(
@@ -134,7 +140,8 @@ async def get_latest_flow_run(flow_id: int, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve latest flow run: {str(e)}")
+        logger.error("Failed to retrieve latest flow run: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to process flow run request")
 
 
 @router.get(
@@ -164,7 +171,8 @@ async def get_flow_run(flow_id: int, run_id: int, db: Session = Depends(get_db))
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve flow run: {str(e)}")
+        logger.error("Failed to retrieve flow run: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to process flow run request")
 
 
 @router.put(
@@ -210,7 +218,8 @@ async def update_flow_run(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update flow run: {str(e)}")
+        logger.error("Failed to update flow run: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to process flow run request")
 
 
 @router.delete(
@@ -244,7 +253,8 @@ async def delete_flow_run(flow_id: int, run_id: int, db: Session = Depends(get_d
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete flow run: {str(e)}")
+        logger.error("Failed to delete flow run: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to process flow run request")
 
 
 @router.delete(
@@ -272,7 +282,8 @@ async def delete_all_flow_runs(flow_id: int, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete flow runs: {str(e)}")
+        logger.error("Failed to delete flow runs: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to process flow run request")
 
 
 @router.get(
@@ -300,4 +311,5 @@ async def get_flow_run_count(flow_id: int, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get flow run count: {str(e)}") 
+        logger.error("Failed to get flow run count: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to process flow run request") 

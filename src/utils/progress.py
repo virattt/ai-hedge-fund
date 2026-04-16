@@ -5,6 +5,7 @@ from rich.table import Table
 from rich.style import Style
 from rich.text import Text
 from typing import Dict, Optional, Callable, List
+import threading
 
 console = Console()
 
@@ -18,16 +19,23 @@ class AgentProgress:
         self.live = Live(self.table, console=console, refresh_per_second=4)
         self.started = False
         self.update_handlers: List[Callable[[str, Optional[str], str], None]] = []
+        self._lock = threading.Lock()
 
     def register_handler(self, handler: Callable[[str, Optional[str], str], None]):
         """Register a handler to be called when agent status updates."""
-        self.update_handlers.append(handler)
+        with self._lock:
+            self.update_handlers.append(handler)
         return handler  # Return handler to support use as decorator
 
     def unregister_handler(self, handler: Callable[[str, Optional[str], str], None]):
         """Unregister a previously registered handler."""
-        if handler in self.update_handlers:
-            self.update_handlers.remove(handler)
+        with self._lock:
+            if handler in self.update_handlers:
+                self.update_handlers.remove(handler)
+
+    def reset(self):
+        """Clear all agent status entries to free memory."""
+        self.agent_status.clear()
 
     def start(self):
         """Start the progress display."""
@@ -52,13 +60,15 @@ class AgentProgress:
             self.agent_status[agent_name]["status"] = status
         if analysis:
             self.agent_status[agent_name]["analysis"] = analysis
-        
+
         # Set the timestamp as UTC datetime
         timestamp = datetime.now(timezone.utc).isoformat()
         self.agent_status[agent_name]["timestamp"] = timestamp
 
-        # Notify all registered handlers
-        for handler in self.update_handlers:
+        # Notify all registered handlers (copy list under lock to avoid mutation during iteration)
+        with self._lock:
+            handlers = list(self.update_handlers)
+        for handler in handlers:
             handler(agent_name, ticker, status, analysis, timestamp)
 
         self._refresh_display()

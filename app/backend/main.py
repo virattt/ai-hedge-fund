@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import logging
 import asyncio
 
@@ -22,9 +23,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],  # Frontend URLs
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+# Global exception handler — log details server-side, return generic message to client
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.error("Unhandled exception on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 # Include all routes
 app.include_router(api_router)
@@ -53,3 +60,12 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"Could not check Ollama status: {e}")
         logger.info("ℹ Ollama integration is available if you install it later")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Gracefully close resources on shutdown."""
+    try:
+        if hasattr(ollama_service, '_async_client') and hasattr(ollama_service._async_client, '_client'):
+            await ollama_service._async_client._client.aclose()
+    except Exception:
+        pass

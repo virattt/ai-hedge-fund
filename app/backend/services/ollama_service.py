@@ -52,7 +52,7 @@ class OllamaService:
             
         except Exception as e:
             logger.error(f"Error checking Ollama status: {e}")
-            return self._create_error_status(str(e))
+            return self._create_error_status("Failed to check Ollama status")
     
     async def start_server(self) -> Dict[str, any]:
         """Start the Ollama server."""
@@ -64,7 +64,7 @@ class OllamaService:
                 
         except Exception as e:
             logger.error(f"Error starting Ollama server: {e}")
-            return {"success": False, "message": f"Error starting server: {str(e)}"}
+            return {"success": False, "message": "Failed to start server"}
     
     async def stop_server(self) -> Dict[str, any]:
         """Stop the Ollama server."""
@@ -76,7 +76,7 @@ class OllamaService:
                 
         except Exception as e:
             logger.error(f"Error stopping Ollama server: {e}")
-            return {"success": False, "message": f"Error stopping server: {str(e)}"}
+            return {"success": False, "message": "Failed to stop server"}
     
     async def download_model(self, model_name: str) -> Dict[str, any]:
         """Download an Ollama model."""
@@ -88,7 +88,7 @@ class OllamaService:
                 
         except Exception as e:
             logger.error(f"Error downloading model {model_name}: {e}")
-            return {"success": False, "message": f"Error downloading model: {str(e)}"}
+            return {"success": False, "message": "Failed to download model"}
     
     async def download_model_with_progress(self, model_name: str) -> AsyncGenerator[str, None]:
         """Download an Ollama model with progress streaming."""
@@ -105,7 +105,7 @@ class OllamaService:
                 
         except Exception as e:
             logger.error(f"Error deleting model {model_name}: {e}")
-            return {"success": False, "message": f"Error deleting model: {str(e)}"}
+            return {"success": False, "message": "Failed to delete model"}
     
     async def get_recommended_models(self) -> List[Dict[str, str]]:
         """Get list of recommended Ollama models."""
@@ -196,10 +196,9 @@ class OllamaService:
         """Check if Ollama is installed on the system."""
         system = platform.system().lower()
         command = ["which", "ollama"] if system in ["darwin", "linux"] else ["where", "ollama"]
-        shell = system == "windows"
-        
+
         try:
-            result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=shell)
+            result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             return result.returncode == 0
         except Exception:
             return False
@@ -248,8 +247,7 @@ class OllamaService:
         
         try:
             command = ["ollama", "serve"]
-            shell = system == "windows"
-            subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=shell)
+            subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             return self._wait_for_server_start()
             
@@ -258,7 +256,11 @@ class OllamaService:
             return False
     
     def _wait_for_server_start(self) -> bool:
-        """Wait for server to start and become ready."""
+        """Wait for server to start and become ready.
+
+        Note: This sync method is called via run_in_executor, so time.sleep
+        only blocks the thread pool thread, not the asyncio event loop.
+        """
         logger.info("Starting Ollama server, waiting for it to become ready...")
         
         for i in range(20):  # Try for 20 seconds
@@ -337,7 +339,10 @@ class OllamaService:
             return False
     
     def _terminate_processes(self, pids: List[str]) -> None:
-        """Terminate processes gracefully, then forcefully if needed."""
+        """Terminate processes gracefully, then forcefully if needed.
+
+        Note: Called via run_in_executor — time.sleep blocks thread only, not event loop.
+        """
         # Try SIGTERM first
         for pid in pids:
             if pid:
@@ -363,7 +368,10 @@ class OllamaService:
                     continue
     
     def _verify_server_stopped(self) -> bool:
-        """Verify that the server has stopped."""
+        """Verify that the server has stopped.
+
+        Note: Called via run_in_executor — time.sleep blocks thread only, not event loop.
+        """
         for _ in range(3):
             try:
                 self._sync_client.list()
@@ -429,7 +437,7 @@ class OllamaService:
             error_data = {
                 "status": "error",
                 "message": f"Error downloading model {model_name}",
-                "error": str(e)
+                "error": "Download failed"
             }
             self._download_progress[model_name] = error_data
             yield f"data: {json.dumps(error_data)}\n\n"
