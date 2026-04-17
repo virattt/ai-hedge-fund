@@ -20,6 +20,7 @@ from src.agents.mohnish_pabrai import mohnish_pabrai_agent
 from src.agents.nassim_taleb import nassim_taleb_agent
 from src.agents.news_sentiment import news_sentiment_agent
 from src.agents.growth_agent import growth_analyst_agent
+from src.agents.day_swing_trader import day_swing_trader_agent
 
 # Define analyst configuration - single source of truth
 ANALYST_CONFIG = {
@@ -174,6 +175,14 @@ ANALYST_CONFIG = {
         "agent_func": valuation_analyst_agent,
         "type": "analyst",
         "order": 18,
+    },
+    "day_swing_trader": {
+        "display_name": "Day & Swing Trader",
+        "description": "Smart Money / Price Action System",
+        "investing_style": "Top-down SMC trader: reads HTF trend, ITF range manipulation, order blocks, FVGs, and Fibonacci discount/premium zones to identify asymmetric swing and day-trade setups with tight invalidation.",
+        "agent_func": day_swing_trader_agent,
+        "type": "analyst",
+        "order": 19,
     },
 }
 
