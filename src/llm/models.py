@@ -27,6 +27,7 @@ class ModelProvider(str, Enum):
     MISTRAL = "Mistral"
     OPENAI = "OpenAI"
     OLLAMA = "Ollama"
+    MLX = "MLX"
     OPENROUTER = "OpenRouter"
     GIGACHAT = "GigaChat"
     AZURE_OPENAI = "Azure OpenAI"
@@ -55,6 +56,9 @@ class LLMModel(BaseModel):
         # Only certain Ollama models support JSON mode
         if self.is_ollama():
             return "llama3" in self.model_name or "neural-chat" in self.model_name
+        # MLX server exposes an OpenAI-compatible API that supports response_format
+        if self.is_mlx():
+            return True
         # OpenRouter models generally support JSON mode
         if self.provider == ModelProvider.OPENROUTER:
             return True
@@ -75,6 +79,10 @@ class LLMModel(BaseModel):
     def is_ollama(self) -> bool:
         """Check if the model is an Ollama model"""
         return self.provider == ModelProvider.OLLAMA
+
+    def is_mlx(self) -> bool:
+        """Check if the model is an MLX model"""
+        return self.provider == ModelProvider.MLX
 
 
 # Load models from JSON file
@@ -101,6 +109,7 @@ def load_models_from_json(json_path: str) -> List[LLMModel]:
 current_dir = Path(__file__).parent
 models_json_path = current_dir / "api_models.json"
 ollama_models_json_path = current_dir / "ollama_models.json"
+mlx_models_json_path = current_dir / "mlx_models.json"
 
 # Load available models from JSON
 AVAILABLE_MODELS = load_models_from_json(str(models_json_path))
@@ -108,22 +117,28 @@ AVAILABLE_MODELS = load_models_from_json(str(models_json_path))
 # Load Ollama models from JSON
 OLLAMA_MODELS = load_models_from_json(str(ollama_models_json_path))
 
+# Load MLX models from JSON
+MLX_MODELS = load_models_from_json(str(mlx_models_json_path))
+
 # Create LLM_ORDER in the format expected by the UI
 LLM_ORDER = [model.to_choice_tuple() for model in AVAILABLE_MODELS]
 
 # Create Ollama LLM_ORDER separately
 OLLAMA_LLM_ORDER = [model.to_choice_tuple() for model in OLLAMA_MODELS]
 
+# Create MLX LLM_ORDER separately
+MLX_LLM_ORDER = [model.to_choice_tuple() for model in MLX_MODELS]
+
 
 def get_model_info(model_name: str, model_provider: str) -> LLMModel | None:
     """Get model information by model_name"""
-    all_models = AVAILABLE_MODELS + OLLAMA_MODELS
+    all_models = AVAILABLE_MODELS + OLLAMA_MODELS + MLX_MODELS
     return next((model for model in all_models if model.model_name == model_name and model.provider == model_provider), None)
 
 
 def find_model_by_name(model_name: str) -> LLMModel | None:
     """Find a model by its name across all available models."""
-    all_models = AVAILABLE_MODELS + OLLAMA_MODELS
+    all_models = AVAILABLE_MODELS + OLLAMA_MODELS + MLX_MODELS
     return next((model for model in all_models if model.model_name == model_name), None)
 
 
@@ -135,7 +150,7 @@ def get_models_list():
             "model_name": model.model_name,
             "provider": model.provider.value
         }
-        for model in AVAILABLE_MODELS
+        for model in AVAILABLE_MODELS + MLX_MODELS
     ]
 
 
@@ -182,6 +197,29 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
         return ChatOllama(
             model=model_name,
             base_url=base_url,
+        )
+    elif model_provider == ModelProvider.MLX:
+        # MLX LM server exposes an OpenAI-compatible API.
+        # A key is optional for local servers but required for secured/hosted deployments.
+        # Default port is 8080; override with MLX_BASE_URL for LAN/remote access.
+        mlx_host = os.getenv("MLX_HOST", "localhost")
+        base_url = os.getenv("MLX_BASE_URL", f"http://{mlx_host}:8080/v1")
+        api_key = (api_keys or {}).get("MLX_API_KEY") or os.getenv("MLX_API_KEY", "mlx")
+        # Local/LAN inference can be slow — use a generous timeout (default 10 min).
+        # Override with MLX_TIMEOUT (seconds) if needed.
+        timeout = float(os.getenv("MLX_TIMEOUT", "600"))
+        # Qwen 3.x and other reasoning models emit <think>...</think> tokens before
+        # the JSON response, which breaks structured output parsing.  Disable thinking
+        # by default; set MLX_ENABLE_THINKING=true to turn it back on.
+        enable_thinking = os.getenv("MLX_ENABLE_THINKING", "false").lower() == "true"
+        extra_body = {"chat_template_kwargs": {"enable_thinking": enable_thinking}}
+        return ChatOpenAI(
+            model=model_name,
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout,
+            max_retries=1,
+            extra_body=extra_body,
         )
     elif model_provider == ModelProvider.OPENROUTER:
         api_key = (api_keys or {}).get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")

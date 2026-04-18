@@ -1,7 +1,8 @@
 import { cn } from '@/lib/utils';
-import { Cloud, Server } from 'lucide-react';
+import { Cloud, Cpu, Server } from 'lucide-react';
 import { useState } from 'react';
 import { CloudModels } from './models/cloud';
+import { MlxSettings } from './models/mlx';
 import { OllamaSettings } from './models/ollama';
 
 interface ModelsProps {
@@ -33,6 +34,13 @@ export function Models({ className }: ModelsProps) {
       icon: Server,
       description: 'Ollama models running locally on your machine',
       component: OllamaSettings,
+    },
+    {
+      id: 'mlx',
+      label: 'MLX',
+      icon: Cpu,
+      description: 'MLX models for Apple Silicon local inference',
+      component: MlxSettings,
     },
   ];
 

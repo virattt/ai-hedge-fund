@@ -14,6 +14,9 @@ show_help() {
   echo "  --margin-requirement RATIO  Margin requirement ratio (default: 0.0)"
   echo "  --ollama            Use Ollama for local LLM inference"
   echo "  --ollama-base-url URL  Use an existing Ollama endpoint (implies --ollama)"
+  echo "  --mlx               Use MLX for local LLM inference"
+  echo "  --mlx-base-url URL  MLX server base URL (default: http://localhost:8080)"
+  echo "  --finance-data SRC  Data provider: Financial (default), Yahoo, or Qveris"
   echo "  --show-reasoning    Show reasoning from each agent"
   echo ""
   echo "Commands:"
@@ -40,6 +43,9 @@ TICKER="AAPL,MSFT,NVDA"
 USE_OLLAMA=""
 OLLAMA_BASE_URL_VALUE="${OLLAMA_BASE_URL:-}"
 USE_EXTERNAL_OLLAMA=""
+USE_MLX=""
+MLX_BASE_URL_VALUE="${MLX_BASE_URL:-http://localhost:8080}"
+FINANCE_DATA="${USE_FINANCE_DATA:-}"
 START_DATE=""
 END_DATE=""
 INITIAL_AMOUNT="100000.0"
@@ -81,6 +87,19 @@ while [[ $# -gt 0 ]]; do
       if [ -z "$USE_OLLAMA" ]; then
         USE_OLLAMA="--ollama"
       fi
+      shift 2
+      ;;
+    --mlx)
+      USE_MLX="--mlx"
+      shift
+      ;;
+    --mlx-base-url)
+      MLX_BASE_URL_VALUE="$2"
+      USE_MLX="--mlx"
+      shift 2
+      ;;
+    --finance-data)
+      FINANCE_DATA="$2"
       shift 2
       ;;
     --show-reasoning)
@@ -271,6 +290,12 @@ if [ -n "$USE_OLLAMA" ]; then
   if [ -n "$OLLAMA_BASE_URL_VALUE" ]; then
     export OLLAMA_BASE_URL="$OLLAMA_BASE_URL_VALUE"
   fi
+  if [ -n "$FINANCE_DATA" ]; then
+    export USE_FINANCE_DATA="$FINANCE_DATA"
+  fi
+  if [ -n "$USE_MLX" ]; then
+    export MLX_BASE_URL="$MLX_BASE_URL_VALUE"
+  fi
 
   COMMAND_OVERRIDE=""
 
@@ -364,8 +389,21 @@ fi
 # Build the command
 CMD="docker run -it --rm -v $(pwd)/.env:/app/.env"
 
+# Inject USE_FINANCE_DATA if set
+if [ -n "$FINANCE_DATA" ]; then
+  CMD="$CMD -e USE_FINANCE_DATA=$FINANCE_DATA"
+fi
+
+# Inject MLX settings if set
+if [ -n "$USE_MLX" ]; then
+  CMD="$CMD -e MLX_BASE_URL=$MLX_BASE_URL_VALUE"
+fi
+
 # Add the command
 CMD="$CMD ai-hedge-fund python $SCRIPT_PATH --ticker $TICKER $START_DATE $END_DATE $INITIAL_PARAM --margin-requirement $MARGIN_REQUIREMENT $SHOW_REASONING"
+if [ -n "$USE_MLX" ]; then
+  CMD="$CMD --mlx"
+fi
 
 # Run the command
 echo "Running: $CMD"
