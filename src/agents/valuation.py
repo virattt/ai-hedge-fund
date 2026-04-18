@@ -81,12 +81,17 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
             wc_change = 0  # Default to 0 if working capital data is unavailable
 
         # Owner Earnings
+        # Cap earnings_growth to avoid unrealistic DCF projections when a company
+        # transitions from losses to profits (e.g., earnings_growth can exceed 500%),
+        # which causes exponential blow-up in the DCF calculation. Cap at 25% to be
+        # consistent with the enhanced DCF function's high_growth cap.
+        capped_earnings_growth = min(most_recent_metrics.earnings_growth or 0.05, 0.25)
         owner_val = calculate_owner_earnings_value(
             net_income=li_curr.net_income,
             depreciation=li_curr.depreciation_and_amortization,
             capex=li_curr.capital_expenditure,
             working_capital_change=wc_change,
-            growth_rate=most_recent_metrics.earnings_growth or 0.05,
+            growth_rate=capped_earnings_growth,
         )
 
         # Enhanced Discounted Cash Flow with WACC and scenarios
