@@ -43,6 +43,16 @@ def ben_graham_agent(state: AgentState, agent_id: str = "ben_graham_agent"):
         progress.update_status(agent_id, ticker, "Getting market cap")
         market_cap = get_market_cap(ticker, end_date, api_key=api_key)
 
+        # If we have no data at all, skip the analysis and return neutral
+        if not metrics and not financial_line_items and not market_cap:
+            graham_analysis[ticker] = {
+                "signal": "neutral",
+                "confidence": 0.0,
+                "reasoning": "Insufficient data available for this ticker. Cannot perform Graham analysis.",
+            }
+            progress.update_status(agent_id, ticker, "Done (no data available)")
+            continue
+
         # Perform sub-analyses
         progress.update_status(agent_id, ticker, "Analyzing earnings stability")
         earnings_analysis = analyze_earnings_stability(metrics, financial_line_items)
