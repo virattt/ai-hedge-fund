@@ -1,0 +1,36 @@
+name: Sync Release Branch
+
+permissions: {}
+
+on:
+  release:
+    types:
+      - created
+
+jobs:
+  sync-release-branch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: startsWith(github.event.release.tag_name, 'v1')
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+          ref: v1
+
+      # The email is derived from the bots user id,
+      # found here: https://api.github.com/users/github-actions%5Bbot%5D
+      - name: Configure Git
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+
+      - name: Sync Release Branch
+        run: |
+          git fetch --tags
+          git checkout v1
+          git reset --hard ${GITHUB_REF}
+          git push --force

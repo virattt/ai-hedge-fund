@@ -1,0 +1,18 @@
+[profile.default]
+fs_permissions = [{ access = "read-write", path = "./" }]
+optimizer = true
+optimizer_runs = 200
+
+# A list of solidity error codes to ignore.
+# 3860 = init-code-size
+ignored_error_codes = [3860]
+
+[rpc_endpoints]
+# The RPC URLs are modified versions of the default for testing initialization.
+mainnet = "https://ethereum.reth.rs/rpc"
+optimism_sepolia = "https://sepolia.optimism.io/"                # Adds a trailing slash.
+arbitrum_one_sepolia = "https://sepolia-rollup.arbitrum.io/rpc/" # Adds a trailing slash.
+needs_undefined_env_var = "${UNDEFINED_RPC_URL_PLACEHOLDER}"
+
+[lint]
+lint_on_build = false
