@@ -14,6 +14,9 @@ set SHOW_REASONING=
 set COMMAND=
 set MODEL_NAME=
 
+:: Jump to argument parsing (skip function definitions)
+goto :main_start
+
 :: Help function
 :show_help
 echo AI Hedge Fund Docker Runner
@@ -48,6 +51,9 @@ echo   run.bat ollama      # Start only the Ollama container
 echo   run.bat pull llama3 # Pull the llama3 model to Ollama
 echo.
 goto :eof
+
+:: Main script entry point
+:main_start
 
 :: Parse arguments
 :parse_args
@@ -407,7 +413,3 @@ echo Running: !CMD!
 
 :: Exit
 exit /b 0
-
-:: Start script execution
-call :parse_args %* 
-
