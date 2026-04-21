@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from datetime import datetime
 from typing import Sequence, Dict
 
@@ -14,6 +15,7 @@ from .types import PerformanceMetrics, PortfolioValuePoint
 from .valuation import calculate_portfolio_value, compute_exposures
 from .output import OutputBuilder
 from .benchmarks import BenchmarkCalculator
+from src.utils.chart_generator import PerformanceChartGenerator
 
 from src.tools.api import (
     get_company_news,
@@ -44,6 +46,7 @@ class BacktestEngine:
         model_provider: str,
         selected_analysts: list[str] | None,
         initial_margin_requirement: float,
+        generate_charts: bool = True,
     ) -> None:
         self._agent = agent
         self._tickers = tickers
@@ -53,6 +56,7 @@ class BacktestEngine:
         self._model_name = model_name
         self._model_provider = model_provider
         self._selected_analysts = selected_analysts
+        self._generate_charts = generate_charts
 
         self._portfolio = Portfolio(
             tickers=tickers,
@@ -66,6 +70,10 @@ class BacktestEngine:
 
         # Benchmark calculator
         self._benchmark = BenchmarkCalculator()
+        
+        # Chart generator (initialize only if needed)
+        if self._generate_charts:
+            self._chart_generator = PerformanceChartGenerator()
 
         self._portfolio_values: list[PortfolioValuePoint] = []
         self._table_rows: list[list] = []
@@ -185,6 +193,28 @@ class BacktestEngine:
                 computed = self._perf.compute_metrics(self._portfolio_values)
                 if computed:
                     self._performance_metrics.update(computed)
+
+        # Generate charts if requested
+        if self._generate_charts and len(self._portfolio_values) > 1:
+            try:
+                # Generate portfolio performance chart
+                perf_chart_path = self._chart_generator.generate_portfolio_performance_chart(
+                    self._portfolio_values,
+                    filename=f"backtest_performance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                )
+                print(f"Portfolio performance chart saved: {perf_chart_path}")
+                
+                # Generate comprehensive dashboard if we have enough data
+                if len(self._portfolio_values) > 5:
+                    dashboard_path = self._chart_generator.generate_combined_dashboard(
+                        self._portfolio_values,
+                        [],  # Could extract backtest results if needed later
+                        filename=f"backtest_dashboard_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                    )
+                    print(f"Performance dashboard saved: {dashboard_path}")
+                    
+            except Exception as e:
+                warnings.warn(f"Failed to generate performance charts: {e}")
 
         return self._performance_metrics
 
