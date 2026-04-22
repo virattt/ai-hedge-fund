@@ -4,6 +4,7 @@ export enum ModelProvider {
   ANTHROPIC = 'Anthropic',
   GROQ = 'Groq',
   OLLAMA = 'Ollama',
+  MLX = 'MLX',
 }
 
 export interface AgentModelConfig {
@@ -43,6 +44,8 @@ export interface BaseHedgeFundRequest {
   model_provider?: ModelProvider;
   margin_requirement?: number;
   portfolio_positions?: PortfolioPosition[];
+  data_provider?: string;
+  mlx_base_url?: string;
 }
 
 export interface HedgeFundRequest extends BaseHedgeFundRequest {

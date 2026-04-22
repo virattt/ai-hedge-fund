@@ -30,6 +30,19 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
             api_key_service = ApiKeyService(db)
             request_data.api_keys = api_key_service.get_api_keys_dict()
 
+        # Apply per-request environment settings (request overrides stored settings)
+        import os as _os
+        _api_keys = request_data.api_keys or {}
+        _data_provider = request_data.data_provider or _api_keys.get("USE_FINANCE_DATA")
+        _mlx_base_url = request_data.mlx_base_url or _api_keys.get("MLX_BASE_URL")
+        _mlx_api_key = _api_keys.get("MLX_API_KEY")
+        if _data_provider:
+            _os.environ["USE_FINANCE_DATA"] = _data_provider
+        if _mlx_base_url:
+            _os.environ["MLX_BASE_URL"] = _mlx_base_url
+        if _mlx_api_key:
+            _os.environ["MLX_API_KEY"] = _mlx_api_key
+
         # Create the portfolio
         portfolio = create_portfolio(request_data.initial_cash, request_data.margin_requirement, request_data.tickers, request_data.portfolio_positions)
 
@@ -174,6 +187,19 @@ async def backtest(request_data: BacktestRequest, request: Request, db: Session 
         if not request_data.api_keys:
             api_key_service = ApiKeyService(db)
             request_data.api_keys = api_key_service.get_api_keys_dict()
+
+        # Apply per-request environment settings (request overrides stored settings)
+        import os as _os
+        _api_keys = request_data.api_keys or {}
+        _data_provider = request_data.data_provider or _api_keys.get("USE_FINANCE_DATA")
+        _mlx_base_url = request_data.mlx_base_url or _api_keys.get("MLX_BASE_URL")
+        _mlx_api_key = _api_keys.get("MLX_API_KEY")
+        if _data_provider:
+            _os.environ["USE_FINANCE_DATA"] = _data_provider
+        if _mlx_base_url:
+            _os.environ["MLX_BASE_URL"] = _mlx_base_url
+        if _mlx_api_key:
+            _os.environ["MLX_API_KEY"] = _mlx_api_key
 
         # Convert model_provider to string if it's an enum
         model_provider = request_data.model_provider

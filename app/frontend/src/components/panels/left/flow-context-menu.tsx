@@ -1,24 +1,26 @@
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Copy, Edit, Trash2 } from 'lucide-react';
+import { Copy, Edit, Play, Trash2 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
 interface FlowContextMenuProps {
   isOpen: boolean;
   position: { x: number; y: number };
   onClose: () => void;
+  onRun: () => void;
   onEdit: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }
 
-export function FlowContextMenu({ 
-  isOpen, 
-  position, 
-  onClose, 
-  onEdit, 
-  onDuplicate, 
-  onDelete 
+export function FlowContextMenu({
+  isOpen,
+  position,
+  onClose,
+  onRun,
+  onEdit,
+  onDuplicate,
+  onDelete
 }: FlowContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -69,23 +71,35 @@ export function FlowContextMenu({
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-start text-primary hover-bg"
+          className="w-full justify-start text-green-400 hover:text-green-300 hover:bg-ramp-grey-700"
+          onClick={() => handleAction(onRun)}
+        >
+          <Play size={14} className="mr-2" />
+          Run
+        </Button>
+
+        <div className="my-1 border-t border-border" />
+
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start text-white hover:text-white hover:bg-ramp-grey-700"
           onClick={() => handleAction(onEdit)}
         >
           <Edit size={14} className="mr-2" />
           Edit
         </Button>
-        
+
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-start text-primary hover:bg-ramp-grey-700"
+          className="w-full justify-start text-white hover:text-white hover:bg-ramp-grey-700"
           onClick={() => handleAction(onDuplicate)}
         >
           <Copy size={14} className="mr-2" />
           Duplicate
         </Button>
-        
+
         <Button
           variant="ghost"
           size="sm"
@@ -98,4 +112,4 @@ export function FlowContextMenu({
       </div>
     </div>
   );
-} 
+}

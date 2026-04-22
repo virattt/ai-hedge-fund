@@ -5,7 +5,7 @@ import { setNodeInternalState, setCurrentFlowId as setNodeStateFlowId } from '@/
 import { cn } from '@/lib/utils';
 import { flowService } from '@/services/flow-service';
 import { Flow as FlowType } from '@/types/flow';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 // Import the flow connection manager to check if flow is actively running
 
@@ -15,8 +15,9 @@ interface FlowTabContentProps {
 }
 
 export function FlowTabContent({ flow, className }: FlowTabContentProps) {
-  const { loadFlow } = useFlowContext();
+  const { loadFlow, currentFlowId } = useFlowContext();
   const { activeTabId } = useTabsContext();
+  const hasLoadedRef = useRef(false);
 
   // Enhanced load function that restores both use-node-state and node context data
   const loadFlowWithCompleteState = async (flowToLoad: FlowType) => {
@@ -52,27 +53,36 @@ export function FlowTabContent({ flow, className }: FlowTabContentProps) {
     }
   };
 
-  // Fetch the latest flow state when this tab becomes active
+  // Fetch the latest flow state when this tab becomes active.
+  // Skip the reload if this flow is already loaded in the canvas (e.g. switching
+  // to Settings and back) to avoid wiping unsaved in-memory changes.
   useEffect(() => {
     const isThisTabActive = activeTabId === `flow-${flow.id}`;
-    
+
     if (isThisTabActive) {
+      // If the canvas already has this flow loaded, don't re-fetch from backend.
+      // This preserves unsaved changes when the user switches tabs and returns.
+      const alreadyLoaded = currentFlowId === flow.id && hasLoadedRef.current;
+      if (alreadyLoaded) return;
+
       const fetchAndLoadFlow = async () => {
         try {
           // Fetch the latest flow data from the backend
           const latestFlow = await flowService.getFlow(flow.id);
           // Load the fresh flow data with complete state restoration
           await loadFlowWithCompleteState(latestFlow);
+          hasLoadedRef.current = true;
         } catch (error) {
           console.error('Failed to fetch latest flow state:', error);
           // Fallback to loading the cached flow data with complete state restoration
           await loadFlowWithCompleteState(flow);
+          hasLoadedRef.current = true;
         }
       };
 
       fetchAndLoadFlow();
     }
-  }, [activeTabId, flow.id, flow, loadFlow]);
+  }, [activeTabId, flow.id, flow, loadFlow, currentFlowId]);
 
   return (
     <div className={cn("h-full w-full", className)}>
