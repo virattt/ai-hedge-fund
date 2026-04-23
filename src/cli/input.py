@@ -13,6 +13,9 @@ from dataclasses import dataclass
 from typing import Optional
 
 
+LOCAL_OLLAMA_OPTION = "__local_ollama__"
+
+
 def add_common_args(
     parser: argparse.ArgumentParser,
     *,
@@ -96,9 +99,7 @@ def select_analysts(flags: dict | None = None) -> list[str]:
         print("\n\nInterrupt received. Exiting...")
         sys.exit(0)
 
-    print(
-        f"\nSelected analysts: {', '.join(Fore.GREEN + c.title().replace('_', ' ') + Style.RESET_ALL for c in choices)}\n"
-    )
+    print(f"\nSelected analysts: {', '.join(Fore.GREEN + c.title().replace('_', ' ') + Style.RESET_ALL for c in choices)}\n")
     return choices
 
 
@@ -109,9 +110,7 @@ def select_model(use_ollama: bool, model_flag: str | None = None) -> tuple[str, 
     if model_flag:
         model = find_model_by_name(model_flag)
         if model:
-            print(
-                f"\nUsing specified model: {Fore.CYAN}{model.provider.value}{Style.RESET_ALL} - {Fore.GREEN + Style.BRIGHT}{model.model_name}{Style.RESET_ALL}\n"
-            )
+            print(f"\nUsing specified model: {Fore.CYAN}{model.provider.value}{Style.RESET_ALL} - {Fore.GREEN + Style.BRIGHT}{model.model_name}{Style.RESET_ALL}\n")
             return model.model_name, model.provider.value
         else:
             print(f"{Fore.RED}Model '{model_flag}' not found. Please select a model.{Style.RESET_ALL}")
@@ -146,13 +145,16 @@ def select_model(use_ollama: bool, model_flag: str | None = None) -> tuple[str, 
             sys.exit(1)
 
         model_provider = ModelProvider.OLLAMA.value
-        print(
-            f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n"
-        )
+        print(f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
     else:
+        model_choices = [
+            questionary.Choice("Local (Ollama)", value=(LOCAL_OLLAMA_OPTION, ModelProvider.OLLAMA.value)),
+            *[questionary.Choice(display, value=(name, provider)) for display, name, provider in LLM_ORDER],
+        ]
+
         model_choice = questionary.select(
             "Select your LLM model:",
-            choices=[questionary.Choice(display, value=(name, provider)) for display, name, provider in LLM_ORDER],
+            choices=model_choices,
             style=questionary.Style(
                 [
                     ("selected", "fg:green bold"),
@@ -169,6 +171,38 @@ def select_model(use_ollama: bool, model_flag: str | None = None) -> tuple[str, 
 
         model_name, model_provider = model_choice
 
+        if model_name == LOCAL_OLLAMA_OPTION and model_provider == ModelProvider.OLLAMA.value:
+            print(f"{Fore.CYAN}Using Ollama for local LLM inference.{Style.RESET_ALL}")
+            model_name = questionary.select(
+                "Select your Ollama model:",
+                choices=[questionary.Choice(display, value=value) for display, value, _ in OLLAMA_LLM_ORDER],
+                style=questionary.Style(
+                    [
+                        ("selected", "fg:green bold"),
+                        ("pointer", "fg:green bold"),
+                        ("highlighted", "fg:green"),
+                        ("answer", "fg:green bold"),
+                    ]
+                ),
+            ).ask()
+
+            if not model_name:
+                print("\n\nInterrupt received. Exiting...")
+                sys.exit(0)
+
+            if model_name == "-":
+                model_name = questionary.text("Enter the custom model name:").ask()
+                if not model_name:
+                    print("\n\nInterrupt received. Exiting...")
+                    sys.exit(0)
+
+            if not ensure_ollama_and_model(model_name):
+                print(f"{Fore.RED}Cannot proceed without Ollama and the selected model.{Style.RESET_ALL}")
+                sys.exit(1)
+
+            print(f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
+            return model_name, ModelProvider.OLLAMA.value
+
         model_info = get_model_info(model_name, model_provider)
         if model_info and model_info.is_custom():
             model_name = questionary.text("Enter the custom model name:").ask()
@@ -177,9 +211,7 @@ def select_model(use_ollama: bool, model_flag: str | None = None) -> tuple[str, 
                 sys.exit(0)
 
         if model_info:
-            print(
-                f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n"
-            )
+            print(f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
         else:
             model_provider = "Unknown"
             print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
@@ -264,10 +296,12 @@ def parse_cli_inputs(
 
     # Normalize parsed values
     tickers = parse_tickers(getattr(args, "tickers", None))
-    selected_analysts = select_analysts({
-        "analysts_all": getattr(args, "analysts_all", False),
-        "analysts": getattr(args, "analysts", None),
-    })
+    selected_analysts = select_analysts(
+        {
+            "analysts_all": getattr(args, "analysts_all", False),
+            "analysts": getattr(args, "analysts", None),
+        }
+    )
     model_name, model_provider = select_model(getattr(args, "ollama", False), getattr(args, "model", None))
     start_date, end_date = resolve_dates(getattr(args, "start_date", None), getattr(args, "end_date", None), default_months_back=default_months_back)
 
@@ -284,5 +318,3 @@ def parse_cli_inputs(
         show_agent_graph=getattr(args, "show_agent_graph", False),
         raw_args=args,
     )
-
-

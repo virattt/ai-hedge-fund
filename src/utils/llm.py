@@ -29,7 +29,7 @@ def call_llm(
     Returns:
         An instance of the specified Pydantic model
     """
-    
+
     # Extract model configuration if state is provided and agent_name is available
     if state and agent_name:
         model_name, model_provider = get_agent_model_config(state, agent_name)
@@ -42,7 +42,7 @@ def call_llm(
     api_keys = None
     if state:
         request = state.get("metadata", {}).get("request")
-        if request and hasattr(request, 'api_keys'):
+        if request and hasattr(request, "api_keys"):
             api_keys = request.api_keys
 
     model_info = get_model_info(model_name, model_provider)
@@ -66,6 +66,7 @@ def call_llm(
                 parsed_result = extract_json_from_response(result.content)
                 if parsed_result:
                     return pydantic_model(**parsed_result)
+                raise ValueError(f"Model returned non-parseable content for structured response: {str(result.content)[:300]}")
             else:
                 return result
 
@@ -107,15 +108,40 @@ def create_default_response(model_class: type[BaseModel]) -> BaseModel:
 
 
 def extract_json_from_response(content: str) -> dict | None:
-    """Extracts JSON from markdown-formatted response."""
+    """Extract JSON from plain or markdown-formatted model responses."""
     try:
-        json_start = content.find("```json")
+        if not content:
+            return None
+
+        stripped = content.strip()
+
+        # Fast path: model returned raw JSON directly.
+        if stripped.startswith("{") or stripped.startswith("["):
+            return json.loads(stripped)
+
+        json_start = stripped.find("```json")
         if json_start != -1:
-            json_text = content[json_start + 7 :]  # Skip past ```json
+            json_text = stripped[json_start + 7 :]
             json_end = json_text.find("```")
             if json_end != -1:
-                json_text = json_text[:json_end].strip()
-                return json.loads(json_text)
+                return json.loads(json_text[:json_end].strip())
+
+        generic_fence_start = stripped.find("```")
+        if generic_fence_start != -1:
+            fenced = stripped[generic_fence_start + 3 :]
+            generic_fence_end = fenced.find("```")
+            if generic_fence_end != -1:
+                fenced_content = fenced[:generic_fence_end].strip()
+                if fenced_content.startswith("json"):
+                    fenced_content = fenced_content[4:].strip()
+                if fenced_content.startswith("{") or fenced_content.startswith("["):
+                    return json.loads(fenced_content)
+
+        # Last resort: extract the outermost JSON object from mixed text.
+        first_brace = stripped.find("{")
+        last_brace = stripped.rfind("}")
+        if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+            return json.loads(stripped[first_brace : last_brace + 1])
     except Exception as e:
         print(f"Error extracting JSON from response: {e}")
     return None
@@ -128,20 +154,20 @@ def get_agent_model_config(state, agent_name):
     Always returns valid model_name and model_provider values.
     """
     request = state.get("metadata", {}).get("request")
-    
-    if request and hasattr(request, 'get_agent_model_config'):
+
+    if request and hasattr(request, "get_agent_model_config"):
         # Get agent-specific model configuration
         model_name, model_provider = request.get_agent_model_config(agent_name)
         # Ensure we have valid values
         if model_name and model_provider:
-            return model_name, model_provider.value if hasattr(model_provider, 'value') else str(model_provider)
-    
+            return model_name, model_provider.value if hasattr(model_provider, "value") else str(model_provider)
+
     # Fall back to global configuration (system defaults)
     model_name = state.get("metadata", {}).get("model_name") or "gpt-4.1"
     model_provider = state.get("metadata", {}).get("model_provider") or "OPENAI"
-    
+
     # Convert enum to string if necessary
-    if hasattr(model_provider, 'value'):
+    if hasattr(model_provider, "value"):
         model_provider = model_provider.value
-    
+
     return model_name, model_provider

@@ -6,7 +6,7 @@ class Price(BaseModel):
     close: float
     high: float
     low: float
-    volume: int
+    volume: int | None = None
     time: str
 
 

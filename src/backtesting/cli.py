@@ -15,6 +15,9 @@ from src.main import run_hedge_fund
 from src.utils.ollama import ensure_ollama_and_model
 
 
+LOCAL_OLLAMA_OPTION = "__local_ollama__"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run backtesting engine (modular)")
     parser.add_argument("--tickers", type=str, required=False, help="Comma-separated tickers")
@@ -66,10 +69,7 @@ def main() -> int:
             print("\n\nInterrupt received. Exiting...")
             return 1
         selected_analysts = choices
-        print(
-            f"\nSelected analysts: "
-            f"{', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n"
-        )
+        print(f"\nSelected analysts: " f"{', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n")
 
     # Model selection simplified: default to first ordered model or Ollama flag
     if args.ollama:
@@ -98,13 +98,16 @@ def main() -> int:
             print(f"{Fore.RED}Cannot proceed without Ollama and the selected model.{Style.RESET_ALL}")
             return 1
         model_provider = ModelProvider.OLLAMA.value
-        print(
-            f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n"
-        )
+        print(f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
     else:
+        model_choices = [
+            questionary.Choice("Local (Ollama)", value=(LOCAL_OLLAMA_OPTION, ModelProvider.OLLAMA.value)),
+            *[questionary.Choice(display, value=(name, provider)) for display, name, provider in LLM_ORDER],
+        ]
+
         model_choice = questionary.select(
             "Select your LLM model:",
-            choices=[questionary.Choice(display, value=(name, provider)) for display, name, provider in LLM_ORDER],
+            choices=model_choices,
             style=questionary.Style(
                 [
                     ("selected", "fg:green bold"),
@@ -118,15 +121,43 @@ def main() -> int:
             print("\n\nInterrupt received. Exiting...")
             return 1
         model_name, model_provider = model_choice
+
+        if model_name == LOCAL_OLLAMA_OPTION and model_provider == ModelProvider.OLLAMA.value:
+            print(f"{Fore.CYAN}Using Ollama for local LLM inference.{Style.RESET_ALL}")
+            model_name = questionary.select(
+                "Select your Ollama model:",
+                choices=[questionary.Choice(display, value=value) for display, value, _ in OLLAMA_LLM_ORDER],
+                style=questionary.Style(
+                    [
+                        ("selected", "fg:green bold"),
+                        ("pointer", "fg:green bold"),
+                        ("highlighted", "fg:green"),
+                        ("answer", "fg:green bold"),
+                    ]
+                ),
+            ).ask()
+            if not model_name:
+                print("\n\nInterrupt received. Exiting...")
+                return 1
+            if model_name == "-":
+                model_name = questionary.text("Enter the custom model name:").ask()
+                if not model_name:
+                    print("\n\nInterrupt received. Exiting...")
+                    return 1
+            if not ensure_ollama_and_model(model_name):
+                print(f"{Fore.RED}Cannot proceed without Ollama and the selected model.{Style.RESET_ALL}")
+                return 1
+            model_provider = ModelProvider.OLLAMA.value
+            print(f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
+            # Continue into engine creation
+
         model_info = get_model_info(model_name, model_provider)
         if model_info and model_info.is_custom():
             model_name = questionary.text("Enter the custom model name:").ask()
             if not model_name:
                 print("\n\nInterrupt received. Exiting...")
                 return 1
-        print(
-            f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n"
-        )
+        print(f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
 
     engine = BacktestEngine(
         agent=run_hedge_fund,
@@ -166,7 +197,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
-
-
