@@ -1,5 +1,10 @@
 [
   {
+    "display_name": "Qwen 2.5 (7B)",
+    "model_name": "qwen2.5:7b",
+    "provider": "Alibaba"
+  },
+  {
     "display_name": "gpt-oss (20B)",
     "model_name": "gpt-oss:20b",
     "provider": "OpenAI"
