@@ -71,6 +71,43 @@ cd app && npm install && npm run setup
 - Backend API: http://localhost:8000
 - API Documentation: http://localhost:8000/docs
 
+### Custom Port Configuration
+
+The web application supports custom ports to avoid conflicts with other services:
+
+#### Mac/Linux:
+```bash
+# Use custom ports
+BACKEND_PORT=8080 FRONTEND_PORT=3000 ./run.sh
+
+# Or set them individually
+BACKEND_PORT=8080 ./run.sh           # Custom backend only
+FRONTEND_PORT=3000 ./run.sh           # Custom frontend only
+```
+
+#### Windows:
+```cmd
+# Set environment variables before running
+set BACKEND_PORT=8080
+set FRONTEND_PORT=3000
+run.bat
+
+# Or set them individually
+set BACKEND_PORT=8080
+run.bat
+```
+
+#### Manual Setup:
+```bash
+# Backend with custom port
+cd app/backend
+poetry run uvicorn main:app --reload --host 127.0.0.1 --port 8080
+
+# Frontend with custom port (in another terminal)
+cd app/frontend
+VITE_API_URL=http://localhost:8080 npm run dev -- --port 3000
+```
+
 ---
 
 ## 🛠️ Manual Setup (For Developers)
@@ -155,6 +192,17 @@ You can now access:
 - Backend API: http://localhost:8000
 - API Documentation: http://localhost:8000/docs
 
+**Using Custom Ports Manually:**
+```bash
+# Backend with custom port
+cd app/backend
+poetry run uvicorn main:app --reload --host 127.0.0.1 --port 8080
+
+# Frontend with custom port (in another terminal)
+cd app/frontend
+VITE_API_URL=http://localhost:8080 npm run dev -- --port 3000
+```
+
 ## Detailed Documentation
 
 For more detailed information:
@@ -224,7 +272,16 @@ chmod +x run.sh
 #### Port Already in Use
 If ports 8000 or 5173 are in use:
 - **Kill existing processes:** `pkill -f "uvicorn\|vite"`
-- **Or use different ports** by modifying the scripts
+- **Or use custom ports:**
+  ```bash
+  # Mac/Linux
+  BACKEND_PORT=8080 FRONTEND_PORT=3000 ./run.sh
+
+  # Windows
+  set BACKEND_PORT=8080
+  set FRONTEND_PORT=3000
+  run.bat
+  ```
 
 ### Getting Help
 - Check the [GitHub Issues](https://github.com/virattt/ai-hedge-fund/issues)
