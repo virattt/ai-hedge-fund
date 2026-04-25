@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 from langchain_anthropic import ChatAnthropic
 from langchain_deepseek import ChatDeepSeek
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -139,7 +140,74 @@ def get_models_list():
     ]
 
 
+def get_dynamic_llm_order() -> List[Tuple[str, str, str]]:
+    """
+    If OPENAI_API_BASE points to a custom endpoint, fetch its model list via
+    GET /v1/models and return choices in (display_name, model_name, provider) format.
+    Falls back to an empty list on any error so the CLI still works offline.
+    """
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    base_url = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1").rstrip("/")
+
+    if not api_key:
+        return []
+
+    if not base_url.startswith("http://") and not base_url.startswith("https://"):
+        logging.getLogger(__name__).warning(
+            f"OPENAI_API_BASE looks malformed (got: {base_url!r}). "
+            "Make sure it starts with 'https://' in your .env file."
+        )
+        return []
+
+    try:
+        import httpx
+        response = httpx.get(
+            base_url + "/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=10.0,
+        )
+        response.raise_for_status()
+        data = response.json()
+        order = []
+        for item in data.get("data", []):
+            model_id = item.get("id", "")
+            if model_id:
+                order.append((model_id, model_id, ModelProvider.OPENAI.value))
+        return order
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"Could not fetch models from {base_url}: {e}")
+
+    # Fallback: use OPENAI_MODELS if the /models endpoint is not supported
+    models_env = os.getenv("OPENAI_MODELS", "")
+    if models_env:
+        return [
+            (model_id.strip(), model_id.strip(), ModelProvider.OPENAI.value)
+            for model_id in models_env.split(",")
+            if model_id.strip()
+        ]
+
+    return []
+
+
 def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | None:
+    # Normalize string providers (e.g. "OPENAI" → ModelProvider.OPENAI)
+    if isinstance(model_provider, str) and not isinstance(model_provider, ModelProvider):
+        # Try exact match first, then case-insensitive
+        try:
+            model_provider = ModelProvider(model_provider)
+        except ValueError:
+            match = next(
+                (p for p in ModelProvider if p.value.lower() == model_provider.lower()),
+                None,
+            )
+            if match:
+                model_provider = match
+            else:
+                raise ValueError(
+                    f"Unknown model provider: {model_provider!r}. "
+                    f"Valid providers: {[p.value for p in ModelProvider]}"
+                )
+
     if model_provider == ModelProvider.GROQ:
         api_key = (api_keys or {}).get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
         if not api_key:
