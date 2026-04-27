@@ -1,24 +1,22 @@
 """SSE streaming service for analyze runs.
 
-Emits `run.started`, `run.done`, and `error` events via sse-starlette's
-EventSourceResponse.  Persistence mirrors ``execute_analyze_run`` in
-``run_service.py`` so the Run row is consistent regardless of which path
-the caller uses.
+Emits ``run.started``, per-agent ``agent.started`` / ``agent.completed``,
+``run.done``, and ``error`` events via sse-starlette's EventSourceResponse.
 
-F2 scope: run.started → background thread → run.done | error.
-F2.5 will add per-agent streaming via LangGraph ``.astream()`` + ContextVar
-progress sink.
+F2.5: agent events are emitted in batch after the synchronous
+``run_hedge_fund`` completes — truly live streaming is deferred to F3.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import queue
 import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..db.models import Run, RunDecision, RunSignal
 from ..schemas import AnalystSignal, Decision
@@ -31,6 +29,8 @@ if str(_SRC) not in sys.path:
 
 from main import run_hedge_fund  # noqa: E402
 
+from .progress_sink import reset_queue, set_queue  # noqa: E402
+
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 async def stream_analyze_run(
     req: AnalyzeRequest,
     session: Session,
-) -> AsyncGenerator[dict]:
+) -> AsyncGenerator[dict[str, str]]:
     """Yield SSE-shaped dicts: ``{"event": ..., "data": ...}``."""
     started_at = datetime.now(UTC)
 
@@ -72,7 +72,15 @@ async def stream_analyze_run(
         "data": json.dumps({"run_id": run_id, "status": "running"}),
     }
 
-    portfolio_for_cli: dict = {
+    # --- emit synthetic agent.started for each expected agent ---
+    agent_names = list(req.selected_analysts) + ["risk_management_agent", "portfolio_manager"]
+    for name in agent_names:
+        yield {
+            "event": "agent.started",
+            "data": json.dumps({"run_id": run_id, "agent": name, "status": "running"}),
+        }
+
+    portfolio_for_cli: dict[str, Any] = {
         "cash": req.portfolio.cash,
         "margin_requirement": req.portfolio.margin_requirement,
         "positions": {
@@ -86,6 +94,10 @@ async def stream_analyze_run(
         },
         "realized_gains": req.portfolio.realized_gains,
     }
+
+    # Set up the progress sink queue for this run
+    event_q: queue.SimpleQueue[dict[str, Any]] = queue.SimpleQueue()
+    token = set_queue(event_q)
 
     t0 = time.monotonic()
     try:
@@ -113,6 +125,26 @@ async def stream_analyze_run(
             "data": json.dumps({"message": repr(exc), "retryable": False}),
         }
         return
+    finally:
+        reset_queue(token)
+
+    # --- drain any events the callback handler deposited ---
+    while True:
+        try:
+            evt = event_q.get_nowait()
+            yield {
+                "event": evt["event"],
+                "data": json.dumps(evt["data"]),
+            }
+        except queue.Empty:
+            break
+
+    # --- emit synthetic agent.completed for each expected agent ---
+    for name in agent_names:
+        yield {
+            "event": "agent.completed",
+            "data": json.dumps({"run_id": run_id, "agent": name, "status": "done"}),
+        }
 
     # --- persist decisions + signals (same as run_service.py) ---
     decisions_raw: dict = result.get("decisions") or {}

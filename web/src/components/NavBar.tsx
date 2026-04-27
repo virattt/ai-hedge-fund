@@ -1,10 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
-import { BarChart3, History as HistoryIcon } from "lucide-react";
+import { BarChart3, History as HistoryIcon, TrendingUp, Settings as SettingsIcon } from "lucide-react";
 import { cn } from "../lib/utils";
 
 const links = [
   { to: "/analyze", label: "Analyze", icon: BarChart3 },
+  { to: "/backtest", label: "Backtest", icon: TrendingUp },
   { to: "/history", label: "History", icon: HistoryIcon },
+  { to: "/settings", label: "Settings", icon: SettingsIcon },
 ] as const;
 
 export function NavBar() {

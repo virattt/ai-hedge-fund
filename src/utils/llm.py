@@ -1,12 +1,24 @@
 """Helper functions for LLM"""
 
 import json
+import logging
+import os
 
 from pydantic import BaseModel
 
 from src.graph.state import AgentState
 from src.llm.models import get_model, get_model_info
 from src.utils.progress import progress
+
+# ---------------------------------------------------------------------------
+# A10a: Observable LLM failures
+# ---------------------------------------------------------------------------
+# When True, retry-exhausted responses include a tagged ``[LLM_ERROR]``
+# reasoning string and are logged at ERROR level so callers (especially the
+# portfolio manager) can detect fabricated defaults.
+LLM_FAILURE_OBSERVABLE: bool = os.getenv("AHF_OBSERVABLE_LLM_FAILURES", "1") != "0"
+
+_log = logging.getLogger("ahf.llm")
 
 
 def call_llm(
@@ -76,14 +88,50 @@ def call_llm(
                 progress.update_status(agent_name, None, f"Error - retry {attempt + 1}/{max_retries}")
 
             if attempt == max_retries - 1:
-                print(f"Error in LLM call after {max_retries} attempts: {e}")
+                _log.error("call_llm exhausted retries", exc_info=e)
                 # Use default_factory if provided, otherwise create a basic default
                 if default_factory:
-                    return default_factory()
-                return create_default_response(pydantic_model)
+                    result = default_factory()
+                else:
+                    result = create_default_response(pydantic_model)
+
+                # A10a: tag the fabricated response so callers can detect it
+                if LLM_FAILURE_OBSERVABLE:
+                    result = _tag_llm_error(result, e)
+                return result
 
     # This should never be reached due to the retry logic above
     return create_default_response(pydantic_model)
+
+
+def _tag_llm_error(response: BaseModel, exc: Exception) -> BaseModel:
+    """Stamp *response* with ``[LLM_ERROR]`` markers so downstream code can
+    detect that this signal is fabricated.
+
+    Works by mutating the existing instance when the model allows it, or
+    reconstructing with updated fields otherwise.
+    """
+    updates: dict = {}
+    if "reasoning" in response.model_fields:
+        updates["reasoning"] = f"[LLM_ERROR] {exc!r} — signal is fabricated; treat with extreme caution"
+    if "confidence" in response.model_fields:
+        updates["confidence"] = 0.0
+
+    if not updates:
+        return response
+
+    # Try in-place mutation (works for models with ``model_config = {"extra": "allow"}``).
+    try:
+        for k, v in updates.items():
+            setattr(response, k, v)
+        return response
+    except (AttributeError, ValueError):
+        pass
+
+    # Fall back: reconstruct
+    data = response.model_dump()
+    data.update(updates)
+    return type(response)(**data)
 
 
 def create_default_response(model_class: type[BaseModel]) -> BaseModel:

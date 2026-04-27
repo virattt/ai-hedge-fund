@@ -164,6 +164,60 @@ class RunListResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Backtest (POST /api/backtests/stream)
+# ---------------------------------------------------------------------------
+
+
+class BacktestRequest(BaseModel):
+    """Input contract for ``POST /api/backtests/stream``."""
+
+    tickers: list[str] = Field(..., min_length=1, max_length=20)
+    start_date: str
+    end_date: str
+    initial_cash: float = 100_000.0
+    margin_requirement: float = 0.0
+    selected_analysts: list[str] = Field(default_factory=list)
+    model_name: str = "gpt-4o"
+    model_provider: str = "OpenAI"
+
+    @field_validator("tickers")
+    @classmethod
+    def _validate_bt_tickers(cls, tickers: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for raw in tickers:
+            t = raw.strip().upper()
+            if not _TICKER_RE.fullmatch(t):
+                raise ValueError(f"invalid ticker symbol: {raw!r}")
+            cleaned.append(t)
+        return cleaned
+
+    @field_validator("start_date", "end_date")
+    @classmethod
+    def _validate_bt_dates(cls, value: str) -> str:
+        if not _DATE_RE.fullmatch(value):
+            raise ValueError("date must be YYYY-MM-DD")
+        datetime.strptime(value, "%Y-%m-%d")
+        return value
+
+
+# ---------------------------------------------------------------------------
+# Ticker endpoints (F4a)
+# ---------------------------------------------------------------------------
+
+
+class FinancialMetricsResponse(BaseModel):
+    """Response for ``GET /api/tickers/{symbol}/financial-metrics``."""
+
+    financial_metrics: list[dict[str, Any]]
+
+
+class InsiderTradesResponse(BaseModel):
+    """Response for ``GET /api/tickers/{symbol}/insider-trades``."""
+
+    insider_trades: list[dict[str, Any]]
+
+
+# ---------------------------------------------------------------------------
 # System
 # ---------------------------------------------------------------------------
 

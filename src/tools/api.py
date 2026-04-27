@@ -4,6 +4,8 @@ import time
 
 import pandas as pd
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from src.data.cache import get_cache
 from src.data.models import (
@@ -23,12 +25,49 @@ from src.data.models import (
 # Global cache instance
 _cache = get_cache()
 
+# ---------------------------------------------------------------------------
+# Resilient HTTP session with automatic retry + timeout (A2)
+# ---------------------------------------------------------------------------
+_HTTP_TIMEOUT = 30  # seconds per request
+
+
+class _TimeoutAdapter(HTTPAdapter):
+    """HTTPAdapter that injects a default timeout into every ``send()``."""
+
+    def __init__(self, *args, timeout: int = _HTTP_TIMEOUT, **kwargs):  # type: ignore[assignment]
+        self._default_timeout = timeout
+        super().__init__(*args, **kwargs)
+
+    def send(self, *args, **kwargs):  # type: ignore[override]
+        if kwargs.get("timeout") is None:
+            kwargs["timeout"] = self._default_timeout
+        return super().send(*args, **kwargs)
+
+
+_retry = Retry(
+    total=3,
+    backoff_factor=1,
+    status_forcelist=[500, 502, 503, 504],
+    allowed_methods=["GET", "POST"],
+    raise_on_status=False,
+)
+_adapter = _TimeoutAdapter(max_retries=_retry)
+
+_session = requests.Session()
+_session.mount("https://", _adapter)
+_session.mount("http://", _adapter)
+
 
 def _make_api_request(
     url: str, headers: dict, method: str = "GET", json_data: dict = None, max_retries: int = 3
 ) -> requests.Response:
     """
     Make an API request with rate limiting handling and moderate backoff.
+
+    Uses a module-level ``requests.Session`` with urllib3 ``Retry`` for
+    automatic 5xx retry + connection pooling + a default 30 s timeout.
+    The explicit loop below handles 429 (rate-limit) responses with
+    Retry-After awareness.
 
     Args:
         url: The URL to request
@@ -50,14 +89,32 @@ def _make_api_request(
             response = requests.get(url, headers=headers)
 
         if response.status_code == 429 and attempt < max_retries:
-            # Linear backoff: 60s, 90s, 120s, 150s...
-            delay = 60 + (30 * attempt)
-            print(f"Rate limited (429). Attempt {attempt + 1}/{max_retries + 1}. Waiting {delay}s before retrying...")
+            # Honour Retry-After header when present, else linear backoff
+            retry_after = response.headers.get("Retry-After")
+            if isinstance(retry_after, str):
+                try:
+                    delay = int(retry_after)
+                except (ValueError, TypeError):
+                    delay = 60 + (30 * attempt)
+                print(
+                    f"Rate limited (429). Retry-After={retry_after}s. "
+                    f"Attempt {attempt + 1}/{max_retries + 1}. Waiting {delay}s before retrying..."
+                )
+            else:
+                # Linear backoff: 60s, 90s, 120s, 150s...
+                delay = 60 + (30 * attempt)
+                print(
+                    f"Rate limited (429). Attempt {attempt + 1}/{max_retries + 1}. Waiting {delay}s before retrying..."
+                )
             time.sleep(delay)
             continue
 
         # Return the response (whether success, other errors, or final 429)
         return response
+
+    # Unreachable in practice — the loop always returns on the last iteration
+    # because the ``attempt < max_retries`` guard prevents the ``continue``.
+    raise Exception(f"Request failed after {max_retries + 1} attempts for {url}")
 
 
 def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> list[Price]:
