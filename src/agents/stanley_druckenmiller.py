@@ -1,13 +1,13 @@
 import json
 import statistics
-from typing import Literal
 
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel
+from typing_extensions import Literal
 
-from graph.state import AgentState, show_agent_reasoning
-from tools.api import (
+from src.graph.state import AgentState, show_agent_reasoning
+from src.tools.api import (
     get_company_news,
     get_financial_metrics,
     get_insider_trades,
@@ -15,8 +15,9 @@ from tools.api import (
     get_prices,
     search_line_items,
 )
-from utils.llm import call_llm
-from utils.progress import progress
+from src.utils.api_key import get_api_key_from_state
+from src.utils.llm import call_llm
+from src.utils.progress import progress
 
 
 class StanleyDruckenmillerSignal(BaseModel):
@@ -25,7 +26,7 @@ class StanleyDruckenmillerSignal(BaseModel):
     reasoning: str
 
 
-def stanley_druckenmiller_agent(state: AgentState):
+def stanley_druckenmiller_agent(state: AgentState, agent_id: str = "stanley_druckenmiller_agent"):
     """
     Analyzes stocks using Stanley Druckenmiller's investing principles:
       - Seeking asymmetric risk-reward opportunities
@@ -39,15 +40,15 @@ def stanley_druckenmiller_agent(state: AgentState):
     start_date = data["start_date"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-
+    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
     analysis_data = {}
     druck_analysis = {}
 
     for ticker in tickers:
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=5)
+        progress.update_status(agent_id, ticker, "Fetching financial metrics")
+        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=5, api_key=api_key)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Gathering financial line items")
+        progress.update_status(agent_id, ticker, "Gathering financial line items")
         # Include relevant line items for Stan Druckenmiller's approach:
         #   - Growth & momentum: revenue, EPS, operating_income, ...
         #   - Valuation: net_income, free_cash_flow, ebit, ebitda
@@ -74,33 +75,34 @@ def stanley_druckenmiller_agent(state: AgentState):
             end_date,
             period="annual",
             limit=5,
+            api_key=api_key,
         )
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date)
+        progress.update_status(agent_id, ticker, "Getting market cap")
+        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Fetching insider trades")
-        insider_trades = get_insider_trades(ticker, end_date, start_date=None, limit=50)
+        progress.update_status(agent_id, ticker, "Fetching insider trades")
+        insider_trades = get_insider_trades(ticker, end_date, limit=50, api_key=api_key)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Fetching company news")
-        company_news = get_company_news(ticker, end_date, start_date=None, limit=50)
+        progress.update_status(agent_id, ticker, "Fetching company news")
+        company_news = get_company_news(ticker, end_date, limit=50, api_key=api_key)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Fetching recent price data for momentum")
-        prices = get_prices(ticker, start_date=start_date, end_date=end_date)
+        progress.update_status(agent_id, ticker, "Fetching recent price data for momentum")
+        prices = get_prices(ticker, start_date=start_date, end_date=end_date, api_key=api_key)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Analyzing growth & momentum")
+        progress.update_status(agent_id, ticker, "Analyzing growth & momentum")
         growth_momentum_analysis = analyze_growth_and_momentum(financial_line_items, prices)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Analyzing sentiment")
+        progress.update_status(agent_id, ticker, "Analyzing sentiment")
         sentiment_analysis = analyze_sentiment(company_news)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Analyzing insider activity")
+        progress.update_status(agent_id, ticker, "Analyzing insider activity")
         insider_activity = analyze_insider_activity(insider_trades)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Analyzing risk-reward")
-        risk_reward_analysis = analyze_risk_reward(financial_line_items, market_cap, prices)
+        progress.update_status(agent_id, ticker, "Analyzing risk-reward")
+        risk_reward_analysis = analyze_risk_reward(financial_line_items, prices)
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Performing Druckenmiller-style valuation")
+        progress.update_status(agent_id, ticker, "Performing Druckenmiller-style valuation")
         valuation_analysis = analyze_druckenmiller_valuation(financial_line_items, market_cap)
 
         # Combine partial scores with weights typical for Druckenmiller:
@@ -135,12 +137,12 @@ def stanley_druckenmiller_agent(state: AgentState):
             "valuation_analysis": valuation_analysis,
         }
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Generating Stanley Druckenmiller analysis")
+        progress.update_status(agent_id, ticker, "Generating Stanley Druckenmiller analysis")
         druck_output = generate_druckenmiller_output(
             ticker=ticker,
             analysis_data=analysis_data,
-            model_name=state["metadata"]["model_name"],
-            model_provider=state["metadata"]["model_provider"],
+            state=state,
+            agent_id=agent_id,
         )
 
         druck_analysis[ticker] = {
@@ -149,15 +151,18 @@ def stanley_druckenmiller_agent(state: AgentState):
             "reasoning": druck_output.reasoning,
         }
 
-        progress.update_status("stanley_druckenmiller_agent", ticker, "Done")
+        progress.update_status(agent_id, ticker, "Done", analysis=druck_output.reasoning)
 
     # Wrap results in a single message
-    message = HumanMessage(content=json.dumps(druck_analysis), name="stanley_druckenmiller_agent")
+    message = HumanMessage(content=json.dumps(druck_analysis), name=agent_id)
 
     if state["metadata"].get("show_reasoning"):
         show_agent_reasoning(druck_analysis, "Stanley Druckenmiller Agent")
 
-    state["data"]["analyst_signals"]["stanley_druckenmiller_agent"] = druck_analysis
+    state["data"]["analyst_signals"][agent_id] = druck_analysis
+
+    progress.update_status(agent_id, None, "Done")
+
     return {"messages": [message], "data": state["data"]}
 
 
@@ -342,7 +347,7 @@ def analyze_sentiment(news_items: list) -> dict:
     return {"score": score, "details": "; ".join(details)}
 
 
-def analyze_risk_reward(financial_line_items: list, market_cap: float | None, prices: list) -> dict:
+def analyze_risk_reward(financial_line_items: list, prices: list) -> dict:
     """
     Assesses risk via:
       - Debt-to-Equity
@@ -523,8 +528,8 @@ def analyze_druckenmiller_valuation(financial_line_items: list, market_cap: floa
 def generate_druckenmiller_output(
     ticker: str,
     analysis_data: dict[str, any],
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
+    agent_id: str,
 ) -> StanleyDruckenmillerSignal:
     """
     Generates a JSON signal in the style of Stanley Druckenmiller.
@@ -535,34 +540,45 @@ def generate_druckenmiller_output(
                 "system",
                 """You are a Stanley Druckenmiller AI agent, making investment decisions using his principles:
             
-            1. Seek asymmetric risk-reward opportunities (large upside, limited downside).
-            2. Emphasize growth, momentum, and market sentiment.
-            3. Preserve capital by avoiding major drawdowns.
-            4. Willing to pay higher valuations for true growth leaders.
-            5. Be aggressive when conviction is high.
-            6. Cut losses quickly if the thesis changes.
-            
-            Rules:
-            - Reward companies showing strong revenue/earnings growth and positive stock momentum.
-            - Evaluate sentiment and insider activity as supportive or contradictory signals.
-            - Watch out for high leverage or extreme volatility that threatens capital.
-            - Output a JSON object with signal, confidence, and a reasoning string.
-            """,
+              1. Seek asymmetric risk-reward opportunities (large upside, limited downside).
+              2. Emphasize growth, momentum, and market sentiment.
+              3. Preserve capital by avoiding major drawdowns.
+              4. Willing to pay higher valuations for true growth leaders.
+              5. Be aggressive when conviction is high.
+              6. Cut losses quickly if the thesis changes.
+                            
+              Rules:
+              - Reward companies showing strong revenue/earnings growth and positive stock momentum.
+              - Evaluate sentiment and insider activity as supportive or contradictory signals.
+              - Watch out for high leverage or extreme volatility that threatens capital.
+              - Output a JSON object with signal, confidence, and a reasoning string.
+              
+              When providing your reasoning, be thorough and specific by:
+              1. Explaining the growth and momentum metrics that most influenced your decision
+              2. Highlighting the risk-reward profile with specific numerical evidence
+              3. Discussing market sentiment and catalysts that could drive price action
+              4. Addressing both upside potential and downside risks
+              5. Providing specific valuation context relative to growth prospects
+              6. Using Stanley Druckenmiller's decisive, momentum-focused, and conviction-driven voice
+              
+              For example, if bullish: "The company shows exceptional momentum with revenue accelerating from 22% to 35% YoY and the stock up 28% over the past three months. Risk-reward is highly asymmetric with 70% upside potential based on FCF multiple expansion and only 15% downside risk given the strong balance sheet with 3x cash-to-debt. Insider buying and positive market sentiment provide additional tailwinds..."
+              For example, if bearish: "Despite recent stock momentum, revenue growth has decelerated from 30% to 12% YoY, and operating margins are contracting. The risk-reward proposition is unfavorable with limited 10% upside potential against 40% downside risk. The competitive landscape is intensifying, and insider selling suggests waning confidence. I'm seeing better opportunities elsewhere with more favorable setups..."
+              """,
             ),
             (
                 "human",
                 """Based on the following analysis, create a Druckenmiller-style investment signal.
 
-            Analysis Data for {ticker}:
-            {analysis_data}
+              Analysis Data for {ticker}:
+              {analysis_data}
 
-            Return the trading signal in this JSON format:
-            {{
-              "signal": "bullish/bearish/neutral",
-              "confidence": float (0-100),
-              "reasoning": "string"
-            }}
-            """,
+              Return the trading signal in this JSON format:
+              {{
+                "signal": "bullish/bearish/neutral",
+                "confidence": float (0-100),
+                "reasoning": "string"
+              }}
+              """,
             ),
         ]
     )
@@ -576,9 +592,8 @@ def generate_druckenmiller_output(
 
     return call_llm(
         prompt=prompt,
-        model_name=model_name,
-        model_provider=model_provider,
         pydantic_model=StanleyDruckenmillerSignal,
-        agent_name="stanley_druckenmiller_agent",
+        agent_name=agent_id,
+        state=state,
         default_factory=create_default_signal,
     )

@@ -24,18 +24,18 @@ wheels/
 # Virtual Environment
 venv/
 ENV/
+.venv/
 
 # Environment Variables
 .env
 # .env.example is tracked on purpose — it documents required keys with placeholders.
-# Real secrets must NEVER be committed there. Use `<PLACEHOLDER>` form.
+# Real secrets must NEVER be committed there. Use <PLACEHOLDER> form.
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-.venv
 .cursorrules
 .cursorignore
 .cursorindexingignore
@@ -50,5 +50,29 @@ Thumbs.db
 # Txt files
 *.txt
 
+# PDF files
+*.pdf
 
-README.md
+# Frontend
+node_modules/
+
+# Outputs
+outputs/
+
+# Database files (users will have their own local databases)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Alembic cache
+app/backend/alembic/versions/__pycache__/
+alembic/versions/__pycache__/
+
+# uv / build artifacts
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+uv.lock

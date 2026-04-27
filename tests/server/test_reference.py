@@ -10,7 +10,8 @@ def test_list_analysts_returns_canonical_set(client: TestClient) -> None:
     assert response.status_code == 200
     items = response.json()
     keys = {item["key"] for item in items}
-    expected = {
+    # Minimum expected set (subset check — resilient to future additions).
+    expected_minimum = {
         "ben_graham",
         "bill_ackman",
         "cathie_wood",
@@ -22,8 +23,13 @@ def test_list_analysts_returns_canonical_set(client: TestClient) -> None:
         "fundamentals_analyst",
         "sentiment_analyst",
         "valuation_analyst",
+        # Added upstream: new analysts
+        "aswath_damodaran",
+        "michael_burry",
+        "peter_lynch",
+        "rakesh_jhunjhunwala",
     }
-    assert keys == expected
+    assert expected_minimum <= keys
     # Order is monotonic, no gaps.
     orders = sorted(item["order"] for item in items)
     assert orders == list(range(len(items)))
@@ -34,7 +40,8 @@ def test_list_models_returns_grouped_options(client: TestClient) -> None:
     assert response.status_code == 200
     items = response.json()
     providers = {item["provider"] for item in items}
-    # All five providers represented.
-    assert {"Anthropic", "DeepSeek", "Gemini", "Groq", "OpenAI"} <= providers
+    # Core providers that must always be present.
+    # Note: upstream renamed "Gemini" → "Google" and added "OpenRouter".
+    assert {"Anthropic", "DeepSeek", "Google", "Groq", "OpenAI"} <= providers
     # gpt-4o is canonical default — must be present.
     assert any(item["model_name"] == "gpt-4o" for item in items)

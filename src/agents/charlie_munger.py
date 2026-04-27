@@ -1,14 +1,15 @@
 import json
-from typing import Literal
 
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel
+from typing_extensions import Literal
 
-from graph.state import AgentState, show_agent_reasoning
-from tools.api import get_company_news, get_financial_metrics, get_insider_trades, get_market_cap, search_line_items
-from utils.llm import call_llm
-from utils.progress import progress
+from src.graph.state import AgentState, show_agent_reasoning
+from src.tools.api import get_company_news, get_financial_metrics, get_insider_trades, get_market_cap, search_line_items
+from src.utils.api_key import get_api_key_from_state
+from src.utils.llm import call_llm
+from src.utils.progress import progress
 
 
 class CharlieMungerSignal(BaseModel):
@@ -17,7 +18,7 @@ class CharlieMungerSignal(BaseModel):
     reasoning: str
 
 
-def charlie_munger_agent(state: AgentState):
+def charlie_munger_agent(state: AgentState, agent_id: str = "charlie_munger_agent"):
     """
     Analyzes stocks using Charlie Munger's investing principles and mental models.
     Focuses on moat strength, management quality, predictability, and valuation.
@@ -25,15 +26,17 @@ def charlie_munger_agent(state: AgentState):
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-
+    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
     analysis_data = {}
     munger_analysis = {}
 
     for ticker in tickers:
-        progress.update_status("charlie_munger_agent", ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=10)  # Munger looks at longer periods
+        progress.update_status(agent_id, ticker, "Fetching financial metrics")
+        metrics = get_financial_metrics(
+            ticker, end_date, period="annual", limit=10, api_key=api_key
+        )  # Munger looks at longer periods
 
-        progress.update_status("charlie_munger_agent", ticker, "Gathering financial line items")
+        progress.update_status(agent_id, ticker, "Gathering financial line items")
         financial_line_items = search_line_items(
             ticker,
             [
@@ -55,12 +58,13 @@ def charlie_munger_agent(state: AgentState):
             end_date,
             period="annual",
             limit=10,  # Munger examines long-term trends
+            api_key=api_key,
         )
 
-        progress.update_status("charlie_munger_agent", ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date)
+        progress.update_status(agent_id, ticker, "Getting market cap")
+        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
 
-        progress.update_status("charlie_munger_agent", ticker, "Fetching insider trades")
+        progress.update_status(agent_id, ticker, "Fetching insider trades")
         # Munger values management with skin in the game
         insider_trades = get_insider_trades(
             ticker,
@@ -68,9 +72,10 @@ def charlie_munger_agent(state: AgentState):
             # Look back 2 years for insider trading patterns
             start_date=None,
             limit=100,
+            api_key=api_key,
         )
 
-        progress.update_status("charlie_munger_agent", ticker, "Fetching company news")
+        progress.update_status(agent_id, ticker, "Fetching company news")
         # Munger avoids businesses with frequent negative press
         company_news = get_company_news(
             ticker,
@@ -78,18 +83,19 @@ def charlie_munger_agent(state: AgentState):
             # Look back 1 year for news
             start_date=None,
             limit=100,
+            api_key=api_key,
         )
 
-        progress.update_status("charlie_munger_agent", ticker, "Analyzing moat strength")
+        progress.update_status(agent_id, ticker, "Analyzing moat strength")
         moat_analysis = analyze_moat_strength(metrics, financial_line_items)
 
-        progress.update_status("charlie_munger_agent", ticker, "Analyzing management quality")
+        progress.update_status(agent_id, ticker, "Analyzing management quality")
         management_analysis = analyze_management_quality(financial_line_items, insider_trades)
 
-        progress.update_status("charlie_munger_agent", ticker, "Analyzing business predictability")
+        progress.update_status(agent_id, ticker, "Analyzing business predictability")
         predictability_analysis = analyze_predictability(financial_line_items)
 
-        progress.update_status("charlie_munger_agent", ticker, "Calculating Munger-style valuation")
+        progress.update_status(agent_id, ticker, "Calculating Munger-style valuation")
         valuation_analysis = calculate_munger_valuation(financial_line_items, market_cap)
 
         # Combine partial scores with Munger's weighting preferences
@@ -123,12 +129,12 @@ def charlie_munger_agent(state: AgentState):
             "news_sentiment": analyze_news_sentiment(company_news) if company_news else "No news data available",
         }
 
-        progress.update_status("charlie_munger_agent", ticker, "Generating Charlie Munger analysis")
+        progress.update_status(agent_id, ticker, "Generating Charlie Munger analysis")
         munger_output = generate_munger_output(
             ticker=ticker,
             analysis_data=analysis_data,
-            model_name=state["metadata"]["model_name"],
-            model_provider=state["metadata"]["model_provider"],
+            state=state,
+            agent_id=agent_id,
         )
 
         munger_analysis[ticker] = {
@@ -137,17 +143,19 @@ def charlie_munger_agent(state: AgentState):
             "reasoning": munger_output.reasoning,
         }
 
-        progress.update_status("charlie_munger_agent", ticker, "Done")
+        progress.update_status(agent_id, ticker, "Done", analysis=munger_output.reasoning)
 
     # Wrap results in a single message for the chain
-    message = HumanMessage(content=json.dumps(munger_analysis), name="charlie_munger_agent")
+    message = HumanMessage(content=json.dumps(munger_analysis), name=agent_id)
 
     # Show reasoning if requested
     if state["metadata"]["show_reasoning"]:
         show_agent_reasoning(munger_analysis, "Charlie Munger Agent")
 
+    progress.update_status(agent_id, None, "Done")
+
     # Add signals to the overall state
-    state["data"]["analyst_signals"]["charlie_munger_agent"] = munger_analysis
+    state["data"]["analyst_signals"][agent_id] = munger_analysis
 
     return {"messages": [message], "data": state["data"]}
 
@@ -463,26 +471,35 @@ def analyze_predictability(financial_line_items: list) -> dict:
     revenues = [item.revenue for item in financial_line_items if hasattr(item, "revenue") and item.revenue is not None]
 
     if revenues and len(revenues) >= 5:
-        # Calculate year-over-year growth rates
-        growth_rates = [(revenues[i] / revenues[i + 1] - 1) for i in range(len(revenues) - 1)]
+        # Calculate year-over-year growth rates, handling zero division
+        growth_rates = []
+        for i in range(len(revenues) - 1):
+            if revenues[i + 1] != 0:  # Avoid division by zero
+                growth_rate = revenues[i] / revenues[i + 1] - 1
+                growth_rates.append(growth_rate)
 
-        avg_growth = sum(growth_rates) / len(growth_rates)
-        growth_volatility = sum(abs(r - avg_growth) for r in growth_rates) / len(growth_rates)
-
-        if avg_growth > 0.05 and growth_volatility < 0.1:
-            # Steady, consistent growth (Munger loves this)
-            score += 3
-            details.append(f"Highly predictable revenue: {avg_growth:.1%} avg growth with low volatility")
-        elif avg_growth > 0 and growth_volatility < 0.2:
-            # Positive but somewhat volatile growth
-            score += 2
-            details.append(f"Moderately predictable revenue: {avg_growth:.1%} avg growth with some volatility")
-        elif avg_growth > 0:
-            # Growing but unpredictable
-            score += 1
-            details.append(f"Growing but less predictable revenue: {avg_growth:.1%} avg growth with high volatility")
+        if not growth_rates:
+            details.append("Cannot calculate revenue growth: zero revenue values found")
         else:
-            details.append(f"Declining or highly unpredictable revenue: {avg_growth:.1%} avg growth")
+            avg_growth = sum(growth_rates) / len(growth_rates)
+            growth_volatility = sum(abs(r - avg_growth) for r in growth_rates) / len(growth_rates)
+
+            if avg_growth > 0.05 and growth_volatility < 0.1:
+                # Steady, consistent growth (Munger loves this)
+                score += 3
+                details.append(f"Highly predictable revenue: {avg_growth:.1%} avg growth with low volatility")
+            elif avg_growth > 0 and growth_volatility < 0.2:
+                # Positive but somewhat volatile growth
+                score += 2
+                details.append(f"Moderately predictable revenue: {avg_growth:.1%} avg growth with some volatility")
+            elif avg_growth > 0:
+                # Growing but unpredictable
+                score += 1
+                details.append(
+                    f"Growing but less predictable revenue: {avg_growth:.1%} avg growth with high volatility"
+                )
+            else:
+                details.append(f"Declining or highly unpredictable revenue: {avg_growth:.1%} avg growth")
     else:
         details.append("Insufficient revenue history for predictability analysis")
 
@@ -615,6 +632,9 @@ def calculate_munger_valuation(financial_line_items: list, market_cap: float) ->
         }
 
     # 2. Calculate FCF yield (inverse of P/FCF multiple)
+    if market_cap <= 0:
+        return {"score": 0, "details": f"Invalid market cap ({market_cap}), cannot value"}
+
     fcf_yield = normalized_fcf / market_cap
 
     # 3. Apply Munger's FCF multiple based on business quality
@@ -700,8 +720,8 @@ def analyze_news_sentiment(news_items: list) -> str:
 def generate_munger_output(
     ticker: str,
     analysis_data: dict[str, any],
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
+    agent_id: str,
 ) -> CharlieMungerSignal:
     """
     Generates investment decisions in the style of Charlie Munger.
@@ -731,7 +751,18 @@ def generate_munger_output(
             - Focus on long-term economics rather than short-term metrics.
             - Be skeptical of businesses with rapidly changing dynamics or excessive share dilution.
             - Avoid excessive leverage or financial engineering.
-            - Provide a rational, data-driven recommendation (bullish, bearish, or neutral).""",
+            - Provide a rational, data-driven recommendation (bullish, bearish, or neutral).
+            
+            When providing your reasoning, be thorough and specific by:
+            1. Explaining the key factors that influenced your decision the most (both positive and negative)
+            2. Applying at least 2-3 specific mental models or disciplines to explain your thinking
+            3. Providing quantitative evidence where relevant (e.g., specific ROIC values, margin trends)
+            4. Citing what you would "avoid" in your analysis (invert the problem)
+            5. Using Charlie Munger's direct, pithy conversational style in your explanation
+            
+            For example, if bullish: "The high ROIC of 22% demonstrates the company's moat. When applying basic microeconomics, we can see that competitors would struggle to..."
+            For example, if bearish: "I see this business making a classic mistake in capital allocation. As I've often said about [relevant Mungerism], this company appears to be..."
+            """,
             ),
             (
                 "human",
@@ -760,9 +791,8 @@ def generate_munger_output(
 
     return call_llm(
         prompt=prompt,
-        model_name=model_name,
-        model_provider=model_provider,
+        state=state,
         pydantic_model=CharlieMungerSignal,
-        agent_name="charlie_munger_agent",
+        agent_name=agent_id,
         default_factory=create_default_charlie_munger_signal,
     )

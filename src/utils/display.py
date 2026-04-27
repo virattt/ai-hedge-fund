@@ -350,17 +350,18 @@ def format_backtest_row(
             f"{return_color}{return_pct:+.2f}%{Style.RESET_ALL}",  # Return
             f"{Fore.YELLOW}{sharpe_ratio:.2f}{Style.RESET_ALL}" if sharpe_ratio is not None else "",  # Sharpe Ratio
             f"{Fore.YELLOW}{sortino_ratio:.2f}{Style.RESET_ALL}" if sortino_ratio is not None else "",  # Sortino Ratio
-            f"{Fore.RED}{max_drawdown:.2f}%{Style.RESET_ALL}" if max_drawdown is not None else "",  # Max Drawdown
+            f"{Fore.RED}{abs(max_drawdown):.2f}%{Style.RESET_ALL}" if max_drawdown is not None else "",  # Max Drawdown
         ]
-    return [
-        date,
-        f"{Fore.CYAN}{ticker}{Style.RESET_ALL}",
-        f"{action_color}{action.upper()}{Style.RESET_ALL}",
-        f"{action_color}{quantity:,.0f}{Style.RESET_ALL}",
-        f"{Fore.WHITE}{price:,.2f}{Style.RESET_ALL}",
-        f"{Fore.WHITE}{shares_owned:,.0f}{Style.RESET_ALL}",
-        f"{Fore.YELLOW}{position_value:,.2f}{Style.RESET_ALL}",
-        f"{Fore.GREEN}{bullish_count}{Style.RESET_ALL}",
-        f"{Fore.RED}{bearish_count}{Style.RESET_ALL}",
-        f"{Fore.BLUE}{neutral_count}{Style.RESET_ALL}",
-    ]
+    else:
+        return [
+            date,
+            f"{Fore.CYAN}{ticker}{Style.RESET_ALL}",
+            f"{action_color}{action.upper()}{Style.RESET_ALL}",
+            f"{action_color}{quantity:,.0f}{Style.RESET_ALL}",
+            f"{Fore.WHITE}{price:,.2f}{Style.RESET_ALL}",
+            f"{Fore.WHITE}{shares_owned:,.0f}{Style.RESET_ALL}",
+            f"{Fore.YELLOW}{position_value:,.2f}{Style.RESET_ALL}",
+            f"{Fore.GREEN}{bullish_count}{Style.RESET_ALL}",
+            f"{Fore.RED}{bearish_count}{Style.RESET_ALL}",
+            f"{Fore.BLUE}{neutral_count}{Style.RESET_ALL}",
+        ]

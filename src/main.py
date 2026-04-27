@@ -10,14 +10,15 @@ from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
 
-from agents.portfolio_manager import portfolio_management_agent
-from agents.risk_manager import risk_management_agent
-from graph.state import AgentState
-from llm.models import LLM_ORDER, get_model_info
-from utils.analysts import ANALYST_ORDER, get_analyst_nodes
-from utils.display import print_trading_output
-from utils.progress import progress
-from utils.visualize import save_graph_as_png
+from src.agents.portfolio_manager import portfolio_management_agent
+from src.agents.risk_manager import risk_management_agent
+from src.graph.state import AgentState
+from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, ModelProvider, get_model_info
+from src.utils.analysts import ANALYST_ORDER, get_analyst_nodes
+from src.utils.display import print_trading_output
+from src.utils.ollama import ensure_ollama_and_model
+from src.utils.progress import progress
+from src.utils.visualize import save_graph_as_png
 
 # Load environment variables from .env file
 load_dotenv()
@@ -48,7 +49,7 @@ def run_hedge_fund(
     portfolio: dict,
     show_reasoning: bool = False,
     selected_analysts: list[str] = [],
-    model_name: str = "gpt-4o",
+    model_name: str = "gpt-4.1",
     model_provider: str = "OpenAI",
 ):
     # Start progress tracking
@@ -117,15 +118,15 @@ def create_workflow(selected_analysts=None):
 
     # Always add risk and portfolio management
     workflow.add_node("risk_management_agent", risk_management_agent)
-    workflow.add_node("portfolio_management_agent", portfolio_management_agent)
+    workflow.add_node("portfolio_manager", portfolio_management_agent)
 
     # Connect selected analysts to risk management
     for analyst_key in selected_analysts:
         node_name = analyst_nodes[analyst_key][0]
         workflow.add_edge(node_name, "risk_management_agent")
 
-    workflow.add_edge("risk_management_agent", "portfolio_management_agent")
-    workflow.add_edge("portfolio_management_agent", END)
+    workflow.add_edge("risk_management_agent", "portfolio_manager")
+    workflow.add_edge("portfolio_manager", END)
 
     workflow.set_entry_point("start_node")
     return workflow
@@ -148,6 +149,7 @@ if __name__ == "__main__":
     parser.add_argument("--end-date", type=str, help="End date (YYYY-MM-DD). Defaults to today")
     parser.add_argument("--show-reasoning", action="store_true", help="Show reasoning from each agent")
     parser.add_argument("--show-agent-graph", action="store_true", help="Show the agent graph")
+    parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
 
     args = parser.parse_args()
 
@@ -180,34 +182,82 @@ if __name__ == "__main__":
             f"\nSelected analysts: {', '.join(Fore.GREEN + choice.title().replace('_', ' ') + Style.RESET_ALL for choice in choices)}\n"
         )
 
-    # Select LLM model
-    model_choice = questionary.select(
-        "Select your LLM model:",
-        choices=[questionary.Choice(display, value=value) for display, value, _ in LLM_ORDER],
-        style=questionary.Style(
-            [
-                ("selected", "fg:green bold"),
-                ("pointer", "fg:green bold"),
-                ("highlighted", "fg:green"),
-                ("answer", "fg:green bold"),
-            ]
-        ),
-    ).ask()
+    # Select LLM model based on whether Ollama is being used
+    model_name = ""
+    model_provider = ""
 
-    if not model_choice:
-        print("\n\nInterrupt received. Exiting...")
-        sys.exit(0)
+    if args.ollama:
+        print(f"{Fore.CYAN}Using Ollama for local LLM inference.{Style.RESET_ALL}")
+
+        # Select from Ollama-specific models
+        model_name: str = questionary.select(
+            "Select your Ollama model:",
+            choices=[questionary.Choice(display, value=value) for display, value, _ in OLLAMA_LLM_ORDER],
+            style=questionary.Style(
+                [
+                    ("selected", "fg:green bold"),
+                    ("pointer", "fg:green bold"),
+                    ("highlighted", "fg:green"),
+                    ("answer", "fg:green bold"),
+                ]
+            ),
+        ).ask()
+
+        if not model_name:
+            print("\n\nInterrupt received. Exiting...")
+            sys.exit(0)
+
+        if model_name == "-":
+            model_name = questionary.text("Enter the custom model name:").ask()
+            if not model_name:
+                print("\n\nInterrupt received. Exiting...")
+                sys.exit(0)
+
+        # Ensure Ollama is installed, running, and the model is available
+        if not ensure_ollama_and_model(model_name):
+            print(f"{Fore.RED}Cannot proceed without Ollama and the selected model.{Style.RESET_ALL}")
+            sys.exit(1)
+
+        model_provider = ModelProvider.OLLAMA.value
+        print(
+            f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n"
+        )
     else:
+        # Use the standard cloud-based LLM selection
+        model_choice = questionary.select(
+            "Select your LLM model:",
+            choices=[questionary.Choice(display, value=(name, provider)) for display, name, provider in LLM_ORDER],
+            style=questionary.Style(
+                [
+                    ("selected", "fg:green bold"),
+                    ("pointer", "fg:green bold"),
+                    ("highlighted", "fg:green"),
+                    ("answer", "fg:green bold"),
+                ]
+            ),
+        ).ask()
+
+        if not model_choice:
+            print("\n\nInterrupt received. Exiting...")
+            sys.exit(0)
+
+        model_name, model_provider = model_choice
+
         # Get model info using the helper function
-        model_info = get_model_info(model_choice)
+        model_info = get_model_info(model_name, model_provider)
         if model_info:
-            model_provider = model_info.provider.value
+            if model_info.is_custom():
+                model_name = questionary.text("Enter the custom model name:").ask()
+                if not model_name:
+                    print("\n\nInterrupt received. Exiting...")
+                    sys.exit(0)
+
             print(
-                f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n"
+                f"\nSelected {Fore.CYAN}{model_provider}{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n"
             )
         else:
             model_provider = "Unknown"
-            print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_choice}{Style.RESET_ALL}\n")
+            print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
 
     # Create the workflow with selected analysts
     workflow = create_workflow(selected_analysts)
@@ -247,12 +297,14 @@ if __name__ == "__main__":
     portfolio = {
         "cash": args.initial_cash,  # Initial cash amount
         "margin_requirement": args.margin_requirement,  # Initial margin requirement
+        "margin_used": 0.0,  # total margin usage across all short positions
         "positions": {
             ticker: {
                 "long": 0,  # Number of shares held long
                 "short": 0,  # Number of shares held short
                 "long_cost_basis": 0.0,  # Average cost basis for long positions
                 "short_cost_basis": 0.0,  # Average price at which shares were sold short
+                "short_margin_used": 0.0,  # Dollars of margin used for this ticker's short
             }
             for ticker in tickers
         },
@@ -273,7 +325,7 @@ if __name__ == "__main__":
         portfolio=portfolio,
         show_reasoning=args.show_reasoning,
         selected_analysts=selected_analysts,
-        model_name=model_choice,
+        model_name=model_name,
         model_provider=model_provider,
     )
     print_trading_output(result)

@@ -15,6 +15,7 @@ dependencies = [
     "langchain-openai>=0.3.5",
     "langchain-deepseek>=0.1.2",
     "langchain-google-genai>=2.0.11",
+    "langchain-ollama>=0.2.0",  # added upstream: Ollama local-model support
     "langgraph==0.2.56",
     "pandas>=2.2",
     "numpy>=1.26,<2.0",  # langchain 0.3.0 pins numpy <2.0 (ADR-005; upgrade when LangChain migrates)
@@ -28,7 +29,7 @@ dependencies = [
     # Explicit declaration of transitive dep — A10d fix.
     "requests>=2.32",
 
-    # --- F1 server stack ----------------------------------------------------
+    # --- F1 server stack (our additions) ------------------------------------
     "fastapi>=0.115",
     "uvicorn[standard]>=0.34",
     "sse-starlette>=2.1",
@@ -60,7 +61,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src", "server"]
+packages = ["src", "server", "app"]
 
 # ---------------------------------------------------------------------------
 # Tooling
@@ -69,8 +70,8 @@ packages = ["src", "server"]
 [tool.ruff]
 line-length = 120
 target-version = "py313"
-src = ["src", "server", "tests"]
-extend-exclude = ["alembic/versions"]
+src = ["src", "server", "tests", "app"]
+extend-exclude = ["alembic/versions", "app/backend/alembic/versions"]
 
 [tool.ruff.lint]
 # E,W: pycodestyle. F: pyflakes. I: isort. UP: pyupgrade. B: flake8-bugbear.
@@ -85,13 +86,16 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["ARG", "PT", "TC"]
 "alembic/**" = ["E", "F", "I"]
+"app/backend/alembic/**" = ["E", "F", "I"]
 # sys.path must be mutated before bare-module imports from src/ can resolve.
 "server/api/reference.py" = ["E402"]
 "server/services/run_service.py" = ["E402"]
 "server/services/streaming.py" = ["E402"]
 # Pre-existing src/ issues — tracked as tech-debt (A7, A17a findings); fix
 # incrementally rather than in one sweep that risks breaking the CLI agents.
-"src/**/*.py" = ["W293", "ARG", "F841", "SIM", "RET", "C4", "C419", "B006", "B007", "B904", "UP", "E721"]
+"src/**/*.py" = ["W293", "W291", "ARG", "F841", "SIM", "RET", "C4", "C419", "B006", "B007", "B904", "UP", "E721", "E722", "E402"]
+# app/backend uses its own conventions (upstream code).
+"app/**/*.py" = ["ARG", "F841", "SIM", "RET", "C4", "B", "UP", "E721", "E712", "E722", "T20", "TCH"]
 
 [tool.ruff.format]
 quote-style = "double"

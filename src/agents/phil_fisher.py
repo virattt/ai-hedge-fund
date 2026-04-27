@@ -1,21 +1,21 @@
 import json
 import statistics
-from typing import Literal
 
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel
+from typing_extensions import Literal
 
-from graph.state import AgentState, show_agent_reasoning
-from tools.api import (
+from src.graph.state import AgentState, show_agent_reasoning
+from src.tools.api import (
     get_company_news,
-    get_financial_metrics,
     get_insider_trades,
     get_market_cap,
     search_line_items,
 )
-from utils.llm import call_llm
-from utils.progress import progress
+from src.utils.api_key import get_api_key_from_state
+from src.utils.llm import call_llm
+from src.utils.progress import progress
 
 
 class PhilFisherSignal(BaseModel):
@@ -24,7 +24,7 @@ class PhilFisherSignal(BaseModel):
     reasoning: str
 
 
-def phil_fisher_agent(state: AgentState):
+def phil_fisher_agent(state: AgentState, agent_id: str = "phil_fisher_agent"):
     """
     Analyzes stocks using Phil Fisher's investing principles:
       - Seek companies with long-term above-average growth potential
@@ -37,18 +37,14 @@ def phil_fisher_agent(state: AgentState):
     Returns a bullish/bearish/neutral signal with confidence and reasoning.
     """
     data = state["data"]
-    start_date = data["start_date"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-
+    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
     analysis_data = {}
     fisher_analysis = {}
 
     for ticker in tickers:
-        progress.update_status("phil_fisher_agent", ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=5)
-
-        progress.update_status("phil_fisher_agent", ticker, "Gathering financial line items")
+        progress.update_status(agent_id, ticker, "Gathering financial line items")
         # Include relevant line items for Phil Fisher's approach:
         #   - Growth & Quality: revenue, net_income, earnings_per_share, R&D expense
         #   - Margins & Stability: operating_income, operating_margin, gross_margin
@@ -74,33 +70,34 @@ def phil_fisher_agent(state: AgentState):
             end_date,
             period="annual",
             limit=5,
+            api_key=api_key,
         )
 
-        progress.update_status("phil_fisher_agent", ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date)
+        progress.update_status(agent_id, ticker, "Getting market cap")
+        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
 
-        progress.update_status("phil_fisher_agent", ticker, "Fetching insider trades")
-        insider_trades = get_insider_trades(ticker, end_date, start_date=None, limit=50)
+        progress.update_status(agent_id, ticker, "Fetching insider trades")
+        insider_trades = get_insider_trades(ticker, end_date, limit=50, api_key=api_key)
 
-        progress.update_status("phil_fisher_agent", ticker, "Fetching company news")
-        company_news = get_company_news(ticker, end_date, start_date=None, limit=50)
+        progress.update_status(agent_id, ticker, "Fetching company news")
+        company_news = get_company_news(ticker, end_date, limit=50, api_key=api_key)
 
-        progress.update_status("phil_fisher_agent", ticker, "Analyzing growth & quality")
+        progress.update_status(agent_id, ticker, "Analyzing growth & quality")
         growth_quality = analyze_fisher_growth_quality(financial_line_items)
 
-        progress.update_status("phil_fisher_agent", ticker, "Analyzing margins & stability")
+        progress.update_status(agent_id, ticker, "Analyzing margins & stability")
         margins_stability = analyze_margins_stability(financial_line_items)
 
-        progress.update_status("phil_fisher_agent", ticker, "Analyzing management efficiency & leverage")
+        progress.update_status(agent_id, ticker, "Analyzing management efficiency & leverage")
         mgmt_efficiency = analyze_management_efficiency_leverage(financial_line_items)
 
-        progress.update_status("phil_fisher_agent", ticker, "Analyzing valuation (Fisher style)")
+        progress.update_status(agent_id, ticker, "Analyzing valuation (Fisher style)")
         fisher_valuation = analyze_fisher_valuation(financial_line_items, market_cap)
 
-        progress.update_status("phil_fisher_agent", ticker, "Analyzing insider activity")
+        progress.update_status(agent_id, ticker, "Analyzing insider activity")
         insider_activity = analyze_insider_activity(insider_trades)
 
-        progress.update_status("phil_fisher_agent", ticker, "Analyzing sentiment")
+        progress.update_status(agent_id, ticker, "Analyzing sentiment")
         sentiment_analysis = analyze_sentiment(company_news)
 
         # Combine partial scores with weights typical for Fisher:
@@ -141,12 +138,12 @@ def phil_fisher_agent(state: AgentState):
             "sentiment_analysis": sentiment_analysis,
         }
 
-        progress.update_status("phil_fisher_agent", ticker, "Generating Phil Fisher-style analysis")
+        progress.update_status(agent_id, ticker, "Generating Phil Fisher-style analysis")
         fisher_output = generate_fisher_output(
             ticker=ticker,
             analysis_data=analysis_data,
-            model_name=state["metadata"]["model_name"],
-            model_provider=state["metadata"]["model_provider"],
+            state=state,
+            agent_id=agent_id,
         )
 
         fisher_analysis[ticker] = {
@@ -155,15 +152,18 @@ def phil_fisher_agent(state: AgentState):
             "reasoning": fisher_output.reasoning,
         }
 
-        progress.update_status("phil_fisher_agent", ticker, "Done")
+        progress.update_status(agent_id, ticker, "Done", analysis=fisher_output.reasoning)
 
     # Wrap results in a single message
-    message = HumanMessage(content=json.dumps(fisher_analysis), name="phil_fisher_agent")
+    message = HumanMessage(content=json.dumps(fisher_analysis), name=agent_id)
 
     if state["metadata"].get("show_reasoning"):
         show_agent_reasoning(fisher_analysis, "Phil Fisher Agent")
 
-    state["data"]["analyst_signals"]["phil_fisher_agent"] = fisher_analysis
+    state["data"]["analyst_signals"][agent_id] = fisher_analysis
+
+    progress.update_status(agent_id, None, "Done")
+
     return {"messages": [message], "data": state["data"]}
 
 
@@ -530,8 +530,8 @@ def analyze_sentiment(news_items: list) -> dict:
 def generate_fisher_output(
     ticker: str,
     analysis_data: dict[str, any],
-    model_name: str,
-    model_provider: str,
+    state: AgentState,
+    agent_id: str,
 ) -> PhilFisherSignal:
     """
     Generates a JSON signal in the style of Phil Fisher.
@@ -548,10 +548,22 @@ def generate_fisher_output(
               4. Willing to pay more for exceptional companies but still mindful of valuation.
               5. Rely on thorough research (scuttlebutt) and thorough fundamental checks.
               
+              When providing your reasoning, be thorough and specific by:
+              1. Discussing the company's growth prospects in detail with specific metrics and trends
+              2. Evaluating management quality and their capital allocation decisions
+              3. Highlighting R&D investments and product pipeline that could drive future growth
+              4. Assessing consistency of margins and profitability metrics with precise numbers
+              5. Explaining competitive advantages that could sustain growth over 3-5+ years
+              6. Using Phil Fisher's methodical, growth-focused, and long-term oriented voice
+              
+              For example, if bullish: "This company exhibits the sustained growth characteristics we seek, with revenue increasing at 18% annually over five years. Management has demonstrated exceptional foresight by allocating 15% of revenue to R&D, which has produced three promising new product lines. The consistent operating margins of 22-24% indicate pricing power and operational efficiency that should continue to..."
+              
+              For example, if bearish: "Despite operating in a growing industry, management has failed to translate R&D investments (only 5% of revenue) into meaningful new products. Margins have fluctuated between 10-15%, showing inconsistent operational execution. The company faces increasing competition from three larger competitors with superior distribution networks. Given these concerns about long-term growth sustainability..."
+              
               You must output a JSON object with:
                 - "signal": "bullish" or "bearish" or "neutral"
                 - "confidence": a float between 0 and 100
-                - "reasoning": a concise explanation
+                - "reasoning": a detailed explanation
               """,
             ),
             (
@@ -579,9 +591,8 @@ def generate_fisher_output(
 
     return call_llm(
         prompt=prompt,
-        model_name=model_name,
-        model_provider=model_provider,
         pydantic_model=PhilFisherSignal,
-        agent_name="phil_fisher_agent",
+        state=state,
+        agent_name=agent_id,
         default_factory=create_default_signal,
     )
