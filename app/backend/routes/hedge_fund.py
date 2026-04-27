@@ -2,6 +2,9 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app.backend.database import get_db
 from app.backend.models.schemas import ErrorResponse, HedgeFundRequest, BacktestRequest, BacktestDayResult, BacktestPerformanceMetrics
@@ -142,6 +145,7 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
             finally:
                 # Clean up
                 progress.unregister_handler(progress_handler)
+                progress.reset()
                 if run_task and not run_task.done():
                     run_task.cancel()
                     try:
@@ -157,7 +161,8 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred while processing the request: {str(e)}")
+        logger.error("Error processing hedge fund request: %s", e)
+        raise HTTPException(status_code=500, detail="An error occurred while processing the request")
 
 @router.post(
     path="/backtest",
@@ -318,6 +323,7 @@ async def backtest(request_data: BacktestRequest, request: Request, db: Session 
             finally:
                 # Clean up
                 progress.unregister_handler(progress_handler)
+                progress.reset()
                 if backtest_task and not backtest_task.done():
                     backtest_task.cancel()
                     try:
@@ -333,7 +339,8 @@ async def backtest(request_data: BacktestRequest, request: Request, db: Session 
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred while processing the backtest request: {str(e)}")
+        logger.error("Error processing backtest request: %s", e)
+        raise HTTPException(status_code=500, detail="An error occurred while processing the backtest request")
 
 
 @router.get(
@@ -348,5 +355,6 @@ async def get_agents():
     try:
         return {"agents": get_agents_list()}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve agents: {str(e)}")
+        logger.error("Failed to retrieve agents: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to retrieve agents")
 
