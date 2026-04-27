@@ -1,20 +1,22 @@
+import json
+import statistics
+from typing import Literal
+
+from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel
+
 from graph.state import AgentState, show_agent_reasoning
 from tools.api import (
-    get_financial_metrics,
-    get_market_cap,
-    search_line_items,
-    get_insider_trades,
     get_company_news,
+    get_financial_metrics,
+    get_insider_trades,
+    get_market_cap,
     get_prices,
+    search_line_items,
 )
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage
-from pydantic import BaseModel
-import json
-from typing_extensions import Literal
-from utils.progress import progress
 from utils.llm import call_llm
-import statistics
+from utils.progress import progress
 
 
 class StanleyDruckenmillerSignal(BaseModel):
@@ -569,9 +571,7 @@ def generate_druckenmiller_output(
 
     def create_default_signal():
         return StanleyDruckenmillerSignal(
-            signal="neutral",
-            confidence=0.0,
-            reasoning="Error in analysis, defaulting to neutral"
+            signal="neutral", confidence=0.0, reasoning="Error in analysis, defaulting to neutral"
         )
 
     return call_llm(

@@ -1,19 +1,21 @@
+import json
+import statistics
+from typing import Literal
+
+from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel
+
 from graph.state import AgentState, show_agent_reasoning
 from tools.api import (
+    get_company_news,
     get_financial_metrics,
+    get_insider_trades,
     get_market_cap,
     search_line_items,
-    get_insider_trades,
-    get_company_news,
 )
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage
-from pydantic import BaseModel
-import json
-from typing_extensions import Literal
-from utils.progress import progress
 from utils.llm import call_llm
-import statistics
+from utils.progress import progress
 
 
 class PhilFisherSignal(BaseModel):
@@ -280,9 +282,9 @@ def analyze_margins_stability(financial_line_items: list) -> dict:
             details.append(f"Operating margin stable or improving ({oldest_op_margin:.1%} -> {newest_op_margin:.1%})")
         elif newest_op_margin > 0:
             raw_score += 1
-            details.append(f"Operating margin positive but slightly declined")
+            details.append("Operating margin positive but slightly declined")
         else:
-            details.append(f"Operating margin may be negative or uncertain")
+            details.append("Operating margin may be negative or uncertain")
     else:
         details.append("Not enough operating margin data points")
 
@@ -390,7 +392,7 @@ def analyze_management_efficiency_leverage(financial_line_items: list) -> dict:
             raw_score += 1
             details.append(f"Majority of periods have positive FCF ({positive_fcf_count}/{len(fcf_values)})")
         else:
-            details.append(f"Free cash flow is inconsistent or often negative")
+            details.append("Free cash flow is inconsistent or often negative")
     else:
         details.append("Insufficient or no FCF data to check consistency")
 
@@ -537,8 +539,8 @@ def generate_fisher_output(
     template = ChatPromptTemplate.from_messages(
         [
             (
-              "system",
-              """You are a Phil Fisher AI agent, making investment decisions using his principles:
+                "system",
+                """You are a Phil Fisher AI agent, making investment decisions using his principles:
   
               1. Emphasize long-term growth potential and quality of management.
               2. Focus on companies investing in R&D for future products/services.
@@ -553,8 +555,8 @@ def generate_fisher_output(
               """,
             ),
             (
-              "human",
-              """Based on the following analysis, create a Phil Fisher-style investment signal.
+                "human",
+                """Based on the following analysis, create a Phil Fisher-style investment signal.
 
               Analysis Data for {ticker}:
               {analysis_data}
@@ -573,11 +575,7 @@ def generate_fisher_output(
     prompt = template.invoke({"analysis_data": json.dumps(analysis_data, indent=2), "ticker": ticker})
 
     def create_default_signal():
-        return PhilFisherSignal(
-            signal="neutral",
-            confidence=0.0,
-            reasoning="Error in analysis, defaulting to neutral"
-        )
+        return PhilFisherSignal(signal="neutral", confidence=0.0, reasoning="Error in analysis, defaulting to neutral")
 
     return call_llm(
         prompt=prompt,

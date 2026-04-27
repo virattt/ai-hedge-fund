@@ -1,9 +1,11 @@
-from graph.state import AgentState, show_agent_reasoning
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage
-from pydantic import BaseModel
 import json
-from typing_extensions import Literal
+from typing import Literal
+
+from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel
+
+from graph.state import AgentState, show_agent_reasoning
 from tools.api import get_financial_metrics, get_market_cap, search_line_items
 from utils.llm import call_llm
 from utils.progress import progress
@@ -67,7 +69,12 @@ def warren_buffett_agent(state: AgentState):
         intrinsic_value_analysis = calculate_intrinsic_value(financial_line_items)
 
         # Calculate total score
-        total_score = fundamental_analysis["score"] + consistency_analysis["score"] + moat_analysis["score"] + mgmt_analysis["score"]
+        total_score = (
+            fundamental_analysis["score"]
+            + consistency_analysis["score"]
+            + moat_analysis["score"]
+            + mgmt_analysis["score"]
+        )
         max_possible_score = 10 + moat_analysis["max_score"] + mgmt_analysis["max_score"]
         # fundamental_analysis + consistency combined were up to 10 points total
         # moat can add up to 3, mgmt can add up to 2, for example
@@ -115,7 +122,7 @@ def warren_buffett_agent(state: AgentState):
         # Store analysis in consistent format with other agents
         buffett_analysis[ticker] = {
             "signal": buffett_output.signal,
-            "confidence": buffett_output.confidence, # Normalize between 0 to 100
+            "confidence": buffett_output.confidence,  # Normalize between 0 to 100
             "reasoning": buffett_output.reasoning,
         }
 
@@ -281,19 +288,31 @@ def analyze_management_quality(financial_line_items: list) -> dict[str, any]:
     mgmt_score = 0
 
     latest = financial_line_items[0]
-    if hasattr(latest, "issuance_or_purchase_of_equity_shares") and latest.issuance_or_purchase_of_equity_shares and latest.issuance_or_purchase_of_equity_shares < 0:
+    if (
+        hasattr(latest, "issuance_or_purchase_of_equity_shares")
+        and latest.issuance_or_purchase_of_equity_shares
+        and latest.issuance_or_purchase_of_equity_shares < 0
+    ):
         # Negative means the company spent money on buybacks
         mgmt_score += 1
         reasoning.append("Company has been repurchasing shares (shareholder-friendly)")
 
-    if hasattr(latest, "issuance_or_purchase_of_equity_shares") and latest.issuance_or_purchase_of_equity_shares and latest.issuance_or_purchase_of_equity_shares > 0:
+    if (
+        hasattr(latest, "issuance_or_purchase_of_equity_shares")
+        and latest.issuance_or_purchase_of_equity_shares
+        and latest.issuance_or_purchase_of_equity_shares > 0
+    ):
         # Positive issuance means new shares => possible dilution
         reasoning.append("Recent common stock issuance (potential dilution)")
     else:
         reasoning.append("No significant new stock issuance detected")
 
     # Check for any dividends
-    if hasattr(latest, "dividends_and_other_cash_distributions") and latest.dividends_and_other_cash_distributions and latest.dividends_and_other_cash_distributions < 0:
+    if (
+        hasattr(latest, "dividends_and_other_cash_distributions")
+        and latest.dividends_and_other_cash_distributions
+        and latest.dividends_and_other_cash_distributions < 0
+    ):
         mgmt_score += 1
         reasoning.append("Company has a track record of paying dividends")
     else:
@@ -365,7 +384,9 @@ def calculate_intrinsic_value(financial_line_items: list) -> dict[str, any]:
         future_value += present_value
 
     # Terminal value
-    terminal_value = (owner_earnings * (1 + growth_rate) ** projection_years * terminal_multiple) / ((1 + discount_rate) ** projection_years)
+    terminal_value = (owner_earnings * (1 + growth_rate) ** projection_years * terminal_multiple) / (
+        (1 + discount_rate) ** projection_years
+    )
 
     intrinsic_value = future_value + terminal_value
 
@@ -427,7 +448,9 @@ def generate_buffett_output(
 
     # Default fallback signal in case parsing fails
     def create_default_warren_buffett_signal():
-        return WarrenBuffettSignal(signal="neutral", confidence=0.0, reasoning="Error in analysis, defaulting to neutral")
+        return WarrenBuffettSignal(
+            signal="neutral", confidence=0.0, reasoning="Error in analysis, defaulting to neutral"
+        )
 
     return call_llm(
         prompt=prompt,

@@ -1,9 +1,10 @@
-from langchain_core.messages import HumanMessage
-from graph.state import AgentState, show_agent_reasoning
-from utils.progress import progress
 import json
 
+from langchain_core.messages import HumanMessage
+
+from graph.state import AgentState, show_agent_reasoning
 from tools.api import get_financial_metrics, get_market_cap, search_line_items
+from utils.progress import progress
 
 
 ##### Valuation Agent #####
@@ -30,7 +31,7 @@ def valuation_agent(state: AgentState):
         if not financial_metrics:
             progress.update_status("valuation_agent", ticker, "Failed: No financial metrics found")
             continue
-        
+
         metrics = financial_metrics[0]
 
         progress.update_status("valuation_agent", ticker, "Gathering line items")
@@ -60,7 +61,9 @@ def valuation_agent(state: AgentState):
 
         progress.update_status("valuation_agent", ticker, "Calculating owner earnings")
         # Calculate working capital change
-        working_capital_change = current_financial_line_item.working_capital - previous_financial_line_item.working_capital
+        working_capital_change = (
+            current_financial_line_item.working_capital - previous_financial_line_item.working_capital
+        )
 
         # Owner Earnings Valuation (Buffett Method)
         owner_earnings_value = calculate_owner_earnings_value(
@@ -107,7 +110,9 @@ def valuation_agent(state: AgentState):
         }
 
         reasoning["owner_earnings_analysis"] = {
-            "signal": ("bullish" if owner_earnings_gap > 0.15 else "bearish" if owner_earnings_gap < -0.15 else "neutral"),
+            "signal": (
+                "bullish" if owner_earnings_gap > 0.15 else "bearish" if owner_earnings_gap < -0.15 else "neutral"
+            ),
             "details": f"Owner Earnings Value: ${owner_earnings_value:,.2f}, Market Cap: ${market_cap:,.2f}, Gap: {owner_earnings_gap:.1%}",
         }
 

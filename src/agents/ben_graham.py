@@ -1,14 +1,15 @@
-from langchain_openai import ChatOpenAI
+import json
+import math
+from typing import Literal
+
+from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel
+
 from graph.state import AgentState, show_agent_reasoning
 from tools.api import get_financial_metrics, get_market_cap, search_line_items
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage
-from pydantic import BaseModel
-import json
-from typing_extensions import Literal
-from utils.progress import progress
 from utils.llm import call_llm
-import math
+from utils.progress import progress
 
 
 class BenGrahamSignal(BaseModel):
@@ -37,7 +38,24 @@ def ben_graham_agent(state: AgentState):
         metrics = get_financial_metrics(ticker, end_date, period="annual", limit=10)
 
         progress.update_status("ben_graham_agent", ticker, "Gathering financial line items")
-        financial_line_items = search_line_items(ticker, ["earnings_per_share", "revenue", "net_income", "book_value_per_share", "total_assets", "total_liabilities", "current_assets", "current_liabilities", "dividends_and_other_cash_distributions", "outstanding_shares"], end_date, period="annual", limit=10)
+        financial_line_items = search_line_items(
+            ticker,
+            [
+                "earnings_per_share",
+                "revenue",
+                "net_income",
+                "book_value_per_share",
+                "total_assets",
+                "total_liabilities",
+                "current_assets",
+                "current_liabilities",
+                "dividends_and_other_cash_distributions",
+                "outstanding_shares",
+            ],
+            end_date,
+            period="annual",
+            limit=10,
+        )
 
         progress.update_status("ben_graham_agent", ticker, "Getting market cap")
         market_cap = get_market_cap(ticker, end_date)
@@ -64,7 +82,14 @@ def ben_graham_agent(state: AgentState):
         else:
             signal = "neutral"
 
-        analysis_data[ticker] = {"signal": signal, "score": total_score, "max_score": max_possible_score, "earnings_analysis": earnings_analysis, "strength_analysis": strength_analysis, "valuation_analysis": valuation_analysis}
+        analysis_data[ticker] = {
+            "signal": signal,
+            "score": total_score,
+            "max_score": max_possible_score,
+            "earnings_analysis": earnings_analysis,
+            "strength_analysis": strength_analysis,
+            "valuation_analysis": valuation_analysis,
+        }
 
         progress.update_status("ben_graham_agent", ticker, "Generating Ben Graham analysis")
         graham_output = generate_graham_output(
@@ -74,7 +99,11 @@ def ben_graham_agent(state: AgentState):
             model_provider=state["metadata"]["model_provider"],
         )
 
-        graham_analysis[ticker] = {"signal": graham_output.signal, "confidence": graham_output.confidence, "reasoning": graham_output.reasoning}
+        graham_analysis[ticker] = {
+            "signal": graham_output.signal,
+            "confidence": graham_output.confidence,
+            "reasoning": graham_output.reasoning,
+        }
 
         progress.update_status("ben_graham_agent", ticker, "Done")
 
@@ -181,7 +210,11 @@ def analyze_financial_strength(metrics: list, financial_line_items: list) -> dic
         details.append("Cannot compute debt ratio (missing total_assets).")
 
     # 3. Dividend track record
-    div_periods = [item.dividends_and_other_cash_distributions for item in financial_line_items if item.dividends_and_other_cash_distributions is not None]
+    div_periods = [
+        item.dividends_and_other_cash_distributions
+        for item in financial_line_items
+        if item.dividends_and_other_cash_distributions is not None
+    ]
     if div_periods:
         # In many data feeds, dividend outflow is shown as a negative number
         # (money going out to shareholders). We'll consider any negative as 'paid a dividend'.
@@ -288,10 +321,11 @@ def generate_graham_output(
     - Return the result in a JSON structure: { signal, confidence, reasoning }.
     """
 
-    template = ChatPromptTemplate.from_messages([
-        (
-            "system",
-            """You are a Benjamin Graham AI agent, making investment decisions using his principles:
+    template = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """You are a Benjamin Graham AI agent, making investment decisions using his principles:
             1. Insist on a margin of safety by buying below intrinsic value (e.g., using Graham Number, net-net).
             2. Emphasize the company's financial strength (low leverage, ample current assets).
             3. Prefer stable earnings over multiple years.
@@ -299,11 +333,11 @@ def generate_graham_output(
             5. Avoid speculative or high-growth assumptions; focus on proven metrics.
                         
             Return a rational recommendation: bullish, bearish, or neutral, with a confidence level (0-100) and concise reasoning.
-            """
-        ),
-        (
-            "human",
-            """Based on the following analysis, create a Graham-style investment signal:
+            """,
+            ),
+            (
+                "human",
+                """Based on the following analysis, create a Graham-style investment signal:
 
             Analysis Data for {ticker}:
             {analysis_data}
@@ -314,17 +348,17 @@ def generate_graham_output(
               "confidence": float (0-100),
               "reasoning": "string"
             }}
-            """
-        )
-    ])
+            """,
+            ),
+        ]
+    )
 
-    prompt = template.invoke({
-        "analysis_data": json.dumps(analysis_data, indent=2),
-        "ticker": ticker
-    })
+    prompt = template.invoke({"analysis_data": json.dumps(analysis_data, indent=2), "ticker": ticker})
 
     def create_default_ben_graham_signal():
-        return BenGrahamSignal(signal="neutral", confidence=0.0, reasoning="Error in generating analysis; defaulting to neutral.")
+        return BenGrahamSignal(
+            signal="neutral", confidence=0.0, reasoning="Error in generating analysis; defaulting to neutral."
+        )
 
     return call_llm(
         prompt=prompt,

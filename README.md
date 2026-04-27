@@ -109,7 +109,7 @@ poetry run python src/main.py --ticker AAPL,MSFT,NVDA --show-reasoning
 You can optionally specify the start and end dates to make decisions for a specific time period.
 
 ```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 
+poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2025-01-01 --end-date 2025-03-01 
 ```
 
 ### Running the Backtester

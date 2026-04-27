@@ -27,12 +27,15 @@ ENV/
 
 # Environment Variables
 .env
+# .env.example is tracked on purpose — it documents required keys with placeholders.
+# Real secrets must NEVER be committed there. Use `<PLACEHOLDER>` form.
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+.venv
 .cursorrules
 .cursorignore
 .cursorindexingignore
@@ -46,3 +49,6 @@ Thumbs.db
 
 # Txt files
 *.txt
+
+
+README.md

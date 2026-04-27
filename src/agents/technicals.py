@@ -1,13 +1,11 @@
+import json
 import math
 
+import numpy as np
+import pandas as pd
 from langchain_core.messages import HumanMessage
 
 from graph.state import AgentState, show_agent_reasoning
-
-import json
-import pandas as pd
-import numpy as np
-
 from tools.api import get_prices, prices_to_df
 from utils.progress import progress
 
@@ -386,11 +384,11 @@ def normalize_pandas(obj):
     """Convert pandas Series/DataFrames to primitive Python types"""
     if isinstance(obj, pd.Series):
         return obj.tolist()
-    elif isinstance(obj, pd.DataFrame):
+    if isinstance(obj, pd.DataFrame):
         return obj.to_dict("records")
-    elif isinstance(obj, dict):
+    if isinstance(obj, dict):
         return {k: normalize_pandas(v) for k, v in obj.items()}
-    elif isinstance(obj, (list, tuple)):
+    if isinstance(obj, (list, tuple)):
         return [normalize_pandas(item) for item in obj]
     return obj
 

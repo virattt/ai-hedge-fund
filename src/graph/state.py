@@ -1,10 +1,10 @@
-from typing_extensions import Annotated, Sequence, TypedDict
-
-import operator
-from langchain_core.messages import BaseMessage
-
-
 import json
+import operator
+from collections.abc import Sequence
+from typing import Annotated
+
+from langchain_core.messages import BaseMessage
+from typing_extensions import TypedDict
 
 
 def merge_dicts(a: dict[str, any], b: dict[str, any]) -> dict[str, any]:
@@ -24,16 +24,15 @@ def show_agent_reasoning(output, agent_name):
     def convert_to_serializable(obj):
         if hasattr(obj, "to_dict"):  # Handle Pandas Series/DataFrame
             return obj.to_dict()
-        elif hasattr(obj, "__dict__"):  # Handle custom objects
+        if hasattr(obj, "__dict__"):  # Handle custom objects
             return obj.__dict__
-        elif isinstance(obj, (int, float, bool, str)):
+        if isinstance(obj, (int, float, bool, str)):
             return obj
-        elif isinstance(obj, (list, tuple)):
+        if isinstance(obj, (list, tuple)):
             return [convert_to_serializable(item) for item in obj]
-        elif isinstance(obj, dict):
+        if isinstance(obj, dict):
             return {key: convert_to_serializable(value) for key, value in obj.items()}
-        else:
-            return str(obj)  # Fallback to string representation
+        return str(obj)  # Fallback to string representation
 
     if isinstance(output, (dict, list)):
         # Convert the output to JSON-serializable format

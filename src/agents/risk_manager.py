@@ -1,8 +1,10 @@
-from langchain_core.messages import HumanMessage
-from graph.state import AgentState, show_agent_reasoning
-from utils.progress import progress
-from tools.api import get_prices, prices_to_df
 import json
+
+from langchain_core.messages import HumanMessage
+
+from graph.state import AgentState, show_agent_reasoning
+from tools.api import get_prices, prices_to_df
+from utils.progress import progress
 
 
 ##### Risk Management Agent #####
@@ -41,7 +43,9 @@ def risk_management_agent(state: AgentState):
         current_position_value = portfolio.get("cost_basis", {}).get(ticker, 0)
 
         # Calculate total portfolio value using stored prices
-        total_portfolio_value = portfolio.get("cash", 0) + sum(portfolio.get("cost_basis", {}).get(t, 0) for t in portfolio.get("cost_basis", {}))
+        total_portfolio_value = portfolio.get("cash", 0) + sum(
+            portfolio.get("cost_basis", {}).get(t, 0) for t in portfolio.get("cost_basis", {})
+        )
 
         # Base limit is 20% of portfolio for any single position
         position_limit = total_portfolio_value * 0.20

@@ -1,13 +1,15 @@
-from langchain_openai import ChatOpenAI
+import json
+from typing import Literal
+
+from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel
+
 from graph.state import AgentState, show_agent_reasoning
 from tools.api import get_financial_metrics, get_market_cap, search_line_items
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage
-from pydantic import BaseModel
-import json
-from typing_extensions import Literal
-from utils.progress import progress
 from utils.llm import call_llm
+from utils.progress import progress
+
 
 class CathieWoodSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
@@ -52,11 +54,10 @@ def cathie_wood_agent(state: AgentState):
                 "research_and_development",
                 "capital_expenditure",
                 "operating_expense",
-
             ],
             end_date,
             period="annual",
-            limit=5
+            limit=5,
         )
 
         progress.update_status("cathie_wood_agent", ticker, "Getting market cap")
@@ -88,7 +89,7 @@ def cathie_wood_agent(state: AgentState):
             "max_score": max_possible_score,
             "disruptive_analysis": disruptive_analysis,
             "innovation_analysis": innovation_analysis,
-            "valuation_analysis": valuation_analysis
+            "valuation_analysis": valuation_analysis,
         }
 
         progress.update_status("cathie_wood_agent", ticker, "Generating Cathie Wood analysis")
@@ -102,25 +103,19 @@ def cathie_wood_agent(state: AgentState):
         cw_analysis[ticker] = {
             "signal": cw_output.signal,
             "confidence": cw_output.confidence,
-            "reasoning": cw_output.reasoning
+            "reasoning": cw_output.reasoning,
         }
 
         progress.update_status("cathie_wood_agent", ticker, "Done")
 
-    message = HumanMessage(
-        content=json.dumps(cw_analysis),
-        name="cathie_wood_agent"
-    )
+    message = HumanMessage(content=json.dumps(cw_analysis), name="cathie_wood_agent")
 
     if state["metadata"].get("show_reasoning"):
         show_agent_reasoning(cw_analysis, "Cathie Wood Agent")
 
     state["data"]["analyst_signals"]["cathie_wood_agent"] = cw_analysis
 
-    return {
-        "messages": [message],
-        "data": state["data"]
-    }
+    return {"messages": [message], "data": state["data"]}
 
 
 def analyze_disruptive_potential(metrics: list, financial_line_items: list) -> dict:
@@ -137,54 +132,57 @@ def analyze_disruptive_potential(metrics: list, financial_line_items: list) -> d
     details = []
 
     if not metrics or not financial_line_items:
-        return {
-            "score": 0,
-            "details": "Insufficient data to analyze disruptive potential"
-        }
+        return {"score": 0, "details": "Insufficient data to analyze disruptive potential"}
 
     # 1. Revenue Growth Analysis - Check for accelerating growth
     revenues = [item.revenue for item in financial_line_items if item.revenue]
     if len(revenues) >= 3:  # Need at least 3 periods to check acceleration
         growth_rates = []
-        for i in range(len(revenues)-1):
-            if revenues[i] and revenues[i+1]:
-                growth_rate = (revenues[i+1] - revenues[i]) / abs(revenues[i]) if revenues[i] != 0 else 0
+        for i in range(len(revenues) - 1):
+            if revenues[i] and revenues[i + 1]:
+                growth_rate = (revenues[i + 1] - revenues[i]) / abs(revenues[i]) if revenues[i] != 0 else 0
                 growth_rates.append(growth_rate)
 
         # Check if growth is accelerating
         if len(growth_rates) >= 2 and growth_rates[-1] > growth_rates[0]:
             score += 2
-            details.append(f"Revenue growth is accelerating: {(growth_rates[-1]*100):.1f}% vs {(growth_rates[0]*100):.1f}%")
+            details.append(
+                f"Revenue growth is accelerating: {(growth_rates[-1] * 100):.1f}% vs {(growth_rates[0] * 100):.1f}%"
+            )
 
         # Check absolute growth rate
         latest_growth = growth_rates[-1] if growth_rates else 0
         if latest_growth > 1.0:
             score += 3
-            details.append(f"Exceptional revenue growth: {(latest_growth*100):.1f}%")
+            details.append(f"Exceptional revenue growth: {(latest_growth * 100):.1f}%")
         elif latest_growth > 0.5:
             score += 2
-            details.append(f"Strong revenue growth: {(latest_growth*100):.1f}%")
+            details.append(f"Strong revenue growth: {(latest_growth * 100):.1f}%")
         elif latest_growth > 0.2:
             score += 1
-            details.append(f"Moderate revenue growth: {(latest_growth*100):.1f}%")
+            details.append(f"Moderate revenue growth: {(latest_growth * 100):.1f}%")
     else:
         details.append("Insufficient revenue data for growth analysis")
 
     # 2. Gross Margin Analysis - Check for expanding margins
-    gross_margins = [item.gross_margin for item in financial_line_items if hasattr(item, 'gross_margin') and item.gross_margin is not None]
+    gross_margins = [
+        item.gross_margin
+        for item in financial_line_items
+        if hasattr(item, "gross_margin") and item.gross_margin is not None
+    ]
     if len(gross_margins) >= 2:
         margin_trend = gross_margins[-1] - gross_margins[0]
         if margin_trend > 0.05:  # 5% improvement
             score += 2
-            details.append(f"Expanding gross margins: +{(margin_trend*100):.1f}%")
+            details.append(f"Expanding gross margins: +{(margin_trend * 100):.1f}%")
         elif margin_trend > 0:
             score += 1
-            details.append(f"Slightly improving gross margins: +{(margin_trend*100):.1f}%")
+            details.append(f"Slightly improving gross margins: +{(margin_trend * 100):.1f}%")
 
         # Check absolute margin level
         if gross_margins[-1] > 0.50:  # High margin business
             score += 2
-            details.append(f"High gross margin: {(gross_margins[-1]*100):.1f}%")
+            details.append(f"High gross margin: {(gross_margins[-1] * 100):.1f}%")
     else:
         details.append("Insufficient gross margin data")
 
@@ -207,18 +205,22 @@ def analyze_disruptive_potential(metrics: list, financial_line_items: list) -> d
         details.append("Insufficient data for operating leverage analysis")
 
     # 4. R&D Investment Analysis
-    rd_expenses = [item.research_and_development for item in financial_line_items if hasattr(item, 'research_and_development') and item.research_and_development is not None]
+    rd_expenses = [
+        item.research_and_development
+        for item in financial_line_items
+        if hasattr(item, "research_and_development") and item.research_and_development is not None
+    ]
     if rd_expenses and revenues:
         rd_intensity = rd_expenses[-1] / revenues[-1]
         if rd_intensity > 0.15:  # High R&D intensity
             score += 3
-            details.append(f"High R&D investment: {(rd_intensity*100):.1f}% of revenue")
+            details.append(f"High R&D investment: {(rd_intensity * 100):.1f}% of revenue")
         elif rd_intensity > 0.08:
             score += 2
-            details.append(f"Moderate R&D investment: {(rd_intensity*100):.1f}% of revenue")
+            details.append(f"Moderate R&D investment: {(rd_intensity * 100):.1f}% of revenue")
         elif rd_intensity > 0.05:
             score += 1
-            details.append(f"Some R&D investment: {(rd_intensity*100):.1f}% of revenue")
+            details.append(f"Some R&D investment: {(rd_intensity * 100):.1f}% of revenue")
     else:
         details.append("No R&D data available")
 
@@ -230,7 +232,7 @@ def analyze_disruptive_potential(metrics: list, financial_line_items: list) -> d
         "score": normalized_score,
         "details": "; ".join(details),
         "raw_score": score,
-        "max_score": max_possible_score
+        "max_score": max_possible_score,
     }
 
 
@@ -248,10 +250,7 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
     details = []
 
     if not metrics or not financial_line_items:
-        return {
-            "score": 0,
-            "details": "Insufficient data to analyze innovation-driven growth"
-        }
+        return {"score": 0, "details": "Insufficient data to analyze innovation-driven growth"}
 
     # 1. R&D Investment Trends
     rd_expenses = [
@@ -266,17 +265,19 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
         rd_growth = (rd_expenses[-1] - rd_expenses[0]) / abs(rd_expenses[0]) if rd_expenses[0] != 0 else 0
         if rd_growth > 0.5:  # 50% growth in R&D
             score += 3
-            details.append(f"Strong R&D investment growth: +{(rd_growth*100):.1f}%")
+            details.append(f"Strong R&D investment growth: +{(rd_growth * 100):.1f}%")
         elif rd_growth > 0.2:
             score += 2
-            details.append(f"Moderate R&D investment growth: +{(rd_growth*100):.1f}%")
+            details.append(f"Moderate R&D investment growth: +{(rd_growth * 100):.1f}%")
 
         # Check R&D intensity trend
         rd_intensity_start = rd_expenses[0] / revenues[0]
         rd_intensity_end = rd_expenses[-1] / revenues[-1]
         if rd_intensity_end > rd_intensity_start:
             score += 2
-            details.append(f"Increasing R&D intensity: {(rd_intensity_end*100):.1f}% vs {(rd_intensity_start*100):.1f}%")
+            details.append(
+                f"Increasing R&D intensity: {(rd_intensity_end * 100):.1f}% vs {(rd_intensity_start * 100):.1f}%"
+            )
     else:
         details.append("Insufficient R&D data for trend analysis")
 
@@ -307,10 +308,10 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
 
         if op_margin_vals[-1] > 0.15 and margin_trend > 0:
             score += 3
-            details.append(f"Strong and improving operating margin: {(op_margin_vals[-1]*100):.1f}%")
+            details.append(f"Strong and improving operating margin: {(op_margin_vals[-1] * 100):.1f}%")
         elif op_margin_vals[-1] > 0.10:
             score += 2
-            details.append(f"Healthy operating margin: {(op_margin_vals[-1]*100):.1f}%")
+            details.append(f"Healthy operating margin: {(op_margin_vals[-1] * 100):.1f}%")
         elif margin_trend > 0:
             score += 1
             details.append("Improving operating efficiency")
@@ -318,7 +319,11 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
         details.append("Insufficient operating margin data")
 
     # 4. Capital Allocation Analysis
-    capex = [item.capital_expenditure for item in financial_line_items if hasattr(item, 'capital_expenditure') and item.capital_expenditure]
+    capex = [
+        item.capital_expenditure
+        for item in financial_line_items
+        if hasattr(item, "capital_expenditure") and item.capital_expenditure
+    ]
     if capex and revenues and len(capex) >= 2:
         capex_intensity = abs(capex[-1]) / revenues[-1]
         capex_growth = (abs(capex[-1]) - abs(capex[0])) / abs(capex[0]) if capex[0] != 0 else 0
@@ -333,7 +338,11 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
         details.append("Insufficient CAPEX data")
 
     # 5. Growth Reinvestment Analysis
-    dividends = [item.dividends_and_other_cash_distributions for item in financial_line_items if hasattr(item, 'dividends_and_other_cash_distributions') and item.dividends_and_other_cash_distributions]
+    dividends = [
+        item.dividends_and_other_cash_distributions
+        for item in financial_line_items
+        if hasattr(item, "dividends_and_other_cash_distributions") and item.dividends_and_other_cash_distributions
+    ]
     if dividends and fcf_vals:
         # Check if company prioritizes reinvestment over dividends
         latest_payout_ratio = dividends[-1] / fcf_vals[-1] if fcf_vals[-1] != 0 else 1
@@ -354,7 +363,7 @@ def analyze_innovation_growth(metrics: list, financial_line_items: list) -> dict
         "score": normalized_score,
         "details": "; ".join(details),
         "raw_score": score,
-        "max_score": max_possible_score
+        "max_score": max_possible_score,
     }
 
 
@@ -365,20 +374,13 @@ def analyze_cathie_wood_valuation(financial_line_items: list, market_cap: float)
     company's ability to capture a sizable portion.
     """
     if not financial_line_items or market_cap is None:
-        return {
-            "score": 0,
-            "details": "Insufficient data for valuation"
-        }
+        return {"score": 0, "details": "Insufficient data for valuation"}
 
     latest = financial_line_items[-1]
     fcf = latest.free_cash_flow if latest.free_cash_flow else 0
 
     if fcf <= 0:
-        return {
-            "score": 0,
-            "details": f"No positive FCF for valuation; FCF = {fcf}",
-            "intrinsic_value": None
-        }
+        return {"score": 0, "details": f"No positive FCF for valuation; FCF = {fcf}", "intrinsic_value": None}
 
     # Instead of a standard DCF, let's assume a higher growth rate for an innovative company.
     # Example values:
@@ -394,8 +396,9 @@ def analyze_cathie_wood_valuation(financial_line_items: list, market_cap: float)
         present_value += pv
 
     # Terminal Value
-    terminal_value = (fcf * (1 + growth_rate) ** projection_years * terminal_multiple) \
-                     / ((1 + discount_rate) ** projection_years)
+    terminal_value = (fcf * (1 + growth_rate) ** projection_years * terminal_multiple) / (
+        (1 + discount_rate) ** projection_years
+    )
     intrinsic_value = present_value + terminal_value
 
     margin_of_safety = (intrinsic_value - market_cap) / market_cap
@@ -409,14 +412,14 @@ def analyze_cathie_wood_valuation(financial_line_items: list, market_cap: float)
     details = [
         f"Calculated intrinsic value: ~{intrinsic_value:,.2f}",
         f"Market cap: ~{market_cap:,.2f}",
-        f"Margin of safety: {margin_of_safety:.2%}"
+        f"Margin of safety: {margin_of_safety:.2%}",
     ]
 
     return {
         "score": score,
         "details": "; ".join(details),
         "intrinsic_value": intrinsic_value,
-        "margin_of_safety": margin_of_safety
+        "margin_of_safety": margin_of_safety,
     }
 
 
@@ -429,10 +432,11 @@ def generate_cathie_wood_output(
     """
     Generates investment decisions in the style of Cathie Wood.
     """
-    template = ChatPromptTemplate.from_messages([
-        (
-            "system",
-            """You are a Cathie Wood AI agent, making investment decisions using her principles:\n\n"
+    template = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """You are a Cathie Wood AI agent, making investment decisions using her principles:\n\n"
             "1. Seek companies leveraging disruptive innovation.\n"
             "2. Emphasize exponential growth potential, large TAM.\n"
             "3. Focus on technology, healthcare, or other future-facing sectors.\n"
@@ -444,29 +448,23 @@ def generate_cathie_wood_output(
             "- Evaluate strong potential for multi-year revenue growth.\n"
             "- Check if the company can scale effectively in a large market.\n"
             "- Use a growth-biased valuation approach.\n"
-            "- Provide a data-driven recommendation (bullish, bearish, or neutral)."""
-        ),
-        (
-            "human",
-            """Based on the following analysis, create a Cathie Wood-style investment signal.\n\n"
+            "- Provide a data-driven recommendation (bullish, bearish, or neutral).""",
+            ),
+            (
+                "human",
+                """Based on the following analysis, create a Cathie Wood-style investment signal.\n\n"
             "Analysis Data for {ticker}:\n"
             "{analysis_data}\n\n"
             "Return the trading signal in this JSON format:\n"
-            "{{\n  \"signal\": \"bullish/bearish/neutral\",\n  \"confidence\": float (0-100),\n  \"reasoning\": \"string\"\n}}"""
-        )
-    ])
+            "{{\n  \"signal\": \"bullish/bearish/neutral\",\n  \"confidence\": float (0-100),\n  \"reasoning\": \"string\"\n}}""",
+            ),
+        ]
+    )
 
-    prompt = template.invoke({
-        "analysis_data": json.dumps(analysis_data, indent=2),
-        "ticker": ticker
-    })
+    prompt = template.invoke({"analysis_data": json.dumps(analysis_data, indent=2), "ticker": ticker})
 
     def create_default_cathie_wood_signal():
-        return CathieWoodSignal(
-            signal="neutral",
-            confidence=0.0,
-            reasoning="Error in analysis, defaulting to neutral"
-        )
+        return CathieWoodSignal(signal="neutral", confidence=0.0, reasoning="Error in analysis, defaulting to neutral")
 
     return call_llm(
         prompt=prompt,
@@ -476,5 +474,6 @@ def generate_cathie_wood_output(
         agent_name="cathie_wood_agent",
         default_factory=create_default_cathie_wood_signal,
     )
+
 
 # source: https://ark-invest.com

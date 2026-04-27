@@ -1,10 +1,8 @@
 from rich.console import Console
 from rich.live import Live
-from rich.table import Table
 from rich.style import Style
+from rich.table import Table
 from rich.text import Text
-from typing import Dict, Optional
-from datetime import datetime
 
 console = Console()
 
@@ -13,7 +11,7 @@ class AgentProgress:
     """Manages progress tracking for multiple agents."""
 
     def __init__(self):
-        self.agent_status: Dict[str, Dict[str, str]] = {}
+        self.agent_status: dict[str, dict[str, str]] = {}
         self.table = Table(show_header=False, box=None, padding=(0, 1))
         self.live = Live(self.table, console=console, refresh_per_second=4)
         self.started = False
@@ -30,7 +28,7 @@ class AgentProgress:
             self.live.stop()
             self.started = False
 
-    def update_status(self, agent_name: str, ticker: Optional[str] = None, status: str = ""):
+    def update_status(self, agent_name: str, ticker: str | None = None, status: str = ""):
         """Update the status of an agent."""
         if agent_name not in self.agent_status:
             self.agent_status[agent_name] = {"status": "", "ticker": None}
@@ -52,10 +50,9 @@ class AgentProgress:
             agent_name = item[0]
             if "risk_management" in agent_name:
                 return (2, agent_name)
-            elif "portfolio_management" in agent_name:
+            if "portfolio_management" in agent_name:
                 return (3, agent_name)
-            else:
-                return (1, agent_name)
+            return (1, agent_name)
 
         for agent_name, info in sorted(self.agent_status.items(), key=sort_key):
             status = info["status"]
