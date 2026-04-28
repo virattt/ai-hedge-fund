@@ -45,7 +45,7 @@ By using this software, you agree to use it solely for learning purposes.
 - [How to Install](#how-to-install)
 - [How to Run](#how-to-run)
   - [⌨️ Command Line Interface](#️-command-line-interface)
-  - [🖥️ Web Application (NEW!)](#️-web-application)
+  - [🖥️ Web Application (Docker Compose)](#️-web-application-docker-compose)
 - [Contributing](#contributing)
 - [Feature Requests](#feature-requests)
 - [License](#license)
@@ -190,6 +190,89 @@ You can also specify a `--ollama` flag to run the backtester using local LLMs.
 # On Windows:
 run.bat --ticker AAPL,MSFT,NVDA --ollama backtest
 ```
+
+### 🖥️ Web Application (Docker Compose)
+
+The full web stack (FastAPI backend + React frontend) can be run via the same `docker-compose.yml` using the `web` profile. Both services build locally from the repository — no pre-built images are pulled.
+
+#### Start the web app
+
+```bash
+# From the docker/ directory
+docker compose build web-backend web-frontend
+docker compose --profile web up -d web-backend web-frontend
+```
+
+Then open:
+- **Web UI**: http://localhost:5173
+- **Backend API**: http://localhost:8000
+- **API docs**: http://localhost:8000/docs
+
+A few notes on why the commands look the way they do:
+
+- The build is scoped to `web-backend web-frontend` explicitly because `image: ai-hedge-fund` is shared with the CLI services — building all six in parallel via `up --build` would have them race to tag the same image.
+- The `up` command also names the services explicitly. Without that, Compose would also start the CLI services (`hedge-fund`, `backtester`, etc.), which sit in the default profile and expect interactive TTY input — they'd produce noise in the logs and never make progress.
+- `--profile web` is still required so Compose recognises `web-backend` and `web-frontend` as activatable.
+- `-d` runs the stack detached in the background. Both services have `restart: unless-stopped`, so they'll come back automatically after a host reboot.
+
+The build produces two images: `ai-hedge-fund` (reused from the CLI services, Python + backend) and `ai-hedge-fund-frontend` (Node build → nginx).
+
+To follow logs:
+
+```bash
+docker compose logs -f web-backend web-frontend
+```
+
+To rebuild after a code change:
+
+```bash
+docker compose build web-backend web-frontend
+docker compose --profile web up -d --force-recreate web-backend web-frontend
+```
+
+#### Stop the web app
+
+```bash
+docker compose --profile web down
+```
+
+The `--profile web` flag is required — without it, Compose ignores services in the `web` profile, leaving the web containers behind with stale network references that break the next `up`.
+
+Saved flows, run history, and API keys persist in the `web_data` named volume across restarts. To wipe persistent data as well:
+
+```bash
+docker compose --profile web down -v
+```
+
+> ⚠️ `down -v` removes **all** named volumes in the project (including `ollama_data`).
+
+#### Combine with Ollama
+
+To also start the bundled Ollama container (for local LLMs):
+
+```bash
+docker compose build web-backend web-frontend
+docker compose --profile web --profile embedded-ollama up -d web-backend web-frontend ollama
+```
+
+If you already have an Ollama instance running on the host or network, set `OLLAMA_BASE_URL` before bringing the stack up — the embedded container is then skipped:
+
+```bash
+docker compose build web-backend web-frontend
+OLLAMA_BASE_URL=http://host.docker.internal:11434 docker compose --profile web up -d web-backend web-frontend
+```
+
+#### Pointing the frontend at a custom backend URL
+
+By default the frontend bundle is built with `VITE_API_URL=http://localhost:8000`, which is correct for local use. To deploy on a remote host, override it at build time:
+
+```bash
+VITE_API_URL=https://hedge.example.com docker compose build web-frontend
+docker compose build web-backend
+docker compose --profile web up -d web-backend web-frontend
+```
+
+`VITE_API_URL` is baked into the static bundle during the Vite build, so it must be set before/at build time — changing it on a running container has no effect.
 
 ## Contributing
 
