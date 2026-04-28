@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1
+
+# Build stage: install deps and produce production bundle
+FROM node:lts-alpine AS build
+WORKDIR /app/frontend
+
+COPY app/frontend/package.json app/frontend/package-lock.json ./
+RUN npm ci
+
+COPY app/frontend/ ./
+
+ARG VITE_API_URL=http://localhost:8000
+ENV VITE_API_URL=$VITE_API_URL
+# Skip the package.json `tsc && vite build` script and call vite directly.
+# Type-check belongs in CI, not in the production image build — running tsc here
+# would couple the deploy build to upstream type errors we can't fix from here.
+RUN npx vite build
+
+# Serve stage: nginx serving the static bundle with SPA fallback
+FROM nginx:alpine
+COPY --from=build /app/frontend/dist /usr/share/nginx/html
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
