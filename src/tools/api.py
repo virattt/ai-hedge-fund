@@ -20,6 +20,7 @@ from src.data.models import (
     InsiderTrade,
     InsiderTradeResponse,
     CompanyFactsResponse,
+    SocialMediaPost,
 )
 
 # Global cache instance
@@ -364,3 +365,164 @@ def prices_to_df(prices: list[Price]) -> pd.DataFrame:
 def get_price_data(ticker: str, start_date: str, end_date: str, api_key: str = None) -> pd.DataFrame:
     prices = get_prices(ticker, start_date, end_date, api_key=api_key)
     return prices_to_df(prices)
+
+
+def get_reddit_posts(
+    ticker: str,
+    end_date: str,
+    start_date: str | None = None,
+    limit: int = 25,
+    user_agent: str | None = None,
+) -> list[SocialMediaPost]:
+    """Fetch recent Reddit posts mentioning the ticker via Reddit's public JSON API.
+
+    Uses the unauthenticated search endpoint. Reddit blocks default Python
+    user-agents, so a descriptive User-Agent header is required.
+    """
+    cache_key = f"reddit_{ticker}_{start_date or 'none'}_{end_date}_{limit}"
+    if cached_data := _cache.get_social_posts(cache_key):
+        return [SocialMediaPost(**post) for post in cached_data]
+
+    headers = {
+        "User-Agent": user_agent
+        or os.environ.get("REDDIT_USER_AGENT")
+        or "ai-hedge-fund/1.0 (sentiment analysis)"
+    }
+    # Search across all of Reddit for the ticker (cashtag or symbol)
+    query = f"%24{ticker}+OR+{ticker}"
+    url = (
+        f"https://www.reddit.com/search.json?q={query}"
+        f"&sort=new&restrict_sr=0&limit={min(limit, 100)}"
+    )
+
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+    except requests.RequestException as e:
+        logger.warning("Reddit fetch failed for %s: %s", ticker, e)
+        return []
+
+    if response.status_code != 200:
+        logger.warning("Reddit returned %s for %s", response.status_code, ticker)
+        return []
+
+    try:
+        data = response.json()
+    except ValueError as e:
+        logger.warning("Failed to parse Reddit response for %s: %s", ticker, e)
+        return []
+
+    end_cutoff = end_date + "T23:59:59" if end_date and "T" not in end_date else end_date
+
+    posts: list[SocialMediaPost] = []
+    for child in data.get("data", {}).get("children", []):
+        post_data = child.get("data", {})
+        created_utc = post_data.get("created_utc")
+        if created_utc is None:
+            continue
+        date_str = datetime.datetime.fromtimestamp(
+            created_utc, tz=datetime.timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        if start_date and date_str < start_date:
+            continue
+        if end_cutoff and date_str > end_cutoff:
+            continue
+
+        title = post_data.get("title") or ""
+        selftext = post_data.get("selftext") or ""
+        text = (title + "\n" + selftext).strip()[:1000]
+
+        posts.append(
+            SocialMediaPost(
+                ticker=ticker,
+                platform="reddit",
+                title=title or None,
+                text=text or title,
+                author=post_data.get("author"),
+                date=date_str,
+                url=f"https://www.reddit.com{post_data.get('permalink', '')}",
+                score=post_data.get("score"),
+                sentiment=None,
+            )
+        )
+
+    if posts:
+        _cache.set_social_posts(cache_key, [p.model_dump() for p in posts])
+    return posts
+
+
+def get_twitter_posts(
+    ticker: str,
+    end_date: str,
+    start_date: str | None = None,
+    limit: int = 25,
+    bearer_token: str | None = None,
+) -> list[SocialMediaPost]:
+    """Fetch recent tweets mentioning the ticker via Twitter API v2.
+
+    Requires a bearer token (TWITTER_BEARER_TOKEN env var). Returns an empty
+    list when no token is configured so the agent degrades gracefully.
+    """
+    token = bearer_token or os.environ.get("TWITTER_BEARER_TOKEN")
+    if not token:
+        return []
+
+    cache_key = f"twitter_{ticker}_{start_date or 'none'}_{end_date}_{limit}"
+    if cached_data := _cache.get_social_posts(cache_key):
+        return [SocialMediaPost(**post) for post in cached_data]
+
+    headers = {"Authorization": f"Bearer {token}"}
+    query = f"${ticker} -is:retweet lang:en"
+    params = {
+        "query": query,
+        "max_results": str(min(max(limit, 10), 100)),  # Twitter API requires 10..100
+        "tweet.fields": "created_at,public_metrics,author_id",
+    }
+    url = "https://api.twitter.com/2/tweets/search/recent"
+
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=15)
+    except requests.RequestException as e:
+        logger.warning("Twitter fetch failed for %s: %s", ticker, e)
+        return []
+
+    if response.status_code != 200:
+        logger.warning("Twitter returned %s for %s", response.status_code, ticker)
+        return []
+
+    try:
+        data = response.json()
+    except ValueError as e:
+        logger.warning("Failed to parse Twitter response for %s: %s", ticker, e)
+        return []
+
+    end_cutoff = end_date + "T23:59:59Z" if end_date and "T" not in end_date else end_date
+
+    posts: list[SocialMediaPost] = []
+    for tweet in data.get("data", []) or []:
+        date_str = tweet.get("created_at", "")
+        if start_date and date_str and date_str < start_date:
+            continue
+        if end_cutoff and date_str and date_str > end_cutoff:
+            continue
+
+        public_metrics = tweet.get("public_metrics") or {}
+        text = (tweet.get("text") or "")[:1000]
+
+        posts.append(
+            SocialMediaPost(
+                ticker=ticker,
+                platform="twitter",
+                title=None,
+                text=text,
+                author=tweet.get("author_id"),
+                date=date_str,
+                url=f"https://twitter.com/i/web/status/{tweet.get('id')}",
+                score=public_metrics.get("like_count"),
+                sentiment=None,
+            )
+        )
+
+    if posts:
+        _cache.set_social_posts(cache_key, [p.model_dump() for p in posts])
+    return posts

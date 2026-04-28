@@ -113,6 +113,18 @@ class CompanyNewsResponse(BaseModel):
     news: list[CompanyNews]
 
 
+class SocialMediaPost(BaseModel):
+    ticker: str
+    platform: str  # "reddit" or "twitter"
+    title: str | None = None
+    text: str
+    author: str | None = None
+    date: str
+    url: str | None = None
+    score: int | None = None
+    sentiment: str | None = None
+
+
 class CompanyFacts(BaseModel):
     ticker: str
     name: str
