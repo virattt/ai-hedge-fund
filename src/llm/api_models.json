@@ -1,5 +1,25 @@
 [
   {
+    "display_name": "Claude Code - Default model",
+    "model_name": "",
+    "provider": "Claude Code"
+  },
+  {
+    "display_name": "Claude Code - Sonnet",
+    "model_name": "sonnet",
+    "provider": "Claude Code"
+  },
+  {
+    "display_name": "Claude Code - Haiku",
+    "model_name": "haiku",
+    "provider": "Claude Code"
+  },
+  {
+    "display_name": "Claude Code - Opus",
+    "model_name": "opus",
+    "provider": "Claude Code"
+  },
+  {
     "display_name": "Grok 4",
     "model_name": "grok-4-0709",
     "provider": "xAI"
