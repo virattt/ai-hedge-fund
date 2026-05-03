@@ -4,6 +4,10 @@ import os
 import pandas as pd
 import requests
 import time
+import urllib3
+
+# Disable SSL warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +49,9 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
     """
     for attempt in range(max_retries + 1):  # +1 for initial attempt
         if method.upper() == "POST":
-            response = requests.post(url, headers=headers, json=json_data)
+            response = requests.post(url, headers=headers, json=json_data, verify=False)
         else:
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, verify=False)
         
         if response.status_code == 429 and attempt < max_retries:
             # Linear backoff: 60s, 90s, 120s, 150s...
