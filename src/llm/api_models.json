@@ -1,5 +1,20 @@
 [
   {
+    "display_name": "Gemini 2.5 Flash-Lite",
+    "model_name": "gemini-2.5-flash-lite",
+    "provider": "Google"
+  },
+  {
+    "display_name": "Gemini 2.5 Flash",
+    "model_name": "gemini-2.5-flash",
+    "provider": "Google"
+  },
+  {
+    "display_name": "Ollama Gemma4",
+    "model_name": "gemma4",
+    "provider": "Ollama"
+  },
+  {
     "display_name": "Grok 4",
     "model_name": "grok-4-0709",
     "provider": "xAI"

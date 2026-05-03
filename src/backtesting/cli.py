@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+from zoneinfo import ZoneInfo
 import argparse
 
 from colorama import Fore, Style, init
@@ -21,13 +22,13 @@ def main() -> int:
     parser.add_argument(
         "--end-date",
         type=str,
-        default=datetime.now().strftime("%Y-%m-%d"),
+        default=datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d"),
         help="End date YYYY-MM-DD",
     )
     parser.add_argument(
         "--start-date",
         type=str,
-        default=(datetime.now() - relativedelta(months=1)).strftime("%Y-%m-%d"),
+        default=(datetime.now(ZoneInfo("America/New_York")) - relativedelta(months=1)).strftime("%Y-%m-%d"),
         help="Start date YYYY-MM-DD",
     )
     parser.add_argument("--initial-capital", type=float, default=100000)

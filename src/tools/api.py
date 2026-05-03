@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import requests
 import time
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -44,15 +45,19 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
         Exception: If the request fails with a non-429 error
     """
     for attempt in range(max_retries + 1):  # +1 for initial attempt
-        if method.upper() == "POST":
-            response = requests.post(url, headers=headers, json=json_data)
-        else:
-            response = requests.get(url, headers=headers)
+        try:
+            if method.upper() == "POST":
+                response = requests.post(url, headers=headers, json=json_data)
+            else:
+                response = requests.get(url, headers=headers)
+        except requests.exceptions.RequestException as e:
+            logger.error(f"API request failed for {url}: {e}")
+            raise
         
         if response.status_code == 429 and attempt < max_retries:
             # Linear backoff: 60s, 90s, 120s, 150s...
             delay = 60 + (30 * attempt)
-            print(f"Rate limited (429). Attempt {attempt + 1}/{max_retries + 1}. Waiting {delay}s before retrying...")
+            logger.warning(f"Rate limited (429). Attempt {attempt + 1}/{max_retries + 1}. Waiting {delay}s before retrying...")
             time.sleep(delay)
             continue
         
