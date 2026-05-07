@@ -6,6 +6,7 @@ from src.agents.ben_graham import ben_graham_agent
 from src.agents.bill_ackman import bill_ackman_agent
 from src.agents.cathie_wood import cathie_wood_agent
 from src.agents.charlie_munger import charlie_munger_agent
+from src.agents.duan import duan_agent
 from src.agents.fundamentals import fundamentals_analyst_agent
 from src.agents.michael_burry import michael_burry_agent
 from src.agents.phil_fisher import phil_fisher_agent
@@ -60,6 +61,14 @@ ANALYST_CONFIG = {
         "description": "The Rational Thinker",
         "investing_style": "Advocates for value investing with a focus on quality businesses and long-term growth through rational decision-making.",
         "agent_func": charlie_munger_agent,
+        "type": "analyst",
+        "order": 4,
+    },
+    "duan_yongpin": {
+        "display_name": "Duan Yongpin",
+        "description": "The Rational Thinker",
+        "investing_style": "Advocates for value investing with a focus on quality businesses and long-term growth through rational decision-making.",
+        "agent_func": duan_agent,
         "type": "analyst",
         "order": 4,
     },

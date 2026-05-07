@@ -185,7 +185,7 @@ def generate_trading_decision(
 ) -> PortfolioManagerOutput:
     """Get decisions from the LLM with deterministic constraints and a minimal prompt."""
 
-    # Deterministic constraints
+    #KEY Deterministic constraints
     allowed_actions_full = compute_allowed_actions(tickers, current_prices, max_shares, portfolio)
 
     # Pre-fill pure holds to avoid sending them to the LLM at all

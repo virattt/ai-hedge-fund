@@ -175,7 +175,7 @@ def risk_management_agent(state: AgentState, agent_id: str = "risk_management_ag
     if state["metadata"]["show_reasoning"]:
         show_agent_reasoning(risk_analysis, "Volatility-Adjusted Risk Management Agent")
 
-    # Add the signal to the analyst_signals list
+    # KEY Add the signal to the analyst_signals list
     state["data"]["analyst_signals"][agent_id] = risk_analysis
 
     return {

@@ -7,5 +7,10 @@
 # agent决策原理
 1. 一个分数，人工定义权重，多元一次方法，输出一个判断结果分数
 
+# 主链路
+- main.py 初始化 state，
+- 多个 analyst agent 并行把自己的 LLM 分析结果写进 state["data"]["analyst_signals"]，
+- risk_management_agent 再补充风控数据，
+- portfolio_manager_agent 汇总这些信号生成交易决策。
 
-
+# - Can you explain what is deterministic vsmodel-driven?

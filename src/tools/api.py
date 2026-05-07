@@ -29,7 +29,19 @@ _cache = get_cache()
 
 
 def _default_financial_metric_payload(ticker: str, report_period: str, period: str) -> dict:
-    """Return a complete FinancialMetrics payload with safe defaults."""
+    """
+    【辅助函数】创建一个完整的财务指标字典模板，所有字段初始化为 None
+
+    作用：为财务指标数据补充缺失的字段，确保数据结构完整
+    应用场景：从本地文件或 API 加载数据时，用此模板填充缺失字段
+
+    参数：
+        ticker: 股票代码 (如 'AAPL')
+        report_period: 报告期间 (如 '2024-12-31')
+        period: 财报周期类型 (如 'ttm'=滚动12个月, 'q'=季度, 'a'=年度)
+
+    返回：包含 40+ 个财务指标字段的字典，所有值初始化为 None
+    """
     return {
         "ticker": ticker,
         "report_period": report_period,
@@ -78,7 +90,24 @@ def _default_financial_metric_payload(ticker: str, report_period: str, period: s
 
 
 def _load_local_aapl_financial_metrics(period: str, end_date: str, limit: int) -> list[FinancialMetrics] | None:
-    """Load local AAPL financial metrics from text file for fast debugging."""
+    """
+    【辅助函数】从本地 JSON 文件加载 AAPL 财务指标数据
+
+    作用：跳过 API 调用，直接从本地文件读取，用于快速调试和离线开发
+    应用场景：
+        - 本地开发/测试时避免频繁 API 调用
+        - 环境变量 AAPL_METRICS_FILE 指向自定义文件位置
+        - 默认路径：project_root/debug/aapl_financial_metrics.txt
+
+    参数：
+        period: 财报周期 (如 'ttm', 'q', 'a')
+        end_date: 截至日期 (如 '2024-12-31')
+        limit: 返回最多多少条记录
+
+    返回：
+        list[FinancialMetrics]: 解析后的财务指标列表
+        None: 文件不存在或解析失败时返回 None
+    """
     project_root = Path(__file__).resolve().parents[2]
     local_file = Path(os.environ.get("AAPL_METRICS_FILE", project_root / "debug" / "aapl_financial_metrics.txt"))
 
@@ -126,20 +155,26 @@ def _load_local_aapl_financial_metrics(period: str, end_date: str, limit: int) -
 
 def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: dict = None, max_retries: int = 3) -> requests.Response:
     """
-    Make an API request with rate limiting handling and moderate backoff.
+    【核心工具函数】发起 HTTP 请求，内置 API 速率限制处理和指数退避重试
 
-    Args:
-        url: The URL to request
-        headers: Headers to include in the request
-        method: HTTP method (GET or POST)
-        json_data: JSON data for POST requests
-        max_retries: Maximum number of retries (default: 3)
+    作用：
+        - 统一处理所有 API 请求，简化调用逻辑
+        - 自动处理 HTTP 429 (Too Many Requests) 错误
+        - 实现线性退避策略 (60s, 90s, 120s, 150s...)
 
-    Returns:
-        requests.Response: The response object
+    参数：
+        url: API 端点 URL
+        headers: HTTP 请求头 (含 X-API-KEY)
+        method: 请求方法 ('GET' 或 'POST')
+        json_data: POST 请求体数据
+        max_retries: 最大重试次数 (默认 3)
 
-    Raises:
-        Exception: If the request fails with a non-429 error
+    返回：requests.Response 对象 (无论成功还是失败都返回)
+
+    重试逻辑：
+        - 收到 429 且未超过重试次数 → 等待后重试
+        - 其他错误 → 直接返回
+        - 最后一次重试失败 → 返回失败响应
     """
     for attempt in range(max_retries + 1):  # +1 for initial attempt
         if method.upper() == "POST":
@@ -159,7 +194,30 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
 
 
 def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> list[Price]:
-    """Fetch price data from cache or API."""
+    """
+    【数据获取函数】获取股票日线价格数据
+
+    作用：
+        - 获取指定时间范围内的股票 OHLCV 数据 (Open, High, Low, Close, Volume)
+        - 优先从缓存读取，缓存未命中则调用 API 获取并缓存
+
+    参数：
+        ticker: 股票代码 (如 'AAPL')
+        start_date: 起始日期 (如 '2024-01-01')
+        end_date: 截至日期 (如 '2024-12-31')
+        api_key: API 密钥 (可选，优先使用环境变量 FINANCIAL_DATASETS_API_KEY)
+
+    返回：list[Price] 按日期升序排列的价格数据
+
+    缓存策略：
+        - 缓存 key: '{ticker}_{start_date}_{end_date}'
+        - 缓存精确匹配 (时间范围完全相同)
+
+    使用场景：
+        - 计算技术指标
+        - 生成价格走势图
+        - 回测和风险计算
+    """
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date}_{end_date}"
 
@@ -201,7 +259,32 @@ def get_financial_metrics(
     limit: int = 10,
     api_key: str = None,
 ) -> list[FinancialMetrics]:
-    """Fetch financial metrics from cache or API."""
+    """
+    【数据获取函数】获取股票财务指标数据 (财务比率、增长率等)
+
+    作用：
+        - 获取 P/E、P/B、ROE、负债率等 40+ 个财务指标
+        - 支持多个时期比对 (滚动年度、季度、年度等)
+        - 优先从本地文件/缓存读取，然后才调用 API
+
+    参数：
+        ticker: 股票代码
+        end_date: 截至日期
+        period: 财报周期类型 ('ttm'=滚动12月, 'q'=季度, 'a'=年度) 默认 'ttm'
+        limit: 返回最多多少期数据 (默认 10)
+        api_key: API 密钥 (可选)
+
+    返回：list[FinancialMetrics] 从新到旧排序的财务指标列表
+
+    优先级：
+        1. 如果是 AAPL → 先尝试从本地文件加载 (_load_local_aapl_financial_metrics)
+        2. 缓存查询 → 命中则直接返回
+        3. API 调用 → 获取新数据并缓存
+
+    使用场景：
+        - Buffett / Graham 等投资分析 agent 的基础数据
+        - 计算企业盈利能力、财务健康度
+    """
     # For quick debugging, allow AAPL metrics to come from a local text file.
     if ticker.upper() == "AAPL":
         if local_metrics := _load_local_aapl_financial_metrics(period=period, end_date=end_date, limit=limit):
@@ -249,7 +332,32 @@ def search_line_items(
     limit: int = 10,
     api_key: str = None,
 ) -> list[LineItem]:
-    """Fetch line items from API."""
+    """
+    【数据获取函数】搜索并获取财务报表的具体科目行项数据
+
+    作用：
+        - 获取财务报表中的原始数据项 (如 net_income, capital_expenditure 等)
+        - 比 get_financial_metrics 更细粒度，直接来自财务报表的核心数据
+
+    参数：
+        ticker: 股票代码
+        line_items: 要查询的财务科目列表，如：
+            ['capital_expenditure', 'depreciation_and_amortization', 'net_income',
+             'outstanding_shares', 'total_assets', 'shareholders_equity', ...]
+        end_date: 截至日期
+        period: 财报周期类型 (默认 'ttm')
+        limit: 返回最多多少期 (默认 10)
+        api_key: API 密钥
+
+    返回：list[LineItem] 指定科目的历史数据列表
+
+    API 端点：POST https://api.financialdatasets.ai/financials/search/line-items
+
+    使用场景：
+        - Warren Buffett agent 计算 ROE、负债率、自由现金流等
+        - Fundamentals agent 分析公司基本面
+        - 用于深度价值投资分析
+    """
     # If not in cache or insufficient data, fetch from API
     headers = {}
     financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
@@ -290,7 +398,35 @@ def get_insider_trades(
     limit: int = 1000,
     api_key: str = None,
 ) -> list[InsiderTrade]:
-    """Fetch insider trades from cache or API."""
+    """
+    【数据获取函数】获取公司内部人员交易记录
+
+    作用：
+        - 获取高管、董事等内部人士的买卖记录
+        - 用于判断管理层对公司前景的真实信心
+        - 分页获取，支持时间范围查询
+
+    参数：
+        ticker: 股票代码
+        end_date: 截至日期
+        start_date: 起始日期 (可选，如果不指定则不设下界)
+        limit: 单页返回最多多少条 (默认 1000)
+        api_key: API 密钥
+
+    返回：list[InsiderTrade] 内部交易记录列表
+
+    分页逻辑：
+        - 从 end_date 开始向前翻页
+        - 直到达到 start_date 或无更多数据
+        - 自动合并所有页的数据
+
+    缓存策略：
+        - 缓存 key: '{ticker}_{start_date or none}_{end_date}_{limit}'
+
+    使用场景：
+        - 情感分析 agent (Sentiment agent) 检测内部人士信心
+        - 评估管理层对公司的态度
+    """
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
 
@@ -356,7 +492,34 @@ def get_company_news(
     limit: int = 1000,
     api_key: str = None,
 ) -> list[CompanyNews]:
-    """Fetch company news from cache or API."""
+    """
+    【数据获取函数】获取公司相关的新闻报道
+
+    作用：
+        - 获取新闻标题、发布日期等信息
+        - 用于情感分析和市场反应评估
+        - 支持时间范围查询和分页
+
+    参数：
+        ticker: 股票代码
+        end_date: 截至日期
+        start_date: 起始日期 (可选)
+        limit: 单页最多返回条数 (默认 1000)
+        api_key: API 密钥
+
+    返回：list[CompanyNews] 新闻记录列表
+
+    分页逻辑：
+        - 同 get_insider_trades，从新到旧翻页
+        - 自动合并所有页数据
+
+    缓存策略：
+        - 缓存 key: '{ticker}_{start_date or none}_{end_date}_{limit}'
+
+    使用场景：
+        - Sentiment agent 进行新闻情感分析
+        - 评估市场对公司的态度变化
+    """
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
 
@@ -420,7 +583,35 @@ def get_market_cap(
     end_date: str,
     api_key: str = None,
 ) -> float | None:
-    """Fetch market cap from the API."""
+    """
+    【数据获取函数】获取股票当前市值
+
+    作用：
+        - 获取股票的当前市值（企业市值 = 股价 × 流通股数）
+        - 用于计算 P/E、P/B 等相对估值指标
+        - 判断企业规模和投资价值
+
+    参数：
+        ticker: 股票代码
+        end_date: 截至日期 (如果是今天则调用实时 API，否则从财务指标获取)
+        api_key: API 密钥
+
+    返回：float | None
+        - 市值（以百万美元计）
+        - None: 如果无法获取数据
+
+    两种查询方式：
+        1. 如果 end_date 是今天
+           → 调用 /company/facts 接口获取实时市值
+        2. 如果 end_date 是历史日期
+           → 从 get_financial_metrics 获取历史市值
+
+    缓存：间接利用 get_financial_metrics 的缓存
+
+    使用场景：
+        - Buffett agent 计算 P/E、P/B 估值倍数
+        - 判断企业规模和 margin of safety (安全边际)
+    """
     # Check if end_date is today
     if end_date == datetime.datetime.now().strftime("%Y-%m-%d"):
         # Get the market cap from company facts API
@@ -452,7 +643,34 @@ def get_market_cap(
 
 
 def prices_to_df(prices: list[Price]) -> pd.DataFrame:
-    """Convert prices to a DataFrame."""
+    """
+    【数据处理工具函数】将价格数据列表转换为 Pandas DataFrame
+
+    作用：
+        - 将 API 返回的价格数据统一转换为 DataFrame 格式
+        - 标准化列名和数据类型
+        - 方便后续的技术分析和时间序列操作
+
+    参数：
+        prices: list[Price] 价格数据对象列表
+
+    返回：pd.DataFrame
+        - index: Date （日期，从旧到新升序）
+        - 列: open, close, high, low, volume （所有列为 float）
+        - 数据已排序，可直接用于技术分析
+
+    处理步骤：
+        1. 将 Price 对象序列化为字典列表
+        2. 创建 DataFrame
+        3. 解析 time 列为 Date 并设为 index
+        4. 清理数据类型（确保数值列为 float）
+        5. 按日期升序排序
+
+    使用场景：
+        - 计算技术指标 (MA, RSI, Bollinger Bands 等)
+        - 绘制股价走势图
+        - 时间序列分析
+    """
     df = pd.DataFrame([p.model_dump() for p in prices])
     df["Date"] = pd.to_datetime(df["time"])
     df.set_index("Date", inplace=True)
@@ -463,7 +681,35 @@ def prices_to_df(prices: list[Price]) -> pd.DataFrame:
     return df
 
 
-# Update the get_price_data function to use the new functions
 def get_price_data(ticker: str, start_date: str, end_date: str, api_key: str = None) -> pd.DataFrame:
+    """
+    【便利函数】获取价格数据并转换为 DataFrame
+
+    作用：
+        - 一站式获取股票价格数据的 DataFrame 形式
+        - 简化调用者代码（无需分别调用 get_prices 和 prices_to_df）
+
+    参数：
+        ticker: 股票代码
+        start_date: 起始日期
+        end_date: 截至日期
+        api_key: API 密钥
+
+    返回：pd.DataFrame (同 prices_to_df 返回格式)
+        - index: Date
+        - 列: open, close, high, low, volume
+
+    内部流程：
+        1. 调用 get_prices() 从缓存/API 获取原始价格数据
+        2. 调用 prices_to_df() 转换为 DataFrame
+
+    使用场景：
+        - 任何需要价格数据的地方（技术分析、风险计算等）
+        - 是对外的主要接口，而不是直接调用 get_prices
+
+    注意：
+        - 缓存和重试逻辑由 get_prices 负责
+        - 此函数只负责格式转换
+    """
     prices = get_prices(ticker, start_date, end_date, api_key=api_key)
     return prices_to_df(prices)
