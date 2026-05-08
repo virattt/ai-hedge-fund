@@ -2,9 +2,40 @@
 
 import json
 from pydantic import BaseModel
+from langchain_core.messages import SystemMessage
 from src.llm.models import get_model, get_model_info
 from src.utils.progress import progress
 from src.graph.state import AgentState
+
+
+def inject_language_into_prompt(prompt, language: str):
+    """
+    Append a language instruction to the system message in a LangChain PromptValue.
+    Returns the modified message list, or the original prompt unchanged if language
+    is English / empty (the default) or if the prompt cannot be parsed.
+    """
+    if not language or language.lower() == "english":
+        return prompt
+
+    lang_note = (
+        f"\n\nIMPORTANT: You MUST respond entirely in {language}. "
+        f"All analysis, reasoning, and output text must be written in {language}."
+    )
+    try:
+        messages = prompt.to_messages()
+        result = []
+        injected = False
+        for msg in messages:
+            if msg.type == "system" and not injected:
+                result.append(SystemMessage(content=msg.content + lang_note))
+                injected = True
+            else:
+                result.append(msg)
+        if not injected:
+            result.insert(0, SystemMessage(content=lang_note.strip()))
+        return result
+    except Exception:
+        return prompt
 
 
 def call_llm(
@@ -48,6 +79,10 @@ def call_llm(
     model_info = get_model_info(model_name, model_provider)
     llm = get_model(model_name, model_provider, api_keys)
 
+    # Inject language instruction into the prompt if a non-English language is selected
+    language = state.get("metadata", {}).get("language", "English") if state else "English"
+    prompt = inject_language_into_prompt(prompt, language)
+
     # For non-JSON support models, we can use structured output
     if not (model_info and not model_info.has_json_mode()):
         llm = llm.with_structured_output(
@@ -70,12 +105,20 @@ def call_llm(
                 return result
 
         except Exception as e:
+            # Truncate long error messages for display (e.g. full HTTP response bodies)
+            error_summary = str(e)
+            if len(error_summary) > 120:
+                error_summary = error_summary[:120] + "..."
+
             if agent_name:
-                progress.update_status(agent_name, None, f"Error - retry {attempt + 1}/{max_retries}")
+                if attempt < max_retries - 1:
+                    progress.update_status(agent_name, None, f"Retry {attempt + 1}/{max_retries}: {error_summary}")
+                else:
+                    progress.update_status(agent_name, None, f"Failed after {max_retries} retries: {error_summary}")
+
+            print(f"[{agent_name or 'LLM'}] Attempt {attempt + 1}/{max_retries} failed: {e}")
 
             if attempt == max_retries - 1:
-                print(f"Error in LLM call after {max_retries} attempts: {e}")
-                # Use default_factory if provided, otherwise create a basic default
                 if default_factory:
                     return default_factory()
                 return create_default_response(pydantic_model)

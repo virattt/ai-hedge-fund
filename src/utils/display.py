@@ -3,6 +3,61 @@ from tabulate import tabulate
 from .analysts import ANALYST_ORDER
 import os
 import json
+import unicodedata
+import tabulate as _tabulate_module
+
+# Enable wide-character (CJK) support in tabulate so table borders align correctly
+try:
+    _tabulate_module.WIDE_CHARS_MODE = True
+except AttributeError:
+    pass
+
+
+def _display_width(s: str) -> int:
+    """Return the visual terminal column-width of a string.
+
+    CJK 全角字符（W / F 类型）占 2 列，其余占 1 列。
+    ANSI 转义序列（colorama 颜色）不占宽度，直接跳过。
+    """
+    # Strip ANSI escape codes before measuring
+    import re
+    plain = re.sub(r'\x1b\[[0-9;]*m', '', s)
+    width = 0
+    for ch in plain:
+        eaw = unicodedata.east_asian_width(ch)
+        width += 2 if eaw in ('W', 'F') else 1
+    return width
+
+
+def _wrap_text(text: str, max_width: int = 60) -> str:
+    """Wrap text to *max_width* terminal columns, CJK-aware.
+
+    Preserves existing newlines (paragraph breaks) and handles
+    mixed CJK / ASCII content correctly.
+    """
+    result_lines = []
+    for paragraph in text.split('\n'):
+        words = paragraph.split()
+        if not words:
+            result_lines.append('')
+            continue
+        current_line = ''
+        current_width = 0
+        for word in words:
+            word_width = _display_width(word)
+            if current_width == 0:
+                current_line = word
+                current_width = word_width
+            elif current_width + 1 + word_width <= max_width:
+                current_line += ' ' + word
+                current_width += 1 + word_width
+            else:
+                result_lines.append(current_line)
+                current_line = word
+                current_width = word_width
+        if current_line:
+            result_lines.append(current_line)
+    return '\n'.join(result_lines)
 
 
 def sort_agent_signals(signals):
@@ -67,24 +122,7 @@ def print_trading_output(result: dict) -> None:
                     # Convert any other type to string
                     reasoning_str = str(reasoning)
                 
-                # Wrap long reasoning text to make it more readable
-                wrapped_reasoning = ""
-                current_line = ""
-                # Use a fixed width of 60 characters to match the table column width
-                max_line_length = 60
-                for word in reasoning_str.split():
-                    if len(current_line) + len(word) + 1 > max_line_length:
-                        wrapped_reasoning += current_line + "\n"
-                        current_line = word
-                    else:
-                        if current_line:
-                            current_line += " " + word
-                        else:
-                            current_line = word
-                if current_line:
-                    wrapped_reasoning += current_line
-                
-                reasoning_str = wrapped_reasoning
+                reasoning_str = _wrap_text(reasoning_str)
 
             table_data.append(
                 [
@@ -120,23 +158,7 @@ def print_trading_output(result: dict) -> None:
 
         # Get reasoning and format it
         reasoning = decision.get("reasoning", "")
-        # Wrap long reasoning text to make it more readable
-        wrapped_reasoning = ""
-        if reasoning:
-            current_line = ""
-            # Use a fixed width of 60 characters to match the table column width
-            max_line_length = 60
-            for word in reasoning.split():
-                if len(current_line) + len(word) + 1 > max_line_length:
-                    wrapped_reasoning += current_line + "\n"
-                    current_line = word
-                else:
-                    if current_line:
-                        current_line += " " + word
-                    else:
-                        current_line = word
-            if current_line:
-                wrapped_reasoning += current_line
+        wrapped_reasoning = _wrap_text(reasoning) if reasoning else ""
 
         decision_data = [
             ["Action", f"{action_color}{action}{Style.RESET_ALL}"],
@@ -233,25 +255,8 @@ def print_trading_output(result: dict) -> None:
             # Convert any other type to string
             reasoning_str = str(portfolio_manager_reasoning)
             
-        # Wrap long reasoning text to make it more readable
-        wrapped_reasoning = ""
-        current_line = ""
-        # Use a fixed width of 60 characters to match the table column width
-        max_line_length = 60
-        for word in reasoning_str.split():
-            if len(current_line) + len(word) + 1 > max_line_length:
-                wrapped_reasoning += current_line + "\n"
-                current_line = word
-            else:
-                if current_line:
-                    current_line += " " + word
-                else:
-                    current_line = word
-        if current_line:
-            wrapped_reasoning += current_line
-            
         print(f"\n{Fore.WHITE}{Style.BRIGHT}Portfolio Strategy:{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}{wrapped_reasoning}{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}{_wrap_text(reasoning_str)}{Style.RESET_ALL}")
 
 
 def print_backtest_results(table_rows: list) -> None:

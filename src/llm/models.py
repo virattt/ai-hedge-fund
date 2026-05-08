@@ -31,6 +31,8 @@ class ModelProvider(str, Enum):
     GIGACHAT = "GigaChat"
     AZURE_OPENAI = "Azure OpenAI"
     XAI = "xAI"
+    TENCENT_CODING_PLAN = "TencentCodingPlan"
+    TENCENT_MAAS = "TencentMaas"
 
 
 class LLMModel(BaseModel):
@@ -50,6 +52,11 @@ class LLMModel(BaseModel):
 
     def has_json_mode(self) -> bool:
         """Check if the model supports JSON mode"""
+        # TencentMaaS / TencentCodingPlan use full OpenAI-compatible protocol
+        # — they support JSON mode regardless of the underlying model name.
+        if self.provider in (ModelProvider.TENCENT_MAAS, ModelProvider.TENCENT_CODING_PLAN):
+            return True
+        # The official DeepSeek API and Gemini don't reliably support JSON mode
         if self.is_deepseek() or self.is_gemini():
             return False
         # Only certain Ollama models support JSON mode
@@ -61,8 +68,8 @@ class LLMModel(BaseModel):
         return True
 
     def is_deepseek(self) -> bool:
-        """Check if the model is a DeepSeek model"""
-        return self.model_name.startswith("deepseek")
+        """Check if the model is a DeepSeek model (official DeepSeek API)"""
+        return self.model_name.startswith("deepseek") and self.provider == ModelProvider.DEEPSEEK
 
     def is_kimi(self) -> bool:
         """Check if the model is a Kimi (Moonshot) model"""
@@ -75,6 +82,14 @@ class LLMModel(BaseModel):
     def is_ollama(self) -> bool:
         """Check if the model is an Ollama model"""
         return self.provider == ModelProvider.OLLAMA
+
+    def is_tencent_coding_plan(self) -> bool:
+        """Check if the model is a Tencent Coding Plan model"""
+        return self.provider == ModelProvider.TENCENT_CODING_PLAN
+
+    def is_tencent_maas(self) -> bool:
+        """Check if the model is a Tencent TokenHub MaaS model"""
+        return self.provider == ModelProvider.TENCENT_MAAS
 
 
 # Load models from JSON file
@@ -250,6 +265,20 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
             print(f"Azure Deployment Name Error: Please make sure AZURE_OPENAI_DEPLOYMENT_NAME is set in your .env file.")
             raise ValueError("Azure OpenAI deployment name not found.  Please make sure AZURE_OPENAI_DEPLOYMENT_NAME is set in your .env file.")
         return AzureChatOpenAI(azure_endpoint=azure_endpoint, azure_deployment=azure_deployment_name, api_key=api_key, api_version="2024-10-21")
+    elif model_provider == ModelProvider.TENCENT_CODING_PLAN:
+        api_key = (api_keys or {}).get("TENCENT_CODING_API_KEY") or os.getenv("TENCENT_CODING_API_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure TENCENT_CODING_API_KEY is set in your .env file or provided via API keys.")
+            raise ValueError("Tencent Coding Plan API key not found. Please make sure TENCENT_CODING_API_KEY is set in your .env file.")
+        base_url = os.getenv("TENCENT_CODING_BASE_URL", "https://api.lkeap.cloud.tencent.com/coding/v3")
+        return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
+    elif model_provider == ModelProvider.TENCENT_MAAS:
+        api_key = (api_keys or {}).get("TENCENT_MAAS_API_KEY") or os.getenv("TENCENT_MAAS_API_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure TENCENT_MAAS_API_KEY is set in your .env file or provided via API keys.")
+            raise ValueError("Tencent TokenHub MaaS API key not found. Please make sure TENCENT_MAAS_API_KEY is set in your .env file.")
+        base_url = os.getenv("TENCENT_MAAS_BASE_URL", "https://tokenhub.tencentmaas.com/v1")
+        return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
     else:
         raise ValueError(
             f"Unsupported model provider: {model_provider}. "

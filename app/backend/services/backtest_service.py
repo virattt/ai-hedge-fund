@@ -32,6 +32,7 @@ class BacktestService:
         model_name: str = "gpt-4.1",
         model_provider: str = "OpenAI",
         request: dict = {},
+        language: str = "English",
     ):
         """
         Initialize the backtest service.
@@ -55,6 +56,7 @@ class BacktestService:
         self.model_name = model_name
         self.model_provider = model_provider
         self.request = request
+        self.language = language
         self.portfolio_values = []
 
     def execute_trade(self, ticker: str, action: str, quantity: float, current_price: float) -> int:
@@ -373,6 +375,7 @@ class BacktestService:
                     model_name=self.model_name,
                     model_provider=self.model_provider,
                     request=self.request,
+                    language=self.language,
                 )
                 
                 # Parse the decisions from the graph result

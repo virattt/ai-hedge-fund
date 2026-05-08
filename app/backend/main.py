@@ -2,15 +2,23 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 import asyncio
+import os
+from pathlib import Path
+from dotenv import load_dotenv
 
-from app.backend.routes import api_router
-from app.backend.database.connection import engine
-from app.backend.database.models import Base
-from app.backend.services.ollama_service import ollama_service
-
-# Configure logging
+# Explicitly load .env from the project root (two levels above app/backend/)
+_env_path = Path(__file__).parent.parent.parent / ".env"
+load_dotenv(_env_path, override=True)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logger.info(f"Loading .env from: {_env_path} (exists={_env_path.exists()})")
+logger.info(f"TENCENT_MAAS_API_KEY loaded: {bool(os.getenv('TENCENT_MAAS_API_KEY'))}")
+
+from app.backend.routes import api_router
+from app.backend.database.connection import engine, SessionLocal
+from app.backend.database.models import Base
+from app.backend.services.ollama_service import ollama_service
+from app.backend.services.api_key_service import ApiKeyService
 
 app = FastAPI(title="AI Hedge Fund API", description="Backend API for AI Hedge Fund", version="0.1.0")
 
@@ -31,7 +39,16 @@ app.include_router(api_router)
 
 @app.on_event("startup")
 async def startup_event():
-    """Startup event to check Ollama availability."""
+    """Startup event: sync .env API keys to DB, then check Ollama availability."""
+    # Sync .env API key values into the database on first start
+    try:
+        db = SessionLocal()
+        ApiKeyService(db).sync_env_to_db()
+        db.close()
+        logger.info("✓ API keys synced from .env to database")
+    except Exception as e:
+        logger.warning(f"Could not sync API keys from .env: {e}")
+
     try:
         logger.info("Checking Ollama availability...")
         status = await ollama_service.check_ollama_status()
