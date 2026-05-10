@@ -107,15 +107,53 @@ def create_default_response(model_class: type[BaseModel]) -> BaseModel:
 
 
 def extract_json_from_response(content: str) -> dict | None:
-    """Extracts JSON from markdown-formatted response."""
+    """Extracts JSON from a response, handling markdown-wrapped and raw JSON formats."""
     try:
+        # 1. Try markdown code block with ```json
         json_start = content.find("```json")
         if json_start != -1:
-            json_text = content[json_start + 7 :]  # Skip past ```json
+            json_text = content[json_start + 7:]  # Skip past ```json
             json_end = json_text.find("```")
             if json_end != -1:
                 json_text = json_text[:json_end].strip()
-                return json.loads(json_text)
+                try:
+                    return json.loads(json_text)
+                except json.JSONDecodeError:
+                    pass
+
+        # 2. Try markdown code block without json specifier
+        json_start = content.find("```")
+        if json_start != -1:
+            json_text = content[json_start + 3:]
+            json_end = json_text.find("```")
+            if json_end != -1:
+                json_text = json_text[:json_end].strip()
+                try:
+                    return json.loads(json_text)
+                except json.JSONDecodeError:
+                    pass
+
+        # 3. Try to parse the entire content as JSON
+        try:
+            return json.loads(content.strip())
+        except json.JSONDecodeError:
+            pass
+
+        # 4. Find the first top-level JSON object by matching braces
+        brace_start = content.find("{")
+        if brace_start != -1:
+            depth = 0
+            for i, char in enumerate(content[brace_start:], brace_start):
+                if char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+                    if depth == 0:
+                        try:
+                            return json.loads(content[brace_start:i + 1])
+                        except json.JSONDecodeError:
+                            break
+
     except Exception as e:
         print(f"Error extracting JSON from response: {e}")
     return None

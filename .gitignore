@@ -30,6 +30,7 @@ ENV/
 # IDE
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
 .cursorrules
@@ -54,6 +55,7 @@ node_modules
 
 # Outputs
 outputs/
+/scratchpad/
 
 # Database files (users will have their own local databases)
 *.db

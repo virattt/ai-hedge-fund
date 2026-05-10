@@ -22,6 +22,7 @@ class ModelProvider(str, Enum):
     DEEPSEEK = "DeepSeek"
     GOOGLE = "Google"
     GROQ = "Groq"
+    KIMI = "Kimi"
     META = "Meta"
     MISTRAL = "Mistral"
     OPENAI = "OpenAI"
@@ -62,6 +63,10 @@ class LLMModel(BaseModel):
     def is_deepseek(self) -> bool:
         """Check if the model is a DeepSeek model"""
         return self.model_name.startswith("deepseek")
+
+    def is_kimi(self) -> bool:
+        """Check if the model is a Kimi (Moonshot) model"""
+        return self.provider == ModelProvider.KIMI
 
     def is_gemini(self) -> bool:
         """Check if the model is a Gemini model"""
@@ -199,6 +204,16 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
                 }
             }
         )
+    elif model_provider == ModelProvider.KIMI:
+        api_key = (api_keys or {}).get("MOONSHOT_API_KEY") or os.getenv("MOONSHOT_API_KEY") \
+            or (api_keys or {}).get("KIMI_API_KEY") or os.getenv("KIMI_API_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure MOONSHOT_API_KEY (or KIMI_API_KEY) is set in your .env file or provided via API keys.")
+            raise ValueError("Kimi API key not found. Please make sure MOONSHOT_API_KEY (or KIMI_API_KEY) is set in your .env file or provided via API keys.")
+        # Kimi exposes an OpenAI-compatible endpoint. Default to the international host;
+        # users in mainland China can override via MOONSHOT_BASE_URL=https://api.moonshot.cn/v1.
+        base_url = os.getenv("MOONSHOT_BASE_URL") or os.getenv("KIMI_BASE_URL") or "https://api.moonshot.ai/v1"
+        return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
     elif model_provider == ModelProvider.XAI:
         api_key = (api_keys or {}).get("XAI_API_KEY") or os.getenv("XAI_API_KEY")
         if not api_key:
