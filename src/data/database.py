@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, Float, Integer, String, Text, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
@@ -70,7 +70,7 @@ def get_engine():
 
 
 def _now() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def write_portfolio_snapshot(
