@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from typing_extensions import Literal
 from src.utils.progress import progress
 from src.utils.llm import call_llm
+from src.data.database import write_decision
 
 
 class PortfolioDecision(BaseModel):
@@ -62,6 +63,14 @@ def portfolio_management_agent(state: AgentState, agent_id: str = "portfolio_man
                 if sig is not None and conf is not None:
                     ticker_signals[agent] = {"sig": sig, "conf": conf}
         signals_by_ticker[ticker] = ticker_signals
+
+    run_id = state["data"].get("run_id", "unknown")
+    end_date = state["data"].get("end_date", "unknown")
+    for ticker, agent_signals in signals_by_ticker.items():
+        for agent_name, payload in agent_signals.items():
+            sig = payload.get("sig") or payload.get("signal", "neutral")
+            conf = float(payload.get("conf") or payload.get("confidence") or 0)
+            write_decision(run_id, end_date, ticker, agent_name, sig, conf, "")
 
     state["data"]["current_prices"] = current_prices
 
