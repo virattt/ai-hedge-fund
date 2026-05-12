@@ -77,10 +77,9 @@ def test_scale_quantity_zero_quantity():
     assert scale_quantity_by_confidence(0, 80) == 0
 
 
-def test_scale_quantity_low_confidence_floors_at_ten_pct():
-    # 0 confidence → minimum 10% of quantity → floor at 1
+def test_scale_quantity_zero_confidence_returns_zero():
     result = scale_quantity_by_confidence(10, 0)
-    assert result == 0  # 0 confidence → returns 0
+    assert result == 0
 
 
 def test_scale_quantity_proportional():
