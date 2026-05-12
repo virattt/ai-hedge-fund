@@ -183,6 +183,49 @@ def _compact_signals(signals_by_ticker: dict[str, dict]) -> dict[str, dict]:
     return out
 
 
+def aggregate_signals(signals: dict[str, dict]) -> dict:
+    """
+    Confidence-weighted aggregation of analyst signals.
+    Each agent: direction (bullish=+1, neutral=0, bearish=-1) × confidence/100.
+    Mean of weighted scores → signal + confidence.
+    Returns: {"signal": str, "confidence": int, "weighted_score": float}
+    """
+    if not signals:
+        return {"signal": "neutral", "confidence": 0, "weighted_score": 0.0}
+
+    _direction = {"bullish": 1, "neutral": 0, "bearish": -1}
+
+    weighted_sum = 0.0
+    for payload in signals.values():
+        sig = (payload.get("sig") or payload.get("signal") or "neutral").lower()
+        conf = float(payload.get("conf") or payload.get("confidence") or 0)
+        weighted_sum += _direction.get(sig, 0) * (conf / 100.0)
+
+    n = len(signals)
+    score = weighted_sum / n  # normalised to [-1, +1]
+
+    THRESHOLD = 0.15
+    if score > THRESHOLD:
+        signal = "bullish"
+        confidence = int(min(abs(weighted_sum) * 100, 100))
+    elif score < -THRESHOLD:
+        signal = "bearish"
+        confidence = int(min(abs(weighted_sum) * 100, 100))
+    else:
+        signal = "neutral"
+        confidence = int((1.0 - abs(score)) * 100)
+
+    return {"signal": signal, "confidence": confidence, "weighted_score": round(score, 4)}
+
+
+def scale_quantity_by_confidence(quantity: int, aggregate_confidence: int) -> int:
+    """Scale max quantity proportionally to aggregate confidence (0 confidence → 0 shares)."""
+    if quantity == 0 or aggregate_confidence == 0:
+        return 0
+    factor = aggregate_confidence / 100.0
+    return max(1, int(quantity * factor))
+
+
 def generate_trading_decision(
         tickers: list[str],
         signals_by_ticker: dict[str, dict],
@@ -215,7 +258,25 @@ def generate_trading_decision(
 
     # Build compact payloads only for tickers sent to LLM
     compact_signals = _compact_signals({t: signals_by_ticker.get(t, {}) for t in tickers_for_llm})
-    compact_allowed = {t: allowed_actions_full[t] for t in tickers_for_llm}
+
+    # Build confidence-weighted aggregates per ticker
+    aggregates = {
+        t: aggregate_signals(compact_signals.get(t, {}))
+        for t in tickers_for_llm
+    }
+
+    scaled_max_shares = {
+        t: scale_quantity_by_confidence(
+            max_shares.get(t, 0),
+            aggregates.get(t, {}).get("confidence", 100),
+        )
+        for t in tickers_for_llm
+    }
+
+    compact_allowed = {
+        t: compute_allowed_actions([t], current_prices, {t: scaled_max_shares[t]}, portfolio)[t]
+        for t in tickers_for_llm
+    }
 
     # Minimal prompt template
     template = ChatPromptTemplate.from_messages(
@@ -230,6 +291,7 @@ def generate_trading_decision(
             (
                 "human",
                 "Signals:\n{signals}\n\n"
+                "Weighted aggregate (confidence-weighted summary):\n{aggregates}\n\n"
                 "Allowed:\n{allowed}\n\n"
                 "Format:\n"
                 "{{\n"
@@ -243,6 +305,7 @@ def generate_trading_decision(
 
     prompt_data = {
         "signals": json.dumps(compact_signals, separators=(",", ":"), ensure_ascii=False),
+        "aggregates": json.dumps(aggregates, separators=(",", ":"), ensure_ascii=False),
         "allowed": json.dumps(compact_allowed, separators=(",", ":"), ensure_ascii=False),
     }
     prompt = template.invoke(prompt_data)
