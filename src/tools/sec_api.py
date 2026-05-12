@@ -100,22 +100,32 @@ def fetch_filing_text(cik: str, accession: str, primary_document: str) -> str:
 
 
 def _extract_section(
-    text: str, item_pattern: str, next_item_pattern: str, max_chars: int = 8000
+    text: str, item_pattern: str, next_item_pattern: str, max_chars: int = 20_000
 ) -> str:
-    """Extract text between two heading patterns (case-insensitive)."""
-    start_match = re.search(item_pattern, text, re.IGNORECASE)
-    if not start_match:
+    """
+    Extract text between two heading patterns (case-insensitive).
+
+    Scans ALL occurrences of item_pattern and returns the longest match —
+    this skips table-of-contents entries (which are a single short line)
+    and finds the actual section body further in the document.
+    """
+    matches = list(re.finditer(item_pattern, text, re.IGNORECASE))
+    if not matches:
         return ""
-    start = start_match.start()
-    end_match = re.search(next_item_pattern, text[start + 1:], re.IGNORECASE)
-    if end_match:
-        end = start + 1 + end_match.start()
-    else:
-        end = start + max_chars
-    return text[start:end][:max_chars]
+
+    best = ""
+    for match in matches:
+        start = match.start()
+        rest = text[start + 1:]
+        end_match = re.search(next_item_pattern, rest, re.IGNORECASE)
+        section = (rest[: end_match.start()] if end_match else rest)[:max_chars]
+        if len(section) > len(best):
+            best = section
+
+    return best
 
 
-_SECTION_CHARS = 8_000
+_SECTION_CHARS = 20_000
 
 
 def get_filing_excerpts(ticker: str) -> dict[str, str]:
