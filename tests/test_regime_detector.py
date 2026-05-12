@@ -57,6 +57,11 @@ def test_regime_multiplier_bull():
     assert regime_position_multiplier("Bull") == 1.0
 
 
+def test_regime_multiplier_bear():
+    from src.agents.regime_detector import regime_position_multiplier
+    assert regime_position_multiplier("Bear") == 0.70
+
+
 def test_regime_multiplier_risk_off():
     from src.agents.regime_detector import regime_position_multiplier
     assert regime_position_multiplier("Risk-Off") == 0.40
