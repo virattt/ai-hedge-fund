@@ -71,7 +71,6 @@ class LineItem(BaseModel):
     period: str
     currency: str
 
-    # Allow additional fields dynamically
     model_config = {"extra": "allow"}
 
 
