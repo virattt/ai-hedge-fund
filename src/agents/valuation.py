@@ -81,12 +81,18 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
             wc_change = 0  # Default to 0 if working capital data is unavailable
 
         # Owner Earnings
+        # Cap earnings growth to prevent absurd valuations — companies
+        # transitioning from loss to profit can report 500%+ growth that
+        # causes the terminal-value formula to explode (see issue #431).
+        capped_earnings_growth = _clamp_growth_rate(
+            most_recent_metrics.earnings_growth or 0.05
+        )
         owner_val = calculate_owner_earnings_value(
             net_income=li_curr.net_income,
             depreciation=li_curr.depreciation_and_amortization,
             capex=li_curr.capital_expenditure,
             working_capital_change=wc_change,
-            growth_rate=most_recent_metrics.earnings_growth or 0.05,
+            growth_rate=capped_earnings_growth,
         )
 
         # Enhanced Discounted Cash Flow with WACC and scenarios
@@ -130,7 +136,9 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
             market_cap=most_recent_metrics.market_cap,
             net_income=li_curr.net_income,
             price_to_book_ratio=most_recent_metrics.price_to_book_ratio,
-            book_value_growth=most_recent_metrics.book_value_growth or 0.03,
+            book_value_growth=_clamp_growth_rate(
+                most_recent_metrics.book_value_growth or 0.03
+            ),
         )
 
         # ------------------------------------------------------------------
@@ -223,6 +231,20 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
 # Helper Valuation Functions
 #############################
 
+# Maximum growth rate any single valuation model may use.  Even the
+# fastest-growing public companies rarely sustain >25 % FCF / earnings
+# growth for a multi-year DCF projection.  Without this cap, API-reported
+# earnings_growth of 300-500 %+ (common for loss-to-profit transitions)
+# causes terminal-value formulas to produce trillion-dollar outputs.
+_MAX_GROWTH_RATE = 0.25
+
+
+def _clamp_growth_rate(rate: float | None, floor: float = 0.0) -> float:
+    """Clamp a growth rate into [floor, _MAX_GROWTH_RATE]."""
+    if rate is None:
+        return 0.05  # sensible default
+    return max(floor, min(float(rate), _MAX_GROWTH_RATE))
+
 def calculate_owner_earnings_value(
     net_income: float | None,
     depreciation: float | None,
@@ -240,6 +262,9 @@ def calculate_owner_earnings_value(
     owner_earnings = net_income + depreciation - capex - working_capital_change
     if owner_earnings <= 0:
         return 0
+
+    # Defence-in-depth: clamp growth even if the caller forgot.
+    growth_rate = min(growth_rate, _MAX_GROWTH_RATE)
 
     pv = 0.0
     for yr in range(1, num_years + 1):
@@ -266,6 +291,9 @@ def calculate_intrinsic_value(
     """Classic DCF on FCF with constant growth and terminal value."""
     if free_cash_flow is None or free_cash_flow <= 0:
         return 0
+
+    # Defence-in-depth: clamp growth rate.
+    growth_rate = min(growth_rate, _MAX_GROWTH_RATE)
 
     pv = 0.0
     for yr in range(1, num_years + 1):
@@ -464,11 +492,16 @@ def calculate_dcf_scenarios(
     }
     
     results = {}
-    base_revenue_growth = revenue_growth or 0.05
+    # Clamp the base revenue growth before scenario adjustments.
+    base_revenue_growth = _clamp_growth_rate(revenue_growth or 0.05)
     
     for scenario, adjustments in scenarios.items():
         adjusted_revenue_growth = base_revenue_growth * adjustments['growth_adj']
         adjusted_wacc = wacc * adjustments['wacc_adj']
+        
+        # Enforce the WACC floor even after scenario adjustments so the
+        # bull scenario can’t push WACC below the 6 % minimum.
+        adjusted_wacc = max(adjusted_wacc, 0.06)
         
         results[scenario] = calculate_enhanced_dcf_value(
             fcf_history=fcf_history,
