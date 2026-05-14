@@ -17,6 +17,10 @@ dependencies = [
     "langchain-google-genai>=2.0.11",
     "langchain-ollama>=0.2.0",  # added upstream: Ollama local-model support
     "langgraph==0.2.56",
+    # Phase 2: SqliteSaver for the Earnings Reaction Playbook checkpointing.
+    # 2.0.x aligns with langgraph 0.2.56's langgraph-checkpoint>=2.0.4,<3 transitive pin.
+    # Bump in lockstep with ADR-005's LangChain 1.x / LangGraph 0.3.x migration.
+    "langgraph-checkpoint-sqlite>=2.0.0,<3.0.0",
     "pandas>=2.2",
     "numpy>=1.26,<2.0",  # langchain 0.3.0 pins numpy <2.0 (ADR-005; upgrade when LangChain migrates)
     "python-dotenv>=1.0",
