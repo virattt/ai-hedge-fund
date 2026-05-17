@@ -298,6 +298,7 @@ export function Flow({ className = '' }: FlowProps) {
           onInit={onInit}
           colorMode={colorMode}
           proOptions={proOptions}
+          deleteKeyCode={['Delete', 'Backspace']}
         >
           <Background 
             variant={BackgroundVariant.Dots}
