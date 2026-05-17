@@ -20,6 +20,8 @@ from src.agents.mohnish_pabrai import mohnish_pabrai_agent
 from src.agents.nassim_taleb import nassim_taleb_agent
 from src.agents.news_sentiment import news_sentiment_agent
 from src.agents.growth_agent import growth_analyst_agent
+from src.agents.ai_infra_bull import ai_infra_bull_agent
+from src.agents.ai_risk_skeptic import ai_risk_skeptic_agent
 
 # Define analyst configuration - single source of truth
 ANALYST_CONFIG = {
@@ -174,6 +176,22 @@ ANALYST_CONFIG = {
         "agent_func": valuation_analyst_agent,
         "type": "analyst",
         "order": 18,
+    },
+    "ai_infra_bull": {
+        "display_name": "AI Infrastructure Bull",
+        "description": "The Picks-and-Shovels AI Investor",
+        "investing_style": "Focuses on the AI infrastructure capex supercycle — compute, data centers, networking, and power. Values companies with locked-in contracts, expanding margins, and high switching costs (CUDA ecosystem, proprietary silicon). Accepts high multiples when AI revenue mix is accelerating.",
+        "agent_func": ai_infra_bull_agent,
+        "type": "analyst",
+        "order": 19,
+    },
+    "ai_risk_skeptic": {
+        "display_name": "AI Risk Skeptic",
+        "description": "The AI Commoditization Stress-Tester",
+        "investing_style": "Applies Taleb-inspired tail-risk thinking to the AI sector. Core question: if AI commoditises in 3 years, what is this company worth? Bearish on pure-play AI SaaS with no proprietary data moat, hyperscaler-dependent revenue, and hype-driven multiples. Bullish on hardware moats, proprietary data, and vertical AI with regulatory shields.",
+        "agent_func": ai_risk_skeptic_agent,
+        "type": "analyst",
+        "order": 20,
     },
 }
 
