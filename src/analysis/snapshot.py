@@ -104,6 +104,8 @@ class SnapshotReport:
 
     synthesis: str
     data_warnings: list[str] = field(default_factory=list)
+    # Last ~90 trading-day closes (oldest -> newest) for sparkline rendering
+    price_sparkline: list[float] = field(default_factory=list)
 
 
 # ----------------------------------------------------------------------------
@@ -517,6 +519,10 @@ def generate_snapshot(ticker: str) -> SnapshotReport:
         f"Macro tilt ({macro_v.lower()}) reflects S&P 500 200-day trend."
     )
 
+    sparkline = (
+        [float(x) for x in close.tail(90).tolist() if pd.notna(x)] if len(close) else []
+    )
+
     return SnapshotReport(
         ticker=ticker,
         company_name=company_name,
@@ -541,4 +547,5 @@ def generate_snapshot(ticker: str) -> SnapshotReport:
         composite_confidence=comp_conf,
         synthesis=" ".join(synthesis_parts),
         data_warnings=warnings_list,
+        price_sparkline=sparkline,
     )

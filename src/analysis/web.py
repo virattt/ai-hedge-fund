@@ -1,173 +1,209 @@
-"""Local web UI for the snapshot system.
+"""Strategist — local web dashboard for AI hedge fund snapshots.
 
 Run with:
-    poetry run python -m src.analysis.web
-or:
     poetry run snapshot-ui
+or:
+    poetry run python -m src.analysis.web
 
-Opens http://127.0.0.1:8765 in your default browser. Type comma-separated
-tickers in the box, click Analyze, and the deep snapshot (price, fundamentals,
-technicals, analyst consensus, overall verdict) renders for each ticker on
-a single page.
-
-Self-contained: no API keys required, pulls data live via yfinance.
+Opens http://127.0.0.1:8765 in your default browser. Five pages:
+    /                       Home: hero search + presets + recents + watchlists
+    /run?tickers=NVDA,AAPL  Results overview: sortable, filterable table
+    /ticker/{T}?from=...    Single-ticker deep-dive (drill-down)
+    /compare?tickers=...    Side-by-side metric comparison
+    /watchlists, /history   Saved lists & recent searches (localStorage)
+    /api/snapshot/{T}       JSON snapshot
+    /api/snapshots?tickers=  Bulk JSON
 """
 
 from __future__ import annotations
 
 import argparse
-import html
+import dataclasses
 import threading
 import time
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from typing import Optional
 
 import uvicorn
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 
-from src.analysis import HTML_STYLE, generate_snapshot, render_html_body
+from src.analysis import generate_snapshot
+from src.analysis.snapshot import SnapshotReport
+from src.analysis.ui_pages import (
+    compare_page,
+    history_page,
+    home_page,
+    results_overview_page,
+    ticker_detail_page,
+    watchlists_page,
+)
 
-app = FastAPI(title="AI Hedge Fund — Ticker Snapshot UI")
-
-
-_EXTRA_STYLE = """
-.shell { padding: 32px 24px; }
-.brand { font-size: 28px; font-weight: 700; margin-bottom: 6px; }
-.tagline { color: var(--dim); margin-bottom: 24px; }
-form.runner { display: flex; gap: 12px; margin-bottom: 32px; flex-wrap: wrap; }
-form.runner input[type=text] {
-  flex: 1; min-width: 320px; font-size: 16px; padding: 12px 16px;
-  border-radius: 10px; border: 1px solid var(--line); background: var(--panel);
-  color: var(--text); font-family: inherit;
-}
-form.runner button {
-  font-size: 16px; padding: 12px 28px; border-radius: 10px;
-  border: 1px solid var(--buy); background: rgba(30,185,128,0.12);
-  color: var(--buy); font-weight: 700; cursor: pointer;
-}
-form.runner button:hover { background: rgba(30,185,128,0.22); }
-.examples { color: var(--dim); font-size: 13px; margin-top: -16px; margin-bottom: 24px; }
-.examples a { color: var(--dim); margin-right: 12px; text-decoration: underline dotted; }
-.note { color: var(--dim); font-size: 13px; margin-top: 16px; }
-.errors { background: rgba(239,83,80,0.15); border:1px solid rgba(239,83,80,0.4);
-  color: var(--sell); padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; font-size: 14px; }
-.progress { color: var(--hold); margin-bottom: 16px; font-size: 14px; }
-hr.sep { border: none; border-top: 1px dashed var(--line); margin: 32px 0; }
-"""
+app = FastAPI(title="Strategist — AI Hedge Fund Snapshot UI", docs_url=None, redoc_url=None)
 
 
-def _page_shell(content: str, title: str = "Ticker Snapshot") -> str:
-    return f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"/>
-<title>{html.escape(title)}</title>
-<style>{HTML_STYLE}{_EXTRA_STYLE}</style>
-</head>
-<body><div class="container shell">
-<div class="brand">AI Hedge Fund · Ticker Snapshot</div>
-<div class="tagline">Live price · 10 fundamentals · 6 technicals · analyst consensus · composite verdict</div>
-<form class="runner" method="get" action="/run">
-  <input type="text" name="tickers" placeholder="Comma-separated tickers, e.g. NVDA, AAPL, MSFT" autofocus required value="{html.escape(_default_value())}"/>
-  <button type="submit">Analyze</button>
-</form>
-<div class="examples">Try:
-<a href="/run?tickers=NVDA">NVDA</a>
-<a href="/run?tickers=NVDA,MSFT,GOOGL,META,AMZN">Mag 5</a>
-<a href="/run?tickers=AAPL,AVGO,TSM,V,COST">Tier 1B</a>
-<a href="/run?tickers=PLTR,SMCI,CRWD">High-risk</a>
-</div>
-{content}
-</div></body></html>"""
+# --- In-memory snapshot cache ----------------------------------------------
+
+_CACHE: dict[str, tuple[float, SnapshotReport]] = {}
+_CACHE_TTL_SECONDS = 300  # 5 minutes — long enough for navigation, short enough for fresh data
 
 
-_LAST_TICKERS = {"value": ""}
+def _cached(ticker: str) -> SnapshotReport:
+    """Fetch a snapshot, reusing recent results within the TTL."""
+    ticker = ticker.upper().strip()
+    now = time.time()
+    if ticker in _CACHE:
+        ts, rep = _CACHE[ticker]
+        if now - ts < _CACHE_TTL_SECONDS:
+            return rep
+    rep = generate_snapshot(ticker)
+    _CACHE[ticker] = (now, rep)
+    return rep
 
 
-def _default_value() -> str:
-    return _LAST_TICKERS["value"]
+def _parse_tickers(raw: str) -> list[str]:
+    """Parse a comma/semicolon/space-separated ticker string into a clean list."""
+    parts = [t.strip().upper() for t in raw.replace(";", ",").replace(" ", ",").split(",") if t.strip()]
+    seen: set[str] = set()
+    out: list[str] = []
+    for t in parts:
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out
+
+
+def _fetch_many(tickers: list[str]) -> tuple[list[SnapshotReport], list[tuple[str, str]], float]:
+    """Fetch snapshots for many tickers in parallel. Returns (reports, errors, elapsed_seconds)."""
+    started = time.perf_counter()
+    results: dict[str, tuple[Optional[SnapshotReport], Optional[str]]] = {}
+
+    def _one(t: str) -> tuple[str, Optional[SnapshotReport], Optional[str]]:
+        try:
+            return t, _cached(t), None
+        except Exception as exc:  # pragma: no cover — yfinance failure surface
+            return t, None, f"{type(exc).__name__}: {exc}"
+
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        for t, rep, err in ex.map(_one, tickers):
+            results[t] = (rep, err)
+
+    reports: list[SnapshotReport] = []
+    errors: list[tuple[str, str]] = []
+    for t in tickers:
+        rep, err = results[t]
+        if err:
+            errors.append((t, err))
+        elif rep is not None:
+            reports.append(rep)
+    elapsed = time.perf_counter() - started
+    return reports, errors, elapsed
+
+
+def _dataclass_to_dict(obj):
+    if dataclasses.is_dataclass(obj):
+        return {k: _dataclass_to_dict(v) for k, v in dataclasses.asdict(obj).items()}
+    if isinstance(obj, (list, tuple)):
+        return [_dataclass_to_dict(x) for x in obj]
+    if isinstance(obj, dict):
+        return {k: _dataclass_to_dict(v) for k, v in obj.items()}
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    return obj
+
+
+# --- HTML page routes -------------------------------------------------------
 
 
 @app.get("/", response_class=HTMLResponse)
-async def home(request: Request) -> HTMLResponse:
-    body = '<div class="note">Enter tickers above. Each snapshot takes ~3–5 seconds; multiple tickers run in parallel (max 5 at a time).</div>'
-    return HTMLResponse(_page_shell(body))
+async def home() -> HTMLResponse:
+    return HTMLResponse(home_page())
+
+
+@app.get("/watchlists", response_class=HTMLResponse)
+async def watchlists() -> HTMLResponse:
+    return HTMLResponse(watchlists_page())
+
+
+@app.get("/history", response_class=HTMLResponse)
+async def history() -> HTMLResponse:
+    return HTMLResponse(history_page())
 
 
 @app.get("/run", response_class=HTMLResponse)
 async def run(tickers: str = "") -> HTMLResponse:
-    raw = [t.strip().upper() for t in tickers.replace(";", ",").split(",") if t.strip()]
-    # de-dup while preserving order
-    seen: set[str] = set()
-    cleaned: list[str] = []
-    for t in raw:
-        if t not in seen:
-            seen.add(t)
-            cleaned.append(t)
-    _LAST_TICKERS["value"] = ", ".join(cleaned)
+    parsed = _parse_tickers(tickers)
+    if not parsed:
+        return HTMLResponse(home_page())
+    reports, errors, elapsed = _fetch_many(parsed)
+    return HTMLResponse(results_overview_page(reports, errors, elapsed, parsed))
 
-    if not cleaned:
-        return HTMLResponse(_page_shell('<div class="errors">No tickers provided.</div>'))
 
-    started = time.perf_counter()
-    bodies: list[str] = []
-    errors: list[tuple[str, str]] = []
+@app.get("/ticker/{ticker}", response_class=HTMLResponse)
+async def ticker_detail(ticker: str, request: Request) -> HTMLResponse:
+    # `from` is a reserved keyword in Python, so we pull it out of query_params directly.
+    raw_from = request.query_params.get("from", "") or ""
+    try:
+        rep = _cached(ticker)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Snapshot failed: {exc}")
+    return HTMLResponse(ticker_detail_page(rep, _parse_tickers(raw_from)))
 
-    # Parallel fetch, bounded to 5 concurrent yfinance calls
-    def _one(t: str) -> tuple[str, str | None, str | None]:
-        try:
-            report = generate_snapshot(t)
-            return t, render_html_body(report), None
-        except Exception as exc:  # pragma: no cover
-            return t, None, f"{type(exc).__name__}: {exc}"
 
-    with ThreadPoolExecutor(max_workers=5) as ex:
-        results = list(ex.map(_one, cleaned))
+@app.get("/compare", response_class=HTMLResponse)
+async def compare(tickers: str = "") -> HTMLResponse:
+    parsed = _parse_tickers(tickers)
+    if not parsed:
+        return HTMLResponse(compare_page([], []))
+    reports, errors, _elapsed = _fetch_many(parsed)
+    return HTMLResponse(compare_page(reports, errors))
 
-    # Preserve user-entered order
-    by_ticker = {t: (body, err) for t, body, err in results}
-    for t in cleaned:
-        body, err = by_ticker[t]
-        if err:
-            errors.append((t, err))
-        else:
-            bodies.append(body)
 
-    elapsed = time.perf_counter() - started
-    header = (
-        f'<div class="progress">Rendered {len(bodies)} of {len(cleaned)} tickers in {elapsed:.1f}s</div>'
+# --- JSON API ---------------------------------------------------------------
+
+
+@app.get("/api/snapshot/{ticker}")
+async def api_snapshot(ticker: str):
+    try:
+        rep = _cached(ticker)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Snapshot failed: {exc}")
+    return JSONResponse(_dataclass_to_dict(rep))
+
+
+@app.get("/api/snapshots")
+async def api_snapshots(tickers: str = ""):
+    parsed = _parse_tickers(tickers)
+    if not parsed:
+        return JSONResponse({"reports": [], "errors": [], "elapsed": 0})
+    reports, errors, elapsed = _fetch_many(parsed)
+    return JSONResponse(
+        {
+            "reports": [_dataclass_to_dict(r) for r in reports],
+            "errors": [{"ticker": t, "message": m} for t, m in errors],
+            "elapsed": elapsed,
+        }
     )
-    err_block = ""
-    if errors:
-        items = "".join(
-            f"<li><b>{html.escape(t)}</b>: {html.escape(msg)}</li>" for t, msg in errors
-        )
-        err_block = f'<div class="errors"><b>Errors:</b><ul>{items}</ul></div>'
-
-    joined = '<hr class="sep"/>'.join(bodies)
-    return HTMLResponse(_page_shell(header + err_block + joined))
 
 
-# --- entry point -----------------------------------------------------------
+# --- Entry point -----------------------------------------------------------
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Local Ticker Snapshot UI")
+    parser = argparse.ArgumentParser(description="Strategist — local snapshot UI")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--no-open", action="store_true", help="Don't auto-open the browser")
-    parser.add_argument("--tickers", default=None, help="Pre-fill tickers in the form")
+    parser.add_argument("--tickers", default=None, help="Pre-run analysis on these tickers (comma-separated)")
     args = parser.parse_args()
-
-    if args.tickers:
-        _LAST_TICKERS["value"] = args.tickers
 
     url = f"http://{args.host}:{args.port}/"
     if args.tickers:
-        url += f"run?tickers={args.tickers.replace(' ', '')}"
+        url = f"http://{args.host}:{args.port}/run?tickers={args.tickers.replace(' ', '')}"
 
     if not args.no_open:
-        # Open browser shortly after the server starts
         def _open():
             time.sleep(1.0)
             try:
@@ -177,7 +213,10 @@ def main() -> None:
 
         threading.Thread(target=_open, daemon=True).start()
 
-    print(f"[snapshot-ui] starting at {url}")
+    print(f"[strategist] starting at {url}")
+    print(f"[strategist]   home:        http://{args.host}:{args.port}/")
+    print(f"[strategist]   compare:     http://{args.host}:{args.port}/compare?tickers=NVDA,AAPL")
+    print(f"[strategist]   watchlists:  http://{args.host}:{args.port}/watchlists")
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 
 
