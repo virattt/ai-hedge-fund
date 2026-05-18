@@ -13,6 +13,13 @@ Public entry points:
 """
 
 from src.analysis.snapshot import generate_snapshot, SnapshotReport
-from src.analysis.renderers import render_console, render_html
+from src.analysis.renderers import render_console, render_html, render_html_body, HTML_STYLE
 
-__all__ = ["generate_snapshot", "SnapshotReport", "render_console", "render_html"]
+__all__ = [
+    "generate_snapshot",
+    "SnapshotReport",
+    "render_console",
+    "render_html",
+    "render_html_body",
+    "HTML_STYLE",
+]

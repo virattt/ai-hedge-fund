@@ -224,6 +224,121 @@ def _fmt_pct_html(x: Optional[float]) -> str:
     return f'<span class="{cls}">{x:+.2%}</span>'
 
 
+def render_html_body(report: SnapshotReport) -> str:
+    """Return just the inner HTML for this report (no <html>/<head> wrapper).
+
+    Useful when embedding multiple snapshots on a single page — the caller
+    is responsible for emitting `<style>{HTML_STYLE}</style>` once.
+    """
+    rows_returns = "".join(
+        f"<tr><td>{pr.label}</td>"
+        f"<td class='right'>{_fmt_pct_html(pr.ticker_return)}</td>"
+        f"<td class='right'>{_fmt_pct_html(pr.spx_return)}</td>"
+        f"<td class='right'>{_fmt_pct_html(pr.relative)}</td></tr>"
+        for pr in report.price_returns
+    )
+    rows_fund = "".join(
+        f"<tr><td>{i+1}</td><td>{html.escape(m.name)}</td>"
+        f"<td class='right'>{html.escape(m.fmt_value())}</td>"
+        f"<td>{_badge(m.verdict)}</td>"
+        f"<td>{html.escape(m.rationale)}</td></tr>"
+        for i, m in enumerate(report.fundamental_metrics)
+    )
+    rows_tech = "".join(
+        f"<tr><td>{i+1}</td><td>{html.escape(ind.name)}</td>"
+        f"<td>{html.escape(ind.state)}</td>"
+        f"<td>{_badge(ind.signal)}</td>"
+        f"<td>{html.escape(ind.rationale)}</td></tr>"
+        for i, ind in enumerate(report.technical_indicators)
+    )
+    a = report.analyst
+    analyst_rows = [
+        ("Total analysts", str(a.total_analysts) if a.total_analysts else "—"),
+        ("% Strong Buy", _fmt_pct_html(a.pct_strong_buy) if a.pct_strong_buy is not None else "—"),
+        ("% Buy", _fmt_pct_html(a.pct_buy) if a.pct_buy is not None else "—"),
+        ("% Hold", _fmt_pct_html(a.pct_hold) if a.pct_hold is not None else "—"),
+        ("% Sell", _fmt_pct_html(a.pct_sell) if a.pct_sell is not None else "—"),
+        ("% Strong Sell", _fmt_pct_html(a.pct_strong_sell) if a.pct_strong_sell is not None else "—"),
+        ("Mean target", _fmt_money(a.mean_target)),
+        ("Median target", _fmt_money(a.median_target)),
+        ("High target", _fmt_money(a.high_target)),
+        ("Low target", _fmt_money(a.low_target)),
+        ("Upside vs current", _fmt_pct_html(a.upside_pct)),
+        ("Consensus", html.escape(a.consensus_label or "—")),
+        ("Recent action", html.escape(a.recent_actions_note or "—")),
+    ]
+    rows_analyst = "".join(
+        f"<tr><td>{html.escape(k)}</td><td class='right'>{v}</td></tr>" for k, v in analyst_rows
+    )
+    warnings_block = ""
+    if report.data_warnings:
+        items = "".join(f"<li>{html.escape(w)}</li>" for w in report.data_warnings)
+        warnings_block = f'<div class="panel warnings"><h3>Data warnings</h3><ul>{items}</ul></div>'
+
+    return f"""
+<div class="report" id="report-{html.escape(report.ticker)}">
+<div class="header">
+  <span class="ticker">{html.escape(report.ticker)}</span>
+  <span class="company">{html.escape(report.company_name)}{f' · {html.escape(report.sector)}' if report.sector else ''}</span>
+  <span class="price">{_fmt_money(report.current_price)}</span>
+</div>
+
+<div class="verdict-banner">
+  <div><div class="verdict-label">Overall Verdict</div><div class="verdict-value">{_badge(report.overall_verdict_label)}</div></div>
+  <div><div class="verdict-label">Composite Score</div><div class="verdict-value">{report.composite_score:.0f}/100</div></div>
+  <div><div class="verdict-label">Confidence</div><div class="verdict-value">{report.composite_confidence:.0%}</div></div>
+  <div><div class="verdict-label">Fundamental</div><div>{_badge(report.fundamental_verdict)} <span class="meta">({report.fundamental_confidence:.0%})</span></div></div>
+  <div><div class="verdict-label">Technical</div><div>{_badge(report.technical_verdict)} <span class="meta">({report.technical_confidence:.0%})</span></div></div>
+  <div><div class="verdict-label">Analyst</div><div>{_badge(report.analyst_verdict_label)}</div></div>
+</div>
+
+<div class="panel">
+  <h2>Synthesis</h2>
+  <p class="synth">{html.escape(report.synthesis)}</p>
+</div>
+
+<div class="grid">
+  <div class="panel">
+    <h2>Price Performance vs S&P 500</h2>
+    <table>
+      <thead><tr><th>Period</th><th class="right">{html.escape(report.ticker)}</th>
+        <th class="right">S&P 500</th><th class="right">Relative</th></tr></thead>
+      <tbody>{rows_returns}</tbody>
+    </table>
+  </div>
+  <div class="panel">
+    <h2>Analyst Consensus</h2>
+    <table>{rows_analyst}</table>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Fundamental Snapshot — 10 Key Metrics</h2>
+  <table>
+    <thead><tr><th>#</th><th>Metric</th><th class="right">Value</th><th>Verdict</th><th>Rationale</th></tr></thead>
+    <tbody>{rows_fund}</tbody>
+  </table>
+</div>
+
+<div class="panel">
+  <h2>Technical Snapshot — 6 Indicators</h2>
+  <table>
+    <thead><tr><th>#</th><th>Indicator</th><th>State</th><th>Signal</th><th>Rationale</th></tr></thead>
+    <tbody>{rows_tech}</tbody>
+  </table>
+</div>
+
+{warnings_block}
+
+<div class="meta">Generated {report.timestamp:%Y-%m-%d %H:%M:%S}. Educational/research use only.</div>
+</div>
+"""
+
+
+# Expose the stylesheet so the multi-ticker page can reuse it
+HTML_STYLE = _HTML_STYLE
+
+
 def render_html(report: SnapshotReport, out_path: Path) -> Path:
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
