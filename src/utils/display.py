@@ -37,8 +37,8 @@ def print_trading_output(result: dict) -> None:
             if ticker not in signals:
                 continue
                 
-            # Skip Risk Management agent in the signals section
-            if agent == "risk_management_agent":
+            # Skip Risk Management and FYI agents (displayed separately in snapshot)
+            if agent == "risk_management_agent" or agent.startswith("fyi_"):
                 continue
 
             signal = signals[ticker]
@@ -179,6 +179,8 @@ def print_trading_output(result: dict) -> None:
         neutral_count = 0
         if analyst_signals:
             for agent, signals in analyst_signals.items():
+                if agent == "risk_management_agent" or agent.startswith("fyi_"):
+                    continue
                 if ticker in signals:
                     signal = signals[ticker].get("signal", "").upper()
                     if signal == "BULLISH":

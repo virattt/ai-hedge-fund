@@ -28,6 +28,7 @@ def _notice_once() -> None:
 
 class ChatClaudeCode(BaseChatModel):
     model_name: str
+    effort: Optional[str] = None
 
     @property
     def _llm_type(self) -> str:
@@ -35,7 +36,7 @@ class ChatClaudeCode(BaseChatModel):
 
     @property
     def _identifying_params(self) -> dict:
-        return {"model_name": self.model_name}
+        return {"model_name": self.model_name, "effort": self.effort}
 
     def _generate(
         self,
@@ -66,6 +67,7 @@ class ChatClaudeCode(BaseChatModel):
         options = ClaudeAgentOptions(
             model=self.model_name,
             system_prompt=system_prompt,
+            effort=self.effort,
         )
 
         async def _collect() -> str:

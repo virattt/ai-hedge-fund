@@ -57,6 +57,10 @@ class LLMModel(BaseModel):
         # the manual JSON-extraction path in call_llm instead.
         if self.provider == ModelProvider.ANTHROPIC and not os.getenv("ANTHROPIC_API_KEY"):
             return False
+        # OpenAI models fall back to ChatCodex (Codex CLI) when no API key is set;
+        # same reasoning — no structured-output JSON mode, use manual extraction.
+        if self.provider == ModelProvider.OPENAI and not os.getenv("OPENAI_API_KEY"):
+            return False
         # Only certain Ollama models support JSON mode
         if self.is_ollama():
             return "llama3" in self.model_name or "neural-chat" in self.model_name
@@ -144,7 +148,7 @@ def get_models_list():
     ]
 
 
-def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | None:
+def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None, effort: str | None = None) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | None:
     if model_provider == ModelProvider.GROQ:
         api_key = (api_keys or {}).get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
         if not api_key:
@@ -157,9 +161,14 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
         api_key = (api_keys or {}).get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
         base_url = os.getenv("OPENAI_API_BASE")
         if not api_key:
-            # Print error to console
-            print(f"API Key Error: Please make sure OPENAI_API_KEY is set in your .env file or provided via API keys.")
-            raise ValueError("OpenAI API key not found.  Please make sure OPENAI_API_KEY is set in your .env file or provided via API keys.")
+            try:
+                from src.llm.codex import ChatCodex
+            except ImportError:
+                raise ValueError(
+                    "OPENAI_API_KEY is not set and the Codex CLI is not available. "
+                    "Set OPENAI_API_KEY in your .env file or install the Codex CLI."
+                )
+            return ChatCodex(model_name=model_name, effort=effort)
         return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
     elif model_provider == ModelProvider.ANTHROPIC:
         api_key = (api_keys or {}).get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
@@ -173,7 +182,7 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
                     "or install `claude-agent-sdk` and log in via the Claude Code CLI to use "
                     "your subscription as a fallback."
                 )
-            return ChatClaudeCode(model_name=model_name)
+            return ChatClaudeCode(model_name=model_name, effort=effort)
         return ChatAnthropic(model=model_name, api_key=api_key)
     elif model_provider == ModelProvider.DEEPSEEK:
         api_key = (api_keys or {}).get("DEEPSEEK_API_KEY") or os.getenv("DEEPSEEK_API_KEY")
