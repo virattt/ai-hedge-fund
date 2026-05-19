@@ -24,6 +24,10 @@ class Settings:
     auto_save_enabled: bool = False
     auto_save_default_tag: str = "auto"
 
+    # Auto-run the AI investor council on every ticker view (off by default —
+    # adds 30-60s per ticker but produces the fullest possible report).
+    auto_run_council: bool = False
+
     # Tagging defaults
     available_tags: list[str] = field(
         default_factory=lambda: ["research", "watchlist", "decision", "position-entered", "auto"]

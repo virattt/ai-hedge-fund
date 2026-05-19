@@ -103,6 +103,30 @@ def _shell(*, active: str, title: str, body: str, breadcrumbs: list[tuple[str, O
   </div>
 </div>
 
+<div id="toast-stack" style="position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:10px; z-index:10000; pointer-events:none"></div>
+
+<style>
+.toast {{
+  background: var(--panel); border: 1px solid var(--line-strong);
+  border-left: 4px solid var(--accent);
+  border-radius: 10px; padding: 14px 18px;
+  box-shadow: 0 10px 32px rgba(0,0,0,0.5);
+  min-width: 260px; max-width: 420px;
+  color: var(--text); font-size: 13px; line-height: 1.5;
+  transform: translateX(120%); opacity: 0;
+  transition: transform 280ms cubic-bezier(.2,.8,.2,1), opacity 200ms;
+  pointer-events: auto;
+}}
+.toast.show {{ transform: translateX(0); opacity: 1; }}
+.toast.success {{ border-left-color: var(--buy); }}
+.toast.error {{ border-left-color: var(--sell); }}
+.toast.info {{ border-left-color: var(--accent); }}
+.toast .toast-title {{ font-weight: 700; font-size: 13.5px; margin-bottom: 3px; }}
+.toast .toast-msg {{ color: var(--dim); font-size: 12.5px; }}
+.toast .toast-actions {{ margin-top: 8px; }}
+.toast .toast-actions a {{ color: var(--accent); font-weight: 600; font-size: 12px; text-decoration: none; margin-right: 12px; }}
+</style>
+
 <script>
 {_CLIENT_JS}
 </script>
@@ -111,6 +135,25 @@ def _shell(*, active: str, title: str, body: str, breadcrumbs: list[tuple[str, O
 
 
 _CLIENT_JS = r"""
+// --- Toast notifications ------------------------------------------------
+window.showToast = function(opts) {
+  const stack = document.getElementById('toast-stack');
+  if (!stack) return;
+  const el = document.createElement('div');
+  el.className = 'toast ' + (opts.kind || 'info');
+  el.innerHTML = `
+    <div class="toast-title">${opts.title || ''}</div>
+    <div class="toast-msg">${opts.message || ''}</div>
+    ${opts.actions ? `<div class="toast-actions">${opts.actions}</div>` : ''}
+  `;
+  stack.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 320);
+  }, opts.duration || 4500);
+};
+
 // --- Loading overlay on form submit -------------------------------------
 (function(){
   const form = document.querySelector('form.runner');
@@ -1343,13 +1386,142 @@ def ticker_detail_page(report: SnapshotReport, from_tickers: list[str], *, deep:
     {next_link}
     {saved_pill}
     {('<a class="btn primary" href="' + html.escape(deep_url) + '">▶ Run deep analysis</a>') if not deep and not report.agents else ''}
+    <button class="btn primary" onclick="openQuickSave()" title="Save analysis to journal (or use the form below for tags/notes)">★ Save</button>
     <a class="btn" href="#price-targets-panel">🎯 Targets</a>
     <a class="btn" href="#backtest-panel">⏪ Backtest</a>
     <a class="btn" href="#interactive-backtest-panel">📅 Custom date</a>
-    <a class="btn" href="#save-panel">💾 Save</a>
     <a class="btn" href="/api/snapshot/{html.escape(report.ticker)}" target="_blank">{{ }} JSON</a>
   </div>
 </div>
+
+<div id="auto-council-banner" style="display:none; padding:14px 18px; background:var(--hold-bg); border:1px solid rgba(245,196,81,0.3); border-radius:12px; margin-bottom:18px; align-items:center; gap:14px">
+  <div class="spinner" style="width:22px; height:22px; border-width:2.5px; margin:0"></div>
+  <div style="flex:1">
+    <div style="font-weight:700; color:var(--hold)">🤖 AI Investor Council running in the background</div>
+    <div class="dim" style="font-size:12.5px"><span id="acb-status">Starting…</span> · The page will refresh automatically when the council finishes (≈30-60s).</div>
+  </div>
+  <a class="btn ghost" id="acb-watch" href="{html.escape(deep_url)}">Watch live →</a>
+</div>
+
+<div id="quick-save-modal" style="display:none; position:fixed; inset:0; z-index:9999; align-items:center; justify-content:center; background:rgba(6,11,26,0.78); backdrop-filter:blur(8px)">
+  <div style="background:var(--panel); border:1px solid var(--line-strong); border-radius:14px; padding:28px 32px; min-width:380px; max-width:480px; box-shadow:0 16px 48px rgba(0,0,0,0.5)">
+    <h2 style="margin:0 0 8px; font-size:18px">★ Save analysis · {html.escape(report.ticker)}</h2>
+    <div class="dim" style="font-size:13px; margin-bottom:18px">Persists the current snapshot{(' + AI council results' if report.agents else '')} to <code>~/.strategist/saved/{html.escape(report.ticker)}/</code>.</div>
+    <div style="margin-bottom:14px">
+      <label class="dim" style="font-size:11.5px; text-transform:uppercase; letter-spacing:0.05em">Note</label>
+      <input type="text" id="qs-note" placeholder="e.g. 'pre-earnings 2026-05-19'" style="width:100%; padding:10px 14px; margin-top:4px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:inherit; font-size:13px"/>
+    </div>
+    <div style="margin-bottom:18px">
+      <label class="dim" style="font-size:11.5px; text-transform:uppercase; letter-spacing:0.05em">Tags</label>
+      <input type="text" id="qs-tags" placeholder="research, decision, position-entered" style="width:100%; padding:10px 14px; margin-top:4px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:inherit; font-size:13px"/>
+      <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap">
+        <button type="button" class="chip" onclick="document.getElementById('qs-tags').value = appendTag(document.getElementById('qs-tags').value, 'research')">research</button>
+        <button type="button" class="chip" onclick="document.getElementById('qs-tags').value = appendTag(document.getElementById('qs-tags').value, 'watchlist')">watchlist</button>
+        <button type="button" class="chip" onclick="document.getElementById('qs-tags').value = appendTag(document.getElementById('qs-tags').value, 'decision')">decision</button>
+        <button type="button" class="chip" onclick="document.getElementById('qs-tags').value = appendTag(document.getElementById('qs-tags').value, 'position-entered')">position-entered</button>
+      </div>
+    </div>
+    <div style="display:flex; gap:8px; justify-content:flex-end">
+      <button class="btn ghost" onclick="closeQuickSave()">Cancel</button>
+      <button class="btn primary" id="qs-submit" onclick="quickSave()">★ Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+window.STRATEGIST_TICKER = {_quote_json(report.ticker)};
+window.STRATEGIST_HAS_AGENTS = {('true' if report.agents else 'false')};
+window.STRATEGIST_DEEP_URL = {_quote_json(deep_url)};
+
+function appendTag(existing, tag) {{
+  const parts = (existing || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (parts.includes(tag)) return existing;
+  parts.push(tag);
+  return parts.join(', ');
+}}
+
+function openQuickSave() {{
+  const m = document.getElementById('quick-save-modal');
+  m.style.display = 'flex';
+  setTimeout(() => document.getElementById('qs-note').focus(), 50);
+}}
+function closeQuickSave() {{
+  document.getElementById('quick-save-modal').style.display = 'none';
+}}
+async function quickSave() {{
+  const note = document.getElementById('qs-note').value;
+  const tags = document.getElementById('qs-tags').value;
+  const btn = document.getElementById('qs-submit');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {{
+    const fd = new FormData();
+    fd.append('note', note);
+    fd.append('tags', tags);
+    const resp = await fetch(`/api/save-ajax/${{window.STRATEGIST_TICKER}}`, {{ method: 'POST', body: fd }});
+    const data = await resp.json();
+    if (data.ok) {{
+      closeQuickSave();
+      window.showToast({{
+        kind: 'success',
+        title: '✓ Saved to journal',
+        message: `${{window.STRATEGIST_TICKER}} · ${{data.has_agents ? data.council_size + ' analyst opinions captured' : 'snapshot only — run deep analysis for AI council'}}`,
+        actions: `<a href="/saved/${{window.STRATEGIST_TICKER}}">View saved →</a><a href="/journal">Journal →</a>`,
+        duration: 6000,
+      }});
+    }} else {{
+      window.showToast({{ kind: 'error', title: 'Save failed', message: data.error || 'Unknown error' }});
+    }}
+  }} catch (err) {{
+    window.showToast({{ kind: 'error', title: 'Save failed', message: String(err) }});
+  }} finally {{
+    btn.disabled = false;
+    btn.textContent = '★ Save';
+  }}
+}}
+window.addEventListener('keydown', (e) => {{
+  if (e.key === 'Escape') closeQuickSave();
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {{ e.preventDefault(); openQuickSave(); }}
+}});
+
+// --- Auto-run AI Council in background --------------------------------
+(async function() {{
+  if (window.STRATEGIST_HAS_AGENTS) return;  // council already attached on this page
+  if (window.location.search.indexOf('deep=1') >= 0) return;  // already a deep view
+  try {{
+    const s = await (await fetch('/api/settings')).json();
+    if (!s.auto_run_council) return;
+  }} catch {{ return; }}
+
+  // Show the banner and silently kick off the SSE
+  const banner = document.getElementById('auto-council-banner');
+  const status = document.getElementById('acb-status');
+  if (banner) {{ banner.style.display = 'flex'; }}
+
+  let done = 0;
+  let total = 19;
+  let seen = new Set();
+  const es = new EventSource(`/api/stream-deep/${{window.STRATEGIST_TICKER}}`);
+  es.onmessage = (e) => {{
+    let data; try {{ data = JSON.parse(e.data); }} catch {{ return; }}
+    if (data.type === 'start') {{ status.textContent = `Starting ${{data.estimated_agents}} analysts…`; total = data.estimated_agents; }}
+    else if (data.type === 'agent_done') {{ done += 1; seen.add(data.agent_id); status.textContent = `${{done}} of ${{Math.max(total, seen.size)}} done · last: ${{data.agent_name}}`; }}
+    else if (data.type === 'agent_update') {{ seen.add(data.agent_id); status.textContent = `working: ${{data.agent_name}} (${{data.status}})`; }}
+    else if (data.type === 'done') {{
+      es.close();
+      status.textContent = `All ${{done}} analysts complete · refreshing with full report…`;
+      window.showToast({{ kind: 'success', title: '✓ AI Council complete', message: `${{done}} analyst opinions ready`, duration: 2500 }});
+      setTimeout(() => {{
+        const url = new URL(window.location);
+        url.searchParams.set('deep', '1');
+        window.location.href = url.toString();
+      }}, 800);
+    }}
+    else if (data.type === 'error') {{ es.close(); status.textContent = `Stopped: ${{data.message}}`; }}
+  }};
+  es.onerror = () => {{ status.textContent = 'Stream connection lost — try Watch live →'; }};
+}})();
+</script>
 
 {final_banner}
 {rationale_block}
@@ -2043,6 +2215,7 @@ def multi_save_compare_page(ticker: str, saves: list, current: SnapshotReport) -
 def settings_page(s, data_sources: dict) -> str:
     """User-level settings: auto-save toggle, default tags, data sources status."""
     checked = "checked" if s.auto_save_enabled else ""
+    council_checked = "checked" if getattr(s, "auto_run_council", False) else ""
     sources_rows = ""
     for name, ok in data_sources.items():
         status = "✓ available" if ok else "— not configured"
@@ -2089,7 +2262,17 @@ def settings_page(s, data_sources: dict) -> str:
 </div>
 
 <div class="panel">
-  <h2>🤖 Deep analysis defaults</h2>
+  <h2>🤖 AI Investor Council</h2>
+  <div class="dim" style="font-size:13px; margin-bottom:14px">
+    The council (14+ LLM analyst personas + Risk Manager + Portfolio Manager) runs in 30-60 seconds per ticker.
+    With <b>auto-run</b> on, every ticker detail page kicks off the council in the background as soon as you open it —
+    you see the snapshot immediately, and the page auto-refreshes with the full council once it completes.
+    With auto-run off (default), you click <b>▶ Run deep analysis</b> per ticker.
+  </div>
+  <label style="display:flex; gap:10px; align-items:center; cursor:pointer; margin-bottom:18px">
+    <input type="checkbox" name="auto_run_council" value="1" {council_checked} style="width:18px; height:18px"/>
+    <span><b>Auto-run AI council on every ticker view</b></span>
+  </label>
   <label style="display:flex; gap:10px; align-items:center">
     <span style="min-width:200px">Default analyst panel (comma-separated, empty = all):</span>
     <input type="text" name="default_analysts" value="{html.escape(','.join(s.default_analysts))}" placeholder="warren_buffett, peter_lynch, charlie_munger"

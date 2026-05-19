@@ -352,7 +352,7 @@ async def api_save(
     note: str = Form(""),
     tags: str = Form(""),  # comma-separated
 ) -> RedirectResponse:
-    """Persist the current snapshot for `ticker` to disk and bounce the user to the saved list."""
+    """Persist the current snapshot for `ticker` to disk and bounce the user to the saved list (form submit version)."""
     try:
         rep = _cached(ticker)
     except Exception as exc:
@@ -360,6 +360,33 @@ async def api_save(
     tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
     snapshot_storage.save_snapshot(rep, note=note, tags=tag_list, source="manual")
     return RedirectResponse(url=f"/saved/{ticker.upper()}", status_code=303)
+
+
+@app.post("/api/save-ajax/{ticker}")
+async def api_save_ajax(
+    ticker: str,
+    note: str = Form(""),
+    tags: str = Form(""),
+) -> JSONResponse:
+    """AJAX save — returns JSON {ok, timestamp, path, tags, has_agents} so the
+    detail page can show a toast and stay on the same page instead of bouncing
+    the user to /saved/<TICKER>."""
+    try:
+        rep = _cached(ticker)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+    tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
+    meta = snapshot_storage.save_snapshot(rep, note=note, tags=tag_list, source="manual")
+    return JSONResponse(
+        {
+            "ok": True,
+            "timestamp": meta["timestamp"],
+            "tags": meta["tags"],
+            "saved_at": meta["saved_at"],
+            "has_agents": bool(rep.agents and not getattr(rep.agents, "error", None)),
+            "council_size": (rep.agents.total_analysts if rep.agents and not getattr(rep.agents, "error", None) else 0),
+        }
+    )
 
 
 @app.post("/api/saved/{ticker}/{timestamp}/tags")
@@ -444,14 +471,25 @@ async def settings_view() -> HTMLResponse:
 async def settings_update(
     auto_save_enabled: str = Form(""),
     auto_save_default_tag: str = Form("auto"),
+    auto_run_council: str = Form(""),
     default_analysts: str = Form(""),
 ) -> RedirectResponse:
     s = settings_store.load_settings()
     s.auto_save_enabled = auto_save_enabled in ("1", "on", "true", "yes")
     s.auto_save_default_tag = (auto_save_default_tag or "auto").strip().lower()
+    s.auto_run_council = auto_run_council in ("1", "on", "true", "yes")
     s.default_analysts = [a.strip() for a in default_analysts.split(",") if a.strip()]
     settings_store.save_settings(s)
     return RedirectResponse(url="/settings?saved=1", status_code=303)
+
+
+@app.get("/api/settings")
+async def api_get_settings() -> JSONResponse:
+    """JSON view of the current settings — used by client-side scripts (e.g.
+    the auto-council kickoff on the ticker detail page)."""
+    s = settings_store.load_settings()
+    import dataclasses as _dc
+    return JSONResponse(_dc.asdict(s))
 
 
 # --- Persistent watchlists ------------------------------------------------
