@@ -169,10 +169,7 @@ class BacktestEngine:
             pnl=round(pnl, 2),
             return_pct=round(return_pct, 6),
             holding_days=signal.holding_days,
-            # Pass through strategy metadata
-            eps_surprise=signal.metadata.get("eps_surprise"),
-            source_type=signal.metadata.get("source_type"),
-            report_period=signal.metadata.get("report_period"),
+            metadata=signal.metadata,
         )
 
     # ------------------------------------------------------------------

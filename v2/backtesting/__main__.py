@@ -111,7 +111,7 @@ def print_table_header():
 def print_trade_row(t):
     print(
         f"  {t.entry_date:<12} {CYAN}{t.ticker:<6}{RESET}"
-        f" {color_direction(t.direction)} {color_eps(t.eps_surprise)}"
+        f" {color_direction(t.direction)} {color_eps(t.metadata.get('eps_surprise'))}"
         f" ${t.entry_price:>8.2f} ${t.exit_price:>8.2f} {t.shares:>7.1f}"
         f" {color_pnl(t.pnl)} {color_pct(t.return_pct)}"
     )

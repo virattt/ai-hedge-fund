@@ -34,10 +34,7 @@ class Trade(BaseModel):
     pnl: float                        # dollar profit/loss
     return_pct: float                 # percentage return (signed)
     holding_days: int                 # trading days held
-    # Context from the event that triggered the trade
-    eps_surprise: str | None = None   # "BEAT" / "MISS"
-    source_type: str | None = None    # "8-K", "10-Q", etc.
-    report_period: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)  # strategy-specific context
 
 
 class PerformanceMetrics(BaseModel):
