@@ -35,7 +35,7 @@ PRESETS: list[tuple[str, str, list[str]]] = [
 # ---- Common chrome --------------------------------------------------------
 
 
-def _shell(*, active: str, title: str, body: str, breadcrumbs: list[tuple[str, Optional[str]]] | None = None, pulse_html: str = "") -> str:
+def _shell(*, active: str, title: str, body: str, breadcrumbs: list[tuple[str, Optional[str]]] | None = None, pulse_html: str = "", show_macro_in_pulse: bool = True) -> str:
     """Wrap page body in sidebar + topbar + footer chrome."""
     nav_items = [
         ("home", "/", "Home", ""),
@@ -84,7 +84,7 @@ def _shell(*, active: str, title: str, body: str, breadcrumbs: list[tuple[str, O
   <main class="main">
     <div class="topbar">
       <div class="crumbs">{crumb_html}</div>
-      <div class="pulse">{pulse_html or '<span class="dot"></span><span>Live · yfinance</span>'}</div>
+      <div class="pulse">{pulse_html or (_macro_strip() if show_macro_in_pulse else '<span class="dot"></span><span>Live · yfinance</span>')}</div>
     </div>
     {body}
     <div class="footer">
@@ -268,6 +268,94 @@ renderWatchlists('watchlists-slot');
 """
 
 
+# ---- Macro panel rendering ------------------------------------------------
+
+
+def _macro_strip() -> str:
+    """A single-line macro indicator strip — used in the topbar pulse slot."""
+    try:
+        from src.analysis.macro import get_macro_snapshot
+        m = get_macro_snapshot()
+    except Exception:
+        return '<span class="dot"></span><span>Live · yfinance</span>'
+
+    parts = [f'<span style="color:{m.regime_color}; font-weight:700">{m.regime_emoji} {html.escape(m.regime_label)}</span>']
+    if m.vix is not None:
+        chg = ""
+        if m.vix_change_1d is not None:
+            cls = "neg" if m.vix_change_1d >= 0 else "pos"  # high VIX = risk-off
+            chg = f' <span class="{cls}" style="font-size:11px">{m.vix_change_1d*100:+.1f}%</span>'
+        parts.append(f'<span title="VIX · {html.escape(m.vix_label or "")}">VIX <b class="mono">{m.vix:.1f}</b>{chg}</span>')
+    if m.us_10y is not None:
+        parts.append(f'<span title="US 10Y">10Y <b class="mono">{m.us_10y*100:.2f}%</b></span>')
+    if m.yield_curve_label:
+        parts.append(f'<span title="Yield curve">Curve <b>{html.escape(m.yield_curve_label)}</b></span>')
+    if m.fear_greed is not None:
+        parts.append(f'<span title="CNN Fear &amp; Greed · {html.escape(m.fear_greed_label or "")}">F&amp;G <b class="mono">{m.fear_greed}</b></span>')
+    return " · ".join(parts)
+
+
+def _macro_panel() -> str:
+    """A full panel on the home page with the macro tape."""
+    try:
+        from src.analysis.macro import get_macro_snapshot
+        m = get_macro_snapshot()
+    except Exception:
+        return ""
+
+    def _val(label: str, value: str, sub: str = "", color: str = "") -> str:
+        sub_html = f'<div class="meta">{sub}</div>' if sub else ""
+        col = f' style="color:{color}"' if color else ""
+        return f'<div class="card"><div class="title">{html.escape(label)}</div><div class="value mono"{col}>{value}</div>{sub_html}</div>'
+
+    cards: list[str] = []
+    cards.append(
+        f'<div class="card" style="border-color:{m.regime_color}"><div class="title">Market regime</div>'
+        f'<div class="value" style="font-size:18px; color:{m.regime_color}">{m.regime_emoji} {html.escape(m.regime_label)}</div>'
+        f'<div class="meta">{html.escape(m.regime_blurb)}</div></div>'
+    )
+    if m.vix is not None:
+        chg = ""
+        if m.vix_change_1d is not None:
+            cls = "neg" if m.vix_change_1d >= 0 else "pos"
+            chg = f'<span class="{cls}" style="font-size:12px"> {m.vix_change_1d*100:+.1f}%</span>'
+        cards.append(_val(
+            "VIX", f"{m.vix:.1f}{chg}",
+            sub=html.escape(m.vix_label or ""),
+            color=("var(--sell)" if (m.vix or 0) > 25 else "var(--buy)" if (m.vix or 0) < 15 else "var(--hold)"),
+        ))
+    if m.us_10y is not None:
+        sub = ""
+        if m.us_2y is not None:
+            sub = f"2Y {m.us_2y*100:.2f}% · spread {m.yield_curve_spread:+.2f}pp"
+        cards.append(_val("US 10Y yield", f"{m.us_10y*100:.2f}%", sub=html.escape(sub)))
+    if m.yield_curve_label:
+        cards.append(_val("Yield curve", html.escape(m.yield_curve_label), sub="10Y − 2Y"))
+    if m.spx_price is not None:
+        chg = ""
+        if m.spx_change_1d is not None:
+            cls = "pos" if m.spx_change_1d >= 0 else "neg"
+            chg = f' <span class="{cls}" style="font-size:13px">{m.spx_change_1d*100:+.2f}%</span>'
+        regime_note = []
+        if m.spx_above_200dma is True:
+            regime_note.append("above 200DMA")
+        elif m.spx_above_200dma is False:
+            regime_note.append("below 200DMA")
+        if m.spx_pct_from_52w_high is not None:
+            regime_note.append(f"{m.spx_pct_from_52w_high*100:+.1f}% from 52w high")
+        cards.append(_val("S&P 500", f"{m.spx_price:,.0f}{chg}", sub=" · ".join(regime_note)))
+    if m.fear_greed is not None:
+        col = "var(--sell)" if m.fear_greed <= 25 else "var(--hold)" if m.fear_greed <= 55 else "var(--buy)"
+        cards.append(_val("Fear &amp; Greed", str(m.fear_greed), sub=html.escape(m.fear_greed_label or ""), color=col))
+
+    return f"""
+<div class="section">
+  <h2>🌐 Live macro context <span class="badge-count">{len(cards)}</span></h2>
+  <div class="card-grid">{''.join(cards)}</div>
+</div>
+"""
+
+
 # ---- Sparkline rendering --------------------------------------------------
 
 
@@ -346,7 +434,9 @@ def home_page() -> str:
         for name, sub, tk in PRESETS
     )
 
+    macro_block = _macro_panel()
     body = f"""
+{macro_block}
 <div class="hero">
   <h1>Run deep analysis on any US stock — locally, in seconds</h1>
   <div class="sub">Live price action vs S&P 500, 10 fundamentals graded BUY / HOLD / SELL, 6 technicals signaled, analyst consensus with target prices — and a single composite verdict.</div>
@@ -707,9 +797,122 @@ def _backtest_panel(backtest, current_price: Optional[float], commentary_url: st
   </div>
 
   <div class="dim" style="font-size:12px; margin-top:10px">
-    Caveat: backtest uses TECHNICAL signals only (RSI / MACD / SMA / Bollinger / volume), not fundamentals or analyst consensus, since yfinance does not provide historical point-in-time ratios. Treat hit rate as one input — not a guarantee.
+    The fixed 4-horizon table above uses TECHNICAL signals only (RSI / MACD / SMA / Bollinger / volume).
+    For historical FUNDAMENTAL verdicts (P/E, ROE, D/E, FCF yield as-of any past date),
+    use the <a href="#interactive-backtest-panel" style="color:var(--accent)">Interactive backtest</a> below —
+    it pulls point-in-time metrics from Financial Datasets when <code>FINANCIAL_DATASETS_API_KEY</code> is set.
   </div>
 </div>
+"""
+
+
+def _interactive_backtest_panel(ticker: str) -> str:
+    """Date picker + 'Run backtest' button. AJAX hits /api/backtest-at."""
+    from datetime import date as _date, timedelta as _td
+    today = _date.today()
+    default_date = (today - _td(days=180)).isoformat()
+    max_date = (today - _td(days=2)).isoformat()
+    # Earliest practical: ~250 trading days before today is roughly 350 calendar days
+    min_date = (today - _td(days=365 * 4)).isoformat()
+    return f"""
+<div class="panel" id="interactive-backtest-panel">
+  <h2>📅 Interactive backtest <span class="count">any date</span></h2>
+  <div class="dim" style="font-size:13px; margin-bottom:14px">
+    Pick any date in the past (≥200 trading days of history needed, so practically anything from late 2022 onward for most tickers). We re-compute the technical verdict as if you'd run it then, and show what actually happened. No new network calls — uses the price series already pulled by the snapshot.
+  </div>
+  <form id="ibt-form" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap" onsubmit="return runInteractiveBacktest(event)">
+    <label class="dim" style="font-size:12.5px">As of</label>
+    <input type="date" id="ibt-date" min="{min_date}" max="{max_date}" value="{default_date}"
+           style="padding:9px 12px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:inherit; font-size:13px"/>
+    <button class="btn primary" type="submit">▶ Run backtest</button>
+    <span id="ibt-status" class="dim" style="font-size:12.5px"></span>
+  </form>
+  <div id="ibt-result" style="margin-top:16px"></div>
+</div>
+
+<script>
+window.__IBT_TICKER = {_quote_json(ticker)};
+async function runInteractiveBacktest(e) {{
+  e.preventDefault();
+  const dateInput = document.getElementById('ibt-date');
+  const status = document.getElementById('ibt-status');
+  const resultDiv = document.getElementById('ibt-result');
+  const date = dateInput.value;
+  if (!date) {{ status.textContent = 'Pick a date.'; return false; }}
+  status.textContent = 'Running…';
+  resultDiv.innerHTML = '';
+  try {{
+    const resp = await fetch(`/api/backtest-at/${{window.__IBT_TICKER}}?date=${{date}}`);
+    if (!resp.ok) {{
+      const err = await resp.json().catch(() => ({{ detail: resp.statusText }}));
+      status.textContent = '';
+      resultDiv.innerHTML = `<div class="error-box">${{err.detail || 'Backtest failed'}}</div>`;
+      return false;
+    }}
+    const d = await resp.json();
+    status.textContent = '';
+    const v = d.verdict || '—';
+    const vClass = 'b-' + v.replace(' ', '-');
+    const retCls = d.realized_return >= 0 ? 'pos' : 'neg';
+    const alphaCls = d.alpha === null || d.alpha === undefined ? 'dim' : (d.alpha >= 0 ? 'pos' : 'neg');
+    const alphaStr = d.alpha === null || d.alpha === undefined ? '—' : `${{(d.alpha*100 >= 0 ? '+' : '')}}${{(d.alpha*100).toFixed(2)}}%`;
+    const correctMark = d.correct === true ? '<span class="pos" style="font-size:18px; font-weight:800">✓ The call paid off</span>'
+                      : d.correct === false ? '<span class="neg" style="font-size:18px; font-weight:800">✗ The call missed</span>'
+                      : '<span class="dim">— neutral</span>';
+    const indicatorRows = (d.indicators || []).map(i => {{
+      const sigCls = 'b-' + (i.signal || '').replace(' ', '-');
+      return `<tr><td><b>${{i.name}}</b></td><td>${{i.state}}</td><td><span class="badge ${{sigCls}}">${{i.signal}}</span></td><td class="dim">${{i.rationale}}</td></tr>`;
+    }}).join('');
+    let fundBlock = '';
+    if (d.fundamentals) {{
+      const f = d.fundamentals;
+      if (f.error) {{
+        fundBlock = `<div class="warning-box" style="margin-top:14px">📚 Historical fundamentals: ${{f.error}}</div>`;
+      }} else if (f.metrics && f.metrics.length) {{
+        const fvCls = 'b-' + (f.verdict || '').replace(' ', '-');
+        const fRows = f.metrics.map(m => {{
+          const mCls = 'b-' + (m.verdict || '').replace(' ', '-');
+          const val = m.value === null || m.value === undefined ? '—'
+                    : (m.unit === '%' ? `${{(m.value*100).toFixed(2)}}%`
+                       : m.unit === 'x' ? `${{m.value.toFixed(2)}}x`
+                       : `${{m.value.toFixed(2)}}`);
+          return `<tr><td><b>${{m.name}}</b></td><td>${{val}}</td><td><span class="badge ${{mCls}}">${{m.verdict}}</span></td><td class="dim">${{m.rationale}}</td></tr>`;
+        }}).join('');
+        fundBlock = `
+          <div style="margin-top:14px">
+            <h3 style="font-size:14px; margin:0 0 8px">📚 Point-in-time fundamentals (Financial Datasets · ${{f.report_period}})</h3>
+            <div style="margin-bottom:8px">Historical fundamental verdict: <span class="badge ${{fvCls}}">${{f.verdict}}</span> <span class="dim">(conf ${{(f.confidence*100).toFixed(0)}}%)</span></div>
+            <div style="overflow-x:auto"><table class="data">
+              <thead><tr><th>Metric</th><th>Value then</th><th>Verdict</th><th>Rationale</th></tr></thead>
+              <tbody>${{fRows}}</tbody>
+            </table></div>
+          </div>`;
+      }}
+    }}
+    resultDiv.innerHTML = `
+      <div class="verdict-banner" style="border:1px solid var(--line-strong); margin-bottom:14px">
+        <div class="col"><div class="lbl">As of</div><div class="val mono">${{d.as_of_date}}</div><div class="meta">${{d.label}}</div></div>
+        <div class="col"><div class="lbl">Verdict then</div><div class="val"><span class="badge ${{vClass}}">${{v}}</span></div><div class="meta">conf ${{(d.confidence*100).toFixed(0)}}%</div></div>
+        <div class="col"><div class="lbl">Price then → now</div><div class="val mono">$${{d.price_then.toFixed(2)}} → $${{d.price_now.toFixed(2)}}</div></div>
+        <div class="col"><div class="lbl">Realized return</div><div class="val mono ${{retCls}}">${{(d.realized_return*100 >= 0 ? '+' : '')}}${{(d.realized_return*100).toFixed(2)}}%</div></div>
+        <div class="col"><div class="lbl">Alpha vs S&amp;P</div><div class="val mono ${{alphaCls}}">${{alphaStr}}</div></div>
+        <div class="col"><div class="lbl">Result</div><div class="val">${{correctMark}}</div></div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="data">
+          <thead><tr><th>Indicator</th><th>State then</th><th>Signal</th><th>Why</th></tr></thead>
+          <tbody>${{indicatorRows}}</tbody>
+        </table>
+      </div>
+      ${{fundBlock}}
+    `;
+  }} catch (err) {{
+    status.textContent = '';
+    resultDiv.innerHTML = `<div class="error-box">${{err.message || err}}</div>`;
+  }}
+  return false;
+}}
+</script>
 """
 
 
@@ -1001,10 +1204,11 @@ def ticker_detail_page(report: SnapshotReport, from_tickers: list[str], *, deep:
     from_qs = quote_plus(",".join(from_tickers)) if from_tickers else ""
     back_link = f'<a class="btn ghost" href="/run?tickers={from_qs}">← Back to results</a>' if from_tickers else ""
 
-    # Build the deep-analysis URL (same page with ?deep=1)
-    deep_url = f"/ticker/{report.ticker}?deep=1"
+    # Build the streaming URL — opens the live progress page which auto-
+    # redirects to ?deep=1 (cached result) when the council finishes.
+    deep_url = f"/ticker/{report.ticker}/streaming"
     if from_tickers:
-        deep_url += f"&from={from_qs}"
+        deep_url += f"?from={from_qs}"
 
     # Run the deep panels:
     rec = report.final_verdict
@@ -1012,6 +1216,7 @@ def ticker_detail_page(report: SnapshotReport, from_tickers: list[str], *, deep:
     rationale_block = _verdict_rationale(rec) if rec else ""
     multi_horizon_block = _multi_horizon_panel(report.price_target_set, report.current_price)
     backtest_block = _backtest_panel(report.backtest, report.current_price)
+    interactive_backtest_block = _interactive_backtest_panel(report.ticker)
     agents_block = _agent_council_panel(report.agents, deep_url=deep_url, has_run=bool(report.agents))
     save_block = _save_form(report.ticker)
     saved_pill = _saved_count_pill(report.ticker)
@@ -1027,6 +1232,7 @@ def ticker_detail_page(report: SnapshotReport, from_tickers: list[str], *, deep:
     {('<a class="btn primary" href="' + html.escape(deep_url) + '">▶ Run deep analysis</a>') if not deep and not report.agents else ''}
     <a class="btn" href="#price-targets-panel">🎯 Targets</a>
     <a class="btn" href="#backtest-panel">⏪ Backtest</a>
+    <a class="btn" href="#interactive-backtest-panel">📅 Custom date</a>
     <a class="btn" href="#save-panel">💾 Save</a>
     <a class="btn" href="/api/snapshot/{html.escape(report.ticker)}" target="_blank">{{ }} JSON</a>
   </div>
@@ -1038,6 +1244,8 @@ def ticker_detail_page(report: SnapshotReport, from_tickers: list[str], *, deep:
 {multi_horizon_block}
 
 {backtest_block}
+
+{interactive_backtest_block}
 
 {agents_block}
 
@@ -1058,6 +1266,197 @@ def ticker_detail_page(report: SnapshotReport, from_tickers: list[str], *, deep:
         crumbs.append((f"Results ({len(from_tickers)})", f"/run?tickers={from_qs}"))
     crumbs.append((report.ticker, None))
     return _shell(active="home", title=f"Strategist · {report.ticker}", body=body, breadcrumbs=crumbs)
+
+
+def streaming_progress_page(ticker: str, from_tickers: list[str]) -> str:
+    """Live progress page. Opens EventSource immediately; redirects to ?deep=1 on done."""
+    from_qs = quote_plus(",".join(from_tickers)) if from_tickers else ""
+    back_link = f'<a class="btn ghost" href="/run?tickers={from_qs}">← Back to results</a>' if from_tickers else f'<a class="btn ghost" href="/ticker/{html.escape(ticker)}">← Back to {html.escape(ticker)}</a>'
+
+    # We render a placeholder grid for the known 14 council nodes. As the SSE
+    # stream emits, JS fills/updates the matching card by id.
+    council_ids = [
+        ("warren_buffett_agent", "Warren Buffett"),
+        ("charlie_munger_agent", "Charlie Munger"),
+        ("ben_graham_agent", "Ben Graham"),
+        ("phil_fisher_agent", "Phil Fisher"),
+        ("peter_lynch_agent", "Peter Lynch"),
+        ("bill_ackman_agent", "Bill Ackman"),
+        ("michael_burry_agent", "Michael Burry"),
+        ("mohnish_pabrai_agent", "Mohnish Pabrai"),
+        ("nassim_taleb_agent", "Nassim Taleb"),
+        ("stanley_druckenmiller_agent", "Stanley Druckenmiller"),
+        ("cathie_wood_agent", "Cathie Wood"),
+        ("aswath_damodaran_agent", "Aswath Damodaran"),
+        ("rakesh_jhunjhunwala_agent", "Rakesh Jhunjhunwala"),
+        ("valuation_agent", "Valuation Model"),
+        ("sentiment_agent", "Sentiment Analyst"),
+        ("fundamentals_agent", "Fundamentals Analyst"),
+        ("technicals_agent", "Technicals Analyst"),
+        ("risk_management_agent", "Risk Manager"),
+        ("portfolio_manager", "Portfolio Manager"),
+    ]
+    cards = "".join(
+        f"""
+<div class="stream-card" id="card-{html.escape(aid)}" data-state="pending">
+  <div class="card-icon">⋯</div>
+  <div class="card-body">
+    <div class="card-name">{html.escape(name)}</div>
+    <div class="card-status dim">Pending</div>
+  </div>
+</div>"""
+        for aid, name in council_ids
+    )
+
+    deep_target_qs = f"from={from_qs}&deep=1" if from_tickers else "deep=1"
+
+    body = f"""
+<div class="topbar" style="margin-bottom:18px">
+  <div class="actions">{back_link}</div>
+  <div class="actions" style="margin-left:auto">
+    <a class="btn" href="/api/snapshot/{html.escape(ticker)}" target="_blank">{{ }} JSON</a>
+  </div>
+</div>
+
+<div class="hero" style="padding:28px 30px">
+  <h1>🤖 Running AI Investor Council on <span style="color:var(--accent)">{html.escape(ticker)}</span></h1>
+  <div class="sub" id="stream-sub">Live progress. Each analyst applies their own framework. Total elapsed: <b id="stream-elapsed">0.0s</b></div>
+  <div id="stream-progress-bar" style="margin-top:14px; height:8px; background:var(--panel-2); border-radius:4px; overflow:hidden">
+    <div id="stream-progress-fill" style="width:0%; height:100%; background:linear-gradient(90deg, var(--accent), var(--buy)); transition:width 320ms ease"></div>
+  </div>
+  <div id="stream-counter" class="dim" style="font-size:12.5px; margin-top:8px">Waiting for first event…</div>
+</div>
+
+<div class="panel">
+  <h2>📡 Live agent feed</h2>
+  <div class="dim" style="font-size:13px; margin-bottom:12px">Each card lights up as its analyst completes. When the council is done, this page redirects to your full deep-analysis report automatically.</div>
+  <div class="stream-grid">
+    {cards}
+  </div>
+</div>
+
+<div id="stream-error-box" class="error-box" style="display:none"></div>
+
+<style>
+.stream-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }}
+.stream-card {{
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  transition: background 220ms ease, border-color 220ms ease, transform 220ms ease;
+}}
+.stream-card[data-state="working"] {{ border-color: var(--hold); background: var(--hold-bg); }}
+.stream-card[data-state="working"] .card-icon {{ color: var(--hold); animation: pulse 1.1s ease-in-out infinite; }}
+.stream-card[data-state="done"] {{ border-color: var(--buy); background: var(--buy-bg); transform: scale(1.02); }}
+.stream-card[data-state="done"] .card-icon {{ color: var(--buy); }}
+.stream-card[data-state="error"] {{ border-color: var(--sell); background: var(--sell-bg); }}
+.stream-card[data-state="error"] .card-icon {{ color: var(--sell); }}
+.stream-card .card-icon {{
+  font-size: 22px; line-height: 1; width: 30px; text-align: center; color: var(--mute);
+}}
+.stream-card .card-name {{ font-weight: 700; font-size: 13.5px; }}
+.stream-card .card-status {{ font-size: 11.5px; margin-top: 2px; }}
+@keyframes pulse {{ 0%, 100% {{ opacity: 0.6; }} 50% {{ opacity: 1; }} }}
+</style>
+
+<script>
+(function() {{
+  const TICKER = {_quote_json(ticker)};
+  const REDIRECT_URL = {_quote_json(f"/ticker/{ticker}?" + deep_target_qs)};
+  const TOTAL = 14;  // approximate; counter updates as we see new agents
+  const seen = new Set();
+  let doneCount = 0;
+  let startedAt = Date.now();
+
+  const elapsedEl = document.getElementById('stream-elapsed');
+  const counterEl = document.getElementById('stream-counter');
+  const fillEl = document.getElementById('stream-progress-fill');
+  const errorEl = document.getElementById('stream-error-box');
+
+  function tickElapsed() {{
+    elapsedEl.textContent = ((Date.now() - startedAt) / 1000).toFixed(1) + 's';
+  }}
+  setInterval(tickElapsed, 100);
+
+  function updateCard(agentId, agentName, state, statusText) {{
+    let card = document.getElementById('card-' + agentId);
+    if (!card) {{
+      const grid = document.querySelector('.stream-grid');
+      card = document.createElement('div');
+      card.id = 'card-' + agentId;
+      card.className = 'stream-card';
+      card.innerHTML = `<div class="card-icon">⋯</div><div class="card-body"><div class="card-name">${{agentName}}</div><div class="card-status dim"></div></div>`;
+      grid.appendChild(card);
+    }}
+    card.setAttribute('data-state', state);
+    const icon = card.querySelector('.card-icon');
+    const status = card.querySelector('.card-status');
+    if (state === 'done') {{ icon.textContent = '✓'; status.textContent = 'Done'; }}
+    else if (state === 'error') {{ icon.textContent = '✗'; status.textContent = statusText || 'Error'; }}
+    else if (state === 'working') {{ icon.textContent = '⋯'; status.textContent = statusText || 'Working…'; }}
+    else {{ icon.textContent = '⋯'; status.textContent = statusText || 'Pending'; }}
+  }}
+
+  const es = new EventSource('/api/stream-deep/' + TICKER);
+  es.onmessage = (e) => {{
+    let data;
+    try {{ data = JSON.parse(e.data); }} catch (err) {{ return; }}
+
+    if (data.type === 'start') {{
+      counterEl.textContent = `Starting ${{data.estimated_agents}} analysts… estimated ${{data.estimated_seconds}}s`;
+      startedAt = Date.now();
+    }}
+    else if (data.type === 'agent_update') {{
+      updateCard(data.agent_id, data.agent_name, 'working', data.status);
+      seen.add(data.agent_id);
+      counterEl.textContent = `${{doneCount}} of ${{Math.max(TOTAL, seen.size)}} done · last: ${{data.agent_name}} (${{data.status}})`;
+    }}
+    else if (data.type === 'agent_done') {{
+      updateCard(data.agent_id, data.agent_name, 'done', 'Done');
+      seen.add(data.agent_id);
+      doneCount += 1;
+      const total = Math.max(TOTAL, seen.size);
+      const pct = Math.min(100, Math.round((doneCount / total) * 100));
+      fillEl.style.width = pct + '%';
+      counterEl.textContent = `${{doneCount}} of ${{total}} done`;
+    }}
+    else if (data.type === 'agent_error') {{
+      updateCard(data.agent_id, data.agent_name, 'error', data.status);
+      seen.add(data.agent_id);
+    }}
+    else if (data.type === 'done') {{
+      fillEl.style.width = '100%';
+      counterEl.textContent = `All analysts complete in ${{data.elapsed.toFixed(1)}}s · redirecting…`;
+      es.close();
+      setTimeout(() => {{ window.location.href = REDIRECT_URL; }}, 700);
+    }}
+    else if (data.type === 'error') {{
+      errorEl.style.display = 'block';
+      errorEl.textContent = 'Pipeline failed: ' + (data.message || 'unknown error');
+      counterEl.textContent = 'Stopped on error.';
+      es.close();
+    }}
+  }};
+  es.onerror = () => {{
+    errorEl.style.display = 'block';
+    errorEl.textContent = 'Stream connection lost. The pipeline may still be running — try refreshing /ticker/' + TICKER + '?deep=1 in a minute.';
+  }};
+}})();
+</script>
+"""
+    crumbs = [
+        ("Home", "/"),
+        (ticker, f"/ticker/{ticker}"),
+        ("Streaming", None),
+    ]
+    return _shell(active="home", title=f"Strategist · {ticker} · Streaming", body=body, breadcrumbs=crumbs)
+
+
+def _quote_json(s: str) -> str:
+    import json as _j
+    return _j.dumps(s)
 
 
 def saved_list_page(items: list[dict], ticker: Optional[str] = None) -> str:

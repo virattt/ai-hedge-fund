@@ -26,9 +26,19 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Optional
 
+import json as _json
+
+# Load .env early so FINANCIAL_DATASETS_API_KEY, ANTHROPIC_API_KEY, etc. are
+# available when the snapshot / agent / fundamentals modules consult os.environ.
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv()
+except Exception:
+    pass
+
 import uvicorn
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 
 from src.analysis import generate_snapshot, attach_final_verdict, deep_analyze, shallow_analyze
 from src.analysis.snapshot import SnapshotReport
@@ -188,6 +198,130 @@ async def compare(tickers: str = "") -> HTMLResponse:
         return HTMLResponse(compare_page([], []))
     reports, errors, _elapsed = _fetch_many(parsed)
     return HTMLResponse(compare_page(reports, errors))
+
+
+# --- Interactive backtest --------------------------------------------------
+
+
+@app.get("/api/backtest-at/{ticker}")
+async def api_backtest_at(ticker: str, date: str) -> JSONResponse:
+    """Run the technical verdict as of an arbitrary historical date.
+
+    Query param `date` is YYYY-MM-DD. Uses the in-memory series cache that
+    `generate_snapshot()` populates — call /api/snapshot/{ticker} first if
+    the cache is cold.
+    """
+    from src.analysis import _series_cache
+    from src.analysis.backtest import backtest_at_date
+
+    series = _series_cache.get(ticker)
+    if not series:
+        # Warm the cache with a fresh snapshot fetch
+        try:
+            _cached(ticker)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"snapshot fetch failed: {exc}")
+        series = _series_cache.get(ticker)
+        if not series:
+            raise HTTPException(status_code=500, detail="series cache empty after snapshot")
+
+    close, volume, spx_close = series
+    point = backtest_at_date(close, volume, date, spx_close)
+    if not point:
+        raise HTTPException(status_code=400, detail="not enough history for that date (need ≥200 trading days before, ≥1 trading day after)")
+
+    # Try the historical fundamentals lookup (Financial Datasets API).
+    # Degrades to None gracefully if no key or no data.
+    fund_payload = None
+    try:
+        from src.analysis.fundamentals_backtest import historical_fundamentals_at_date
+        fp = historical_fundamentals_at_date(ticker, date, close)
+        if fp:
+            fund_payload = {
+                "report_period": fp.report_period,
+                "verdict": fp.fundamental_verdict,
+                "confidence": fp.fundamental_confidence,
+                "error": fp.error,
+                "metrics": [
+                    {
+                        "name": m.name,
+                        "value": m.value,
+                        "unit": m.unit,
+                        "verdict": m.verdict,
+                        "rationale": m.rationale,
+                    }
+                    for m in fp.metrics
+                ],
+            }
+    except Exception as exc:
+        fund_payload = {"error": str(exc)}
+
+    return JSONResponse(
+        {
+            "label": point.label,
+            "as_of_date": point.as_of_date,
+            "price_then": point.price_then,
+            "price_now": point.price_now,
+            "realized_return": point.realized_return,
+            "spx_return": point.spx_return,
+            "alpha": point.alpha,
+            "verdict": point.technical_verdict,
+            "confidence": point.technical_confidence,
+            "correct": point.correct,
+            "indicators": [
+                {
+                    "name": r.name,
+                    "state": r.state,
+                    "signal": r.signal,
+                    "rationale": r.rationale,
+                }
+                for r in point.indicator_signals
+            ],
+            "fundamentals": fund_payload,
+        }
+    )
+
+
+# --- SSE streaming for deep analysis ---------------------------------------
+
+
+@app.get("/api/stream-deep/{ticker}")
+async def stream_deep_endpoint(ticker: str) -> StreamingResponse:
+    """Server-Sent Events stream of LangGraph agent progress."""
+    from src.analysis.agent_streamer import stream_agent_run
+
+    ticker = ticker.upper()
+
+    async def generator():
+        try:
+            async for event in stream_agent_run(ticker):
+                yield f"data: {_json.dumps(event)}\n\n"
+        except Exception as exc:  # pragma: no cover — pipeline failures
+            yield f"data: {_json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@app.get("/ticker/{ticker}/streaming", response_class=HTMLResponse)
+async def ticker_streaming_page(ticker: str, request: Request) -> HTMLResponse:
+    """Live streaming page that opens an EventSource to /api/stream-deep/{ticker}.
+
+    Shows a grid of 14 agent cards. As each completes, the card flips to ✓.
+    When the pipeline finishes, JS auto-redirects to ?deep=1 which uses the
+    now-cached agent results to render the full report.
+    """
+    from src.analysis.ui_pages import streaming_progress_page
+
+    raw_from = request.query_params.get("from", "") or ""
+    return HTMLResponse(streaming_progress_page(ticker.upper(), _parse_tickers(raw_from)))
 
 
 # --- Save / Compare routes -------------------------------------------------

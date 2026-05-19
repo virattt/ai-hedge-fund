@@ -136,6 +136,84 @@ def _signals_at(
     return v, conf, rows
 
 
+def backtest_at_date(
+    close: pd.Series,
+    volume: pd.Series,
+    target_date: str,
+    spx_close: Optional[pd.Series] = None,
+) -> Optional[BacktestPoint]:
+    """Run the technical signals as of an arbitrary historical `target_date`
+    (YYYY-MM-DD) and report what would have happened.
+
+    Returns None if there isn't enough history before or after the date.
+    """
+    if not isinstance(close.index, pd.DatetimeIndex) or len(close) == 0:
+        return None
+
+    target_ts = pd.Timestamp(target_date)
+    idx_tz = close.index.tz
+    if idx_tz is not None and target_ts.tz is None:
+        target_ts = target_ts.tz_localize(idx_tz)
+
+    # Find the last trading day on or before target_date
+    valid = close.index[close.index <= target_ts]
+    if len(valid) == 0:
+        return None
+    last_pos = close.index.get_loc(valid[-1])
+    # We need at least 200 days of history for the indicators
+    if last_pos < 200:
+        return None
+    # And the date must be in the past — at least 1 trading day before the latest
+    if last_pos >= len(close) - 1:
+        return None
+
+    as_of = close.index[last_pos]
+    as_of_str = as_of.strftime("%Y-%m-%d") if hasattr(as_of, "strftime") else str(as_of)
+
+    price_then = float(close.iloc[last_pos])
+    price_now = float(close.iloc[-1])
+    realized = price_now / price_then - 1.0
+
+    days_held = len(close) - 1 - last_pos
+    months_held = days_held / 21
+    label = f"{months_held:.1f}M ago" if months_held >= 1 else f"{days_held}d ago"
+
+    spx_ret: Optional[float] = None
+    alpha: Optional[float] = None
+    if spx_close is not None and len(spx_close) > days_held:
+        try:
+            spx_then = float(spx_close.iloc[-1 - days_held])
+            spx_now = float(spx_close.iloc[-1])
+            spx_ret = spx_now / spx_then - 1.0
+            alpha = realized - spx_ret
+        except Exception:
+            pass
+
+    verdict, conf, rows = _signals_at(close, volume, last_pos)
+
+    correct: Optional[bool] = None
+    if verdict in ("BUY", "STRONG BUY"):
+        correct = realized > 0
+    elif verdict in ("SELL", "REDUCE"):
+        correct = realized < 0
+    elif verdict == "HOLD":
+        correct = abs(realized) < 0.15
+
+    return BacktestPoint(
+        label=label,
+        as_of_date=as_of_str,
+        price_then=price_then,
+        price_now=price_now,
+        realized_return=realized,
+        spx_return=spx_ret,
+        alpha=alpha,
+        technical_verdict=verdict,
+        technical_confidence=conf,
+        indicator_signals=rows,
+        correct=correct,
+    )
+
+
 def run_backtest(
     close: pd.Series, volume: pd.Series, spx_close: Optional[pd.Series] = None
 ) -> BacktestSummary:

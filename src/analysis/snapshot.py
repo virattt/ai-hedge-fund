@@ -530,6 +530,15 @@ def generate_snapshot(ticker: str) -> SnapshotReport:
         [float(x) for x in close.tail(90).tolist() if pd.notna(x)] if len(close) else []
     )
 
+    # Stash the raw price/volume/spx series in a process-level cache so
+    # the interactive backtest endpoint can run arbitrary historical
+    # dates without re-pulling yfinance.
+    try:
+        from src.analysis import _series_cache
+        _series_cache.put(ticker, close, volume, spx_close)
+    except Exception:
+        pass
+
     # Run technical backtest (fast, deterministic — reuses price/volume already pulled)
     backtest_summary = None
     try:
