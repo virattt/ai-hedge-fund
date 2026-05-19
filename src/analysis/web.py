@@ -27,16 +27,19 @@ from datetime import datetime
 from typing import Optional
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from src.analysis import generate_snapshot, attach_final_verdict, deep_analyze, shallow_analyze
 from src.analysis.snapshot import SnapshotReport
+from src.analysis import storage as snapshot_storage
 from src.analysis.ui_pages import (
     compare_page,
+    compare_saved_page,
     history_page,
     home_page,
     results_overview_page,
+    saved_list_page,
     ticker_detail_page,
     watchlists_page,
 )
@@ -185,6 +188,50 @@ async def compare(tickers: str = "") -> HTMLResponse:
         return HTMLResponse(compare_page([], []))
     reports, errors, _elapsed = _fetch_many(parsed)
     return HTMLResponse(compare_page(reports, errors))
+
+
+# --- Save / Compare routes -------------------------------------------------
+
+
+@app.post("/api/save/{ticker}")
+async def api_save(ticker: str, note: str = Form("")) -> RedirectResponse:
+    """Persist the current snapshot for `ticker` to disk and bounce the user to the saved list."""
+    try:
+        rep = _cached(ticker)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Snapshot failed: {exc}")
+    snapshot_storage.save_snapshot(rep, note=note)
+    return RedirectResponse(url=f"/saved/{ticker.upper()}", status_code=303)
+
+
+@app.get("/saved", response_class=HTMLResponse)
+async def saved_all() -> HTMLResponse:
+    items = snapshot_storage.list_saved()
+    return HTMLResponse(saved_list_page(items))
+
+
+@app.get("/saved/{ticker}", response_class=HTMLResponse)
+async def saved_for(ticker: str) -> HTMLResponse:
+    items = snapshot_storage.list_saved(ticker)
+    return HTMLResponse(saved_list_page(items, ticker=ticker.upper()))
+
+
+@app.get("/compare-saved/{ticker}/{timestamp}", response_class=HTMLResponse)
+async def compare_saved(ticker: str, timestamp: str) -> HTMLResponse:
+    saved = snapshot_storage.load_saved(ticker, timestamp)
+    if not saved:
+        raise HTTPException(status_code=404, detail="Saved snapshot not found")
+    try:
+        current = _cached(ticker)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Snapshot fetch failed: {exc}")
+    return HTMLResponse(compare_saved_page(saved, current))
+
+
+@app.post("/api/delete-saved/{ticker}/{timestamp}")
+async def delete_saved(ticker: str, timestamp: str) -> RedirectResponse:
+    snapshot_storage.delete_saved(ticker, timestamp)
+    return RedirectResponse(url=f"/saved/{ticker.upper()}", status_code=303)
 
 
 # --- JSON API ---------------------------------------------------------------

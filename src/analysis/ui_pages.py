@@ -38,9 +38,10 @@ PRESETS: list[tuple[str, str, list[str]]] = [
 def _shell(*, active: str, title: str, body: str, breadcrumbs: list[tuple[str, Optional[str]]] | None = None, pulse_html: str = "") -> str:
     """Wrap page body in sidebar + topbar + footer chrome."""
     nav_items = [
-        ("home", "/", "Home", "M3 9l9-7 9 7v11a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2V9z"),
-        ("watchlists", "/watchlists", "Watchlists", "M5 5h14v14H5z M5 9h14 M5 13h14 M5 17h14"),
-        ("history", "/history", "Recent", "M12 8v5l3 3 M21 12a9 9 0 1 1-3-6.7"),
+        ("home", "/", "Home", ""),
+        ("saved", "/saved", "Saved", ""),
+        ("watchlists", "/watchlists", "Watchlists", ""),
+        ("history", "/history", "Recent", ""),
     ]
     nav_html = []
     for key, href, label, _path in nav_items:
@@ -823,6 +824,150 @@ def _agent_council_panel(agents, *, deep_url: str, has_run: bool) -> str:
 """
 
 
+def _multi_horizon_panel(price_target_set, current_price: Optional[float]) -> str:
+    """Render the 3M / 6M / 12M / 24M price-target table + a visual range bar."""
+    if not price_target_set or not price_target_set.targets:
+        return ""
+
+    pts = price_target_set
+    rows: list[str] = []
+
+    def _money(v: Optional[float]) -> str:
+        if v is None or v != v:
+            return '<span class="dim">—</span>'
+        return f"${v:,.2f}"
+
+    def _pct(v: Optional[float], color: bool = True) -> str:
+        if v is None or v != v:
+            return '<span class="dim">—</span>'
+        cls = ("pos" if v >= 0 else "neg") if color else ""
+        sign = "+" if v >= 0 else ""
+        return f'<span class="{cls}">{sign}{v*100:.1f}%</span>'
+
+    # Pre-compute the global range for the visual bar (current_price ± widest sigma_t)
+    all_vals: list[float] = []
+    for t in pts.targets:
+        for v in (t.bear_case, t.bull_case, t.combined_target):
+            if v is not None and v == v:
+                all_vals.append(v)
+    if current_price:
+        all_vals.append(current_price)
+    if not all_vals:
+        return ""
+    g_lo = min(all_vals) * 0.97
+    g_hi = max(all_vals) * 1.03
+    g_rng = max(g_hi - g_lo, 1e-6)
+
+    def _xpct(v: float) -> float:
+        return max(0.0, min(100.0, (v - g_lo) / g_rng * 100))
+
+    for t in pts.targets:
+        # Visual bar: bear -- combined -- bull, with current price marker
+        bar = ""
+        if t.bear_case is not None and t.bull_case is not None and t.combined_target is not None:
+            bear_x = _xpct(t.bear_case)
+            bull_x = _xpct(t.bull_case)
+            mid_x = _xpct(t.combined_target)
+            width = max(0.5, bull_x - bear_x)
+            curr_x = _xpct(current_price) if current_price else mid_x
+            bar = f"""
+<div style="position:relative; height:24px; background:rgba(255,255,255,0.04); border-radius:6px;">
+  <div style="position:absolute; left:{bear_x:.1f}%; width:{width:.1f}%; height:100%; background:linear-gradient(90deg, var(--sell-bg), var(--hold-bg), var(--buy-bg)); border-radius:6px; opacity:0.85;"></div>
+  <div title="Current" style="position:absolute; left:{curr_x:.1f}%; top:0; bottom:0; width:2px; background:var(--accent); transform:translateX(-1px); box-shadow:0 0 6px var(--accent);"></div>
+  <div title="Target ${t.combined_target:,.2f}" style="position:absolute; left:{mid_x:.1f}%; top:50%; width:10px; height:10px; background:var(--text); border-radius:50%; transform:translate(-5px,-5px); box-shadow:0 0 0 2px var(--panel);"></div>
+</div>"""
+
+        components_str = ""
+        if t.components_used == 3:
+            components_str = '<span style="color:var(--buy)">●●●</span>'
+        elif t.components_used == 2:
+            components_str = '<span style="color:var(--hold)">●●○</span>'
+        elif t.components_used == 1:
+            components_str = '<span style="color:var(--mute)">●○○</span>'
+
+        rows.append(f"""
+<tr>
+  <td><b>{html.escape(t.label)}</b><div class="dim" style="font-size:11px">{html.escape(t.notes or '—')}</div></td>
+  <td class="num">{_money(t.technical_target)}</td>
+  <td class="num">{_money(t.fundamental_target)}</td>
+  <td class="num">{_money(t.analyst_target)}</td>
+  <td class="num mono" style="font-weight:700">{_money(t.combined_target)}</td>
+  <td class="num"><span style="color:var(--sell)">{_money(t.bear_case)}</span></td>
+  <td class="num"><span style="color:var(--buy)">{_money(t.bull_case)}</span></td>
+  <td class="num">{_pct(t.upside_pct)}</td>
+  <td class="num">{_pct(t.downside_pct)}</td>
+  <td class="num">{t.confidence:.0f}% <span title="Components ({t.components_used}/3)">{components_str}</span></td>
+  <td style="min-width:180px">{bar}</td>
+</tr>""")
+
+    vol_note = ""
+    if pts.annualized_volatility is not None:
+        vol_note = f' · Annualised volatility {pts.annualized_volatility*100:.1f}%'
+
+    return f"""
+<div class="panel" id="price-targets-panel">
+  <h2>🎯 Multi-horizon price targets <span class="count">3M / 6M / 12M / 24M</span></h2>
+  <div class="dim" style="font-size:13px; margin-bottom:14px">
+    Each horizon is modelled three ways and then weighted (shorter horizons lean technical, longer lean fundamental + analyst). Bear / bull are 1σ-wide bands from realized vol scaled by √time — wider for longer horizons. The blue vertical line on the visual bar is the current price; the white dot is the combined target.{vol_note}.
+  </div>
+  <div style="overflow-x:auto">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Horizon</th>
+          <th class="right" title="From 6M annualized momentum with decay">Technical</th>
+          <th class="right" title="Projected EPS × target P/E">Fundamental</th>
+          <th class="right" title="Mean analyst 12M target, scaled to horizon">Analyst</th>
+          <th class="right" title="Horizon-weighted combination">Combined</th>
+          <th class="right" title="−1σ from realized volatility">Bear case</th>
+          <th class="right" title="+1σ from realized volatility">Bull case</th>
+          <th class="right" title="Combined vs current">Upside</th>
+          <th class="right" title="Bear vs current">Downside</th>
+          <th class="right" title="Tighter cluster of lenses = higher confidence">Conf.</th>
+          <th>Range (bear ⇢ bull)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {''.join(rows)}
+      </tbody>
+    </table>
+  </div>
+  <div class="dim" style="font-size:11.5px; margin-top:10px">
+    Methodology: 3M weights (Tech 55% / Fund 25% / Analyst 20%) → 24M weights (Tech 10% / Fund 55% / Analyst 35%). EPS growth clamped to [-30%, +60%]; technical decay 0.65 (≤6M) / 0.45 (≤12M) / 0.30 (24M); bear/bull from 1σ band on daily log returns scaled by √(months/12). Targets are estimates, not guarantees.
+  </div>
+</div>
+"""
+
+
+def _saved_count_pill(ticker: str) -> str:
+    """Render a small 'N saved' pill that links to /saved/<TICKER>, server-side."""
+    try:
+        from src.analysis.storage import list_saved
+        items = list_saved(ticker)
+        if not items:
+            return ""
+        return f'<a class="btn ghost" href="/saved/{html.escape(ticker)}" title="View saved snapshots">📁 {len(items)} saved</a>'
+    except Exception:
+        return ""
+
+
+def _save_form(ticker: str) -> str:
+    """Tiny inline save form with optional note."""
+    return f"""
+<div class="panel" id="save-panel" style="background:linear-gradient(180deg, var(--panel-2), var(--panel)); border:1px solid var(--line-strong)">
+  <h2>💾 Save this analysis</h2>
+  <div class="dim" style="font-size:13px; margin-bottom:12px">
+    Persist the full snapshot (price, fundamentals, technicals, analyst panel, backtest, final verdict, multi-horizon targets, and AI council results if you've run them) to <code>~/.strategist/saved/</code>. Re-run this ticker later and compare what changed.
+  </div>
+  <form action="/api/save/{html.escape(ticker)}" method="post" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+    <input type="text" name="note" placeholder="Optional note: e.g. 'pre-earnings 2026-05-19'"
+           style="flex:1; min-width:280px; padding:10px 14px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:inherit; font-size:13px"/>
+    <button class="btn primary" type="submit">★ Save snapshot</button>
+  </form>
+</div>
+"""
+
+
 def _methodology_panel(rec) -> str:
     from src.analysis.final_verdict import compose_methodology
     return f"""
@@ -865,8 +1010,11 @@ def ticker_detail_page(report: SnapshotReport, from_tickers: list[str], *, deep:
     rec = report.final_verdict
     final_banner = _final_verdict_banner(rec, report) if rec else ""
     rationale_block = _verdict_rationale(rec) if rec else ""
+    multi_horizon_block = _multi_horizon_panel(report.price_target_set, report.current_price)
     backtest_block = _backtest_panel(report.backtest, report.current_price)
     agents_block = _agent_council_panel(report.agents, deep_url=deep_url, has_run=bool(report.agents))
+    save_block = _save_form(report.ticker)
+    saved_pill = _saved_count_pill(report.ticker)
     methodology_block = _methodology_panel(rec) if rec else ""
 
     body = f"""
@@ -875,14 +1023,19 @@ def ticker_detail_page(report: SnapshotReport, from_tickers: list[str], *, deep:
   <div class="actions" style="margin-left:auto">
     {prev_link}
     {next_link}
+    {saved_pill}
     {('<a class="btn primary" href="' + html.escape(deep_url) + '">▶ Run deep analysis</a>') if not deep and not report.agents else ''}
+    <a class="btn" href="#price-targets-panel">🎯 Targets</a>
     <a class="btn" href="#backtest-panel">⏪ Backtest</a>
+    <a class="btn" href="#save-panel">💾 Save</a>
     <a class="btn" href="/api/snapshot/{html.escape(report.ticker)}" target="_blank">{{ }} JSON</a>
   </div>
 </div>
 
 {final_banner}
 {rationale_block}
+
+{multi_horizon_block}
 
 {backtest_block}
 
@@ -896,6 +1049,8 @@ def ticker_detail_page(report: SnapshotReport, from_tickers: list[str], *, deep:
   {render_html_body(report)}
 </div>
 
+{save_block}
+
 {methodology_block}
 """
     crumbs: list[tuple[str, Optional[str]]] = [("Home", "/")]
@@ -903,6 +1058,246 @@ def ticker_detail_page(report: SnapshotReport, from_tickers: list[str], *, deep:
         crumbs.append((f"Results ({len(from_tickers)})", f"/run?tickers={from_qs}"))
     crumbs.append((report.ticker, None))
     return _shell(active="home", title=f"Strategist · {report.ticker}", body=body, breadcrumbs=crumbs)
+
+
+def saved_list_page(items: list[dict], ticker: Optional[str] = None) -> str:
+    """List saved snapshots across (optionally just one) tickers."""
+    if not items:
+        body = f"""
+<div class="section">
+  <h2>📁 Saved analyses{(' · ' + html.escape(ticker)) if ticker else ''}</h2>
+  <div class="empty">
+    <div class="big">No saved snapshots yet</div>
+    Run any ticker analysis, scroll to the bottom of the detail page, and click <b>★ Save snapshot</b>. Your saves live in <code>~/.strategist/saved/</code>.
+  </div>
+</div>
+"""
+        crumbs: list[tuple[str, Optional[str]]] = [("Home", "/"), ("Saved", None)]
+        return _shell(active="watchlists", title="Strategist · Saved", body=body, breadcrumbs=crumbs)
+
+    cards: list[str] = []
+    for s in items:
+        verdict_badge = _badge(s.get("verdict") or "—") if s.get("verdict") and s.get("verdict") != "—" else ""
+        score = s.get("score")
+        score_html = f'<span class="mono" style="font-size:13px; color:var(--mute)">{score:.0f}/100</span>' if score is not None else ""
+        price_html = _fmt_money(s.get("price_at_save"))
+        note_html = html.escape(s.get("note") or "")
+        compare_url = f"/compare-saved/{s['ticker']}/{s['timestamp']}"
+        cards.append(f"""
+<div class="card">
+  <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:6px">
+    <b style="font-size:16px">{html.escape(s['ticker'])}</b>
+    {verdict_badge}
+    {score_html}
+  </div>
+  <div class="dim" style="font-size:12.5px">Saved {html.escape(s['saved_at'])}</div>
+  <div class="mono" style="margin-top:4px; font-size:13px">Price @ save: {price_html}</div>
+  {f'<div style="margin-top:8px; color:var(--text); font-size:13px; font-style:italic">"{note_html}"</div>' if note_html else ''}
+  <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap">
+    <a class="btn primary" href="{compare_url}">⇆ Compare with now</a>
+    <a class="btn" href="/ticker/{html.escape(s['ticker'])}">Open ticker</a>
+  </div>
+</div>""")
+
+    body = f"""
+<div class="section">
+  <div class="topbar" style="margin-bottom:18px">
+    <div>
+      <h1 style="margin:0; font-size:24px">📁 Saved analyses</h1>
+      <div class="dim" style="font-size:13px; margin-top:4px">{len(items)} snapshot{'s' if len(items) != 1 else ''} {('for ' + html.escape(ticker)) if ticker else 'across all tickers'}</div>
+    </div>
+  </div>
+  <div class="card-grid">
+    {''.join(cards)}
+  </div>
+</div>
+"""
+    crumbs = [("Home", "/"), ("Saved" + ((' · ' + ticker) if ticker else ''), None)]
+    return _shell(active="watchlists", title="Strategist · Saved", body=body, breadcrumbs=crumbs)
+
+
+def compare_saved_page(saved: dict, current: SnapshotReport) -> str:
+    """Side-by-side: saved snapshot vs current. Highlights what changed."""
+    ticker = current.ticker
+    saved_price = saved.get("current_price")
+    now_price = current.current_price
+    realized = None
+    if saved_price and now_price:
+        realized = now_price / saved_price - 1.0
+    saved_at = saved.get("_meta", {}).get("saved_at", "")
+    note = saved.get("_meta", {}).get("note", "")
+    saved_fv = saved.get("final_verdict") or {}
+    saved_action = saved_fv.get("action") or "—"
+    saved_score = saved_fv.get("composite_score")
+    saved_target_mid = saved_fv.get("price_target_mid")
+    saved_target_low = saved_fv.get("price_target_low")
+    saved_target_high = saved_fv.get("price_target_high")
+    saved_hold = saved_fv.get("hold_period_label", "—")
+
+    cur_fv = current.final_verdict
+    cur_action = cur_fv.action if cur_fv else "—"
+    cur_score = cur_fv.composite_score if cur_fv else None
+    cur_target = cur_fv.price_target_mid if cur_fv else None
+    cur_hold = cur_fv.hold_period_label if cur_fv else "—"
+
+    def _row(label: str, saved_val: str, cur_val: str, delta: str = "") -> str:
+        return f"<tr><td class='metric-label'>{html.escape(label)}</td><td>{saved_val}</td><td>{cur_val}</td><td>{delta}</td></tr>"
+
+    def _money_or_dash(v) -> str:
+        if v is None:
+            return '<span class="dim">—</span>'
+        try:
+            return _fmt_money(float(v))
+        except Exception:
+            return str(v)
+
+    def _delta_money(saved_v, cur_v) -> str:
+        if saved_v is None or cur_v is None:
+            return ""
+        try:
+            d = float(cur_v) - float(saved_v)
+            pct = d / float(saved_v) if float(saved_v) else 0
+            cls = "pos" if d >= 0 else "neg"
+            return f'<span class="{cls}">{d:+,.2f} ({pct*100:+.1f}%)</span>'
+        except Exception:
+            return ""
+
+    def _delta_score(saved_v, cur_v) -> str:
+        if saved_v is None or cur_v is None:
+            return ""
+        try:
+            d = float(cur_v) - float(saved_v)
+            cls = "pos" if d >= 0 else "neg"
+            return f'<span class="{cls}">{d:+.1f}</span>'
+        except Exception:
+            return ""
+
+    # Map saved fundamentals by name for diffing
+    saved_fund = {m.get("name"): m for m in (saved.get("fundamental_metrics") or [])}
+    cur_fund = {m.name: m for m in current.fundamental_metrics}
+    saved_tech = {i.get("name"): i for i in (saved.get("technical_indicators") or [])}
+    cur_tech = {i.name: i for i in current.technical_indicators}
+
+    fund_rows: list[str] = []
+    for name in cur_fund:
+        s_row = saved_fund.get(name) or {}
+        c_row = cur_fund[name]
+        s_val = s_row.get("value")
+        c_val = c_row.value
+        s_verdict = s_row.get("verdict", "—")
+        c_verdict = c_row.verdict
+        verdict_changed = s_verdict and s_verdict != "—" and s_verdict != c_verdict
+        change_mark = ' <span class="pos" style="font-size:11px">⬤ changed</span>' if verdict_changed else ""
+        fund_rows.append(f"""
+<tr>
+  <td>{html.escape(name)}</td>
+  <td class="num">{html.escape(str(s_val) if s_val is not None else '—')}</td>
+  <td>{_badge(s_verdict) if s_verdict and s_verdict != '—' else '<span class="dim">—</span>'}</td>
+  <td class="num">{c_row.fmt_value()}</td>
+  <td>{_badge(c_verdict)}{change_mark}</td>
+</tr>""")
+
+    tech_rows: list[str] = []
+    for name in cur_tech:
+        s_row = saved_tech.get(name) or {}
+        c_row = cur_tech[name]
+        s_signal = s_row.get("signal", "—")
+        c_signal = c_row.signal
+        sig_changed = s_signal and s_signal != "—" and s_signal != c_signal
+        change_mark = ' <span class="pos" style="font-size:11px">⬤ flipped</span>' if sig_changed else ""
+        tech_rows.append(f"""
+<tr>
+  <td>{html.escape(name)}</td>
+  <td>{_badge(s_signal) if s_signal and s_signal != '—' else '<span class="dim">—</span>'}</td>
+  <td>{_badge(c_signal)}{change_mark}</td>
+</tr>""")
+
+    realized_block = ""
+    if realized is not None:
+        cls = "pos" if realized >= 0 else "neg"
+        # Was the saved verdict right?
+        verdict_call = ""
+        if saved_action and saved_action != "—":
+            if "BUY" in saved_action:
+                hit = realized > 0
+            elif "SELL" in saved_action or "REDUCE" in saved_action:
+                hit = realized < 0
+            elif "HOLD" in saved_action:
+                hit = abs(realized) < 0.15
+            else:
+                hit = None
+            if hit is True:
+                verdict_call = '<span class="pos">✓ The saved call paid off</span>'
+            elif hit is False:
+                verdict_call = '<span class="neg">✗ The saved call missed</span>'
+
+        realized_block = f"""
+<div class="panel" style="background:linear-gradient(180deg, var(--panel-2), var(--panel))">
+  <h2>⏱ Realized since save</h2>
+  <div style="display:flex; gap:36px; flex-wrap:wrap; align-items:center">
+    <div><div class="dim" style="font-size:11px; text-transform:uppercase">Price at save</div><div class="mono" style="font-size:20px; font-weight:700">{_money_or_dash(saved_price)}</div></div>
+    <div><div class="dim" style="font-size:11px; text-transform:uppercase">Price now</div><div class="mono" style="font-size:20px; font-weight:700">{_money_or_dash(now_price)}</div></div>
+    <div><div class="dim" style="font-size:11px; text-transform:uppercase">Realized return</div><div class="mono {cls}" style="font-size:22px; font-weight:800">{realized*100:+.2f}%</div></div>
+    <div>{verdict_call}</div>
+  </div>
+</div>"""
+
+    note_block = ""
+    if note:
+        note_block = f'<div class="warning-box" style="font-style:italic">"{html.escape(note)}"</div>'
+
+    body = f"""
+<div class="topbar" style="margin-bottom:18px">
+  <div>
+    <h1 style="margin:0; font-size:24px">⇆ Comparing {html.escape(ticker)}</h1>
+    <div class="dim" style="font-size:13px; margin-top:4px">Saved <b>{html.escape(saved_at)}</b> vs <b>now</b> ({current.timestamp:%Y-%m-%d %H:%M})</div>
+  </div>
+  <div class="actions" style="margin-left:auto">
+    <a class="btn" href="/saved/{html.escape(ticker)}">← All saved</a>
+    <a class="btn" href="/ticker/{html.escape(ticker)}">Open current</a>
+  </div>
+</div>
+{note_block}
+{realized_block}
+
+<div class="panel">
+  <h2>📋 Headline diff</h2>
+  <table class="data">
+    <thead><tr><th>Field</th><th>Saved</th><th>Now</th><th>Δ</th></tr></thead>
+    <tbody>
+      <tr><td class="metric-label">Verdict</td><td>{_badge(saved_action)}</td><td>{_badge(cur_action)}</td><td>{('<span class="pos">⬤ unchanged</span>' if saved_action == cur_action else '<span class="neg">⬤ changed</span>')}</td></tr>
+      <tr><td class="metric-label">Composite score</td><td class="num mono">{saved_score:.0f}/100</td><td class="num mono">{cur_score:.0f}/100</td><td>{_delta_score(saved_score, cur_score)}</td></tr>
+      <tr><td class="metric-label">Current price</td><td class="num mono">{_money_or_dash(saved_price)}</td><td class="num mono">{_money_or_dash(now_price)}</td><td>{_delta_money(saved_price, now_price)}</td></tr>
+      <tr><td class="metric-label">12M price target (mid)</td><td class="num mono">{_money_or_dash(saved_target_mid)}</td><td class="num mono">{_money_or_dash(cur_target)}</td><td>{_delta_money(saved_target_mid, cur_target)}</td></tr>
+      <tr><td class="metric-label">Hold period</td><td>{html.escape(saved_hold)}</td><td>{html.escape(cur_hold)}</td><td>{('<span class="dim">same</span>' if saved_hold == cur_hold else '<span class="neg">changed</span>')}</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="grid">
+  <div class="panel">
+    <h2>10 Fundamentals · diff</h2>
+    <table class="data">
+      <thead><tr><th>Metric</th><th class="right">Saved value</th><th>Saved verdict</th><th class="right">Now</th><th>Now verdict</th></tr></thead>
+      <tbody>{''.join(fund_rows)}</tbody>
+    </table>
+  </div>
+  <div class="panel">
+    <h2>6 Technicals · diff</h2>
+    <table class="data">
+      <thead><tr><th>Indicator</th><th>Saved signal</th><th>Now signal</th></tr></thead>
+      <tbody>{''.join(tech_rows)}</tbody>
+    </table>
+  </div>
+</div>
+"""
+    crumbs = [
+        ("Home", "/"),
+        ("Saved", "/saved"),
+        (f"{ticker}", f"/saved/{ticker}"),
+        ("Compare", None),
+    ]
+    return _shell(active="watchlists", title=f"Strategist · Compare {ticker}", body=body, breadcrumbs=crumbs)
 
 
 def compare_page(reports: list[SnapshotReport], errors: list[tuple[str, str]]) -> str:

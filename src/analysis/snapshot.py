@@ -112,6 +112,7 @@ class SnapshotReport:
     backtest: object | None = None   # BacktestSummary
     agents: object | None = None     # AgentRunResult
     final_verdict: object | None = None  # FinalRecommendation
+    price_target_set: object | None = None  # PriceTargetSet (multi-horizon)
 
 
 # ----------------------------------------------------------------------------
@@ -538,6 +539,15 @@ def generate_snapshot(ticker: str) -> SnapshotReport:
     except Exception as _e:
         warnings_list.append(f"backtest failed: {_e}")
 
+    # Multi-horizon price targets (3M / 6M / 12M / 24M)
+    pt_set = None
+    try:
+        from src.analysis.price_targets import compute_targets as _compute_targets
+        if current_price and len(close):
+            pt_set = _compute_targets(close, info, analyst, current_price)
+    except Exception as _e:
+        warnings_list.append(f"price targets failed: {_e}")
+
     return SnapshotReport(
         ticker=ticker,
         company_name=company_name,
@@ -564,4 +574,5 @@ def generate_snapshot(ticker: str) -> SnapshotReport:
         data_warnings=warnings_list,
         price_sparkline=sparkline,
         backtest=backtest_summary,
+        price_target_set=pt_set,
     )
