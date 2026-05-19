@@ -16,25 +16,26 @@ from typing_extensions import Literal
 
 
 class Sentiment(BaseModel):
-    """Represents the sentiment of a news article or social media post."""
+    """Rappresenta il sentiment di un articolo di news o di un post social."""
 
     sentiment: Literal["positive", "negative", "neutral"]
-    confidence: int = Field(description="Confidence 0-100")
+    confidence: int = Field(description="Confidenza da 0 a 100")
 
 
 def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agent"):
     """
-    Analyzes sentiment for a list of tickers across news, Reddit, and Twitter
-    and generates trading signals.
+    Analizza il sentiment per una lista di ticker su news, Reddit e Twitter
+    e genera segnali di trading.
 
-    For each ticker the agent fetches:
-      - Company news from the Financial Datasets API
-      - Recent Reddit posts via the public Reddit JSON API
-      - Recent tweets via the Twitter API v2 (when TWITTER_BEARER_TOKEN is set)
+    Per ogni ticker l'agente recupera:
+      - Le news societarie dall'API Financial Datasets
+      - I post Reddit recenti tramite l'API JSON pubblica di Reddit
+      - I tweet recenti tramite Twitter API v2 (quando TWITTER_BEARER_TOKEN è impostato)
 
-    Items without a pre-classified sentiment are scored by an LLM. Signals from
-    all sources are aggregated to produce an overall bullish/bearish/neutral
-    signal and confidence score per ticker.
+    Gli elementi senza sentiment pre-classificato vengono valutati da un LLM.
+    I segnali provenienti da tutte le fonti vengono aggregati per produrre un
+    segnale complessivo bullish/bearish/neutral e un punteggio di confidenza
+    per ciascun ticker.
     """
     data = state.get("data", {})
     end_date = data.get("end_date")
@@ -45,8 +46,8 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
     sentiment_analysis = {}
 
     for ticker in tickers:
-        # --- 1. Fetch company news ---
-        progress.update_status(agent_id, ticker, "Fetching company news")
+        # --- 1. Recupera le news societarie ---
+        progress.update_status(agent_id, ticker, "Recupero delle news societarie")
         company_news = get_company_news(
             ticker=ticker,
             end_date=end_date,
@@ -54,8 +55,8 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
             api_key=api_key,
         ) or []
 
-        # --- 2. Fetch Reddit posts ---
-        progress.update_status(agent_id, ticker, "Fetching Reddit posts")
+        # --- 2. Recupera i post da Reddit ---
+        progress.update_status(agent_id, ticker, "Recupero dei post da Reddit")
         reddit_posts = get_reddit_posts(
             ticker=ticker,
             end_date=end_date,
@@ -63,8 +64,8 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
             user_agent=reddit_user_agent,
         ) or []
 
-        # --- 3. Fetch Twitter posts ---
-        progress.update_status(agent_id, ticker, "Fetching Twitter posts")
+        # --- 3. Recupera i post da Twitter ---
+        progress.update_status(agent_id, ticker, "Recupero dei post da Twitter")
         twitter_posts = get_twitter_posts(
             ticker=ticker,
             end_date=end_date,
@@ -75,7 +76,7 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
         sentiment_confidences: dict[int, int] = {}
         llm_classified_counts = {"news": 0, "reddit": 0, "twitter": 0}
 
-        # --- 4. Classify the most recent items per source via LLM ---
+        # --- 4. Classifica con l'LLM gli elementi più recenti per ogni fonte ---
         if company_news:
             recent_news = company_news[:10]
             news_to_classify = [n for n in recent_news if n.sentiment is None][:5]
@@ -83,12 +84,12 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
                 progress.update_status(
                     agent_id,
                     ticker,
-                    f"Analyzing sentiment for {len(news_to_classify)} news articles",
+                    f"Analisi del sentiment per {len(news_to_classify)} articoli di news",
                 )
                 _classify_items(
                     items=news_to_classify,
                     ticker=ticker,
-                    source_label="news article",
+                    source_label="articolo di news",
                     text_fn=lambda n: n.title,
                     state=state,
                     agent_id=agent_id,
@@ -101,12 +102,12 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
             progress.update_status(
                 agent_id,
                 ticker,
-                f"Analyzing sentiment for {len(reddit_to_classify)} Reddit posts",
+                f"Analisi del sentiment per {len(reddit_to_classify)} post Reddit",
             )
             _classify_items(
                 items=reddit_to_classify,
                 ticker=ticker,
-                source_label="Reddit post",
+                source_label="post Reddit",
                 text_fn=lambda p: p.text or p.title or "",
                 state=state,
                 agent_id=agent_id,
@@ -119,7 +120,7 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
             progress.update_status(
                 agent_id,
                 ticker,
-                f"Analyzing sentiment for {len(twitter_to_classify)} tweets",
+                f"Analisi del sentiment per {len(twitter_to_classify)} tweet",
             )
             _classify_items(
                 items=twitter_to_classify,
@@ -132,8 +133,8 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
             )
             llm_classified_counts["twitter"] = len(twitter_to_classify)
 
-        # --- 5. Aggregate signals across all sources ---
-        progress.update_status(agent_id, ticker, "Aggregating signals")
+        # --- 5. Aggrega i segnali da tutte le fonti ---
+        progress.update_status(agent_id, ticker, "Aggregazione dei segnali")
 
         all_items = list(company_news) + list(reddit_posts) + list(twitter_posts)
         sentiment_series = pd.Series(
@@ -166,7 +167,7 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
             total_signals=total_signals,
         )
 
-        # Per-source breakdown for the reasoning report
+        # Dettaglio per fonte da inserire nel report di reasoning
         def _source_metrics(items: list) -> dict:
             sigs = [
                 "bullish" if i.sentiment == "positive"
@@ -176,7 +177,7 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
                 if i.sentiment is not None
             ]
             return {
-                "total": len(items),
+                "totale": len(items),
                 "bullish": sigs.count("bullish"),
                 "bearish": sigs.count("bearish"),
                 "neutral": sigs.count("neutral"),
@@ -184,20 +185,20 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
 
         reasoning = {
             "news_sentiment": {
-                "signal": overall_signal,
-                "confidence": confidence,
-                "metrics": {
-                    "total_items": total_signals,
-                    "bullish_items": bullish_signals,
-                    "bearish_items": bearish_signals,
-                    "neutral_items": neutral_signals,
-                    "items_classified_by_llm": sum(llm_classified_counts.values()),
-                    "by_source": {
+                "segnale": overall_signal,
+                "confidenza": confidence,
+                "metriche": {
+                    "elementi_totali": total_signals,
+                    "elementi_bullish": bullish_signals,
+                    "elementi_bearish": bearish_signals,
+                    "elementi_neutral": neutral_signals,
+                    "classificati_dall_llm": sum(llm_classified_counts.values()),
+                    "per_fonte": {
                         "news": _source_metrics(company_news),
                         "reddit": _source_metrics(reddit_posts),
                         "twitter": _source_metrics(twitter_posts),
                     },
-                    "llm_classified_by_source": llm_classified_counts,
+                    "classificati_dall_llm_per_fonte": llm_classified_counts,
                 },
             }
         }
@@ -209,7 +210,7 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
         }
 
         progress.update_status(
-            agent_id, ticker, "Done", analysis=json.dumps(reasoning, indent=4)
+            agent_id, ticker, "Completato", analysis=json.dumps(reasoning, indent=4)
         )
 
     message = HumanMessage(
@@ -218,13 +219,13 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
     )
 
     if state.get("metadata", {}).get("show_reasoning"):
-        show_agent_reasoning(sentiment_analysis, "News Sentiment Analysis Agent")
+        show_agent_reasoning(sentiment_analysis, "Agente di Analisi del Sentiment delle News")
 
     if "analyst_signals" not in state["data"]:
         state["data"]["analyst_signals"] = {}
     state["data"]["analyst_signals"][agent_id] = sentiment_analysis
 
-    progress.update_status(agent_id, None, "Done")
+    progress.update_status(agent_id, None, "Completato")
 
     return {
         "messages": [message],
@@ -241,12 +242,12 @@ def _classify_items(
     agent_id: str,
     sentiment_confidences: dict,
 ) -> None:
-    """Classify a list of items in-place using the LLM, recording confidences."""
+    """Classifica in place una lista di elementi usando l'LLM, registrando le confidenze."""
     for idx, item in enumerate(items):
         progress.update_status(
             agent_id,
             ticker,
-            f"Analyzing sentiment for {source_label} {idx + 1} of {len(items)}",
+            f"Analisi del sentiment per {source_label} {idx + 1} di {len(items)}",
         )
         text = (text_fn(item) or "").strip()
         if not text:
@@ -255,14 +256,14 @@ def _classify_items(
             continue
 
         prompt = (
-            f"Please analyze the sentiment of the following {source_label} "
-            f"with the following context: "
-            f"The stock is {ticker}. "
-            f"Determine if sentiment is 'positive', 'negative', or 'neutral' "
-            f"for the stock {ticker} only. "
-            f"Also provide a confidence score for your prediction from 0 to 100. "
-            f"Respond in JSON format.\n\n"
-            f"Content: {text}"
+            f"Analizza il sentiment del seguente {source_label} "
+            f"considerando il seguente contesto: "
+            f"l'azione di riferimento è {ticker}. "
+            f"Determina se il sentiment è 'positive', 'negative' o 'neutral' "
+            f"esclusivamente rispetto all'azione {ticker}. "
+            f"Indica inoltre un punteggio di confidenza compreso tra 0 e 100. "
+            f"Rispondi in formato JSON.\n\n"
+            f"Contenuto: {text}"
         )
         response = call_llm(prompt, Sentiment, agent_name=agent_id, state=state)
         if response:
@@ -282,10 +283,11 @@ def _calculate_confidence_score(
     total_signals: int,
 ) -> float:
     """
-    Calculate confidence score for a sentiment signal.
+    Calcola il punteggio di confidenza per un segnale di sentiment.
 
-    Uses a weighted approach combining LLM confidence scores (70%) with
-    signal proportion (30%) when LLM classifications are available.
+    Quando sono disponibili classificazioni dell'LLM, utilizza un approccio
+    pesato che combina i punteggi di confidenza dell'LLM (70%) con la
+    proporzione di segnali concordi (30%).
     """
     if total_signals == 0:
         return 0.0

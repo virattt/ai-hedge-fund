@@ -374,10 +374,10 @@ def get_reddit_posts(
     limit: int = 25,
     user_agent: str | None = None,
 ) -> list[SocialMediaPost]:
-    """Fetch recent Reddit posts mentioning the ticker via Reddit's public JSON API.
+    """Recupera i post Reddit recenti che menzionano il ticker tramite l'API JSON pubblica.
 
-    Uses the unauthenticated search endpoint. Reddit blocks default Python
-    user-agents, so a descriptive User-Agent header is required.
+    Usa l'endpoint di ricerca senza autenticazione. Reddit blocca lo User-Agent
+    di default di Python, quindi è necessario un header User-Agent descrittivo.
     """
     cache_key = f"reddit_{ticker}_{start_date or 'none'}_{end_date}_{limit}"
     if cached_data := _cache.get_social_posts(cache_key):
@@ -388,7 +388,7 @@ def get_reddit_posts(
         or os.environ.get("REDDIT_USER_AGENT")
         or "ai-hedge-fund/1.0 (sentiment analysis)"
     }
-    # Search across all of Reddit for the ticker (cashtag or symbol)
+    # Cerca su tutto Reddit il ticker (sia come cashtag che come simbolo)
     query = f"%24{ticker}+OR+{ticker}"
     url = (
         f"https://www.reddit.com/search.json?q={query}"
@@ -398,17 +398,17 @@ def get_reddit_posts(
     try:
         response = requests.get(url, headers=headers, timeout=15)
     except requests.RequestException as e:
-        logger.warning("Reddit fetch failed for %s: %s", ticker, e)
+        logger.warning("Recupero da Reddit fallito per %s: %s", ticker, e)
         return []
 
     if response.status_code != 200:
-        logger.warning("Reddit returned %s for %s", response.status_code, ticker)
+        logger.warning("Reddit ha restituito %s per %s", response.status_code, ticker)
         return []
 
     try:
         data = response.json()
     except ValueError as e:
-        logger.warning("Failed to parse Reddit response for %s: %s", ticker, e)
+        logger.warning("Impossibile interpretare la risposta di Reddit per %s: %s", ticker, e)
         return []
 
     end_cutoff = end_date + "T23:59:59" if end_date and "T" not in end_date else end_date
@@ -458,10 +458,11 @@ def get_twitter_posts(
     limit: int = 25,
     bearer_token: str | None = None,
 ) -> list[SocialMediaPost]:
-    """Fetch recent tweets mentioning the ticker via Twitter API v2.
+    """Recupera i tweet recenti che menzionano il ticker tramite Twitter API v2.
 
-    Requires a bearer token (TWITTER_BEARER_TOKEN env var). Returns an empty
-    list when no token is configured so the agent degrades gracefully.
+    Richiede un bearer token (variabile d'ambiente TWITTER_BEARER_TOKEN).
+    Se il token non è configurato restituisce una lista vuota, in modo che
+    l'agente continui a funzionare senza Twitter.
     """
     token = bearer_token or os.environ.get("TWITTER_BEARER_TOKEN")
     if not token:
@@ -475,7 +476,8 @@ def get_twitter_posts(
     query = f"${ticker} -is:retweet lang:en"
     params = {
         "query": query,
-        "max_results": str(min(max(limit, 10), 100)),  # Twitter API requires 10..100
+        # L'API Twitter accetta valori tra 10 e 100 per max_results
+        "max_results": str(min(max(limit, 10), 100)),
         "tweet.fields": "created_at,public_metrics,author_id",
     }
     url = "https://api.twitter.com/2/tweets/search/recent"
@@ -483,17 +485,17 @@ def get_twitter_posts(
     try:
         response = requests.get(url, headers=headers, params=params, timeout=15)
     except requests.RequestException as e:
-        logger.warning("Twitter fetch failed for %s: %s", ticker, e)
+        logger.warning("Recupero da Twitter fallito per %s: %s", ticker, e)
         return []
 
     if response.status_code != 200:
-        logger.warning("Twitter returned %s for %s", response.status_code, ticker)
+        logger.warning("Twitter ha restituito %s per %s", response.status_code, ticker)
         return []
 
     try:
         data = response.json()
     except ValueError as e:
-        logger.warning("Failed to parse Twitter response for %s: %s", ticker, e)
+        logger.warning("Impossibile interpretare la risposta di Twitter per %s: %s", ticker, e)
         return []
 
     end_cutoff = end_date + "T23:59:59Z" if end_date and "T" not in end_date else end_date

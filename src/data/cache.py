@@ -63,11 +63,11 @@ class Cache:
         self._company_news_cache[ticker] = self._merge_data(self._company_news_cache.get(ticker), data, key_field="date")
 
     def get_social_posts(self, cache_key: str) -> list[dict[str, any]] | None:
-        """Get cached social media posts (Reddit/Twitter) if available."""
+        """Restituisce i post social (Reddit/Twitter) in cache, se presenti."""
         return self._social_posts_cache.get(cache_key)
 
     def set_social_posts(self, cache_key: str, data: list[dict[str, any]]):
-        """Append new social media posts to cache, deduplicated by URL."""
+        """Aggiunge nuovi post social alla cache, deduplicati per URL."""
         self._social_posts_cache[cache_key] = self._merge_data(
             self._social_posts_cache.get(cache_key), data, key_field="url"
         )

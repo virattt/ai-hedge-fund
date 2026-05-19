@@ -115,13 +115,13 @@ class CompanyNewsResponse(BaseModel):
 
 class SocialMediaPost(BaseModel):
     ticker: str
-    platform: str  # "reddit" or "twitter"
+    platform: str  # "reddit" oppure "twitter"
     title: str | None = None
     text: str
     author: str | None = None
     date: str
     url: str | None = None
-    score: int | None = None
+    score: int | None = None  # upvote per Reddit, like per Twitter
     sentiment: str | None = None
 
 
