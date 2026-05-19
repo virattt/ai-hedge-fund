@@ -40,8 +40,9 @@ def _shell(*, active: str, title: str, body: str, breadcrumbs: list[tuple[str, O
     nav_items = [
         ("home", "/", "Home", ""),
         ("saved", "/saved", "Saved", ""),
+        ("journal", "/journal", "Journal", ""),
         ("watchlists", "/watchlists", "Watchlists", ""),
-        ("history", "/history", "Recent", ""),
+        ("settings", "/settings", "Settings", ""),
     ]
     nav_html = []
     for key, href, label, _path in nav_items:
@@ -426,6 +427,53 @@ def _score_pill(score: float, verdict: str) -> str:
 # ---- Pages ----------------------------------------------------------------
 
 
+def _home_watchlists_slot() -> str:
+    """Server-rendered chip strip of your saved watchlists."""
+    try:
+        from src.analysis.watchlists import list_watchlists
+        items = list_watchlists()
+    except Exception:
+        items = []
+    if not items:
+        return '<div class="empty"><div class="big">No watchlists yet</div>Build one on <a href="/watchlists" style="color:var(--accent)">/watchlists</a>.</div>'
+    chips: list[str] = []
+    for w in items[:10]:
+        chips.append(
+            f'<a class="chip" href="/run?tickers={quote_plus(",".join(w["tickers"]))}">'
+            f'<b>{html.escape(w["name"])}</b>'
+            f'<span class="count">{len(w["tickers"])}</span>'
+            f'</a>'
+        )
+    return '<div class="chips">' + "".join(chips) + '</div>'
+
+
+def _home_recent_slot() -> str:
+    """Server-rendered chips of your most recent saved tickers."""
+    try:
+        from src.analysis.storage import list_saved
+        items = list_saved()[:10]
+    except Exception:
+        items = []
+    if not items:
+        return '<div class="empty"><div class="big">No saved analyses yet</div>Run any ticker, scroll to the bottom, click ★ Save snapshot.</div>'
+    seen = set()
+    chips: list[str] = []
+    for it in items:
+        t = it["ticker"]
+        if t in seen:
+            continue
+        seen.add(t)
+        when = it.get("saved_at", "")[:10]
+        verdict_short = (it.get("verdict") or "—").replace("STRONG ", "")
+        chips.append(
+            f'<a class="chip" href="/ticker/{html.escape(t)}"><b>{html.escape(t)}</b>'
+            f'<span class="count">{html.escape(verdict_short)} · {html.escape(when)}</span></a>'
+        )
+        if len(chips) >= 8:
+            break
+    return '<div class="chips">' + "".join(chips) + '</div>'
+
+
 def home_page() -> str:
     preset_chips = "".join(
         f'<a class="chip" href="/run?tickers={quote_plus(",".join(tk))}">'
@@ -450,24 +498,84 @@ def home_page() -> str:
 </div>
 
 <div class="section">
-  <h2>Recent analyses <span class="badge-count" id="recents-count">·</span></h2>
-  <div id="recents-slot" class="chips" style="min-height:48px"></div>
+  <h2>Recent analyses</h2>
+  {_home_recent_slot()}
 </div>
 
 <div class="section">
   <h2>Your watchlists</h2>
-  <div id="watchlists-slot" class="card-grid"></div>
+  {_home_watchlists_slot()}
+  <div style="margin-top:8px"><a class="btn ghost" href="/watchlists">Manage watchlists →</a></div>
 </div>
 """
     return _shell(active="home", title="Strategist · Home", body=body, breadcrumbs=[("Home", "/")])
 
 
 def watchlists_page() -> str:
+    """Persistent server-side watchlists.
+
+    Reads /api/watchlists on page load and renders each as a card with
+    Analyze / Edit / Delete actions. New watchlists are created via a
+    POST form. Data lives at ~/.strategist/watchlists.json.
+    """
     body = """
-<div class="section">
-  <h2>Your watchlists</h2>
-  <div id="watchlists-slot" class="card-grid"></div>
+<div class="topbar" style="margin-bottom:18px">
+  <div>
+    <h1 style="margin:0; font-size:24px">📂 Watchlists</h1>
+    <div class="dim" style="font-size:13px; margin-top:4px">Persisted at <code>~/.strategist/watchlists.json</code> — survives reboots and browser changes.</div>
+  </div>
 </div>
+
+<div class="panel">
+  <h2>+ Create a new watchlist</h2>
+  <form action="/api/watchlists" method="post" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+    <input type="text" name="name" placeholder="Name (e.g. 'Tier 1 Compounders')" required
+           style="flex:1; min-width:200px; padding:10px 14px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:inherit; font-size:13px"/>
+    <input type="text" name="tickers" placeholder="Tickers (comma-separated): NVDA, MSFT, GOOGL" required
+           style="flex:2; min-width:280px; padding:10px 14px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:inherit; font-size:13px"/>
+    <button class="btn primary" type="submit">+ Create</button>
+  </form>
+</div>
+
+<div id="wl-list" class="card-grid"></div>
+
+<script>
+async function loadWatchlists() {
+  const slot = document.getElementById('wl-list');
+  try {
+    const resp = await fetch('/api/watchlists');
+    const items = await resp.json();
+    if (!items.length) {
+      slot.innerHTML = '<div class="empty"><div class="big">No watchlists yet</div>Create one above. Examples: "Mag 7", "AI compute", "GLP-1 ecosystem".</div>';
+      return;
+    }
+    slot.innerHTML = items.map(w => `
+      <div class="card">
+        <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:6px">
+          <b style="font-size:16px">${escapeHtml(w.name)}</b>
+          <span class="dim" style="font-size:11.5px">${w.tickers.length} ticker${w.tickers.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div class="mono" style="font-size:12.5px; color:var(--dim); margin-top:4px">${escapeHtml(w.tickers.join(', '))}</div>
+        <div class="meta" style="margin-top:6px">Updated ${(w.updated_at || w.created_at || '').slice(0, 10)}</div>
+        <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap">
+          <a class="btn primary" href="/run?tickers=${encodeURIComponent(w.tickers.join(','))}">▶ Analyze</a>
+          <form action="/api/watchlists/${w.id}/delete" method="post" style="display:inline" onsubmit="return confirm('Delete this watchlist?')">
+            <button class="btn ghost" type="submit">Delete</button>
+          </form>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    slot.innerHTML = '<div class="error-box">Failed to load watchlists: ' + err + '</div>';
+  }
+}
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+loadWatchlists();
+</script>
 """
     return _shell(
         active="watchlists",
@@ -1155,7 +1263,7 @@ def _saved_count_pill(ticker: str) -> str:
 
 
 def _save_form(ticker: str) -> str:
-    """Tiny inline save form with optional note."""
+    """Tiny inline save form with optional note and tags."""
     return f"""
 <div class="panel" id="save-panel" style="background:linear-gradient(180deg, var(--panel-2), var(--panel)); border:1px solid var(--line-strong)">
   <h2>💾 Save this analysis</h2>
@@ -1164,9 +1272,14 @@ def _save_form(ticker: str) -> str:
   </div>
   <form action="/api/save/{html.escape(ticker)}" method="post" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
     <input type="text" name="note" placeholder="Optional note: e.g. 'pre-earnings 2026-05-19'"
-           style="flex:1; min-width:280px; padding:10px 14px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:inherit; font-size:13px"/>
+           style="flex:1; min-width:240px; padding:10px 14px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:inherit; font-size:13px"/>
+    <input type="text" name="tags" placeholder="Tags (comma-separated): research, decision, position-entered"
+           style="flex:1; min-width:220px; padding:10px 14px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:inherit; font-size:13px"/>
     <button class="btn primary" type="submit">★ Save snapshot</button>
   </form>
+  <div class="dim" style="font-size:11.5px; margin-top:8px">
+    Auto-save can be enabled in <a href="/settings" style="color:var(--accent)">Settings</a> — once per ticker per day on detail-page view.
+  </div>
 </div>
 """
 
@@ -1459,7 +1572,7 @@ def _quote_json(s: str) -> str:
     return _j.dumps(s)
 
 
-def saved_list_page(items: list[dict], ticker: Optional[str] = None) -> str:
+def saved_list_page(items: list[dict], ticker: Optional[str] = None, tag: Optional[str] = None) -> str:
     """List saved snapshots across (optionally just one) tickers."""
     if not items:
         body = f"""
@@ -1474,6 +1587,21 @@ def saved_list_page(items: list[dict], ticker: Optional[str] = None) -> str:
         crumbs: list[tuple[str, Optional[str]]] = [("Home", "/"), ("Saved", None)]
         return _shell(active="watchlists", title="Strategist · Saved", body=body, breadcrumbs=crumbs)
 
+    # Build tag filter chip row
+    from src.analysis.storage import list_all_tags
+    all_tags = list_all_tags()
+    tag_chips = ""
+    if all_tags:
+        chip_html: list[str] = []
+        all_link = f"/saved/{ticker}" if ticker else "/saved"
+        active_cls = "" if tag else " style=\"background:var(--panel-hover); color:var(--text); border-color:var(--line-strong)\""
+        chip_html.append(f'<a class="chip"{active_cls} href="{all_link}">All <span class="count">{len(items) if not tag else "—"}</span></a>')
+        for t, count in all_tags:
+            link = f"/saved/{ticker}?tag={t}" if ticker else f"/saved?tag={t}"
+            active = ' style="background:var(--panel-hover); color:var(--text); border-color:var(--line-strong)"' if tag == t else ""
+            chip_html.append(f'<a class="chip"{active} href="{link}"><b>{html.escape(t)}</b><span class="count">{count}</span></a>')
+        tag_chips = f'<div class="chips" style="margin-bottom:18px">{"".join(chip_html)}</div>'
+
     cards: list[str] = []
     for s in items:
         verdict_badge = _badge(s.get("verdict") or "—") if s.get("verdict") and s.get("verdict") != "—" else ""
@@ -1482,18 +1610,46 @@ def saved_list_page(items: list[dict], ticker: Optional[str] = None) -> str:
         price_html = _fmt_money(s.get("price_at_save"))
         note_html = html.escape(s.get("note") or "")
         compare_url = f"/compare-saved/{s['ticker']}/{s['timestamp']}"
+        tag_pills = ""
+        for t in (s.get("tags") or []):
+            tag_pills += f'<span class="badge b-HOLD" style="font-size:10px; margin-right:4px; text-transform:lowercase">{html.escape(t)}</span>'
+
+        # Target-hit progress
+        target_html = ""
+        progress = s.get("target_progress_pct")
+        target_hit = s.get("target_hit")
+        realized = s.get("realized_pct")
+        target_mid = s.get("price_target_mid")
+        if target_mid and progress is not None:
+            hit_str = "🎯 Hit!" if target_hit else f"{progress*100:.0f}% to target"
+            hit_cls = "var(--buy)" if target_hit else "var(--hold)"
+            pct = min(100, max(0, progress * 100))
+            realized_html = f' <span class="dim" style="font-size:11px">· realized {realized*100:+.1f}%</span>' if realized is not None else ""
+            target_html = f"""
+<div style="margin-top:8px">
+  <div style="font-size:11.5px; color:{hit_cls}; font-weight:700">{hit_str}{realized_html}</div>
+  <div style="margin-top:4px; height:4px; background:rgba(255,255,255,0.06); border-radius:2px; overflow:hidden">
+    <div style="height:100%; width:{pct:.0f}%; background:{hit_cls}; border-radius:2px"></div>
+  </div>
+  <div class="dim" style="font-size:10.5px; margin-top:2px">Target: ${target_mid:,.2f}</div>
+</div>"""
+
+        select_id = f"sel-{s['ticker']}-{s['timestamp']}"
         cards.append(f"""
-<div class="card">
+<div class="card" data-ticker="{html.escape(s['ticker'])}" data-timestamp="{html.escape(s['timestamp'])}">
   <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:6px">
+    <input type="checkbox" class="multi-select" id="{select_id}" data-ticker="{html.escape(s['ticker'])}" data-ts="{html.escape(s['timestamp'])}" />
     <b style="font-size:16px">{html.escape(s['ticker'])}</b>
     {verdict_badge}
     {score_html}
   </div>
-  <div class="dim" style="font-size:12.5px">Saved {html.escape(s['saved_at'])}</div>
+  <div class="dim" style="font-size:12.5px">Saved {html.escape(s['saved_at'])} {('· ' + html.escape(s.get('source',''))) if s.get('source') and s.get('source') != 'manual' else ''}</div>
   <div class="mono" style="margin-top:4px; font-size:13px">Price @ save: {price_html}</div>
+  {tag_pills}
+  {target_html}
   {f'<div style="margin-top:8px; color:var(--text); font-size:13px; font-style:italic">"{note_html}"</div>' if note_html else ''}
   <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap">
-    <a class="btn primary" href="{compare_url}">⇆ Compare with now</a>
+    <a class="btn primary" href="{compare_url}">⇆ Compare</a>
     <a class="btn" href="/ticker/{html.escape(s['ticker'])}">Open ticker</a>
   </div>
 </div>""")
@@ -1502,17 +1658,474 @@ def saved_list_page(items: list[dict], ticker: Optional[str] = None) -> str:
 <div class="section">
   <div class="topbar" style="margin-bottom:18px">
     <div>
-      <h1 style="margin:0; font-size:24px">📁 Saved analyses</h1>
-      <div class="dim" style="font-size:13px; margin-top:4px">{len(items)} snapshot{'s' if len(items) != 1 else ''} {('for ' + html.escape(ticker)) if ticker else 'across all tickers'}</div>
+      <h1 style="margin:0; font-size:24px">📁 Saved analyses{(' · ' + html.escape(ticker)) if ticker else ''}{(' · #' + html.escape(tag)) if tag else ''}</h1>
+      <div class="dim" style="font-size:13px; margin-top:4px">{len(items)} snapshot{'s' if len(items) != 1 else ''}{(' for ' + html.escape(ticker)) if ticker else ' across all tickers'}</div>
+    </div>
+    <div class="actions" style="margin-left:auto; align-items:center">
+      <a class="btn" href="/journal">📓 Journal</a>
+      <button id="multi-compare-btn" class="btn primary" disabled onclick="runMultiCompare()">⇆ Compare selected</button>
     </div>
   </div>
-  <div class="card-grid">
+  {tag_chips}
+  <div class="card-grid" id="saved-grid">
     {''.join(cards)}
   </div>
 </div>
+
+<script>
+(function() {{
+  const btn = document.getElementById('multi-compare-btn');
+  const boxes = document.querySelectorAll('.multi-select');
+  function update() {{
+    const checked = Array.from(boxes).filter(b => b.checked);
+    btn.disabled = checked.length < 2;
+    btn.textContent = checked.length < 2 ? '⇆ Compare selected (pick 2+)' : '⇆ Compare ' + checked.length + ' selected';
+  }}
+  boxes.forEach(b => b.addEventListener('change', update));
+  update();
+  window.runMultiCompare = function() {{
+    const checked = Array.from(boxes).filter(b => b.checked);
+    if (checked.length < 2) return;
+    // Group by ticker — compare only saves of the same ticker
+    const byTicker = {{}};
+    checked.forEach(b => {{
+      const t = b.dataset.ticker;
+      if (!byTicker[t]) byTicker[t] = [];
+      byTicker[t].push(b.dataset.ts);
+    }});
+    const tickers = Object.keys(byTicker);
+    if (tickers.length !== 1) {{
+      alert('Select saves of the same ticker (currently selected: ' + tickers.join(', ') + ')');
+      return;
+    }}
+    const t = tickers[0];
+    const ts = byTicker[t].join(',');
+    window.location.href = `/compare-saves?ticker=${{t}}&ts=${{ts}}`;
+  }};
+}})();
+</script>
 """
     crumbs = [("Home", "/"), ("Saved" + ((' · ' + ticker) if ticker else ''), None)]
-    return _shell(active="watchlists", title="Strategist · Saved", body=body, breadcrumbs=crumbs)
+    return _shell(active="saved", title="Strategist · Saved", body=body, breadcrumbs=crumbs)
+
+
+def journal_page(summary: dict, current_prices: dict, all_tags: list, active_tag: Optional[str] = None) -> str:
+    """Saved-verdicts dashboard.
+
+    Aggregate stats across every saved snapshot: hit rate by verdict, avg
+    return, target hits/misses, top/worst performers, recent activity.
+    """
+    total = summary.get("total", 0)
+    by_verdict = summary.get("by_verdict", {})
+    hit_rate = summary.get("hit_rate", {})
+    avg_return = summary.get("avg_return", {})
+    avg_hold = summary.get("avg_hold_days", {})
+
+    if total == 0:
+        empty_body = """
+<div class="empty">
+  <div class="big">📓 Your journal is empty</div>
+  Run any analysis, open the detail page, scroll to the bottom and click <b>★ Save snapshot</b>.
+  Or enable <a href="/settings" style="color:var(--accent)">auto-save</a> to build the journal automatically as you research.
+</div>
+"""
+        return _shell(
+            active="journal",
+            title="Strategist · Journal",
+            body=empty_body,
+            breadcrumbs=[("Home", "/"), ("Journal", None)],
+        )
+
+    # KPI cards
+    n_buys = by_verdict.get("BUY", 0) + by_verdict.get("STRONG BUY", 0)
+    n_holds = by_verdict.get("HOLD", 0)
+    n_sells = by_verdict.get("SELL", 0) + by_verdict.get("REDUCE", 0)
+    total_hits = summary.get("target_hit_count", 0)
+    total_misses = summary.get("target_miss_count", 0)
+    overall_hit_rate = (total_hits / (total_hits + total_misses)) if (total_hits + total_misses) > 0 else None
+    overall_hit_str = f"{overall_hit_rate*100:.0f}%" if overall_hit_rate is not None else "—"
+
+    # Per-verdict hit-rate table rows
+    hr_rows: list[str] = []
+    for v in ("STRONG BUY", "BUY", "HOLD", "REDUCE", "SELL"):
+        n = by_verdict.get(v, 0)
+        if n == 0:
+            continue
+        hr = hit_rate.get(v)
+        avg_r = avg_return.get(v)
+        avg_h = avg_hold.get(v)
+        hr_str = f"{hr*100:.0f}%" if hr is not None else "—"
+        avg_r_str = ""
+        if avg_r is not None:
+            cls = "pos" if avg_r >= 0 else "neg"
+            avg_r_str = f'<span class="{cls}">{avg_r*100:+.1f}%</span>'
+        else:
+            avg_r_str = '<span class="dim">—</span>'
+        avg_h_str = f"{avg_h:.0f}d" if avg_h is not None else "—"
+        hr_rows.append(f"""
+<tr>
+  <td>{_badge(v)}</td>
+  <td class="num">{n}</td>
+  <td class="num">{hr_str}</td>
+  <td class="num">{avg_r_str}</td>
+  <td class="num">{avg_h_str}</td>
+</tr>""")
+
+    # Best / worst tables
+    def _perf_rows(items: list[dict]) -> str:
+        rows: list[str] = []
+        for it in items:
+            ret = it.get("realized_pct")
+            cls = "pos" if ret is not None and ret >= 0 else ("neg" if ret is not None else "dim")
+            ret_str = f"{ret*100:+.2f}%" if ret is not None else "—"
+            tags = " ".join(
+                f'<span class="badge b-HOLD" style="font-size:9.5px; text-transform:lowercase">{html.escape(t)}</span>'
+                for t in (it.get("tags") or [])[:3]
+            )
+            target_mark = "🎯" if it.get("target_hit") is True else ("·" if it.get("target_hit") is False else "")
+            rows.append(f"""
+<tr onclick="location.href='/compare-saved/{html.escape(it['ticker'])}/{html.escape(it['timestamp'])}'" style="cursor:pointer">
+  <td><b>{html.escape(it['ticker'])}</b> {target_mark}</td>
+  <td>{_badge(it.get('verdict') or '—')}</td>
+  <td class="dim" style="font-size:11.5px">{html.escape(it.get('saved_at',''))[:10]}</td>
+  <td class="num">{_fmt_money(it.get('price_at_save'))}</td>
+  <td class="num">{_fmt_money(it.get('current_price_now'))}</td>
+  <td class="num {cls}">{ret_str}</td>
+  <td>{tags}</td>
+</tr>""")
+        return "".join(rows)
+
+    best_rows = _perf_rows(summary.get("best", []))
+    worst_rows = _perf_rows(summary.get("worst", []))
+    recent_rows = _perf_rows(summary.get("recent", []))
+
+    # Tag filter strip
+    tag_strip = '<a class="chip" href="/journal">All <span class="count">' + str(total) + '</span></a>'
+    for t, count in all_tags:
+        active = ' style="background:var(--panel-hover); color:var(--text); border-color:var(--line-strong)"' if active_tag == t else ""
+        tag_strip += f'<a class="chip"{active} href="/journal?tag={t}"><b>{html.escape(t)}</b><span class="count">{count}</span></a>'
+
+    body = f"""
+<div class="topbar" style="margin-bottom:18px">
+  <div>
+    <h1 style="margin:0; font-size:24px">📓 Journal{(' · #' + html.escape(active_tag)) if active_tag else ''}</h1>
+    <div class="dim" style="font-size:13px; margin-top:4px">{total} saved analysis{('es' if total != 1 else '')} · {total_hits} target hits · {total_misses} misses</div>
+  </div>
+  <div class="actions" style="margin-left:auto">
+    <a class="btn" href="/saved">All saves</a>
+    <a class="btn" href="/settings">Settings</a>
+  </div>
+</div>
+
+<div class="chips" style="margin-bottom:24px">{tag_strip}</div>
+
+<div class="card-grid">
+  <div class="card"><div class="title">Total saves</div><div class="value">{total}</div><div class="meta">all-time</div></div>
+  <div class="card"><div class="title">Buys</div><div class="value pos">{n_buys}</div><div class="meta">STRONG BUY + BUY</div></div>
+  <div class="card"><div class="title">Holds</div><div class="value" style="color:var(--hold)">{n_holds}</div><div class="meta">—</div></div>
+  <div class="card"><div class="title">Sells / Reduces</div><div class="value neg">{n_sells}</div><div class="meta">—</div></div>
+  <div class="card"><div class="title">Overall target hit rate</div><div class="value mono">{overall_hit_str}</div><div class="meta">{total_hits} hits / {total_misses} misses</div></div>
+</div>
+
+<div class="section">
+  <h2>📊 Hit rate by verdict</h2>
+  <div class="dim" style="font-size:13px; margin-bottom:12px">A BUY/STRONG BUY counts as a hit when the current price ≥ the saved 12M price-target midpoint. SELL/REDUCE counts as a hit when current price ≤ target. HOLD counts as a hit when realized return is within ±15%.</div>
+  <div class="tablewrap">
+    <table class="data">
+      <thead><tr><th>Verdict</th><th class="right">Saves</th><th class="right">Hit rate</th><th class="right">Avg return</th><th class="right">Avg hold</th></tr></thead>
+      <tbody>{''.join(hr_rows)}</tbody>
+    </table>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="panel">
+    <h2>🏆 Best performers</h2>
+    <table class="data">
+      <thead><tr><th>Ticker</th><th>Verdict</th><th>Saved</th><th class="right">Price @ save</th><th class="right">Now</th><th class="right">Return</th><th>Tags</th></tr></thead>
+      <tbody>{best_rows}</tbody>
+    </table>
+  </div>
+  <div class="panel">
+    <h2>📉 Worst performers</h2>
+    <table class="data">
+      <thead><tr><th>Ticker</th><th>Verdict</th><th>Saved</th><th class="right">Price @ save</th><th class="right">Now</th><th class="right">Return</th><th>Tags</th></tr></thead>
+      <tbody>{worst_rows}</tbody>
+    </table>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>⏱ Recent activity</h2>
+  <table class="data">
+    <thead><tr><th>Ticker</th><th>Verdict</th><th>Saved</th><th class="right">Price @ save</th><th class="right">Now</th><th class="right">Return</th><th>Tags</th></tr></thead>
+    <tbody>{recent_rows}</tbody>
+  </table>
+</div>
+"""
+    return _shell(
+        active="journal",
+        title="Strategist · Journal",
+        body=body,
+        breadcrumbs=[("Home", "/"), ("Journal", None)],
+    )
+
+
+def multi_save_compare_page(ticker: str, saves: list, current: SnapshotReport) -> str:
+    """Side-by-side comparison of 2-6 saved snapshots of the same ticker, with
+    an SVG line chart of verdict drift over time."""
+    # saves is list of (timestamp, dict)
+    # Extract: (saved_at, score, price, target, verdict) tuples
+    points: list[dict] = []
+    for ts, d in saves:
+        meta = d.get("_meta", {})
+        fv = d.get("final_verdict") or {}
+        points.append({
+            "saved_at": meta.get("saved_at", ts),
+            "ts": ts,
+            "score": fv.get("composite_score"),
+            "verdict": fv.get("action", "—"),
+            "price": d.get("current_price"),
+            "target": fv.get("price_target_mid"),
+            "note": meta.get("note", ""),
+            "tags": meta.get("tags") or [],
+        })
+    # Append the current snapshot
+    cur_rec = current.final_verdict
+    points.append({
+        "saved_at": current.timestamp.isoformat(timespec="seconds"),
+        "ts": "now",
+        "score": cur_rec.composite_score if cur_rec else None,
+        "verdict": cur_rec.action if cur_rec else "—",
+        "price": current.current_price,
+        "target": cur_rec.price_target_mid if cur_rec else None,
+        "note": "current",
+        "tags": ["current"],
+    })
+    # Sort by saved_at
+    points.sort(key=lambda x: x["saved_at"])
+
+    # SVG line chart: x = time index, y = score (0-100)
+    width, height = 720, 220
+    pad_l, pad_r, pad_t, pad_b = 40, 16, 16, 30
+    plot_w = width - pad_l - pad_r
+    plot_h = height - pad_t - pad_b
+
+    def _x(i: int, n: int) -> float:
+        if n <= 1:
+            return pad_l + plot_w / 2
+        return pad_l + i * plot_w / (n - 1)
+
+    def _y(score: Optional[float]) -> float:
+        if score is None:
+            return pad_t + plot_h / 2
+        return pad_t + (1 - score / 100) * plot_h
+
+    n = len(points)
+    score_path = "M " + " L ".join(f"{_x(i, n):.1f},{_y(p['score']):.1f}" for i, p in enumerate(points))
+
+    # Score circles (color by verdict)
+    score_circles: list[str] = []
+    labels: list[str] = []
+    for i, p in enumerate(points):
+        x = _x(i, n)
+        y = _y(p["score"])
+        v = p.get("verdict") or ""
+        color = "var(--buy)" if "BUY" in v else ("var(--sell)" if v in ("SELL", "REDUCE") else "var(--hold)")
+        title = f"{p['saved_at']}: {v} ({p['score']:.0f}/100)" if p['score'] is not None else f"{p['saved_at']}: {v}"
+        score_circles.append(
+            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="6" fill="{color}" stroke="var(--panel)" stroke-width="2"><title>{html.escape(title)}</title></circle>'
+        )
+        labels.append(
+            f'<text x="{x:.1f}" y="{height - 8}" text-anchor="middle" fill="var(--mute)" font-size="10">{html.escape(p["saved_at"][:10])}</text>'
+        )
+
+    # Y axis ticks (0 / 50 / 100)
+    y_ticks = "".join(
+        f'<line x1="{pad_l}" x2="{width - pad_r}" y1="{_y(v):.1f}" y2="{_y(v):.1f}" stroke="var(--line)" stroke-dasharray="2 4"/>'
+        f'<text x="{pad_l - 6}" y="{_y(v) + 3:.1f}" text-anchor="end" fill="var(--mute)" font-size="10">{v}</text>'
+        for v in (0, 50, 100)
+    )
+
+    svg = f"""
+<svg viewBox="0 0 {width} {height}" style="width:100%; max-width:{width}px; height:auto">
+  {y_ticks}
+  <path d="{score_path}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  {''.join(score_circles)}
+  {''.join(labels)}
+</svg>
+"""
+
+    # Price line chart too
+    valid_prices = [(i, p) for i, p in enumerate(points) if p.get("price") is not None]
+    if valid_prices:
+        prices = [p["price"] for _, p in valid_prices]
+        p_lo = min(prices) * 0.97
+        p_hi = max(prices) * 1.03
+        p_rng = max(p_hi - p_lo, 1e-6)
+
+        def _py(price: float) -> float:
+            return pad_t + (1 - (price - p_lo) / p_rng) * plot_h
+
+        price_path = "M " + " L ".join(
+            f"{_x(i, n):.1f},{_py(p['price']):.1f}" for i, p in valid_prices
+        )
+        price_circles = []
+        for i, p in valid_prices:
+            x = _x(i, n)
+            y = _py(p["price"])
+            title = f"{p['saved_at']}: ${p['price']:,.2f}"
+            price_circles.append(
+                f'<circle cx="{x:.1f}" cy="{y:.1f}" r="5" fill="var(--text)" stroke="var(--panel)" stroke-width="2"><title>{html.escape(title)}</title></circle>'
+            )
+        # Y ticks for price
+        y_ticks_p = ""
+        for v in (p_lo, (p_lo + p_hi) / 2, p_hi):
+            y_ticks_p += (
+                f'<line x1="{pad_l}" x2="{width - pad_r}" y1="{_py(v):.1f}" y2="{_py(v):.1f}" stroke="var(--line)" stroke-dasharray="2 4"/>'
+                f'<text x="{pad_l - 6}" y="{_py(v) + 3:.1f}" text-anchor="end" fill="var(--mute)" font-size="10">${v:,.0f}</text>'
+            )
+        svg_price = f"""
+<svg viewBox="0 0 {width} {height}" style="width:100%; max-width:{width}px; height:auto">
+  {y_ticks_p}
+  <path d="{price_path}" fill="none" stroke="var(--buy)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  {''.join(price_circles)}
+</svg>
+"""
+    else:
+        svg_price = '<div class="dim">No prices recorded for these saves.</div>'
+
+    # Side-by-side mini-cards
+    side_cards = "".join(f"""
+<div class="card" style="min-width:160px">
+  <div class="title">{html.escape(p['saved_at'][:10])}{(' ★' if p['ts'] == 'now' else '')}</div>
+  <div style="margin:4px 0">{_badge(p.get('verdict') or '—')}</div>
+  <div class="mono" style="font-size:14px; font-weight:700">{(f'{p["score"]:.0f}/100') if p.get('score') is not None else '—'}</div>
+  <div class="meta">Price {_fmt_money(p.get('price'))}</div>
+  <div class="meta">Target {_fmt_money(p.get('target'))}</div>
+  {(f'<div class="meta" style="font-style:italic; margin-top:4px">"{html.escape(p["note"])}"</div>' if p.get('note') and p['note'] != 'current' else '')}
+</div>""" for p in points)
+
+    body = f"""
+<div class="topbar" style="margin-bottom:18px">
+  <div>
+    <h1 style="margin:0; font-size:24px">⇆ Drift over time · {html.escape(ticker)}</h1>
+    <div class="dim" style="font-size:13px; margin-top:4px">{len(points)} data points (including current)</div>
+  </div>
+  <div class="actions" style="margin-left:auto">
+    <a class="btn" href="/saved/{html.escape(ticker)}">← All saves</a>
+    <a class="btn" href="/ticker/{html.escape(ticker)}">Open ticker</a>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>📈 Composite score drift (0-100)</h2>
+  <div class="dim" style="font-size:13px; margin-bottom:8px">Each dot is a saved analysis (or the current run). Higher = more bullish.</div>
+  {svg}
+</div>
+
+<div class="panel">
+  <h2>💰 Price evolution</h2>
+  {svg_price}
+</div>
+
+<div class="panel">
+  <h2>📋 Snapshot detail</h2>
+  <div class="card-grid">
+    {side_cards}
+  </div>
+</div>
+"""
+    crumbs = [("Home", "/"), ("Saved", "/saved"), (ticker, f"/saved/{ticker}"), ("Compare drift", None)]
+    return _shell(active="saved", title=f"Strategist · {ticker} drift", body=body, breadcrumbs=crumbs)
+
+
+def settings_page(s, data_sources: dict) -> str:
+    """User-level settings: auto-save toggle, default tags, data sources status."""
+    checked = "checked" if s.auto_save_enabled else ""
+    sources_rows = ""
+    for name, ok in data_sources.items():
+        status = "✓ available" if ok else "— not configured"
+        cls = "pos" if ok else "dim"
+        hint = ""
+        if not ok:
+            hint = {
+                "yfinance": "always available (no key needed)",
+                "financial_datasets": "set FINANCIAL_DATASETS_API_KEY in .env",
+                "fmp": "set FMP_API_KEY in .env (free tier: financialmodelingprep.com)",
+                "polygon": "set POLYGON_API_KEY in .env",
+            }.get(name, "")
+        sources_rows += f"""
+<tr>
+  <td><b>{html.escape(name)}</b></td>
+  <td class="{cls}">{status}</td>
+  <td class="dim">{html.escape(hint)}</td>
+</tr>"""
+
+    body = f"""
+<div class="topbar" style="margin-bottom:18px">
+  <div>
+    <h1 style="margin:0; font-size:24px">⚙️ Settings</h1>
+    <div class="dim" style="font-size:13px; margin-top:4px">Stored at <code>~/.strategist/settings.json</code> — survives restarts and machine moves.</div>
+  </div>
+</div>
+
+<form action="/api/settings" method="post">
+<div class="panel">
+  <h2>📓 Journal</h2>
+  <div class="dim" style="font-size:13px; margin-bottom:14px">
+    Auto-save persists a snapshot every time you open a ticker detail page — once per ticker per day, idempotent.
+    Builds your research journal automatically. Disabled by default.
+  </div>
+  <label style="display:flex; gap:10px; align-items:center; cursor:pointer; margin-bottom:14px">
+    <input type="checkbox" name="auto_save_enabled" value="1" {checked} style="width:18px; height:18px"/>
+    <span><b>Enable auto-save on every ticker detail view</b></span>
+  </label>
+  <label style="display:flex; gap:10px; align-items:center">
+    <span style="min-width:200px">Default auto-save tag:</span>
+    <input type="text" name="auto_save_default_tag" value="{html.escape(s.auto_save_default_tag)}"
+           style="padding:8px 12px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:inherit; font-size:13px"/>
+  </label>
+</div>
+
+<div class="panel">
+  <h2>🤖 Deep analysis defaults</h2>
+  <label style="display:flex; gap:10px; align-items:center">
+    <span style="min-width:200px">Default analyst panel (comma-separated, empty = all):</span>
+    <input type="text" name="default_analysts" value="{html.escape(','.join(s.default_analysts))}" placeholder="warren_buffett, peter_lynch, charlie_munger"
+           style="flex:1; min-width:300px; padding:8px 12px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:inherit; font-size:13px"/>
+  </label>
+</div>
+
+<button class="btn primary" type="submit" style="font-size:14px">Save settings</button>
+</form>
+
+<div class="panel" style="margin-top:24px">
+  <h2>🔌 Data sources</h2>
+  <div class="dim" style="font-size:13px; margin-bottom:14px">
+    Strategist supports multiple data backends for fundamentals. yfinance is always available (free, no key). Set additional API keys in your <code>.env</code> for richer historical data and the historical fundamentals backtest.
+  </div>
+  <table class="data">
+    <thead><tr><th>Source</th><th>Status</th><th>How to enable</th></tr></thead>
+    <tbody>{sources_rows}</tbody>
+  </table>
+</div>
+
+<div class="panel">
+  <h2>📂 Data on disk</h2>
+  <div class="dim" style="font-size:13px; line-height:1.7">
+    Your saves, settings, and watchlists all live under <code>~/.strategist/</code>:
+    <ul style="margin:8px 0 0 18px">
+      <li><code>settings.json</code> — this page's preferences</li>
+      <li><code>watchlists.json</code> — your saved watchlists (survives across browsers)</li>
+      <li><code>saved/&lt;TICKER&gt;/&lt;YYYY-MM-DD_HH-MM-SS&gt;.json</code> — one file per saved analysis</li>
+    </ul>
+    Want to back this up or sync between machines? Just <code>git init</code> that directory.
+  </div>
+</div>
+"""
+    crumbs = [("Home", "/"), ("Settings", None)]
+    return _shell(active="settings", title="Strategist · Settings", body=body, breadcrumbs=crumbs)
 
 
 def compare_saved_page(saved: dict, current: SnapshotReport) -> str:

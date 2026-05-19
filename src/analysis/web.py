@@ -43,13 +43,18 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 from src.analysis import generate_snapshot, attach_final_verdict, deep_analyze, shallow_analyze
 from src.analysis.snapshot import SnapshotReport
 from src.analysis import storage as snapshot_storage
+from src.analysis import watchlists as wl_store
+from src.analysis import settings as settings_store
 from src.analysis.ui_pages import (
     compare_page,
     compare_saved_page,
     history_page,
     home_page,
+    journal_page,
+    multi_save_compare_page,
     results_overview_page,
     saved_list_page,
+    settings_page,
     ticker_detail_page,
     watchlists_page,
 )
@@ -181,6 +186,9 @@ async def ticker_detail(ticker: str, request: Request) -> HTMLResponse:
 
     `?deep=1` triggers the LangGraph AI investor council on top of the
     snapshot. Adds 30-60 seconds but yields a fuller report.
+
+    If auto-save is enabled in settings.json AND we haven't already saved
+    this ticker today via 'auto', drop a snapshot to disk before rendering.
     """
     raw_from = request.query_params.get("from", "") or ""
     deep_flag = request.query_params.get("deep", "") in ("1", "true", "yes")
@@ -188,6 +196,17 @@ async def ticker_detail(ticker: str, request: Request) -> HTMLResponse:
         rep = _cached(ticker, deep=deep_flag)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Snapshot failed: {exc}")
+
+    # Auto-save (idempotent: once per ticker per day)
+    try:
+        s = settings_store.load_settings()
+        if s.auto_save_enabled and not snapshot_storage.already_saved_today(ticker, source="auto"):
+            snapshot_storage.save_snapshot(
+                rep, note="auto-saved on view", tags=[s.auto_save_default_tag], source="auto"
+            )
+    except Exception:
+        pass
+
     return HTMLResponse(ticker_detail_page(rep, _parse_tickers(raw_from), deep=deep_flag))
 
 
@@ -328,13 +347,26 @@ async def ticker_streaming_page(ticker: str, request: Request) -> HTMLResponse:
 
 
 @app.post("/api/save/{ticker}")
-async def api_save(ticker: str, note: str = Form("")) -> RedirectResponse:
+async def api_save(
+    ticker: str,
+    note: str = Form(""),
+    tags: str = Form(""),  # comma-separated
+) -> RedirectResponse:
     """Persist the current snapshot for `ticker` to disk and bounce the user to the saved list."""
     try:
         rep = _cached(ticker)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Snapshot failed: {exc}")
-    snapshot_storage.save_snapshot(rep, note=note)
+    tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
+    snapshot_storage.save_snapshot(rep, note=note, tags=tag_list, source="manual")
+    return RedirectResponse(url=f"/saved/{ticker.upper()}", status_code=303)
+
+
+@app.post("/api/saved/{ticker}/{timestamp}/tags")
+async def api_update_tags(ticker: str, timestamp: str, tags: str = Form("")) -> RedirectResponse:
+    """Edit tags on an existing saved snapshot."""
+    tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
+    snapshot_storage.update_tags(ticker, timestamp, tag_list)
     return RedirectResponse(url=f"/saved/{ticker.upper()}", status_code=303)
 
 
@@ -345,9 +377,113 @@ async def saved_all() -> HTMLResponse:
 
 
 @app.get("/saved/{ticker}", response_class=HTMLResponse)
-async def saved_for(ticker: str) -> HTMLResponse:
-    items = snapshot_storage.list_saved(ticker)
-    return HTMLResponse(saved_list_page(items, ticker=ticker.upper()))
+async def saved_for(ticker: str, request: Request) -> HTMLResponse:
+    tag = request.query_params.get("tag") or None
+    items = snapshot_storage.list_saved(ticker, tag=tag)
+    # Enrich with current prices (one fetch per ticker, cached)
+    cur_prices = {ticker.upper(): _safe_current_price(ticker)}
+    items = snapshot_storage.evaluate_target_hits(items, cur_prices)
+    return HTMLResponse(saved_list_page(items, ticker=ticker.upper(), tag=tag))
+
+
+def _safe_current_price(ticker: str) -> Optional[float]:
+    try:
+        return _cached(ticker).current_price
+    except Exception:
+        return None
+
+
+@app.get("/journal", response_class=HTMLResponse)
+async def journal(request: Request) -> HTMLResponse:
+    """Saved-verdicts dashboard: aggregate hit rate, avg return, top hits/misses."""
+    tag = request.query_params.get("tag") or None
+    items = snapshot_storage.list_saved(tag=tag)
+    # Build {ticker -> current_price} for all tickers in the journal
+    tickers = sorted({i["ticker"] for i in items})
+    current_prices: dict[str, float] = {}
+    for t in tickers:
+        p = _safe_current_price(t)
+        if p is not None:
+            current_prices[t] = p
+    summary = snapshot_storage.journal_summary(items, current_prices)
+    all_tags = snapshot_storage.list_all_tags()
+    return HTMLResponse(journal_page(summary, current_prices, all_tags, active_tag=tag))
+
+
+@app.get("/compare-saves", response_class=HTMLResponse)
+async def compare_saves(request: Request) -> HTMLResponse:
+    """Multi-save comparison page. Query: ?ticker=X&ts=ts1,ts2,ts3 (2-6 timestamps)."""
+    ticker = (request.query_params.get("ticker") or "").upper()
+    ts_raw = request.query_params.get("ts") or ""
+    timestamps = [t.strip() for t in ts_raw.split(",") if t.strip()][:6]
+    if not ticker or len(timestamps) < 2:
+        raise HTTPException(status_code=400, detail="Need ?ticker=X&ts=ts1,ts2,...")
+    saves = []
+    for ts in timestamps:
+        s = snapshot_storage.load_saved(ticker, ts)
+        if s:
+            saves.append((ts, s))
+    if len(saves) < 2:
+        raise HTTPException(status_code=404, detail="Fewer than 2 saved snapshots loaded")
+    try:
+        current = _cached(ticker)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Current snapshot fetch failed: {exc}")
+    return HTMLResponse(multi_save_compare_page(ticker, saves, current))
+
+
+# --- Settings -------------------------------------------------------------
+
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_view() -> HTMLResponse:
+    return HTMLResponse(settings_page(settings_store.load_settings(), settings_store.detected_data_sources()))
+
+
+@app.post("/api/settings")
+async def settings_update(
+    auto_save_enabled: str = Form(""),
+    auto_save_default_tag: str = Form("auto"),
+    default_analysts: str = Form(""),
+) -> RedirectResponse:
+    s = settings_store.load_settings()
+    s.auto_save_enabled = auto_save_enabled in ("1", "on", "true", "yes")
+    s.auto_save_default_tag = (auto_save_default_tag or "auto").strip().lower()
+    s.default_analysts = [a.strip() for a in default_analysts.split(",") if a.strip()]
+    settings_store.save_settings(s)
+    return RedirectResponse(url="/settings?saved=1", status_code=303)
+
+
+# --- Persistent watchlists ------------------------------------------------
+
+
+@app.get("/api/watchlists")
+async def api_list_watchlists() -> JSONResponse:
+    return JSONResponse(wl_store.list_watchlists())
+
+
+@app.post("/api/watchlists")
+async def api_create_watchlist(name: str = Form(...), tickers: str = Form("")) -> RedirectResponse:
+    tickers_list = [t.strip() for t in tickers.split(",") if t.strip()]
+    wl_store.create_watchlist(name, tickers_list)
+    return RedirectResponse(url="/watchlists", status_code=303)
+
+
+@app.post("/api/watchlists/{wl_id}/delete")
+async def api_delete_watchlist(wl_id: str) -> RedirectResponse:
+    wl_store.delete_watchlist(wl_id)
+    return RedirectResponse(url="/watchlists", status_code=303)
+
+
+@app.post("/api/watchlists/{wl_id}/update")
+async def api_update_watchlist(
+    wl_id: str,
+    name: str = Form(""),
+    tickers: str = Form(""),
+) -> RedirectResponse:
+    tickers_list = [t.strip() for t in tickers.split(",") if t.strip()]
+    wl_store.update_watchlist(wl_id, name=name or None, tickers=tickers_list or None)
+    return RedirectResponse(url="/watchlists", status_code=303)
 
 
 @app.get("/compare-saved/{ticker}/{timestamp}", response_class=HTMLResponse)

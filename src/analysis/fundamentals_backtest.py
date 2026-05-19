@@ -48,8 +48,40 @@ class HistoricalFundamentalsPoint:
     error: Optional[str] = None
 
 
-def _has_api_key() -> bool:
+def _has_financial_datasets_key() -> bool:
     return bool(os.environ.get("FINANCIAL_DATASETS_API_KEY"))
+
+
+def _fetch_metrics_any_source(ticker: str, target_date: str):
+    """Try Financial Datasets first, then FMP. Returns an object with
+    attributes matching the fields we render (.report_period, .price_to_earnings_ratio,
+    .enterprise_value_to_ebitda_ratio, .debt_to_equity, .return_on_equity,
+    .return_on_invested_capital, .free_cash_flow_yield, .revenue_growth) or
+    None if no source is configured / no data found.
+    """
+    # Source 1: Financial Datasets (preferred — gives revenue_growth + ROIC)
+    if _has_financial_datasets_key():
+        try:
+            from src.tools.api import get_financial_metrics
+            metrics_list = get_financial_metrics(
+                ticker=ticker.upper(),
+                end_date=target_date,
+                period="ttm",
+                limit=1,
+            )
+            if metrics_list:
+                return metrics_list[0], "Financial Datasets"
+        except Exception:
+            pass
+
+    # Source 2: Financial Modeling Prep
+    from src.analysis.fmp_adapter import fetch_historical_metrics, has_fmp_key
+    if has_fmp_key():
+        fmp = fetch_historical_metrics(ticker, target_date)
+        if fmp:
+            return fmp, "Financial Modeling Prep"
+
+    return None, None
 
 
 def historical_fundamentals_at_date(
@@ -59,41 +91,21 @@ def historical_fundamentals_at_date(
 ) -> Optional[HistoricalFundamentalsPoint]:
     """Pull point-in-time financial metrics and grade them.
 
-    Returns None if the API key isn't set or the call returns no data.
+    Tries Financial Datasets first, then FMP. Returns a result object with
+    `.error` populated if no source is configured.
     """
-    if not _has_api_key():
+    fm, source = _fetch_metrics_any_source(ticker, target_date)
+    if fm is None:
         return HistoricalFundamentalsPoint(
             as_of_date=target_date,
             label="—",
             report_period="—",
-            error="FINANCIAL_DATASETS_API_KEY not set — historical fundamentals unavailable. Free fallback uses technical signals only.",
+            error=(
+                "No fundamentals API key configured. Set FINANCIAL_DATASETS_API_KEY "
+                "or FMP_API_KEY in .env to enable historical fundamental verdicts. "
+                "Technical-only backtest still works."
+            ),
         )
-
-    try:
-        from src.tools.api import get_financial_metrics
-        metrics_list = get_financial_metrics(
-            ticker=ticker.upper(),
-            end_date=target_date,
-            period="ttm",
-            limit=1,
-        )
-    except Exception as exc:
-        return HistoricalFundamentalsPoint(
-            as_of_date=target_date,
-            label="—",
-            report_period="—",
-            error=f"financial_datasets call failed: {exc}",
-        )
-
-    if not metrics_list:
-        return HistoricalFundamentalsPoint(
-            as_of_date=target_date,
-            label="—",
-            report_period="—",
-            error="no financial metrics returned for that date",
-        )
-
-    fm = metrics_list[0]  # most-recent TTM metrics with report_period <= target_date
 
     # Grade each available metric using the same rules as the live snapshot
     rows: list[MetricRow] = []
