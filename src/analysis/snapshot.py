@@ -107,6 +107,12 @@ class SnapshotReport:
     # Last ~90 trading-day closes (oldest -> newest) for sparkline rendering
     price_sparkline: list[float] = field(default_factory=list)
 
+    # Populated lazily by the orchestrator (src.analysis.combined.deep_analyze).
+    # Kept on this dataclass so the renderer has one place to look.
+    backtest: object | None = None   # BacktestSummary
+    agents: object | None = None     # AgentRunResult
+    final_verdict: object | None = None  # FinalRecommendation
+
 
 # ----------------------------------------------------------------------------
 # Data fetch
@@ -523,6 +529,15 @@ def generate_snapshot(ticker: str) -> SnapshotReport:
         [float(x) for x in close.tail(90).tolist() if pd.notna(x)] if len(close) else []
     )
 
+    # Run technical backtest (fast, deterministic — reuses price/volume already pulled)
+    backtest_summary = None
+    try:
+        from src.analysis.backtest import run_backtest as _run_bt
+        if len(close):
+            backtest_summary = _run_bt(close, volume, spx_close if len(spx_close) else None)
+    except Exception as _e:
+        warnings_list.append(f"backtest failed: {_e}")
+
     return SnapshotReport(
         ticker=ticker,
         company_name=company_name,
@@ -548,4 +563,5 @@ def generate_snapshot(ticker: str) -> SnapshotReport:
         synthesis=" ".join(synthesis_parts),
         data_warnings=warnings_list,
         price_sparkline=sparkline,
+        backtest=backtest_summary,
     )

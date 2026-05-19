@@ -424,6 +424,16 @@ def results_overview_page(reports: list[SnapshotReport], errors: list[tuple[str,
 
     rows_html = []
     for r in reports:
+        # If a final verdict has been attached, use it; otherwise fall back to snapshot composite
+        rec = getattr(r, "final_verdict", None)
+        display_verdict = rec.action if rec else r.overall_verdict_label
+        display_score = rec.composite_score if rec else r.composite_score
+
+        # Backtest hit rate for the column
+        hit_rate = None
+        if r.backtest and r.backtest.hit_rate is not None:
+            hit_rate = r.backtest.hit_rate
+
         ret_1d = r.price_returns[0].ticker_return if r.price_returns else None
         ret_1w = r.price_returns[1].ticker_return if r.price_returns else None
         ret_1m = r.price_returns[2].ticker_return if r.price_returns else None
@@ -441,8 +451,10 @@ def results_overview_page(reports: list[SnapshotReport], errors: list[tuple[str,
         def _cell(val: Optional[float], color: bool = True) -> str:
             return f'<td class="num" data-sort="{(val if val is not None and val == val else -999):.6f}">{_fmt_pct(val, color=color)}</td>'
 
+        hit_str = f"{hit_rate*100:.0f}%" if hit_rate is not None else "—"
+        hit_sort = (hit_rate or 0)
         rows_html.append(f"""
-<tr data-ticker="{html.escape(r.ticker)}" data-verdict="{html.escape(r.overall_verdict_label)}" data-sector="{html.escape(r.sector or '')}" onclick="location.href='{href}'">
+<tr data-ticker="{html.escape(r.ticker)}" data-verdict="{html.escape(display_verdict)}" data-sector="{html.escape(r.sector or '')}" onclick="location.href='{href}'">
   <td class="ticker">{html.escape(r.ticker)}<span class="co">{html.escape(r.company_name)}</span></td>
   <td class="num" data-sort="{r.current_price or 0:.6f}">{_fmt_money(r.current_price)}</td>
   <td>{spark}</td>
@@ -454,8 +466,9 @@ def results_overview_page(reports: list[SnapshotReport], errors: list[tuple[str,
   <td class="num" data-sort="{(pe.value if pe and pe.value and pe.value==pe.value else 999):.4f}">{pe.fmt_value() if pe else '—'}</td>
   <td class="num" data-sort="{(roe.value if roe and roe.value and roe.value==roe.value else -1):.6f}">{roe.fmt_value() if roe else '—'}</td>
   <td class="num">{html.escape(rsi_state)}</td>
-  <td data-sort="{r.composite_score:.2f}">{_badge(r.overall_verdict_label)}</td>
-  <td class="num" data-sort="{r.composite_score:.2f}">{_score_pill(r.composite_score, r.overall_verdict_label)}</td>
+  <td class="num" data-sort="{hit_sort:.4f}">{hit_str}</td>
+  <td data-sort="{display_score:.2f}">{_badge(display_verdict)}</td>
+  <td class="num" data-sort="{display_score:.2f}">{_score_pill(display_score, display_verdict)}</td>
   <td class="dim">{html.escape(r.sector or '—')}</td>
 </tr>""")
 
@@ -514,6 +527,7 @@ def results_overview_page(reports: list[SnapshotReport], errors: list[tuple[str,
             <th>P/E <span class="arrow">▲▼</span></th>
             <th>ROE <span class="arrow">▲▼</span></th>
             <th>RSI</th>
+            <th>Hit rate <span class="arrow">▲▼</span></th>
             <th>Verdict</th>
             <th>Score <span class="arrow">▲▼</span></th>
             <th>Sector</th>
@@ -539,20 +553,321 @@ window.STRATEGIST_TICKERS = {json.dumps([r.ticker for r in reports])};
     )
 
 
-def ticker_detail_page(report: SnapshotReport, from_tickers: list[str]) -> str:
-    # Prev/next nav
+# ---- Deep-analysis section renderers -------------------------------------
+
+
+def _final_verdict_banner(rec, snapshot: SnapshotReport) -> str:
+    """Big-glance verdict card at the very top of the detail page."""
+    badge = _badge(rec.action)
+    score_pct = max(0, min(100, rec.composite_score))
+    conf_pct = max(0, min(100, rec.confidence_pct))
+    # Color the score bar by verdict family
+    bar_color = "var(--buy)" if "BUY" in rec.action else ("var(--sell)" if rec.action in ("SELL","REDUCE") else "var(--hold)")
+
+    upside_block = ""
+    if rec.upside_pct is not None and rec.price_target_mid is not None:
+        upside_cls = "pos" if rec.upside_pct >= 0 else "neg"
+        upside_block = f'<div class="col"><div class="lbl">Price target (mid)</div><div class="val mono">${rec.price_target_mid:,.2f}</div><div class="meta {upside_cls}">{rec.upside_pct*100:+.1f}% upside</div></div>'
+
+    range_block = ""
+    if rec.price_target_low and rec.price_target_high:
+        range_block = f'<div class="col"><div class="lbl">Target range</div><div class="val mono" style="font-size:15px">${rec.price_target_low:,.0f} – ${rec.price_target_high:,.0f}</div><div class="meta">low / high analyst</div></div>'
+
+    size_color = "var(--buy)" if rec.position_size_pct > 0 else "var(--mute)"
+
+    return f"""
+<div class="verdict-banner" style="border: 1px solid var(--line-strong)">
+  <div class="col">
+    <div class="lbl">Final verdict</div>
+    <div class="val">{badge}</div>
+    <div class="meta">Confidence {conf_pct:.0f}%</div>
+  </div>
+  <div class="col">
+    <div class="lbl">Composite score</div>
+    <div class="val mono">{score_pct:.0f}<span style="font-size:14px;color:var(--mute)">/100</span></div>
+    <div style="margin-top:6px; width:140px; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden">
+      <div style="height:100%; width:{score_pct:.0f}%; background:{bar_color}; border-radius:3px"></div>
+    </div>
+  </div>
+  {upside_block}
+  {range_block}
+  <div class="col">
+    <div class="lbl">Hold period</div>
+    <div class="val" style="font-size:18px">{html.escape(rec.hold_period_label)}</div>
+    <div class="meta">{rec.hold_period_months_min}–{rec.hold_period_months_max} months</div>
+  </div>
+  <div class="col">
+    <div class="lbl">Position size</div>
+    <div class="val mono" style="color:{size_color}">{rec.position_size_pct:.1f}%</div>
+    <div class="meta">of portfolio</div>
+  </div>
+  <div class="col">
+    <div class="lbl">Risk grade</div>
+    <div class="val" style="font-size:18px">{html.escape(rec.risk_grade)}</div>
+    <div class="meta">{html.escape(snapshot.ticker)} · {html.escape(snapshot.sector or '—')}</div>
+  </div>
+</div>
+"""
+
+
+def _verdict_rationale(rec) -> str:
+    cat_html = ""
+    if rec.key_catalysts:
+        items = "".join(f"<li>{html.escape(c)}</li>" for c in rec.key_catalysts)
+        cat_html = f'<div class="panel" style="flex:1;min-width:280px"><h2>🔼 Key catalysts <span class="count">{len(rec.key_catalysts)}</span></h2><ul style="margin:0 0 0 18px; line-height:1.7">{items}</ul></div>'
+    risk_html = ""
+    if rec.key_risks:
+        items = "".join(f"<li>{html.escape(r)}</li>" for r in rec.key_risks)
+        risk_html = f'<div class="panel" style="flex:1;min-width:280px"><h2>🔻 Key risks <span class="count">{len(rec.key_risks)}</span></h2><ul style="margin:0 0 0 18px; line-height:1.7">{items}</ul></div>'
+
+    return f"""
+<div class="panel" style="background: linear-gradient(180deg, var(--panel), var(--panel-2))">
+  <h2>📋 How we got there</h2>
+  <p class="synth">{html.escape(rec.rationale)}</p>
+</div>
+<div style="display:flex; gap:16px; flex-wrap:wrap">
+  {cat_html}
+  {risk_html}
+</div>
+"""
+
+
+def _backtest_panel(backtest, current_price: Optional[float], commentary_url: str = "") -> str:
+    """Render the multi-horizon technical backtest table + summary."""
+    if not backtest or not backtest.points:
+        return f"""
+<div class="panel" id="backtest-panel">
+  <h2>⏪ Track record (backtest) <span class="count">technical</span></h2>
+  <div class="dim" style="font-size:13px">
+    Backtest requires at least 252 + 200 trading days of price history. Not enough data for this ticker yet.
+  </div>
+</div>
+"""
+
+    pts = backtest.points
+    hit = backtest.hit_count
+    miss = backtest.miss_count
+    hr = backtest.hit_rate
+    hr_str = f"{hr*100:.0f}%" if hr is not None else "—"
+    aa = backtest.avg_alpha
+    aa_str = f"{aa*100:+.1f}%" if aa is not None else "—"
+
+    rows_html = []
+    for p in pts:
+        # Realized return color
+        ret_cls = "pos" if p.realized_return >= 0 else "neg"
+        alpha_str = f"{p.alpha*100:+.1f}%" if p.alpha is not None else "—"
+        alpha_cls = ("pos" if (p.alpha or 0) >= 0 else "neg") if p.alpha is not None else "dim"
+        # Hit/miss icon
+        icon = "✓" if p.correct else ("✗" if p.correct is False else "—")
+        icon_cls = "pos" if p.correct else ("neg" if p.correct is False else "dim")
+        verdict_badge = _badge(p.technical_verdict)
+        rows_html.append(f"""
+<tr>
+  <td><b>{html.escape(p.label)}</b><div class="dim" style="font-size:11.5px">{html.escape(p.as_of_date)}</div></td>
+  <td>{verdict_badge}</td>
+  <td class="num">${p.price_then:,.2f}</td>
+  <td class="num">${p.price_now:,.2f}</td>
+  <td class="num {ret_cls}">{p.realized_return*100:+.2f}%</td>
+  <td class="num {alpha_cls}">{alpha_str}</td>
+  <td class="num {icon_cls}" style="font-size:16px; font-weight:700">{icon}</td>
+</tr>""")
+
+    return f"""
+<div class="panel" id="backtest-panel">
+  <h2>⏪ Track record (backtest) <span class="count">{len(pts)} horizons</span></h2>
+  <div class="dim" style="font-size:13px; margin-bottom:14px">
+    What would our technical signal model have recommended if you ran it back then — and how did the call play out? Hit / miss compares the BUY / HOLD / SELL direction against the actual realized return. Alpha is excess return vs S&P 500 over the same window.
+  </div>
+
+  <div class="card-grid" style="margin-bottom:14px">
+    <div class="card"><div class="title">Hit rate</div><div class="value mono">{hr_str}</div><div class="meta">{hit} hits · {miss} misses</div></div>
+    <div class="card"><div class="title">Avg α on BUY calls</div><div class="value mono">{aa_str}</div><div class="meta">vs S&amp;P 500</div></div>
+    <div class="card"><div class="title">Horizons tested</div><div class="value mono">{len(pts)}</div><div class="meta">1M · 3M · 6M · 1Y</div></div>
+  </div>
+
+  <div style="overflow-x:auto">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>As of</th>
+          <th>Verdict then</th>
+          <th class="right">Price then</th>
+          <th class="right">Price now</th>
+          <th class="right">Realized return</th>
+          <th class="right">Alpha vs S&amp;P</th>
+          <th class="right">Hit?</th>
+        </tr>
+      </thead>
+      <tbody>
+        {''.join(rows_html)}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="dim" style="font-size:12px; margin-top:10px">
+    Caveat: backtest uses TECHNICAL signals only (RSI / MACD / SMA / Bollinger / volume), not fundamentals or analyst consensus, since yfinance does not provide historical point-in-time ratios. Treat hit rate as one input — not a guarantee.
+  </div>
+</div>
+"""
+
+
+def _agent_council_panel(agents, *, deep_url: str, has_run: bool) -> str:
+    """Render the AI investor council. Two states: (a) not yet run — show
+    CTA + skeleton; (b) run complete — show all signals."""
+    if not has_run:
+        return f"""
+<div class="panel" id="agent-council-panel">
+  <h2>🤖 AI Investor Council <span class="count">14+ analysts</span></h2>
+  <div class="dim" style="font-size:13px; margin-bottom:16px">
+    Run the multi-agent LangGraph pipeline. 14 LLM-driven analyst personas (Buffett, Munger, Lynch, Druckenmiller, Marks, Klarman, Fisher, Pabrai, Taleb, Cathie Wood, Damodaran, Jhunjhunwala, plus Risk &amp; Portfolio Manager) each apply their own framework and produce an independent signal. The Portfolio Manager then weighs all signals into a final BUY / SELL / HOLD with size and confidence.
+  </div>
+  <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:8px">
+    <a class="btn primary" href="{html.escape(deep_url)}">▶ Run deep analysis (≈30-60s)</a>
+    <span class="dim" style="font-size:12.5px">Uses your Claude Code subscription (no API key needed) via the fallback wired in <code>src/llm/models.py</code>.</span>
+  </div>
+</div>
+"""
+
+    if agents.error:
+        return f"""
+<div class="panel" id="agent-council-panel">
+  <h2>🤖 AI Investor Council</h2>
+  <div class="error-box">
+    Agent run failed: {html.escape(agents.error)}<br/>
+    The snapshot + backtest verdict above is still valid — it does not depend on the LLM call.
+  </div>
+</div>
+"""
+
+    # Sentiment header bars
+    total = agents.total_analysts or 1
+    bull = agents.bullish_count
+    bear = agents.bearish_count
+    neut = agents.neutral_count
+    bull_pct = bull / total * 100
+    bear_pct = bear / total * 100
+    neut_pct = neut / total * 100
+
+    rows_html = []
+    for s in agents.agent_signals:
+        sig_label = {
+            "bullish": "BUY",
+            "bearish": "SELL",
+            "neutral": "HOLD",
+        }.get(s.signal, "HOLD")
+        snippet = s.reasoning[:240] + ("…" if len(s.reasoning) > 240 else "")
+        rows_html.append(f"""
+<tr>
+  <td><b>{html.escape(s.agent_name)}</b><div class="dim" style="font-size:11px">{html.escape(s.agent_id)}</div></td>
+  <td>{_badge(sig_label)}</td>
+  <td class="num">{s.confidence:.0f}%</td>
+  <td style="max-width:520px; line-height:1.5; font-size:13px; color:var(--text)">{html.escape(snippet) or '<span class="dim">— no reasoning provided</span>'}</td>
+</tr>""")
+
+    pm_block = ""
+    if agents.pm_decision:
+        pm = agents.pm_decision
+        action_badge = _badge(
+            "STRONG BUY" if pm.confidence >= 80 and "buy" in pm.action else
+            "BUY" if "buy" in pm.action else
+            "SELL" if "sell" in pm.action or "short" in pm.action else
+            "HOLD"
+        )
+        pm_block = f"""
+<div class="panel" style="border:1px solid var(--line-strong); background:linear-gradient(180deg, var(--panel-2), var(--panel))">
+  <h2>👔 Portfolio Manager — Final Decision</h2>
+  <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:center; margin-bottom:14px">
+    <div><div class="dim" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em">Action</div><div style="font-size:18px; font-weight:700; margin-top:4px">{action_badge}</div></div>
+    <div><div class="dim" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em">Quantity</div><div class="mono" style="font-size:20px; font-weight:700; margin-top:4px">{pm.quantity:,}</div></div>
+    <div><div class="dim" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em">Confidence</div><div class="mono" style="font-size:20px; font-weight:700; margin-top:4px">{pm.confidence:.0f}%</div></div>
+  </div>
+  <div style="color:var(--text); font-size:13.5px; line-height:1.6">{html.escape(pm.reasoning[:1200] + ('…' if len(pm.reasoning)>1200 else '')) or '<span class="dim">No reasoning provided.</span>'}</div>
+</div>
+"""
+
+    return f"""
+<div class="panel" id="agent-council-panel">
+  <h2>🤖 AI Investor Council <span class="count">{agents.total_analysts} analysts</span></h2>
+  <div class="dim" style="font-size:13px; margin-bottom:14px">
+    14 LLM-driven analyst personas applied their own framework to this ticker. Below: each verdict + reasoning, sorted bullish → bearish.
+    Total elapsed: <b>{agents.elapsed_seconds:.1f}s</b>.
+  </div>
+
+  <div style="display:flex; gap:6px; margin-bottom:14px; align-items:center; flex-wrap:wrap">
+    <div style="flex:1; min-width:220px; height:36px; background:var(--panel-2); border-radius:8px; overflow:hidden; display:flex">
+      <div style="background:var(--buy); width:{bull_pct}%" title="{bull} bullish"></div>
+      <div style="background:var(--hold); width:{neut_pct}%" title="{neut} neutral"></div>
+      <div style="background:var(--sell); width:{bear_pct}%" title="{bear} bearish"></div>
+    </div>
+    <div style="font-size:12.5px; color:var(--dim)">
+      <span style="color:var(--buy); font-weight:700">{bull} bullish</span> ·
+      <span style="color:var(--hold); font-weight:700">{neut} neutral</span> ·
+      <span style="color:var(--sell); font-weight:700">{bear} bearish</span>
+    </div>
+  </div>
+
+  <div style="overflow-x:auto">
+    <table class="data">
+      <thead>
+        <tr><th>Analyst</th><th>Signal</th><th class="right">Conf.</th><th>Reasoning</th></tr>
+      </thead>
+      <tbody>
+        {''.join(rows_html)}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{pm_block}
+"""
+
+
+def _methodology_panel(rec) -> str:
+    from src.analysis.final_verdict import compose_methodology
+    return f"""
+<details class="panel" style="cursor:pointer">
+  <summary style="font-size:15px; font-weight:700; cursor:pointer">📐 Methodology — how the final verdict was computed</summary>
+  <div style="margin-top:14px; font-size:13.5px; line-height:1.7; color:var(--text)">
+    {compose_methodology(rec)}
+  </div>
+</details>
+"""
+
+
+def ticker_detail_page(report: SnapshotReport, from_tickers: list[str], *, deep: bool = False) -> str:
+    """Detail page with the full combined report.
+
+    When `deep=True`, the page assumes `report.agents` is populated. The
+    `deep=1` query param triggers this — the orchestrator runs LangGraph
+    before rendering. The Final Verdict banner respects either mode.
+    """
+    # Prev/next nav across the originating result set
     prev_link = next_link = ""
     if from_tickers and report.ticker in from_tickers:
         idx = from_tickers.index(report.ticker)
         if idx > 0:
             prev = from_tickers[idx - 1]
-            prev_link = f'<a class="btn" href="/ticker/{prev}?from={quote_plus(",".join(from_tickers))}">← {prev}</a>'
+            prev_link = f'<a class="btn" href="/ticker/{prev}?from={quote_plus(",".join(from_tickers))}{"&deep=1" if deep else ""}">← {prev}</a>'
         if idx < len(from_tickers) - 1:
             nxt = from_tickers[idx + 1]
-            next_link = f'<a class="btn" href="/ticker/{nxt}?from={quote_plus(",".join(from_tickers))}">{nxt} →</a>'
+            next_link = f'<a class="btn" href="/ticker/{nxt}?from={quote_plus(",".join(from_tickers))}{"&deep=1" if deep else ""}">{nxt} →</a>'
 
     from_qs = quote_plus(",".join(from_tickers)) if from_tickers else ""
     back_link = f'<a class="btn ghost" href="/run?tickers={from_qs}">← Back to results</a>' if from_tickers else ""
+
+    # Build the deep-analysis URL (same page with ?deep=1)
+    deep_url = f"/ticker/{report.ticker}?deep=1"
+    if from_tickers:
+        deep_url += f"&from={from_qs}"
+
+    # Run the deep panels:
+    rec = report.final_verdict
+    final_banner = _final_verdict_banner(rec, report) if rec else ""
+    rationale_block = _verdict_rationale(rec) if rec else ""
+    backtest_block = _backtest_panel(report.backtest, report.current_price)
+    agents_block = _agent_council_panel(report.agents, deep_url=deep_url, has_run=bool(report.agents))
+    methodology_block = _methodology_panel(rec) if rec else ""
 
     body = f"""
 <div class="topbar" style="margin-bottom:18px">
@@ -560,12 +875,28 @@ def ticker_detail_page(report: SnapshotReport, from_tickers: list[str]) -> str:
   <div class="actions" style="margin-left:auto">
     {prev_link}
     {next_link}
-    <a class="btn" href="/api/snapshot/{report.ticker}" target="_blank">{{ }} JSON</a>
+    {('<a class="btn primary" href="' + html.escape(deep_url) + '">▶ Run deep analysis</a>') if not deep and not report.agents else ''}
+    <a class="btn" href="#backtest-panel">⏪ Backtest</a>
+    <a class="btn" href="/api/snapshot/{html.escape(report.ticker)}" target="_blank">{{ }} JSON</a>
   </div>
 </div>
-<div class="report-card">
-{render_html_body(report)}
+
+{final_banner}
+{rationale_block}
+
+{backtest_block}
+
+{agents_block}
+
+<div class="panel">
+  <h2>📊 Snapshot detail</h2>
+  <div class="dim" style="font-size:13px; margin-bottom:14px">
+    The deterministic, rule-based pull from yfinance: price action, 10 fundamental metrics, 6 technical indicators, and analyst consensus. This is the input to the snapshot half of the composite score above.
+  </div>
+  {render_html_body(report)}
 </div>
+
+{methodology_block}
 """
     crumbs: list[tuple[str, Optional[str]]] = [("Home", "/")]
     if from_tickers:

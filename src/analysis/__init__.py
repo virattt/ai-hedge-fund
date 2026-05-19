@@ -14,6 +14,7 @@ Public entry points:
 
 from src.analysis.snapshot import generate_snapshot, SnapshotReport
 from src.analysis.renderers import render_console, render_html, render_html_body, HTML_STYLE
+from src.analysis.combined import deep_analyze, shallow_analyze, attach_final_verdict
 
 __all__ = [
     "generate_snapshot",
@@ -22,4 +23,7 @@ __all__ = [
     "render_html",
     "render_html_body",
     "HTML_STYLE",
+    "deep_analyze",
+    "shallow_analyze",
+    "attach_final_verdict",
 ]

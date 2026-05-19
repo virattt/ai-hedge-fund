@@ -53,6 +53,11 @@ def add_common_args(
         action="store_true",
         help="Skip the structured ticker snapshot (price/fundamental/technical/analyst tables) that runs before the LangGraph pipeline.",
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress the rich-console snapshot output. The HTML dashboard is still written to ./reports/<TICKER>_snapshot_<date>.html. The recommended UX is `poetry run snapshot-ui` which opens a browser dashboard.",
+    )
     return parser
 
 

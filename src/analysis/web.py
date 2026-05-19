@@ -30,7 +30,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from src.analysis import generate_snapshot
+from src.analysis import generate_snapshot, attach_final_verdict, deep_analyze, shallow_analyze
 from src.analysis.snapshot import SnapshotReport
 from src.analysis.ui_pages import (
     compare_page,
@@ -50,15 +50,27 @@ _CACHE: dict[str, tuple[float, SnapshotReport]] = {}
 _CACHE_TTL_SECONDS = 300  # 5 minutes — long enough for navigation, short enough for fresh data
 
 
-def _cached(ticker: str) -> SnapshotReport:
-    """Fetch a snapshot, reusing recent results within the TTL."""
+def _cached(ticker: str, *, deep: bool = False) -> SnapshotReport:
+    """Fetch a snapshot, reusing recent results within the TTL.
+
+    If `deep=True` and the cached version doesn't have AI council results yet,
+    upgrade it: re-run the LangGraph pipeline and re-attach the final verdict.
+    """
     ticker = ticker.upper().strip()
     now = time.time()
-    if ticker in _CACHE:
-        ts, rep = _CACHE[ticker]
-        if now - ts < _CACHE_TTL_SECONDS:
-            return rep
-    rep = generate_snapshot(ticker)
+    cached = _CACHE.get(ticker)
+    if cached and now - cached[0] < _CACHE_TTL_SECONDS:
+        rep = cached[1]
+        if deep and not rep.agents:
+            # Upgrade in place — keep the snapshot, attach agents + new verdict
+            from src.analysis.agent_runner import run_agents
+            rep.agents = run_agents(ticker)
+            attach_final_verdict(rep)
+            _CACHE[ticker] = (now, rep)
+        return rep
+
+    # Cold load
+    rep = shallow_analyze(ticker) if not deep else deep_analyze(ticker)
     _CACHE[ticker] = (now, rep)
     return rep
 
@@ -75,14 +87,23 @@ def _parse_tickers(raw: str) -> list[str]:
     return out
 
 
-def _fetch_many(tickers: list[str]) -> tuple[list[SnapshotReport], list[tuple[str, str]], float]:
-    """Fetch snapshots for many tickers in parallel. Returns (reports, errors, elapsed_seconds)."""
+def _fetch_many(tickers: list[str], *, deep: bool = False) -> tuple[list[SnapshotReport], list[tuple[str, str]], float]:
+    """Fetch snapshots for many tickers in parallel. Returns (reports, errors, elapsed_seconds).
+
+    Always runs at least the shallow analysis (snapshot + backtest + verdict).
+    If `deep=True`, also runs the LangGraph council per ticker — much slower,
+    so the caller should set expectations in the UI.
+    """
     started = time.perf_counter()
     results: dict[str, tuple[Optional[SnapshotReport], Optional[str]]] = {}
 
     def _one(t: str) -> tuple[str, Optional[SnapshotReport], Optional[str]]:
         try:
-            return t, _cached(t), None
+            rep = _cached(t, deep=deep)
+            # Make sure final verdict is attached for the overview rendering
+            if not rep.final_verdict:
+                attach_final_verdict(rep)
+            return t, rep, None
         except Exception as exc:  # pragma: no cover — yfinance failure surface
             return t, None, f"{type(exc).__name__}: {exc}"
 
@@ -143,13 +164,18 @@ async def run(tickers: str = "") -> HTMLResponse:
 
 @app.get("/ticker/{ticker}", response_class=HTMLResponse)
 async def ticker_detail(ticker: str, request: Request) -> HTMLResponse:
-    # `from` is a reserved keyword in Python, so we pull it out of query_params directly.
+    """Single-ticker detail page.
+
+    `?deep=1` triggers the LangGraph AI investor council on top of the
+    snapshot. Adds 30-60 seconds but yields a fuller report.
+    """
     raw_from = request.query_params.get("from", "") or ""
+    deep_flag = request.query_params.get("deep", "") in ("1", "true", "yes")
     try:
-        rep = _cached(ticker)
+        rep = _cached(ticker, deep=deep_flag)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Snapshot failed: {exc}")
-    return HTMLResponse(ticker_detail_page(rep, _parse_tickers(raw_from)))
+    return HTMLResponse(ticker_detail_page(rep, _parse_tickers(raw_from), deep=deep_flag))
 
 
 @app.get("/compare", response_class=HTMLResponse)

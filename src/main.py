@@ -172,10 +172,12 @@ if __name__ == "__main__":
         reports_dir = _Path("reports")
         reports_dir.mkdir(exist_ok=True)
         _today = _date.today().strftime("%Y-%m-%d")
+        _quiet = getattr(inputs, "quiet", False)
         for _t in tickers:
             try:
                 _report = generate_snapshot(_t)
-                render_console(_report)
+                if not _quiet:
+                    render_console(_report)
                 _out = reports_dir / f"{_t}_snapshot_{_today}.html"
                 render_html(_report, _out)
                 print(f"{Fore.CYAN}Saved snapshot HTML → {_out}{Style.RESET_ALL}")
