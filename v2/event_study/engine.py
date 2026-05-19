@@ -58,6 +58,7 @@ _ESTIMATION_END = -11              # end of estimation window (10-day buffer avo
 _MIN_ESTIMATION_DAYS = 200         # skip events without enough pre-event price history
 _MAX_EVENT_WINDOW = 20             # widest post-event window (day 0 through day +20)
 _RETROSPECTIVE_CUTOFF_DAYS = 45    # max days between filing_date and report_period
+_RETROSPECTIVE_SOURCE_TYPES = {"8-K", "10-Q"}
 _CAR_WINDOWS = [(0, 1), (0, 5), (0, 20)]  # the three event windows we compute CARs for
 
 
@@ -367,26 +368,28 @@ def _parse_date(s: str) -> date:
 
 
 def _filter_retrospective(records: list[EarningsRecord]) -> list[EarningsRecord]:
-    """Drop records where filing_date is >45 days after report_period.
+    """Drop stale quarterly rows while preserving annual filing events.
 
     The ER extractor sometimes parses prior-period comparison data from
-    a current 8-K, producing rows that look like a real Q4 event but are
+    a current 8-K/10-Q, producing rows that look like a real Q4 event but are
     actually anchored on a Q1 filing date (e.g., GS: report_period=2025-12-31,
     filing_date=2026-04-13 → 103 days, clearly retrospective).
 
-    Without this filter, CARs would be computed around the wrong dates.
+    Annual filings naturally arrive more than 45 days after the fiscal year end,
+    so the quarterly cutoff must not discard valid 10-K/20-F events.
     """
     kept: list[EarningsRecord] = []
     for r in records:
         filing = _parse_date(r.filing_date)
         report = _parse_date(r.report_period)
-        if (filing - report).days < _RETROSPECTIVE_CUTOFF_DAYS:
+        age_days = (filing - report).days
+        if r.source_type not in _RETROSPECTIVE_SOURCE_TYPES or age_days < _RETROSPECTIVE_CUTOFF_DAYS:
             kept.append(r)
         else:
             logger.debug(
                 "Filtered retrospective: %s %s filed %s (report %s, %d days)",
                 r.ticker, r.source_type, r.filing_date, r.report_period,
-                (filing - report).days,
+                age_days,
             )
     return kept
 
