@@ -1434,9 +1434,43 @@ def ticker_detail_page(report: SnapshotReport, from_tickers: list[str], *, deep:
     <a class="btn" href="#price-targets-panel">🎯 Targets</a>
     <a class="btn" href="#backtest-panel">⏪ Backtest</a>
     <a class="btn" href="#interactive-backtest-panel">📅 Custom date</a>
-    <a class="btn" href="/api/snapshot/{html.escape(report.ticker)}" target="_blank">{{ }} JSON</a>
+    <div class="dl-menu" style="position:relative; display:inline-block">
+      <button class="btn" onclick="toggleDl()" id="dl-trigger" title="Download analysis">⬇ Download ▾</button>
+      <div id="dl-pop" class="dl-pop" style="display:none">
+        <a href="/export/{html.escape(report.ticker)}.md" download>📝 Markdown (.md)</a>
+        <a href="/print/{html.escape(report.ticker)}" target="_blank">📄 PDF (via print)</a>
+        <a href="/export/{html.escape(report.ticker)}.html" download>🌐 HTML (standalone)</a>
+        <a href="/export/{html.escape(report.ticker)}.json" download>{{ }} JSON</a>
+      </div>
+    </div>
   </div>
 </div>
+
+<style>
+.dl-pop {{
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 1000;
+  background: var(--panel); border: 1px solid var(--line-strong); border-radius: 10px;
+  box-shadow: 0 10px 32px rgba(0,0,0,0.45);
+  min-width: 220px; padding: 6px;
+}}
+.dl-pop a {{
+  display: block; padding: 9px 12px; color: var(--text); text-decoration: none;
+  border-radius: 6px; font-size: 13px;
+}}
+.dl-pop a:hover {{ background: var(--panel-hover); }}
+</style>
+<script>
+function toggleDl() {{
+  const pop = document.getElementById('dl-pop');
+  pop.style.display = pop.style.display === 'none' ? 'block' : 'none';
+}}
+document.addEventListener('click', (e) => {{
+  const trig = document.getElementById('dl-trigger');
+  const pop = document.getElementById('dl-pop');
+  if (!pop) return;
+  if (!trig.contains(e.target) && !pop.contains(e.target)) pop.style.display = 'none';
+}});
+</script>
 
 <div id="auto-council-banner" style="display:none; padding:14px 18px; background:var(--hold-bg); border:1px solid rgba(245,196,81,0.3); border-radius:12px; margin-bottom:18px; align-items:center; gap:14px">
   <div class="spinner" style="width:22px; height:22px; border-width:2.5px; margin:0"></div>

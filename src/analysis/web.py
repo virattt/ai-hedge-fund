@@ -649,6 +649,163 @@ def _start_background_refresher() -> None:
     t.start()
 
 
+# --- Exports: Markdown / HTML / JSON / Print-PDF -------------------------
+
+
+@app.get("/export/{ticker}.md")
+async def export_md(ticker: str) -> "Response":
+    """Download the analysis as Markdown."""
+    from fastapi.responses import Response
+    from src.analysis.exporter import to_markdown
+    try:
+        rep = _cached(ticker)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Snapshot failed: {exc}")
+    if _is_empty_report(rep):
+        raise HTTPException(status_code=404, detail=f"No data for ticker {ticker.upper()}")
+    md = to_markdown(rep)
+    filename = f"{ticker.upper()}_{rep.timestamp:%Y-%m-%d}.md"
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/export/{ticker}.json")
+async def export_json(ticker: str) -> "Response":
+    """Download the snapshot as a JSON file (vs /api/snapshot which is inline)."""
+    from fastapi.responses import Response
+    try:
+        rep = _cached(ticker)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Snapshot failed: {exc}")
+    if _is_empty_report(rep):
+        raise HTTPException(status_code=404, detail=f"No data for ticker {ticker.upper()}")
+    payload = _dataclass_to_dict(rep)
+    filename = f"{ticker.upper()}_{rep.timestamp:%Y-%m-%d}.json"
+    return Response(
+        content=_json.dumps(payload, indent=2, default=str),
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/export/{ticker}.html")
+async def export_html(ticker: str) -> "Response":
+    """Download a self-contained single-file HTML report."""
+    from fastapi.responses import Response
+    from src.analysis import render_html_body, HTML_STYLE
+    try:
+        rep = _cached(ticker)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Snapshot failed: {exc}")
+    if _is_empty_report(rep):
+        raise HTTPException(status_code=404, detail=f"No data for ticker {ticker.upper()}")
+    body = render_html_body(rep)
+    standalone = f"""<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<title>{rep.ticker} — {rep.company_name}</title>
+<style>{HTML_STYLE}</style>
+</head><body><div class="container shell">{body}</div></body></html>"""
+    filename = f"{ticker.upper()}_{rep.timestamp:%Y-%m-%d}.html"
+    return Response(
+        content=standalone,
+        media_type="text/html; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/print/{ticker}", response_class=HTMLResponse)
+async def print_view(ticker: str) -> HTMLResponse:
+    """Print-optimized view that auto-fires window.print() once the page paints.
+
+    User saves as PDF from the browser print dialog → 100% reliable PDF
+    output with no extra Python deps (no weasyprint, no playwright).
+    """
+    try:
+        rep = _cached(ticker)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Snapshot failed: {exc}")
+    if _is_empty_report(rep):
+        from src.analysis.ui_pages import ticker_not_found_page
+        return HTMLResponse(ticker_not_found_page(ticker, reason="no_data"), status_code=404)
+
+    from src.analysis import HTML_STYLE
+    from src.analysis.ui_pages import _final_verdict_banner, _verdict_rationale, _multi_horizon_panel, _backtest_panel, _news_panel, _agent_council_panel
+    from src.analysis.renderers import render_html_body
+
+    rec = rep.final_verdict
+    sections = [
+        _final_verdict_banner(rec, rep) if rec else "",
+        _verdict_rationale(rec) if rec else "",
+        _multi_horizon_panel(rep.price_target_set, rep.current_price),
+        _backtest_panel(rep.backtest, rep.current_price),
+        _news_panel(rep.ticker),
+        _agent_council_panel(rep.agents, deep_url="", has_run=bool(rep.agents and not getattr(rep.agents, "error", None))) if rep.agents else "",
+        render_html_body(rep),
+    ]
+
+    print_css = """
+@media print {
+  body { background: white !important; color: black !important; }
+  .panel, .verdict-banner, .card { background: white !important; border: 1px solid #ccc !important; box-shadow: none !important; page-break-inside: avoid; }
+  .badge { border: 1px solid #888 !important; color: black !important; background: #f5f5f5 !important; }
+  a { color: black !important; text-decoration: none !important; }
+  h1, h2, h3 { color: black !important; }
+  .dim, .meta { color: #555 !important; }
+  .pos { color: #006400 !important; }
+  .neg { color: #8B0000 !important; }
+  table { page-break-inside: auto; }
+  tr { page-break-inside: avoid; page-break-after: auto; }
+  thead { display: table-header-group; }
+  .no-print { display: none !important; }
+}
+.print-banner {
+  background: var(--panel-2); border:1px solid var(--line); border-radius:10px;
+  padding:12px 16px; margin-bottom:20px; display:flex; gap:12px; align-items:center;
+  font-size:13px;
+}
+.print-banner button {
+  background: var(--accent); color: #07112c; border:none; border-radius:6px;
+  padding:6px 12px; font-size:13px; font-weight:600; cursor:pointer;
+}
+@page { margin: 18mm 16mm; size: A4; }
+"""
+
+    return HTMLResponse(f"""<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<title>{rep.ticker} — {rep.company_name}</title>
+<style>{HTML_STYLE}{print_css}</style>
+</head><body><div class="container shell" style="max-width: 1000px">
+  <div class="print-banner no-print">
+    🖨 Print dialog will open in a moment. Choose <b>"Save as PDF"</b> as destination, then click Save.
+    <button onclick="window.print()">Print / Save PDF</button>
+    <a href="/ticker/{rep.ticker}" class="btn ghost no-print" style="margin-left:auto">← Back to dashboard</a>
+  </div>
+
+  <div style="margin-bottom: 22px">
+    <h1 style="margin:0 0 4px; font-size:26px">{rep.ticker} — {rep.company_name}</h1>
+    <div class="dim" style="font-size:13px">Generated {rep.timestamp:%Y-%m-%d %H:%M} · {(rep.sector or '')}</div>
+  </div>
+
+  {''.join(sections)}
+
+  <div style="margin-top:24px; padding-top:14px; border-top:1px solid var(--line); font-size:11px; color:var(--mute)">
+    Generated by Strategist · data via yfinance + Financial Datasets · educational/research use only.
+  </div>
+</div>
+
+<script>
+  // Auto-fire print dialog ~600ms after paint so the user doesn't have to click
+  // (modern browsers will show their native print UI; user chooses "Save as PDF")
+  window.addEventListener('load', () => setTimeout(() => window.print(), 600));
+</script>
+</body></html>""")
+
+
 @app.get("/api/news/{ticker}")
 async def api_news(ticker: str, limit: int = 12) -> JSONResponse:
     """Recent news for a ticker (cached 10 min)."""
