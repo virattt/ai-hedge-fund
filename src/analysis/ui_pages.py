@@ -1071,7 +1071,7 @@ async function runInteractiveBacktest(e) {{
 
 def _agent_council_panel(agents, *, deep_url: str, has_run: bool) -> str:
     """Render the AI investor council. Two states: (a) not yet run — show
-    CTA + skeleton; (b) run complete — show all signals."""
+    CTA + auto-vs-manual toggle; (b) run complete — show all signals."""
     if not has_run:
         return f"""
 <div class="panel" id="agent-council-panel">
@@ -1079,11 +1079,136 @@ def _agent_council_panel(agents, *, deep_url: str, has_run: bool) -> str:
   <div class="dim" style="font-size:13px; margin-bottom:16px">
     Run the multi-agent LangGraph pipeline. 14 LLM-driven analyst personas (Buffett, Munger, Lynch, Druckenmiller, Marks, Klarman, Fisher, Pabrai, Taleb, Cathie Wood, Damodaran, Jhunjhunwala, plus Risk &amp; Portfolio Manager) each apply their own framework and produce an independent signal. The Portfolio Manager then weighs all signals into a final BUY / SELL / HOLD with size and confidence.
   </div>
-  <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:8px">
-    <a class="btn primary" href="{html.escape(deep_url)}">▶ Run deep analysis (≈30-60s)</a>
-    <span class="dim" style="font-size:12.5px">Uses your Claude Code subscription (no API key needed) via the fallback wired in <code>src/llm/models.py</code>.</span>
+
+  <div class="council-modes">
+    <!-- Manual run -->
+    <div class="council-mode-card">
+      <div class="council-mode-head">
+        <div>
+          <div class="council-mode-title">▶ Run manually</div>
+          <div class="council-mode-sub">One-off: kick off the council for this ticker only. Live progress, ~30-60s.</div>
+        </div>
+        <a class="btn primary" href="{html.escape(deep_url)}">Run now</a>
+      </div>
+    </div>
+
+    <!-- Auto-run toggle -->
+    <div class="council-mode-card">
+      <div class="council-mode-head">
+        <div>
+          <div class="council-mode-title">🔄 Auto-run on every ticker view</div>
+          <div class="council-mode-sub" id="auto-mode-sub">Loading current setting…</div>
+        </div>
+        <label class="toggle" title="Click to flip">
+          <input type="checkbox" id="auto-council-toggle" disabled />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="dim" style="font-size:11.5px; margin-top:12px">
+    Uses your Claude Code subscription (no API key needed) via the fallback in <code>src/llm/models.py</code>.
+    Full settings at <a href="/settings" style="color:var(--accent)">/settings</a>.
   </div>
 </div>
+
+<style>
+.council-modes {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }}
+@media (max-width: 720px) {{ .council-modes {{ grid-template-columns: 1fr; }} }}
+.council-mode-card {{
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 14px 16px;
+}}
+.council-mode-head {{
+  display: flex; gap: 12px; align-items: center; justify-content: space-between;
+}}
+.council-mode-title {{ font-weight: 700; font-size: 14px; }}
+.council-mode-sub {{ color: var(--dim); font-size: 12px; margin-top: 3px; line-height: 1.45; max-width: 320px; }}
+
+/* iOS-style toggle */
+.toggle {{ position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }}
+.toggle input {{ opacity: 0; width: 0; height: 0; }}
+.toggle-slider {{
+  position: absolute; cursor: pointer; inset: 0;
+  background: var(--panel-hover); border: 1px solid var(--line-strong);
+  transition: background 180ms ease, border-color 180ms ease;
+  border-radius: 24px;
+}}
+.toggle-slider:before {{
+  position: absolute; content: ""; height: 18px; width: 18px;
+  left: 2px; top: 2px;
+  background: var(--text);
+  transition: transform 180ms ease, background 180ms ease;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}}
+.toggle input:checked + .toggle-slider {{
+  background: var(--buy); border-color: var(--buy);
+}}
+.toggle input:checked + .toggle-slider:before {{
+  transform: translateX(20px);
+  background: #07112c;
+}}
+.toggle input:disabled + .toggle-slider {{ opacity: 0.5; cursor: wait; }}
+</style>
+
+<script>
+(async function() {{
+  const toggle = document.getElementById('auto-council-toggle');
+  const sub = document.getElementById('auto-mode-sub');
+  if (!toggle) return;
+
+  async function loadCurrent() {{
+    try {{
+      const s = await (await fetch('/api/settings')).json();
+      toggle.checked = !!s.auto_run_council;
+      toggle.disabled = false;
+      sub.textContent = toggle.checked
+        ? 'ON — the council runs in the background every time you open any ticker. Page refreshes when done.'
+        : 'OFF — you'll click "Run now" each time. Flip the switch to make it automatic on every view.';
+    }} catch (e) {{
+      sub.textContent = 'Failed to load setting: ' + e;
+    }}
+  }}
+
+  toggle.addEventListener('change', async () => {{
+    const wantOn = toggle.checked;
+    toggle.disabled = true;
+    sub.textContent = 'Saving…';
+    try {{
+      const fd = new FormData();
+      // Replay other settings via current values so we don't clobber them.
+      const cur = await (await fetch('/api/settings')).json();
+      fd.append('auto_save_enabled', cur.auto_save_enabled ? '1' : '');
+      fd.append('auto_save_default_tag', cur.auto_save_default_tag || 'auto');
+      fd.append('auto_run_council', wantOn ? '1' : '');
+      fd.append('default_analysts', (cur.default_analysts || []).join(','));
+      const r = await fetch('/api/settings', {{ method: 'POST', body: fd }});
+      if (!r.ok && r.status !== 303) throw new Error('HTTP ' + r.status);
+      window.showToast({{
+        kind: 'success',
+        title: wantOn ? '✓ Auto-run enabled' : '○ Auto-run disabled',
+        message: wantOn
+          ? 'AI council will start in the background on every ticker view. Kicking off now for this ticker…'
+          : 'You\\'ll run the council manually from now on.',
+        duration: 4000,
+      }});
+      await loadCurrent();
+      if (wantOn) {{
+        // Trigger the deep run immediately so the user sees it work right away
+        setTimeout(() => window.location.href = {_quote_json(deep_url)}, 800);
+      }}
+    }} catch (e) {{
+      window.showToast({{ kind: 'error', title: 'Failed to save', message: String(e) }});
+      toggle.checked = !wantOn;
+      toggle.disabled = false;
+    }}
+  }});
+
+  loadCurrent();
+}})();
+</script>
 """
 
     if agents.error:
