@@ -291,13 +291,42 @@ def _enrich_analyst_with_breakdown(ticker_obj, panel: AnalystPanel) -> AnalystPa
 # ----------------------------------------------------------------------------
 
 
+def _resolve_yfinance_symbol(ticker: str):
+    """yfinance uses '-' (not '.') for class-share suffixes (BRK-B, BF-B).
+    If the user typed 'BRK.B' and yfinance returns nothing, retry with 'BRK-B'."""
+    import yfinance as yf
+    yf_t = yf.Ticker(ticker)
+    try:
+        info = yf_t.info or {}
+        if info.get("regularMarketPrice") or info.get("currentPrice"):
+            return ticker, yf_t, info
+    except Exception:
+        info = {}
+
+    if "." in ticker:
+        alt = ticker.replace(".", "-")
+        try:
+            alt_yf = yf.Ticker(alt)
+            alt_info = alt_yf.info or {}
+            if alt_info.get("regularMarketPrice") or alt_info.get("currentPrice"):
+                return alt, alt_yf, alt_info
+        except Exception:
+            pass
+
+    return ticker, yf_t, info
+
+
 def generate_snapshot(ticker: str) -> SnapshotReport:
     """Build a SnapshotReport for `ticker`. Returns a report with N/A entries on failure rather than raising."""
     import yfinance as yf  # lazy import — only imported when this runs
 
     warnings_list: list[str] = []
     ticker = ticker.upper().strip()
-    yf_ticker = yf.Ticker(ticker)
+    # Resolve common aliases (e.g. BRK.B → BRK-B) so the user can type either
+    resolved, yf_ticker, _resolved_info = _resolve_yfinance_symbol(ticker)
+    if resolved != ticker:
+        warnings_list.append(f"resolved {ticker} → {resolved}")
+        ticker = resolved
 
     # --- Price history (3y for 3Y return; we'll also need shorter periods, but 3y covers all) -----
     try:

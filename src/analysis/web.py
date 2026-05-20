@@ -48,6 +48,7 @@ from src.analysis import settings as settings_store
 from src.analysis.ui_pages import (
     compare_page,
     compare_saved_page,
+    earnings_calendar_page,
     history_page,
     home_page,
     journal_page,
@@ -56,6 +57,8 @@ from src.analysis.ui_pages import (
     saved_list_page,
     settings_page,
     ticker_detail_page,
+    ticker_not_found_page,
+    universe_heatmap_page,
     watchlists_page,
 )
 
@@ -180,6 +183,36 @@ async def run(tickers: str = "") -> HTMLResponse:
     return HTMLResponse(results_overview_page(reports, errors, elapsed, parsed))
 
 
+def _ticker_looks_valid(t: str) -> bool:
+    """Basic ticker sanity check before hitting yfinance.
+
+    Allow letters, digits, ., -, ^ (for ^GSPC etc). 1-12 chars.
+    """
+    import re as _re
+    if not t or len(t) > 12:
+        return False
+    return bool(_re.match(r"^[A-Za-z0-9.\-^]+$", t))
+
+
+def _is_empty_report(rep) -> bool:
+    """Detect SnapshotReport produced for a non-existent/garbage ticker.
+
+    yfinance silently returns empty data: we get a report with current_price=None,
+    no analyst counts, all fundamentals with value=None (the rows still exist),
+    and no technical indicators (we skip them when there's <200 days of history).
+    """
+    if rep.current_price is not None:
+        return False  # real ticker
+    if rep.analyst and rep.analyst.total_analysts:
+        return False
+    # The metric rows always exist; check if any actually have a value
+    if any(m.value is not None for m in (rep.fundamental_metrics or [])):
+        return False
+    if rep.technical_indicators:
+        return False
+    return True
+
+
 @app.get("/ticker/{ticker}", response_class=HTMLResponse)
 async def ticker_detail(ticker: str, request: Request) -> HTMLResponse:
     """Single-ticker detail page.
@@ -192,10 +225,20 @@ async def ticker_detail(ticker: str, request: Request) -> HTMLResponse:
     """
     raw_from = request.query_params.get("from", "") or ""
     deep_flag = request.query_params.get("deep", "") in ("1", "true", "yes")
+
+    if not _ticker_looks_valid(ticker):
+        from src.analysis.ui_pages import ticker_not_found_page
+        return HTMLResponse(ticker_not_found_page(ticker, reason="invalid_format"), status_code=400)
+
     try:
         rep = _cached(ticker, deep=deep_flag)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Snapshot failed: {exc}")
+
+    # yfinance silently returns empty data for non-existent tickers — detect and show a real error.
+    if _is_empty_report(rep):
+        from src.analysis.ui_pages import ticker_not_found_page
+        return HTMLResponse(ticker_not_found_page(ticker, reason="no_data"), status_code=404)
 
     # Auto-save (idempotent: once per ticker per day)
     try:
@@ -244,8 +287,22 @@ async def api_backtest_at(ticker: str, date: str) -> JSONResponse:
         if not series:
             raise HTTPException(status_code=500, detail="series cache empty after snapshot")
 
+    # Validate date format before running the backtest engine. pandas will
+    # raise on malformed input — surface that as a 400 instead of a 500.
+    try:
+        import pandas as _pd
+        _pd.Timestamp(date)
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail=f"invalid date '{date}' — use YYYY-MM-DD format",
+        )
+
     close, volume, spx_close = series
-    point = backtest_at_date(close, volume, date, spx_close)
+    try:
+        point = backtest_at_date(close, volume, date, spx_close)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"backtest failed: {exc}")
     if not point:
         raise HTTPException(status_code=400, detail="not enough history for that date (need ≥200 trading days before, ≥1 trading day after)")
 
@@ -435,6 +492,81 @@ async def journal(request: Request) -> HTMLResponse:
     summary = snapshot_storage.journal_summary(items, current_prices)
     all_tags = snapshot_storage.list_all_tags()
     return HTMLResponse(journal_page(summary, current_prices, all_tags, active_tag=tag))
+
+
+@app.get("/heatmap", response_class=HTMLResponse)
+async def heatmap(tickers: str = "") -> HTMLResponse:
+    """Universe heatmap — sector × verdict grid."""
+    parsed = _parse_tickers(tickers)
+    if not parsed:
+        return HTMLResponse(universe_heatmap_page([], ""))
+    reports, _errors, _elapsed = _fetch_many(parsed)
+    return HTMLResponse(universe_heatmap_page(reports, ",".join(parsed)))
+
+
+@app.get("/calendar", response_class=HTMLResponse)
+async def earnings_calendar() -> HTMLResponse:
+    """Earnings calendar — aggregate across saves + watchlists."""
+    # Build candidate ticker list from saves + watchlists
+    tickers: set[str] = set()
+    try:
+        for item in snapshot_storage.list_saved():
+            tickers.add(item["ticker"])
+    except Exception:
+        pass
+    try:
+        for w in wl_store.list_watchlists():
+            tickers.update(w.get("tickers", []) or [])
+    except Exception:
+        pass
+
+    rows: list[dict] = []
+    if tickers:
+        # Best-effort — yfinance .info has 'earningsDate' (list of timestamps)
+        try:
+            import yfinance as _yf
+            from datetime import datetime as _dt
+        except Exception:
+            tickers = set()
+
+        for t in sorted(tickers):
+            try:
+                info = _yf.Ticker(t).info or {}
+            except Exception:
+                continue
+            date = None
+            ed = info.get("earningsDate") or info.get("earningsTimestamp")
+            if isinstance(ed, list) and ed:
+                try:
+                    date = _dt.fromtimestamp(int(ed[0])).date()
+                except Exception:
+                    pass
+            elif isinstance(ed, (int, float)):
+                try:
+                    date = _dt.fromtimestamp(int(ed)).date()
+                except Exception:
+                    pass
+            rows.append(
+                {
+                    "ticker": t,
+                    "company_name": info.get("longName") or info.get("shortName") or "",
+                    "date": date,
+                    "source": "watchlist" if any(t in (w.get("tickers") or []) for w in wl_store.list_watchlists()) else "saved",
+                }
+            )
+
+    return HTMLResponse(earnings_calendar_page(rows))
+
+
+@app.get("/api/news/{ticker}")
+async def api_news(ticker: str, limit: int = 12) -> JSONResponse:
+    """Recent news for a ticker (cached 10 min)."""
+    from src.analysis.news import fetch_news
+    try:
+        items = fetch_news(ticker, limit=limit)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc), "items": []}, status_code=500)
+    return JSONResponse({"ticker": ticker.upper(), "items": items})
 
 
 @app.get("/compare-saves", response_class=HTMLResponse)

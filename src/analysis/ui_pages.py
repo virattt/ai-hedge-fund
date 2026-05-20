@@ -39,6 +39,8 @@ def _shell(*, active: str, title: str, body: str, breadcrumbs: list[tuple[str, O
     """Wrap page body in sidebar + topbar + footer chrome."""
     nav_items = [
         ("home", "/", "Home", ""),
+        ("heatmap", "/heatmap", "Heatmap", ""),
+        ("calendar", "/calendar", "Earnings", ""),
         ("saved", "/saved", "Saved", ""),
         ("journal", "/journal", "Journal", ""),
         ("watchlists", "/watchlists", "Watchlists", ""),
@@ -1327,6 +1329,47 @@ def _save_form(ticker: str) -> str:
 """
 
 
+def _news_panel(ticker: str) -> str:
+    """Recent news for this ticker. Server-rendered (cached 10 min)."""
+    try:
+        from src.analysis.news import fetch_news, relative_time
+        items = fetch_news(ticker, limit=8)
+    except Exception:
+        items = []
+
+    if not items:
+        return ""
+
+    rows: list[str] = []
+    for n in items:
+        title = html.escape(n["title"])
+        link = html.escape(n["link"])
+        publisher = html.escape(n["publisher"])
+        rel = relative_time(n["published"])
+        summary = html.escape(n["summary"][:240])
+        rows.append(f"""
+<a class="news-item" href="{link}" target="_blank" rel="noopener">
+  <div class="news-title">{title}</div>
+  <div class="news-meta">{publisher} · {html.escape(rel)}</div>
+  {f'<div class="news-summary">{summary}…</div>' if summary else ''}
+</a>""")
+
+    return f"""
+<div class="panel" id="news-panel">
+  <h2>📰 Recent news <span class="count">{len(items)}</span></h2>
+  <div class="dim" style="font-size:13px; margin-bottom:12px">Newest first, cached 10 min. Click any headline to open the source in a new tab.</div>
+  <style>
+  .news-item {{ display:block; padding:12px 14px; border-radius:10px; background:var(--panel-2); border:1px solid var(--line); margin-bottom:8px; text-decoration:none; color:var(--text); transition:background 120ms ease, border-color 120ms ease; }}
+  .news-item:hover {{ background:var(--panel-hover); border-color:var(--line-strong); }}
+  .news-title {{ font-weight:600; font-size:13.5px; line-height:1.4; }}
+  .news-meta {{ font-size:11.5px; color:var(--mute); margin-top:4px; }}
+  .news-summary {{ font-size:12.5px; color:var(--dim); margin-top:6px; line-height:1.55; }}
+  </style>
+  {''.join(rows)}
+</div>
+"""
+
+
 def _methodology_panel(rec) -> str:
     from src.analysis.final_verdict import compose_methodology
     return f"""
@@ -1373,6 +1416,7 @@ def ticker_detail_page(report: SnapshotReport, from_tickers: list[str], *, deep:
     multi_horizon_block = _multi_horizon_panel(report.price_target_set, report.current_price)
     backtest_block = _backtest_panel(report.backtest, report.current_price)
     interactive_backtest_block = _interactive_backtest_panel(report.ticker)
+    news_block = _news_panel(report.ticker)
     agents_block = _agent_council_panel(report.agents, deep_url=deep_url, has_run=bool(report.agents))
     save_block = _save_form(report.ticker)
     saved_pill = _saved_count_pill(report.ticker)
@@ -1531,6 +1575,8 @@ window.addEventListener('keydown', (e) => {{
 {backtest_block}
 
 {interactive_backtest_block}
+
+{news_block}
 
 {agents_block}
 
@@ -2210,6 +2256,339 @@ def multi_save_compare_page(ticker: str, saves: list, current: SnapshotReport) -
 """
     crumbs = [("Home", "/"), ("Saved", "/saved"), (ticker, f"/saved/{ticker}"), ("Compare drift", None)]
     return _shell(active="saved", title=f"Strategist · {ticker} drift", body=body, breadcrumbs=crumbs)
+
+
+def ticker_not_found_page(ticker: str, *, reason: str = "no_data") -> str:
+    """Friendly error page for tickers yfinance can't find."""
+    msg = {
+        "invalid_format": "That ticker format doesn't look right. Tickers are usually 1-5 letters (e.g. AAPL, MSFT). For ADRs or indices use suffixes/prefixes like 005930.KS or ^GSPC.",
+        "no_data": f"We couldn't find any market data for <b>{html.escape(ticker)}</b>. Common causes: delisted ticker, typo, or an exchange we don't cover (only US markets + ADRs supported via yfinance).",
+    }.get(reason, "Unknown error.")
+
+    body = f"""
+<div class="empty" style="margin-top:60px">
+  <div class="big">🤷 Ticker not found · {html.escape(ticker)}</div>
+  <div style="font-size:14px; line-height:1.7; margin-top:10px; max-width:560px; margin-left:auto; margin-right:auto">{msg}</div>
+  <div style="margin-top:24px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap">
+    <a class="btn primary" href="/">← Back to Home</a>
+    <a class="btn" href="/saved">Browse saved</a>
+    <a class="btn" href="/watchlists">Open a watchlist</a>
+  </div>
+  <div class="dim" style="margin-top:24px; font-size:12px">
+    Looking for a known ticker? Try
+    <a href="/ticker/NVDA" style="color:var(--accent)">NVDA</a>,
+    <a href="/ticker/AAPL" style="color:var(--accent)">AAPL</a>,
+    <a href="/ticker/MSFT" style="color:var(--accent)">MSFT</a>.
+  </div>
+</div>
+"""
+    return _shell(
+        active="home",
+        title=f"Strategist · {ticker} not found",
+        body=body,
+        breadcrumbs=[("Home", "/"), (ticker, None)],
+    )
+
+
+def universe_heatmap_page(reports: list, tickers_input: str) -> str:
+    """Universe heatmap — sector × verdict grid.
+
+    Each ticker is a colored tile (color = verdict, size scaled by market cap).
+    Grouped by sector. Hover for details, click to open the detail page.
+    """
+    if not reports:
+        empty_body = f"""
+<div class="topbar" style="margin-bottom:18px">
+  <h1 style="margin:0; font-size:24px">🌡 Universe Heatmap</h1>
+</div>
+<div class="empty">
+  <div class="big">Pick a universe to visualise</div>
+  <div style="margin-top:8px; font-size:13.5px">Append <code>?tickers=NVDA,AAPL,MSFT,...</code> to the URL, or use one of the presets below.</div>
+  <div class="chips" style="margin-top:18px; justify-content:center">
+    <a class="chip" href="/heatmap?tickers=NVDA,MSFT,GOOGL,META,AMZN,AAPL,AVGO,TSM,V,COST"><b>Tier 1 Compounders</b><span class="count">10</span></a>
+    <a class="chip" href="/heatmap?tickers=AAPL,MSFT,GOOGL,META,AMZN,NVDA,TSLA"><b>Mag 7</b><span class="count">7</span></a>
+    <a class="chip" href="/heatmap?tickers=NVDA,AMD,AVGO,TSM,ASML,MU,SMCI"><b>AI Compute</b><span class="count">7</span></a>
+    <a class="chip" href="/heatmap?tickers=LLY,NVO,ABBV,MRK,PFE,JNJ,ISRG"><b>Healthcare</b><span class="count">7</span></a>
+    <a class="chip" href="/heatmap?tickers=JPM,GS,MS,BRK.B,V,MA,WFC"><b>Financials</b><span class="count">7</span></a>
+  </div>
+</div>
+"""
+        return _shell(
+            active="home",
+            title="Strategist · Heatmap",
+            body=empty_body,
+            breadcrumbs=[("Home", "/"), ("Heatmap", None)],
+        )
+
+    # Group by sector
+    by_sector: dict[str, list] = {}
+    for r in reports:
+        s = r.sector or "Other / Unknown"
+        by_sector.setdefault(s, []).append(r)
+    # Sort sectors by count desc
+    sector_order = sorted(by_sector.keys(), key=lambda k: -len(by_sector[k]))
+
+    # Min/max market cap for tile sizing
+    caps = [r.market_cap for r in reports if r.market_cap]
+    cap_lo = min(caps) if caps else 0
+    cap_hi = max(caps) if caps else 1
+
+    def _tile_size(market_cap):
+        # Scale tile width 110px (smallest) to 180px (largest)
+        if not market_cap or cap_hi == cap_lo:
+            return 130
+        import math as _m
+        # Log scale because mega-caps are 1000x bigger than smaller caps
+        try:
+            ratio = (_m.log10(max(market_cap, 1e8)) - _m.log10(max(cap_lo, 1e8))) / max(1, _m.log10(cap_hi) - _m.log10(max(cap_lo, 1e8)))
+        except Exception:
+            ratio = 0.5
+        return 110 + ratio * 70
+
+    def _verdict_bg(verdict: str) -> str:
+        v = (verdict or "").upper()
+        if "STRONG BUY" in v:
+            return "linear-gradient(135deg, rgba(46,204,122,0.45), rgba(46,204,122,0.25))"
+        if "BUY" in v:
+            return "linear-gradient(135deg, rgba(46,204,122,0.30), rgba(46,204,122,0.12))"
+        if "HOLD" in v:
+            return "linear-gradient(135deg, rgba(245,196,81,0.25), rgba(245,196,81,0.10))"
+        if "REDUCE" in v:
+            return "linear-gradient(135deg, rgba(184,100,196,0.30), rgba(184,100,196,0.12))"
+        if "SELL" in v:
+            return "linear-gradient(135deg, rgba(239,83,80,0.35), rgba(239,83,80,0.15))"
+        return "linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))"
+
+    def _verdict_border(verdict: str) -> str:
+        v = (verdict or "").upper()
+        if "BUY" in v:
+            return "var(--buy)"
+        if "SELL" in v or "REDUCE" in v:
+            return "var(--sell)"
+        if "HOLD" in v:
+            return "var(--hold)"
+        return "var(--line)"
+
+    sector_blocks: list[str] = []
+    n_buy = n_hold = n_sell = 0
+    for sector in sector_order:
+        sec_reports = by_sector[sector]
+        # Sort tickers within sector by composite score desc
+        sec_reports.sort(key=lambda r: -(r.composite_score or 0))
+        tiles: list[str] = []
+        sec_buy = sec_hold = sec_sell = 0
+        for r in sec_reports:
+            verdict = (r.final_verdict.action if r.final_verdict else r.overall_verdict_label) or "—"
+            v_upper = verdict.upper()
+            if "BUY" in v_upper:
+                sec_buy += 1
+                n_buy += 1
+            elif "SELL" in v_upper or "REDUCE" in v_upper:
+                sec_sell += 1
+                n_sell += 1
+            else:
+                sec_hold += 1
+                n_hold += 1
+            score = r.final_verdict.composite_score if r.final_verdict else r.composite_score
+            size = _tile_size(r.market_cap)
+            ret_1d = r.price_returns[0].ticker_return if r.price_returns else None
+            ret_1d_str = ""
+            if ret_1d is not None:
+                cls = "pos" if ret_1d >= 0 else "neg"
+                ret_1d_str = f'<span class="{cls}" style="font-size:10.5px; margin-top:2px">{ret_1d*100:+.2f}%</span>'
+
+            tiles.append(f"""
+<a href="/ticker/{html.escape(r.ticker)}"
+   class="heatmap-tile"
+   style="background:{_verdict_bg(verdict)}; border-color:{_verdict_border(verdict)}; width:{size:.0f}px; height:{size*0.62:.0f}px"
+   title="{html.escape(r.ticker)} · {html.escape(verdict)} · score {score:.0f}/100 · {html.escape(r.company_name)}">
+  <div class="ht-ticker">{html.escape(r.ticker)}</div>
+  <div class="ht-score">{score:.0f}</div>
+  {ret_1d_str}
+</a>""")
+
+        sector_blocks.append(f"""
+<div class="sector-block">
+  <div class="sector-head">
+    <b>{html.escape(sector)}</b>
+    <span class="dim" style="font-size:11.5px">
+      {len(sec_reports)} tickers
+      {(' · <span class="pos">' + str(sec_buy) + ' BUY</span>') if sec_buy else ''}
+      {(' · <span style="color:var(--hold)">' + str(sec_hold) + ' HOLD</span>') if sec_hold else ''}
+      {(' · <span class="neg">' + str(sec_sell) + ' SELL</span>') if sec_sell else ''}
+    </span>
+  </div>
+  <div class="heatmap-grid">{''.join(tiles)}</div>
+</div>""")
+
+    body = f"""
+<div class="topbar" style="margin-bottom:18px">
+  <div>
+    <h1 style="margin:0; font-size:24px">🌡 Universe Heatmap</h1>
+    <div class="dim" style="font-size:13px; margin-top:4px">{len(reports)} tickers · {len(sector_order)} sectors · grouped, sized by market cap, colored by verdict</div>
+  </div>
+  <div class="actions" style="margin-left:auto">
+    <a class="btn" href="/run?tickers={quote_plus(tickers_input)}">📊 Table view</a>
+    <a class="btn" href="/compare?tickers={quote_plus(tickers_input)}">⇆ Compare</a>
+  </div>
+</div>
+
+<div class="card-grid" style="margin-bottom:18px">
+  <div class="card"><div class="title">Tickers</div><div class="value">{len(reports)}</div><div class="meta">{len(sector_order)} sectors</div></div>
+  <div class="card"><div class="title">Bullish</div><div class="value pos">{n_buy}</div><div class="meta">{(n_buy/len(reports)*100):.0f}% of universe</div></div>
+  <div class="card"><div class="title">Neutral</div><div class="value" style="color:var(--hold)">{n_hold}</div><div class="meta">{(n_hold/len(reports)*100):.0f}%</div></div>
+  <div class="card"><div class="title">Bearish</div><div class="value neg">{n_sell}</div><div class="meta">{(n_sell/len(reports)*100):.0f}%</div></div>
+</div>
+
+<style>
+.sector-block {{ background: var(--panel); border:1px solid var(--line); border-radius:var(--radius-lg); padding:18px 20px; margin-bottom:14px; }}
+.sector-head {{ margin-bottom:14px; font-size:14px; display:flex; align-items:baseline; gap:10px; }}
+.heatmap-grid {{ display:flex; flex-wrap:wrap; gap:8px; }}
+.heatmap-tile {{
+  display:flex; flex-direction:column; justify-content:center; align-items:center;
+  border:1.5px solid; border-radius:10px;
+  padding:8px; text-decoration:none; color:var(--text);
+  transition:transform 160ms ease, box-shadow 160ms ease;
+  cursor:pointer; min-width:90px;
+}}
+.heatmap-tile:hover {{ transform:translateY(-2px) scale(1.04); box-shadow:0 8px 24px rgba(0,0,0,0.4); }}
+.ht-ticker {{ font-weight:800; font-size:16px; letter-spacing:-0.01em; }}
+.ht-score {{ font-family:'JetBrains Mono', monospace; font-size:13px; font-weight:700; margin-top:2px; opacity:0.85; }}
+</style>
+
+{''.join(sector_blocks)}
+
+<div class="panel" style="margin-top:16px">
+  <h2>How to read this</h2>
+  <div class="dim" style="font-size:13px; line-height:1.7">
+    Each tile is a ticker — <b>color</b> shows the overall verdict (greener = more bullish, redder = more bearish),
+    <b>size</b> scales with market cap (log scale — mega-caps appear larger but not absurdly so),
+    <b>score</b> is the composite 0-100 from <a href="/journal" style="color:var(--accent)">our model</a>,
+    and the small percentage is today's price change. Hover any tile for full context, click to drill in.
+  </div>
+</div>
+"""
+    return _shell(
+        active="home",
+        title="Strategist · Heatmap",
+        body=body,
+        breadcrumbs=[("Home", "/"), ("Heatmap", None)],
+    )
+
+
+def earnings_calendar_page(rows: list[dict]) -> str:
+    """Earnings calendar — upcoming earnings for tickers in saves + watchlists."""
+    if not rows:
+        empty_body = """
+<div class="topbar" style="margin-bottom:18px">
+  <h1 style="margin:0; font-size:24px">📅 Earnings Calendar</h1>
+</div>
+<div class="empty">
+  <div class="big">No upcoming earnings on file</div>
+  <div style="margin-top:8px; font-size:13.5px">Add tickers to a <a href="/watchlists" style="color:var(--accent)">watchlist</a> or <a href="/saved">save analyses</a> — their next earnings dates will populate here automatically.</div>
+</div>
+"""
+        return _shell(
+            active="home",
+            title="Strategist · Earnings",
+            body=empty_body,
+            breadcrumbs=[("Home", "/"), ("Earnings", None)],
+        )
+
+    # Group by week
+    from datetime import datetime as _dt, timedelta as _td
+    today = _dt.now().date()
+
+    def _week_bucket(d):
+        if d is None:
+            return "Unknown"
+        delta = (d - today).days
+        if delta < 0:
+            return "Past"
+        if delta <= 1:
+            return "Imminent (today / tomorrow)"
+        if delta <= 7:
+            return "This week"
+        if delta <= 14:
+            return "Next week"
+        if delta <= 30:
+            return "Within 30 days"
+        if delta <= 90:
+            return "Within 90 days"
+        return "Later"
+
+    bucket_order = [
+        "Imminent (today / tomorrow)",
+        "This week",
+        "Next week",
+        "Within 30 days",
+        "Within 90 days",
+        "Later",
+        "Past",
+        "Unknown",
+    ]
+    buckets: dict[str, list[dict]] = {b: [] for b in bucket_order}
+    for r in rows:
+        d = r.get("date")
+        buckets[_week_bucket(d)].append(r)
+
+    rendered_blocks: list[str] = []
+    for bucket in bucket_order:
+        items = buckets[bucket]
+        if not items:
+            continue
+        items.sort(key=lambda x: x.get("date") or _dt.max.date())
+        ticker_rows: list[str] = []
+        for r in items:
+            d = r.get("date")
+            d_str = d.isoformat() if d else "—"
+            days_str = ""
+            if d:
+                delta = (d - today).days
+                if delta == 0:
+                    days_str = "today"
+                elif delta == 1:
+                    days_str = "tomorrow"
+                elif delta < 0:
+                    days_str = f"{-delta}d ago"
+                else:
+                    days_str = f"in {delta}d"
+            source = r.get("source", "")
+            ticker_rows.append(f"""
+<tr onclick="location.href='/ticker/{html.escape(r['ticker'])}'" style="cursor:pointer">
+  <td><b>{html.escape(r['ticker'])}</b><div class="dim" style="font-size:11.5px">{html.escape(r.get('company_name','') or '')}</div></td>
+  <td class="num mono">{d_str}</td>
+  <td class="dim">{days_str}</td>
+  <td class="dim" style="font-size:11.5px">{html.escape(source)}</td>
+</tr>""")
+        rendered_blocks.append(f"""
+<div class="panel">
+  <h2>{html.escape(bucket)} <span class="count">{len(items)}</span></h2>
+  <table class="data">
+    <thead><tr><th>Ticker</th><th class="right">Date</th><th>When</th><th>Source</th></tr></thead>
+    <tbody>{''.join(ticker_rows)}</tbody>
+  </table>
+</div>""")
+
+    body = f"""
+<div class="topbar" style="margin-bottom:18px">
+  <div>
+    <h1 style="margin:0; font-size:24px">📅 Earnings Calendar</h1>
+    <div class="dim" style="font-size:13px; margin-top:4px">{sum(len(b) for b in buckets.values())} entries · pulled from yfinance for tickers in your saves + watchlists</div>
+  </div>
+  <div class="actions" style="margin-left:auto">
+    <a class="btn" href="/watchlists">Manage watchlists</a>
+  </div>
+</div>
+
+{''.join(rendered_blocks)}
+"""
+    return _shell(
+        active="home",
+        title="Strategist · Earnings Calendar",
+        body=body,
+        breadcrumbs=[("Home", "/"), ("Earnings", None)],
+    )
 
 
 def settings_page(s, data_sources: dict) -> str:
