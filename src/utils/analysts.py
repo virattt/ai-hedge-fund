@@ -20,6 +20,7 @@ from src.agents.mohnish_pabrai import mohnish_pabrai_agent
 from src.agents.nassim_taleb import nassim_taleb_agent
 from src.agents.news_sentiment import news_sentiment_agent
 from src.agents.growth_agent import growth_analyst_agent
+from src.agents.macro_agent import macro_agent
 
 # Define analyst configuration - single source of truth
 ANALYST_CONFIG = {
@@ -174,6 +175,14 @@ ANALYST_CONFIG = {
         "agent_func": valuation_analyst_agent,
         "type": "analyst",
         "order": 18,
+    },
+    "macro": {
+        "display_name": "Macro Agent",
+        "description": "Top-Down Regime Strategist",
+        "investing_style": "Reads the macro regime — trend, volatility, rate sensitivity, and macro news flow — to take a risk-on or risk-off stance on each name.",
+        "agent_func": macro_agent,
+        "type": "analyst",
+        "order": 19,
     },
 }
 
