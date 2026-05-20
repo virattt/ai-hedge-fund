@@ -36,6 +36,9 @@ try:
 except Exception:
     pass
 
+import contextlib
+from typing import AsyncIterator
+
 import uvicorn
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
@@ -62,7 +65,20 @@ from src.analysis.ui_pages import (
     watchlists_page,
 )
 
-app = FastAPI(title="Strategist — AI Hedge Fund Snapshot UI", docs_url=None, redoc_url=None)
+@contextlib.asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Startup
+    _start_background_refresher()
+    yield
+    # Shutdown — daemon threads exit automatically; nothing else to clean up.
+
+
+app = FastAPI(
+    title="Strategist — AI Hedge Fund Snapshot UI",
+    docs_url=None,
+    redoc_url=None,
+    lifespan=_lifespan,
+)
 
 
 # --- In-memory snapshot cache ----------------------------------------------
@@ -556,6 +572,81 @@ async def earnings_calendar() -> HTMLResponse:
             )
 
     return HTMLResponse(earnings_calendar_page(rows))
+
+
+# --- Health + background refresher ------------------------------------
+
+
+@app.get("/healthz")
+async def healthz() -> JSONResponse:
+    """Liveness probe — used by start-up checks and external monitors."""
+    import os
+    return JSONResponse(
+        {
+            "ok": True,
+            "pid": os.getpid(),
+            "cache_size": len(_CACHE),
+            "data_dir": str(snapshot_storage.SAVED_DIR.parent),
+        }
+    )
+
+
+def _start_background_refresher() -> None:
+    """Pre-warm the snapshot cache for every ticker the user cares about.
+
+    Runs every 6 hours. Iterates over saved tickers + all watchlist tickers,
+    fetches a fresh snapshot for each (parallel, max 5 concurrent), and
+    seeds the in-process cache. Result: when you open a ticker detail page
+    the next morning, it loads instantly with fresh data.
+
+    Idempotent and crash-safe — any single ticker failure is logged and
+    skipped. Disabled if the server is run with STRATEGIST_NO_REFRESHER=1.
+    """
+    import os
+    if os.environ.get("STRATEGIST_NO_REFRESHER") == "1":
+        return
+
+    import threading
+    import time as _time
+
+    INTERVAL_SECONDS = 6 * 60 * 60  # 6 hours
+    INITIAL_DELAY_SECONDS = 30      # don't hammer at boot — let the UI come up first
+
+    def _all_tracked_tickers() -> list[str]:
+        tickers: set[str] = set()
+        try:
+            for s in snapshot_storage.list_saved():
+                tickers.add(s["ticker"])
+        except Exception:
+            pass
+        try:
+            for w in wl_store.list_watchlists():
+                tickers.update(w.get("tickers", []) or [])
+        except Exception:
+            pass
+        return sorted(tickers)
+
+    def _refresh_pass() -> None:
+        tickers = _all_tracked_tickers()
+        if not tickers:
+            return
+        # Reuse _fetch_many for parallel snapshot fetch
+        try:
+            _fetch_many(tickers, deep=False)
+        except Exception:
+            pass
+
+    def _worker() -> None:
+        _time.sleep(INITIAL_DELAY_SECONDS)
+        while True:
+            try:
+                _refresh_pass()
+            except Exception:
+                pass
+            _time.sleep(INTERVAL_SECONDS)
+
+    t = threading.Thread(target=_worker, name="strategist-refresher", daemon=True)
+    t.start()
 
 
 @app.get("/api/news/{ticker}")
