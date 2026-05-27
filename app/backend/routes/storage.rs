@@ -1,0 +1,5 @@
+// Source: app/backend/routes/storage.py
+//! Sibling to app/backend/routes/storage.py
+//! Porting skeleton for database models, repositories, routes, or services.
+
+// TODO: Implement structs/functions mirroring public shape of storage.py.

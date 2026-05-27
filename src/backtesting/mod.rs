@@ -1,0 +1,11 @@
+// Source: src/backtesting/__init__.py
+pub mod benchmarks;
+pub mod cli;
+pub mod controller;
+pub mod engine;
+pub mod metrics;
+pub mod output;
+pub mod portfolio;
+pub mod trader;
+pub mod types;
+pub mod valuation;

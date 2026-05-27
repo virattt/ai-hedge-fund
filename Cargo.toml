@@ -1,0 +1,42 @@
+[package]
+name = "ai-hedge-fund"
+version = "0.1.0"
+edition = "2021"
+description = "Parallel Rust skeleton for AI Hedge Fund simulator"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.11", features = ["json"] }
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.0", features = ["derive"] }
+dotenvy = "0.15"
+anyhow = "1.0"
+async-trait = "0.1"
+futures = "0.3"
+
+
+[lib]
+name = "ai_hedge_fund"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ai-hedge-fund"
+path = "src/main.rs"
+
+[[bin]]
+name = "backtester"
+path = "src/backtester.rs"
+
+[[bin]]
+name = "app-backend"
+path = "app/backend/main.rs"
+
+[[bin]]
+name = "v2-backtesting"
+path = "v2/backtesting/__main__.rs"
+
+[[bin]]
+name = "v2-event-study"
+path = "v2/event_study/__main__.rs"
