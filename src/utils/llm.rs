@@ -10,8 +10,8 @@ use crate::llm::models::{ModelProvider, get_model_info};
 
 /// Resolves model configuration for a specific agent from state metadata.
 pub fn get_agent_model_config(state: Option<&AgentState>, _agent_name: Option<&str>) -> (String, ModelProvider) {
-    if let Some(s) = state {
-        let model_name = s.metadata.get("model_name")
+    let (mut model_name, mut model_provider) = if let Some(s) = state {
+        let name = s.metadata.get("model_name")
             .and_then(|v| v.as_str())
             .unwrap_or("gpt-5.5")
             .to_string();
@@ -20,7 +20,7 @@ pub fn get_agent_model_config(state: Option<&AgentState>, _agent_name: Option<&s
             .and_then(|v| v.as_str())
             .unwrap_or("OPENAI");
 
-        let model_provider = match model_provider_str.to_uppercase().as_str() {
+        let provider = match model_provider_str.to_uppercase().as_str() {
             "ANTHROPIC" => ModelProvider::Anthropic,
             "DEEPSEEK" => ModelProvider::DeepSeek,
             "GOOGLE" => ModelProvider::Google,
@@ -33,15 +33,35 @@ pub fn get_agent_model_config(state: Option<&AgentState>, _agent_name: Option<&s
             _ => ModelProvider::OpenAI,
         };
 
-        (model_name, model_provider)
+        (name, provider)
     } else {
         ("gpt-5.5".to_string(), ModelProvider::OpenAI)
+    };
+
+    // If provider is OpenAI but we don't have a valid OpenAI key, and we have an OpenRouter key,
+    // automatically coerce provider to OpenRouter for OpenAI-compatible execution!
+    if model_provider == ModelProvider::OpenAI {
+        let has_openai = env::var("OPENAI_API_KEY")
+            .map(|k| !k.starts_with("your-") && !k.is_empty())
+            .unwrap_or(false);
+        let has_openrouter = env::var("OPENROUTER_API_KEY")
+            .map(|k| !k.starts_with("your-") && !k.is_empty())
+            .unwrap_or(false);
+
+        if !has_openai && has_openrouter {
+            model_provider = ModelProvider::OpenRouter;
+            if model_name == "gpt-4" || model_name == "gpt-5.5" || model_name == "gpt-4o" {
+                model_name = "openai/gpt-4o".to_string();
+            }
+        }
     }
+
+    (model_name, model_provider)
 }
 
 /// Helper function to retrieve the API key from environment for a model provider.
 pub fn get_api_key_for_provider(provider: &ModelProvider) -> Option<String> {
-    match provider {
+    let raw_key = match provider {
         ModelProvider::OpenAI => env::var("OPENAI_API_KEY").ok(),
         ModelProvider::Anthropic => env::var("ANTHROPIC_API_KEY").ok(),
         ModelProvider::DeepSeek => env::var("DEEPSEEK_API_KEY").ok(),
@@ -52,7 +72,15 @@ pub fn get_api_key_for_provider(provider: &ModelProvider) -> Option<String> {
         ModelProvider::xAI => env::var("XAI_API_KEY").ok(),
         ModelProvider::AzureOpenAI => env::var("AZURE_OPENAI_API_KEY").ok(),
         _ => None,
+    };
+
+    // Filter out placeholders
+    if let Some(ref k) = raw_key {
+        if k.starts_with("your-") || k.is_empty() {
+            return None;
+        }
     }
+    raw_key
 }
 
 /// Generates a deterministic mock response for testing offline or when API credentials are absent.
