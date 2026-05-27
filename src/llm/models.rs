@@ -31,6 +31,27 @@ pub struct LLMModel {
 }
 
 impl ModelProvider {
+    /// Parse a provider label from workflow metadata or API requests.
+    pub fn from_label(label: &str) -> Option<Self> {
+        match label.trim().to_ascii_lowercase().as_str() {
+            "alibaba" => Some(ModelProvider::Alibaba),
+            "anthropic" => Some(ModelProvider::Anthropic),
+            "deepseek" => Some(ModelProvider::DeepSeek),
+            "google" => Some(ModelProvider::Google),
+            "groq" => Some(ModelProvider::Groq),
+            "kimi" | "moonshot" => Some(ModelProvider::Kimi),
+            "meta" => Some(ModelProvider::Meta),
+            "mistral" => Some(ModelProvider::Mistral),
+            "openai" => Some(ModelProvider::OpenAI),
+            "ollama" => Some(ModelProvider::Ollama),
+            "openrouter" => Some(ModelProvider::OpenRouter),
+            "gigachat" => Some(ModelProvider::GigaChat),
+            "azure openai" | "azure_openai" => Some(ModelProvider::AzureOpenAI),
+            "xai" => Some(ModelProvider::xAI),
+            _ => None,
+        }
+    }
+
     pub fn value(&self) -> &'static str {
         match self {
             ModelProvider::Alibaba => "Alibaba",

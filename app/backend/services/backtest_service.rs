@@ -3,6 +3,9 @@ use ai_hedge_fund::backtesting::trader::TradeExecutor;
 use ai_hedge_fund::backtesting::metrics::PerformanceMetricsCalculator;
 use ai_hedge_fund::backtesting::types::{PerformanceMetrics, PortfolioValuePoint};
 use ai_hedge_fund::backtesting::controller::AgentController;
+use ai_hedge_fund::cli::input::resolve_data_provider;
+use ai_hedge_fund::data::provider::configure_provider;
+use ai_hedge_fund::utils::llm::{log_resolved_llm_config, resolve_llm_config};
 use crate::models::schemas::{BacktestRequest, BacktestDayResult, BacktestPerformanceMetrics};
 use anyhow::{Result, Context};
 use std::collections::HashMap;
@@ -21,8 +24,14 @@ impl BacktestService {
         let start_date = req.start_date.clone();
         let end_date = req.end_date.clone();
         let initial_capital = req.initial_capital;
-        let model_name = req.base.model_name.clone().unwrap_or_else(|| "gpt-4.1".to_string());
-        let model_provider = req.base.model_provider.clone().unwrap_or(ai_hedge_fund::llm::models::ModelProvider::OpenAI);
+        let llm = resolve_llm_config(
+            req.base.model_name.as_deref(),
+            false,
+            req.base.model_provider.clone(),
+        );
+        log_resolved_llm_config(&llm);
+        let model_name = llm.model_name;
+        let model_provider = llm.model_provider;
         
         let start_dt = NaiveDate::parse_from_str(&start_date, "%Y-%m-%d")?;
         let end_dt = NaiveDate::parse_from_str(&end_date, "%Y-%m-%d")?;
@@ -44,6 +53,8 @@ impl BacktestService {
         }
         
         let api_key = std::env::var("FINANCIAL_DATASETS_API_KEY").ok();
+        let data_provider = resolve_data_provider(None);
+        configure_provider(Some(data_provider));
         
         while current_dt <= end_dt {
             let weekday = current_dt.weekday().number_from_monday();
@@ -89,6 +100,7 @@ impl BacktestService {
                 &model_name,
                 provider_str,
                 selected_analysts.clone(),
+                Some(data_provider),
             ).await {
                 Ok(out) => out,
                 Err(e) => {

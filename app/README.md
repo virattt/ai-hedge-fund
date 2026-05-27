@@ -33,9 +33,12 @@ Open and edit `.env` to add your keys:
 # For running LLMs hosted by OpenAI
 OPENAI_API_KEY=your-openai-api-key
 
-# For getting financial datasets to power the hedge fund
+# Optional — premium market data from https://financialdatasets.ai/
+# Leave unset or as placeholder to use Yahoo Finance (free default)
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
+
+The backend resolves the market-data provider from the environment on each run (same logic as the CLI: valid `FINANCIAL_DATASETS_API_KEY` → Financial Datasets, otherwise Yahoo Finance). There is no provider selector in the UI yet. See [docs/data_providers.md](../docs/data_providers.md).
 
 ---
 

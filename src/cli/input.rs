@@ -3,6 +3,7 @@
 //! Handles CLI argument parsing and interactive configuration settings using the clap crate.
 
 use clap::Parser;
+use crate::data::provider::DataProvider;
 
 /// CLIInputs matches the structure returned by parse_cli_inputs in Python.
 #[derive(Parser, Debug, Clone)]
@@ -51,6 +52,11 @@ pub struct CLIInputs {
     /// Show the agent graph
     #[clap(long, action)]
     pub show_agent_graph: bool,
+
+    /// Financial data provider (`financial-datasets` or `yahoo-finance`).
+    /// Defaults to yahoo-finance when FINANCIAL_DATASETS_API_KEY is not set.
+    #[clap(long)]
+    pub data_provider: Option<String>,
 }
 
 /// Resolves start and end dates based on parameters, falling back to months-back offset if needed.
@@ -72,4 +78,10 @@ pub fn resolve_dates(start_date: Option<String>, end_date: Option<String>, defau
 /// Parses the CLI inputs, falling back to interactive selection if requirements are missing.
 pub fn parse_cli_inputs() -> CLIInputs {
     CLIInputs::parse()
+}
+
+/// Resolve the data provider from CLI flag and environment.
+pub fn resolve_data_provider(cli_value: Option<&str>) -> DataProvider {
+    let explicit = cli_value.and_then(DataProvider::from_cli_str);
+    DataProvider::resolve(explicit)
 }

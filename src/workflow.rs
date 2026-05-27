@@ -26,6 +26,7 @@ use crate::agents::stanley_druckenmiller::stanley_druckenmiller_agent;
 use crate::agents::valuation::valuation_analyst_agent;
 use crate::agents::risk_manager::risk_management_agent;
 use crate::agents::portfolio_manager::portfolio_management_agent;
+use crate::data::provider::{configure_provider, DataProvider};
 
 /// Result structure returned by running the hedge fund flow.
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
@@ -49,8 +50,15 @@ pub async fn run_hedge_fund(
     selected_analysts: Vec<String>,
     model_name: &str,
     model_provider: &str,
+    data_provider: Option<DataProvider>,
 ) -> Result<HedgeFundResult> {
     println!("Starting parallel hedge fund execution workflow...");
+
+    configure_provider(data_provider);
+    let provider = crate::data::provider::active_provider();
+    if provider == DataProvider::YahooFinance {
+        println!("Using Yahoo Finance as the data provider (free tier).");
+    }
     
     // Resolve lookback start (30 days lookback)
     let end_dt = chrono::NaiveDate::parse_from_str(end_date, "%Y-%m-%d")
@@ -75,6 +83,7 @@ pub async fn run_hedge_fund(
     state.metadata.insert("show_reasoning".to_string(), serde_json::json!(show_reasoning));
     state.metadata.insert("model_name".to_string(), serde_json::json!(model_name));
     state.metadata.insert("model_provider".to_string(), serde_json::json!(model_provider));
+    state.metadata.insert("data_provider".to_string(), serde_json::json!(provider.as_str()));
     
     if let Some(key) = api_key {
         state.metadata.insert("FINANCIAL_DATASETS_API_KEY".to_string(), serde_json::json!(key));

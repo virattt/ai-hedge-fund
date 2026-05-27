@@ -5,6 +5,9 @@
 use anyhow::Result;
 use ai_hedge_fund::backtesting::engine::BacktestEngine;
 use ai_hedge_fund::backtesting::types::PerformanceMetrics;
+use ai_hedge_fund::cli::input::resolve_data_provider;
+use ai_hedge_fund::data::provider::configure_provider;
+use ai_hedge_fund::utils::llm::{log_resolved_llm_config, resolve_llm_config};
 
 /// Runs the backtest, handling potential runtime errors or interruptions.
 pub async fn run_backtest(backtester: &mut BacktestEngine) -> Result<Option<PerformanceMetrics>> {
@@ -31,6 +34,9 @@ async fn main() -> Result<()> {
     
     // Parse inputs using clap
     let cli = ai_hedge_fund::cli::input::parse_cli_inputs();
+
+    let data_provider = resolve_data_provider(cli.data_provider.as_deref());
+    configure_provider(Some(data_provider));
     
     // Resolve dates
     let (start_date, end_date) = ai_hedge_fund::cli::input::resolve_dates(cli.start_date, cli.end_date, Some(1));
@@ -42,13 +48,11 @@ async fn main() -> Result<()> {
         cli.tickers
     };
 
-    // Determine model name and provider
-    let model_name = cli.model.unwrap_or_else(|| "gpt-4".to_string());
-    let model_provider = if cli.ollama {
-        "Ollama".to_string()
-    } else {
-        "OpenAI".to_string()
-    };
+    // Determine model name and provider from CLI + environment
+    let llm = resolve_llm_config(cli.model.as_deref(), cli.ollama, None);
+    log_resolved_llm_config(&llm);
+    let model_name = llm.model_name;
+    let model_provider = llm.model_provider.value().to_string();
 
     let selected_analysts = cli.analysts.unwrap_or_default();
 
@@ -62,6 +66,7 @@ async fn main() -> Result<()> {
         model_provider,
         selected_analysts,
         initial_margin_requirement: cli.margin_requirement,
+        data_provider: Some(data_provider),
     };
 
     let _metrics = run_backtest(&mut backtester).await?;

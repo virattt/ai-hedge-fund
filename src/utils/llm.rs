@@ -2,84 +2,177 @@
 //! Unified LLM client dispatcher querying live models (OpenAI, Anthropic, Gemini, DeepSeek, Groq, Ollama) over reqwest APIs,
 //! with markdown/brace JSON extraction, error retry loops, and deterministic test fallbacks.
 
-use anyhow::{Result, Context};
+use anyhow::Result;
 use serde::de::DeserializeOwned;
 use std::env;
 use crate::graph::state::AgentState;
-use crate::llm::models::{ModelProvider, get_model_info};
+use crate::llm::models::ModelProvider;
+use crate::utils::api_key::env_api_key;
 
-/// Resolves model configuration for a specific agent from state metadata.
-pub fn get_agent_model_config(state: Option<&AgentState>, _agent_name: Option<&str>) -> (String, ModelProvider) {
-    let (mut model_name, mut model_provider) = if let Some(s) = state {
-        let name = s.metadata.get("model_name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("gpt-5.5")
-            .to_string();
-        
-        let model_provider_str = s.metadata.get("model_provider")
-            .and_then(|v| v.as_str())
-            .unwrap_or("OPENAI");
+/// Resolved LLM model and provider after environment-based auto-detection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedLlmConfig {
+    pub model_name: String,
+    pub model_provider: ModelProvider,
+}
 
-        let provider = match model_provider_str.to_uppercase().as_str() {
-            "ANTHROPIC" => ModelProvider::Anthropic,
-            "DEEPSEEK" => ModelProvider::DeepSeek,
-            "GOOGLE" => ModelProvider::Google,
-            "GROQ" => ModelProvider::Groq,
-            "KIMI" => ModelProvider::Kimi,
-            "OLLAMA" => ModelProvider::Ollama,
-            "OPENROUTER" => ModelProvider::OpenRouter,
-            "XAI" => ModelProvider::xAI,
-            "AZURE OPENAI" | "AZURE_OPENAI" => ModelProvider::AzureOpenAI,
-            _ => ModelProvider::OpenAI,
+const DEFAULT_MODEL: &str = "gpt-4.1";
+
+/// Resolve the LLM provider and model from explicit inputs and environment keys.
+///
+/// When the requested provider has no valid API key, falls back to the first
+/// provider with a configured key (e.g. OpenRouter when OpenAI is absent).
+pub fn resolve_llm_config(
+    model_name: Option<&str>,
+    ollama: bool,
+    explicit_provider: Option<ModelProvider>,
+) -> ResolvedLlmConfig {
+    if ollama {
+        return ResolvedLlmConfig {
+            model_name: model_name.unwrap_or("llama3").to_string(),
+            model_provider: ModelProvider::Ollama,
         };
+    }
 
-        (name, provider)
-    } else {
-        ("gpt-5.5".to_string(), ModelProvider::OpenAI)
-    };
+    let requested_model = model_name.unwrap_or(DEFAULT_MODEL);
 
-    // If provider is OpenAI but we don't have a valid OpenAI key, and we have an OpenRouter key,
-    // automatically coerce provider to OpenRouter for OpenAI-compatible execution!
-    if model_provider == ModelProvider::OpenAI {
-        let has_openai = env::var("OPENAI_API_KEY")
-            .map(|k| !k.starts_with("your-") && !k.is_empty())
-            .unwrap_or(false);
-        let has_openrouter = env::var("OPENROUTER_API_KEY")
-            .map(|k| !k.starts_with("your-") && !k.is_empty())
-            .unwrap_or(false);
-
-        if !has_openai && has_openrouter {
-            model_provider = ModelProvider::OpenRouter;
-            if model_name == "gpt-4" || model_name == "gpt-5.5" || model_name == "gpt-4o" {
-                model_name = "openai/gpt-4o".to_string();
-            }
+    if let Some(ref provider) = explicit_provider {
+        if provider_has_valid_key(provider) {
+            return ResolvedLlmConfig {
+                model_name: normalize_model_for_provider(requested_model, provider),
+                model_provider: provider.clone(),
+            };
         }
     }
 
-    (model_name, model_provider)
+    if let Some(detected) = detect_provider_from_env() {
+        return ResolvedLlmConfig {
+            model_name: normalize_model_for_provider(requested_model, &detected),
+            model_provider: detected,
+        };
+    }
+
+    let fallback_provider = explicit_provider.unwrap_or(ModelProvider::OpenAI);
+    ResolvedLlmConfig {
+        model_name: normalize_model_for_provider(requested_model, &fallback_provider),
+        model_provider: fallback_provider,
+    }
+}
+
+/// Log the resolved LLM configuration for CLI / server entry points.
+pub fn log_resolved_llm_config(config: &ResolvedLlmConfig) {
+    if config.model_provider == ModelProvider::Ollama {
+        println!(
+            "Using Ollama ({}) for LLM inference.",
+            config.model_name
+        );
+        return;
+    }
+
+    let key_status = if provider_has_valid_key(&config.model_provider) {
+        "configured"
+    } else {
+        "missing — agents will use mock responses"
+    };
+
+    println!(
+        "Using {} ({}) as the LLM provider (API key: {}).",
+        config.model_provider.value(),
+        config.model_name,
+        key_status
+    );
+}
+
+fn detect_provider_from_env() -> Option<ModelProvider> {
+    const PROVIDERS: &[(ModelProvider, &str)] = &[
+        (ModelProvider::OpenAI, "OPENAI_API_KEY"),
+        (ModelProvider::OpenRouter, "OPENROUTER_API_KEY"),
+        (ModelProvider::Anthropic, "ANTHROPIC_API_KEY"),
+        (ModelProvider::Groq, "GROQ_API_KEY"),
+        (ModelProvider::DeepSeek, "DEEPSEEK_API_KEY"),
+        (ModelProvider::Google, "GOOGLE_API_KEY"),
+        (ModelProvider::Kimi, "MOONSHOT_API_KEY"),
+        (ModelProvider::xAI, "XAI_API_KEY"),
+        (ModelProvider::GigaChat, "GIGACHAT_API_KEY"),
+        (ModelProvider::AzureOpenAI, "AZURE_OPENAI_API_KEY"),
+    ];
+
+    for (provider, env_var) in PROVIDERS {
+        if env_api_key(env_var).is_some() {
+            return Some(provider.clone());
+        }
+    }
+
+    if env_api_key("KIMI_API_KEY").is_some() {
+        return Some(ModelProvider::Kimi);
+    }
+
+    None
+}
+
+fn provider_has_valid_key(provider: &ModelProvider) -> bool {
+    get_api_key_for_provider(provider).is_some()
+}
+
+fn normalize_model_for_provider(model_name: &str, provider: &ModelProvider) -> String {
+    if *provider != ModelProvider::OpenRouter || model_name.contains('/') {
+        return model_name.to_string();
+    }
+
+    if model_name.starts_with("gpt-") {
+        return format!("openai/{}", model_name);
+    }
+    if model_name.starts_with("claude-") {
+        return format!("anthropic/{}", model_name);
+    }
+    if model_name.starts_with("gemini-") {
+        return format!("google/{}", model_name);
+    }
+    if model_name.starts_with("deepseek-") {
+        return format!("deepseek/{}", model_name);
+    }
+    if model_name.starts_with("grok-") {
+        return format!("x-ai/{}", model_name);
+    }
+
+    model_name.to_string()
+}
+
+/// Resolves model configuration for a specific agent from state metadata.
+pub fn get_agent_model_config(state: Option<&AgentState>, _agent_name: Option<&str>) -> (String, ModelProvider) {
+    let (model_name, explicit_provider) = if let Some(s) = state {
+        let name = s.metadata
+            .get("model_name")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let provider = s.metadata
+            .get("model_provider")
+            .and_then(|v| v.as_str())
+            .and_then(ModelProvider::from_label);
+        (name, provider)
+    } else {
+        (None, None)
+    };
+
+    let resolved = resolve_llm_config(model_name.as_deref(), false, explicit_provider);
+    (resolved.model_name, resolved.model_provider)
 }
 
 /// Helper function to retrieve the API key from environment for a model provider.
 pub fn get_api_key_for_provider(provider: &ModelProvider) -> Option<String> {
     let raw_key = match provider {
-        ModelProvider::OpenAI => env::var("OPENAI_API_KEY").ok(),
-        ModelProvider::Anthropic => env::var("ANTHROPIC_API_KEY").ok(),
-        ModelProvider::DeepSeek => env::var("DEEPSEEK_API_KEY").ok(),
-        ModelProvider::Google => env::var("GOOGLE_API_KEY").ok(),
-        ModelProvider::Groq => env::var("GROQ_API_KEY").ok(),
-        ModelProvider::Kimi => env::var("MOONSHOT_API_KEY").ok().or_else(|| env::var("KIMI_API_KEY").ok()),
-        ModelProvider::OpenRouter => env::var("OPENROUTER_API_KEY").ok(),
-        ModelProvider::xAI => env::var("XAI_API_KEY").ok(),
-        ModelProvider::AzureOpenAI => env::var("AZURE_OPENAI_API_KEY").ok(),
+        ModelProvider::OpenAI => env_api_key("OPENAI_API_KEY"),
+        ModelProvider::Anthropic => env_api_key("ANTHROPIC_API_KEY"),
+        ModelProvider::DeepSeek => env_api_key("DEEPSEEK_API_KEY"),
+        ModelProvider::Google => env_api_key("GOOGLE_API_KEY"),
+        ModelProvider::Groq => env_api_key("GROQ_API_KEY"),
+        ModelProvider::Kimi => env_api_key("MOONSHOT_API_KEY").or_else(|| env_api_key("KIMI_API_KEY")),
+        ModelProvider::OpenRouter => env_api_key("OPENROUTER_API_KEY"),
+        ModelProvider::xAI => env_api_key("XAI_API_KEY"),
+        ModelProvider::AzureOpenAI => env_api_key("AZURE_OPENAI_API_KEY"),
         _ => None,
     };
 
-    // Filter out placeholders
-    if let Some(ref k) = raw_key {
-        if k.starts_with("your-") || k.is_empty() {
-            return None;
-        }
-    }
     raw_key
 }
 
@@ -348,4 +441,68 @@ pub fn extract_json_from_response(content: &str) -> Option<serde_json::Value> {
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn clear_llm_env() {
+        for key in [
+            "OPENAI_API_KEY",
+            "OPENROUTER_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "GROQ_API_KEY",
+        ] {
+            env::remove_var(key);
+        }
+    }
+
+    #[test]
+    fn openrouter_selected_when_openai_missing() {
+        clear_llm_env();
+        env::set_var("OPENROUTER_API_KEY", "sk-or-test-key");
+
+        let resolved = resolve_llm_config(
+            Some("gpt-4.1"),
+            false,
+            Some(ModelProvider::OpenAI),
+        );
+
+        assert_eq!(resolved.model_provider, ModelProvider::OpenRouter);
+        assert_eq!(resolved.model_name, "openai/gpt-4.1");
+        clear_llm_env();
+    }
+
+    #[test]
+    fn placeholder_keys_are_ignored() {
+        clear_llm_env();
+        env::set_var("OPENAI_API_KEY", "your-openai-api-key");
+        env::set_var("OPENROUTER_API_KEY", "sk-or-real-key");
+
+        let resolved = resolve_llm_config(None, false, Some(ModelProvider::OpenAI));
+        assert_eq!(resolved.model_provider, ModelProvider::OpenRouter);
+        clear_llm_env();
+    }
+
+    #[test]
+    fn empty_keys_are_ignored() {
+        clear_llm_env();
+        env::set_var("OPENAI_API_KEY", "   ");
+        env::set_var("OPENROUTER_API_KEY", "sk-or-real-key");
+
+        let resolved = resolve_llm_config(None, false, None);
+        assert_eq!(resolved.model_provider, ModelProvider::OpenRouter);
+        clear_llm_env();
+    }
+
+    #[test]
+    fn ollama_flag_wins_over_env_keys() {
+        clear_llm_env();
+        env::set_var("OPENROUTER_API_KEY", "sk-or-real-key");
+
+        let resolved = resolve_llm_config(None, true, None);
+        assert_eq!(resolved.model_provider, ModelProvider::Ollama);
+        clear_llm_env();
+    }
 }

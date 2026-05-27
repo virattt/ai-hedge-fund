@@ -45,6 +45,7 @@ By using this software, you agree to use it solely for learning purposes.
 
 ## Table of Contents
 - [How to Install](#how-to-install)
+- [Financial Data Providers](#financial-data-providers)
 - [How to Run](#how-to-run)
   - [⌨️ Command Line Interface](#️-command-line-interface)
   - [🖥️ Web Application](#️-web-application)
@@ -55,7 +56,7 @@ By using this software, you agree to use it solely for learning purposes.
 
 ## How to Install
 
-Before you can run Open Hedge, you'll need to set up your environment and API keys.
+Before you can run Open Hedge, set up your environment. You need **LLM** API keys to run agents; **market data** works out of the box via Yahoo Finance without a paid data key.
 
 ### 1. Clone the Repository
 
@@ -66,22 +67,67 @@ cd open-hedge
 
 ### 2. Set up API keys
 
-Create a `.env` file for your API keys:
+Create a `.env` file in the repository root:
 ```bash
-# Create .env file for your API keys (in the root directory)
 cp .env.example .env
 ```
 
-Open and edit the `.env` file to add your API keys:
+Open and edit `.env`:
+
 ```bash
-# For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
+# Required for agent reasoning — set at least one LLM provider
 OPENAI_API_KEY=your-openai-api-key
 
-# For getting financial data to power the hedge fund
+# Optional — premium market data from https://financialdatasets.ai/
+# Omit or leave as the placeholder to use Yahoo Finance (free, default)
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
-**Important**: You must set at least one LLM API key (e.g. `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY`) for the hedge fund to work. 
+**Important:** You must set at least one LLM API key (e.g. `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY`) for the hedge fund to work. Placeholder values from `.env.example` and empty keys are ignored; if the default provider has no valid key, Open Hedge auto-selects the first configured provider (OpenRouter is checked when OpenAI is absent).
+
+You do **not** need a Financial Datasets key to fetch prices and fundamentals; Open Hedge defaults to Yahoo Finance when `FINANCIAL_DATASETS_API_KEY` is unset or still the `.env.example` placeholder.
+
+## Financial Data Providers
+
+Open Hedge supports two market-data sources:
+
+| Provider | When it is used |
+| :--- | :--- |
+| **Yahoo Finance** (free) | Default when no valid `FINANCIAL_DATASETS_API_KEY` is configured |
+| **Financial Datasets** (paid) | When a real API key is set, or when forced via `--data-provider financial-datasets` |
+
+**Resolution order:** explicit `--data-provider` CLI flag → valid `FINANCIAL_DATASETS_API_KEY` in the environment → Yahoo Finance.
+
+### Quickstart without a market-data API key
+
+```bash
+cp .env.example .env
+# Set OPENAI_API_KEY (or another LLM key); leave FINANCIAL_DATASETS_API_KEY as placeholder
+
+cargo run --bin backtester -- --tickers AAPL,MSFT,NVDA --start-date 2026-01-01 --end-date 2026-02-01
+```
+
+### Choose a provider (CLI)
+
+On the backtester (and any binary using the shared CLI parser):
+
+```bash
+# Force Yahoo Finance
+cargo run --bin backtester -- --ticker AAPL --data-provider yahoo-finance
+
+# Force Financial Datasets (requires a valid FINANCIAL_DATASETS_API_KEY)
+cargo run --bin backtester -- --ticker AAPL --data-provider financial-datasets
+```
+
+Accepted values: `yahoo-finance`, `financial-datasets` (underscore variants also work).
+
+### Premium data (Financial Datasets)
+
+Set a real key from [financialdatasets.ai](https://financialdatasets.ai/) in `.env` to unlock fuller fundamentals, insider trades, and news sentiment. Yahoo Finance covers daily prices and basic fundamentals with **derived fallbacks** for missing metrics; insider activity is empty on the Yahoo path so related agents stay neutral.
+
+**Further reading:** [docs/data_providers.md](docs/data_providers.md) (setup and resolution) · [docs/yahoo_finance_limitations.md](docs/yahoo_finance_limitations.md) (feature matrix and backtest caveats).
+
+The web dashboard uses the same environment-based resolution when you run flows or backtests; there is no provider toggle in the UI yet.
 
 ## How to Run
 
@@ -111,7 +157,7 @@ cargo run --bin ai-hedge-fund -- --ticker AAPL,MSFT,NVDA --start-date 2026-01-01
 cargo run --bin backtester -- --ticker AAPL,MSFT,NVDA --start-date 2026-01-01 --end-date 2026-02-01
 ```
 
-*(Note: Use standard double dashes `--` to pass command-line options directly to the Rust binary. All CLI arguments—such as `--ticker`, `--start-date`, `--end-date`, `--ollama`, etc.—are fully supported by the Rust clap parser!)*
+*(Note: Use standard double dashes `--` to pass command-line options directly to the Rust binary. The backtester supports `--ticker`, `--start-date`, `--end-date`, `--data-provider`, `--ollama`, and related flags via the shared clap parser.)*
 
 ### 🖥️ Web Application
 

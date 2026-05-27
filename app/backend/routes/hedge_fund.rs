@@ -26,6 +26,8 @@ use crate::services::api_key_service::ApiKeyService;
 use crate::services::portfolio::create_portfolio;
 use crate::services::graph::run_graph_async;
 use crate::services::backtest_service::BacktestService;
+use ai_hedge_fund::utils::api_key::is_valid_api_key;
+use ai_hedge_fund::utils::llm::{log_resolved_llm_config, resolve_llm_config};
 use ai_hedge_fund::utils::analysts::get_analysts_list;
 
 pub fn router() -> Router<SqlitePool> {
@@ -50,6 +52,9 @@ async fn run_hedge_fund_handler(
     // Set standard API key environment variables if provided
     if let Some(ref keys) = req.base.api_keys {
         for (provider, key_val) in keys {
+            if !is_valid_api_key(key_val) {
+                continue;
+            }
             if provider.eq_ignore_ascii_case("financial_datasets") {
                 std::env::set_var("FINANCIAL_DATASETS_API_KEY", key_val);
             } else if provider.eq_ignore_ascii_case("openai") {
@@ -69,8 +74,14 @@ async fn run_hedge_fund_handler(
     let tickers = req.base.tickers.clone();
     let start_date = req.start_date.clone().unwrap_or_else(|| "2024-01-01".to_string());
     let end_date = req.end_date.clone().unwrap_or_else(|| "2024-01-08".to_string());
-    let model_name = req.base.model_name.clone().unwrap_or_else(|| "gpt-4.1".to_string());
-    let model_provider = req.base.model_provider.clone().unwrap_or(ai_hedge_fund::llm::models::ModelProvider::OpenAI);
+    let llm = resolve_llm_config(
+        req.base.model_name.as_deref(),
+        false,
+        req.base.model_provider.clone(),
+    );
+    log_resolved_llm_config(&llm);
+    let model_name = llm.model_name;
+    let model_provider = llm.model_provider;
 
     let portfolio_val = serde_json::to_value(create_portfolio(
         req.initial_cash,
@@ -150,6 +161,9 @@ async fn backtest_handler(
 
     if let Some(ref keys) = req.base.api_keys {
         for (provider, key_val) in keys {
+            if !is_valid_api_key(key_val) {
+                continue;
+            }
             if provider.eq_ignore_ascii_case("financial_datasets") {
                 std::env::set_var("FINANCIAL_DATASETS_API_KEY", key_val);
             } else if provider.eq_ignore_ascii_case("openai") {

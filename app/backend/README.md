@@ -32,9 +32,11 @@ Open and edit `.env` to include your provider API keys:
 # OpenAI key for default models
 OPENAI_API_KEY=your-openai-api-key
 
-# Financial Datasets key to fetch equities pricing and news
+# Optional — Financial Datasets for premium data; otherwise Yahoo Finance (default)
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
+
+Runs and backtests call `resolve_data_provider` at startup: a real Financial Datasets key selects paid data; otherwise the server uses Yahoo Finance via `yahoo-finance-rs`. See [docs/data_providers.md](../../docs/data_providers.md).
 
 ---
 

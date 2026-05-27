@@ -16,6 +16,7 @@ use crate::backtesting::output::OutputBuilder;
 use crate::utils::display::BacktestRow;
 use crate::agents::portfolio_manager::PortfolioDecision;
 use crate::tools::api::get_prices;
+use crate::data::provider::{configure_provider, active_provider, DataProvider};
 
 /// Driver engine for executing historical backtests.
 #[derive(Debug)]
@@ -28,20 +29,34 @@ pub struct BacktestEngine {
     pub model_provider: String,
     pub selected_analysts: Vec<String>,
     pub initial_margin_requirement: f64,
+    pub data_provider: Option<DataProvider>,
 }
 
 impl BacktestEngine {
     /// Runs the historical simulation daily loop.
     pub async fn run_backtest(&mut self) -> Result<PerformanceMetrics> {
         println!("BacktestEngine: prefetching historical datasets...");
-        
+
+        configure_provider(self.data_provider);
+        let provider = active_provider();
         let api_key = std::env::var("FINANCIAL_DATASETS_API_KEY").ok();
-        if api_key.is_none() || api_key.as_deref() == Some("your-financial-datasets-api-key") || api_key.as_deref().unwrap_or("").is_empty() {
-            println!("--------------------------------------------------------------------------------");
-            println!("WARNING: FINANCIAL_DATASETS_API_KEY is not set or is set to a placeholder.");
-            println!("Historical API queries will fail or be unauthorized. Please configure the key");
-            println!("in your environment or in a .env file.");
-            println!("--------------------------------------------------------------------------------");
+
+        match provider {
+            DataProvider::YahooFinance => {
+                println!("Using Yahoo Finance as the data provider (free tier).");
+            }
+            DataProvider::FinancialDatasets => {
+                if api_key.is_none()
+                    || api_key.as_deref() == Some("your-financial-datasets-api-key")
+                    || api_key.as_deref().unwrap_or("").is_empty()
+                {
+                    println!("--------------------------------------------------------------------------------");
+                    println!("WARNING: FINANCIAL_DATASETS_API_KEY is not set or is set to a placeholder.");
+                    println!("Historical API queries will fail or be unauthorized. Please configure the key");
+                    println!("in your environment or in a .env file, or use --data-provider yahoo-finance.");
+                    println!("--------------------------------------------------------------------------------");
+                }
+            }
         }
 
         // 1. Parse start and end dates
@@ -116,6 +131,7 @@ impl BacktestEngine {
                 &self.model_name,
                 &self.model_provider,
                 self.selected_analysts.clone(),
+                self.data_provider,
             ).await?;
 
             let decisions_json = agent_output.decisions.as_ref()

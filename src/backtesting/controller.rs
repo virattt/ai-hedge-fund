@@ -4,6 +4,7 @@
 
 use crate::backtesting::portfolio::Portfolio;
 use crate::workflow::{run_hedge_fund, HedgeFundResult};
+use crate::data::provider::DataProvider;
 use anyhow::Result;
 
 pub struct AgentController;
@@ -23,6 +24,7 @@ impl AgentController {
         model_name: &str,
         model_provider: &str,
         selected_analysts: Vec<String>,
+        data_provider: Option<DataProvider>,
     ) -> Result<HedgeFundResult> {
         let portfolio_json = serde_json::to_value(portfolio)?;
         
@@ -35,6 +37,7 @@ impl AgentController {
             selected_analysts,
             model_name,
             model_provider,
+            data_provider,
         )
         .await
     }

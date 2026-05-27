@@ -3,6 +3,7 @@ pub mod analysts;
 pub mod api_key;
 pub mod display;
 pub mod docker;
+pub mod financial_data;
 pub mod llm;
 pub mod ollama;
 pub mod progress;

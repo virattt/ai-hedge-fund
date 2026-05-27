@@ -1,6 +1,8 @@
 use anyhow::{Result, Context};
 use crate::models::schemas::{GraphNode, GraphEdge};
 use ai_hedge_fund::workflow::{run_hedge_fund, HedgeFundResult};
+use ai_hedge_fund::cli::input::resolve_data_provider;
+use ai_hedge_fund::data::provider::configure_provider;
 
 pub fn extract_base_agent_key(unique_id: &str) -> String {
     // Unique ID format: "agent_name_suffix" or similar. Extract prefix before suffix.
@@ -45,6 +47,8 @@ pub async fn run_graph_async(
 
     // Call the core Rust hedge fund workflow driver
     let show_reasoning = false;
+    let data_provider = resolve_data_provider(None);
+    configure_provider(Some(data_provider));
     run_hedge_fund(
         tickers.to_vec(),
         start_date,
@@ -54,6 +58,7 @@ pub async fn run_graph_async(
         selected_analysts,
         model_name,
         model_provider,
+        Some(data_provider),
     )
     .await
     .context("Failed to run Rust hedge fund graph workflow")
