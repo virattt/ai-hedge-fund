@@ -79,6 +79,20 @@ const LLM_API_KEYS: ApiKey[] = [
     description: 'For GigaChat models (GigaChat-2-Max, etc.)',
     url: 'https://github.com/ai-forever/gigachat',
     placeholder: 'your-gigachat-api-key'
+  },
+  {
+    key: 'TENCENT_CODING_API_KEY',
+    label: 'Tencent Coding Plan API',
+    description: 'For Tencent Coding Plan models (hunyuan-2.0, kimi-k2.5, glm-5, etc.) — key format: sk-sp-xxxx',
+    url: 'https://console.cloud.tencent.com/tokenhub/codingplan',
+    placeholder: 'sk-sp-your-tencent-coding-api-key'
+  },
+  {
+    key: 'TENCENT_MAAS_API_KEY',
+    label: 'Tencent TokenHub MaaS API',
+    description: 'For Tencent MaaS models (deepseek-v4-pro, deepseek-v4-flash, glm-5.1, minimax-m2.7)',
+    url: 'https://console.cloud.tencent.com/tokenhub',
+    placeholder: 'sk-your-tencent-maas-api-key'
   }
 ];
 

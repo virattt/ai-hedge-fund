@@ -5,19 +5,9 @@
     "provider": "xAI"
   },
   {
-    "display_name": "DeepSeek V4 Pro",
-    "model_name": "deepseek-v4-pro",
-    "provider": "DeepSeek"
-  },
-  {
     "display_name": "GPT-5.5",
     "model_name": "gpt-5.5",
     "provider": "OpenAI"
-  },
-  {
-    "display_name": "Kimi K2.6",
-    "model_name": "kimi-k2.6",
-    "provider": "Kimi"
   },
   {
     "display_name": "Claude Opus 4.7",
@@ -28,5 +18,105 @@
     "display_name": "Gemini 3.1 Pro",
     "model_name": "gemini-3.1-pro-preview",
     "provider": "Google"
+  },
+  {
+    "display_name": "Tencent Auto (tc-code-latest)",
+    "model_name": "tc-code-latest",
+    "provider": "TencentCodingPlan"
+  },
+  {
+    "display_name": "Tencent HY 2.0 Instruct",
+    "model_name": "hunyuan-2.0-instruct",
+    "provider": "TencentCodingPlan"
+  },
+  {
+    "display_name": "Tencent HY 2.0 Think",
+    "model_name": "hunyuan-2.0-thinking",
+    "provider": "TencentCodingPlan"
+  },
+  {
+    "display_name": "MiniMax M2.5 (TencentCodingPlan)",
+    "model_name": "minimax-m2.5",
+    "provider": "TencentCodingPlan"
+  },
+  {
+    "display_name": "Kimi K2.5 (TencentCodingPlan)",
+    "model_name": "kimi-k2.5",
+    "provider": "TencentCodingPlan"
+  },
+  {
+    "display_name": "GLM-5 (TencentCodingPlan)",
+    "model_name": "glm-5",
+    "provider": "TencentCodingPlan"
+  },
+  {
+    "display_name": "DeepSeek V4 Pro (TencentMaas)",
+    "model_name": "deepseek-v4-pro",
+    "provider": "TencentMaas"
+  },
+  {
+    "display_name": "DeepSeek V4 Flash (TencentMaas)",
+    "model_name": "deepseek-v4-flash",
+    "provider": "TencentMaas"
+  },
+  {
+    "display_name": "DeepSeek V3.2 (TencentMaas)",
+    "model_name": "deepseek-v3.2",
+    "provider": "TencentMaas"
+  },
+  {
+    "display_name": "DeepSeek V3.1 Terminus (TencentMaas)",
+    "model_name": "deepseek-v3.1-terminus",
+    "provider": "TencentMaas"
+  },
+  {
+    "display_name": "DeepSeek R1-0528 (TencentMaas)",
+    "model_name": "deepseek-r1-0528",
+    "provider": "TencentMaas"
+  },
+  {
+    "display_name": "HY 3 Preview (TencentMaas)",
+    "model_name": "hy3-preview",
+    "provider": "TencentMaas"
+  },
+  {
+    "display_name": "HY 2.0 Instruct (TencentMaas)",
+    "model_name": "hunyuan-2.0-instruct-20251111",
+    "provider": "TencentMaas"
+  },
+  {
+    "display_name": "HY 2.0 Think (TencentMaas)",
+    "model_name": "hunyuan-2.0-thinking-20251109",
+    "provider": "TencentMaas"
+  },
+  {
+    "display_name": "Kimi K2.6 (TencentMaas)",
+    "model_name": "kimi-k2.6",
+    "provider": "TencentMaas"
+  },
+  {
+    "display_name": "Kimi K2.5 (TencentMaas)",
+    "model_name": "kimi-k2.5",
+    "provider": "TencentMaas"
+  },
+  {
+    "display_name": "GLM-5.1 (TencentMaas)",
+    "model_name": "glm-5.1",
+    "provider": "TencentMaas"
+  },
+  {
+    "display_name": "GLM-5 Turbo (TencentMaas)",
+    "model_name": "glm-5-turbo",
+    "provider": "TencentMaas"
+  },
+  {
+    "display_name": "MiniMax M2.7 (TencentMaas)",
+    "model_name": "minimax-m2.7",
+    "provider": "TencentMaas"
+  },
+  {
+    "display_name": "MiniMax M2.5 (TencentMaas)",
+    "model_name": "minimax-m2.5",
+    "provider": "TencentMaas"
   }
 ]

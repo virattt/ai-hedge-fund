@@ -40,9 +40,11 @@ export interface BaseHedgeFundRequest {
   graph_edges: GraphEdge[];
   agent_models?: AgentModelConfig[];
   model_name?: string;
-  model_provider?: ModelProvider;
+  model_provider?: string;  // accept any provider string, not just the limited enum
   margin_requirement?: number;
   portfolio_positions?: PortfolioPosition[];
+  api_keys?: Record<string, string>;
+  language?: string;
 }
 
 export interface HedgeFundRequest extends BaseHedgeFundRequest {

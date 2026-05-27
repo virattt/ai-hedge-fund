@@ -68,6 +68,7 @@ class BaseHedgeFundRequest(BaseModel):
     margin_requirement: float = 0.0
     portfolio_positions: Optional[List[PortfolioPosition]] = None
     api_keys: Optional[Dict[str, str]] = None
+    language: Optional[str] = "English"
 
     def get_agent_ids(self) -> List[str]:
         """Extract agent IDs from graph structure"""

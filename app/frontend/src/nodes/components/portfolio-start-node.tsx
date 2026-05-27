@@ -39,6 +39,18 @@ const runModes = [
   { value: 'backtest', label: 'Backtest' },
 ];
 
+const SUPPORTED_LANGUAGES = [
+  { value: 'English', label: 'English' },
+  { value: 'Chinese', label: '中文 (Chinese)' },
+  { value: 'Japanese', label: '日本語 (Japanese)' },
+  { value: 'Korean', label: '한국어 (Korean)' },
+  { value: 'French', label: 'Français (French)' },
+  { value: 'German', label: 'Deutsch (German)' },
+  { value: 'Spanish', label: 'Español (Spanish)' },
+  { value: 'Portuguese', label: 'Português (Portuguese)' },
+  { value: 'Russian', label: 'Русский (Russian)' },
+];
+
 export function PortfolioStartNode({
   data,
   selected,
@@ -58,7 +70,9 @@ export function PortfolioStartNode({
   const [runMode, setRunMode] = useNodeState(id, 'runMode', 'single');
   const [startDate, setStartDate] = useNodeState(id, 'startDate', threeMonthsAgo.toISOString().split('T')[0]);
   const [endDate, setEndDate] = useNodeState(id, 'endDate', today.toISOString().split('T')[0]);
+  const [language, setLanguage] = useNodeState(id, 'language', 'English');
   const [open, setOpen] = useState(false);
+  const [languageOpen, setLanguageOpen] = useState(false);
   
   const { currentFlowId } = useFlowContext();
   const nodeContext = useNodeContext();
@@ -229,6 +243,7 @@ export function PortfolioStartNode({
         model_provider: undefined,
         // Pass portfolio positions to backend
         portfolio_positions: portfolioPositions,
+        language,
       });
     } else {
       // Use the regular hedge fund API for single run
@@ -251,6 +266,7 @@ export function PortfolioStartNode({
         initial_cash: parseFloat(initialCash) || 100000,
         // Pass portfolio positions to backend
         portfolio_positions: portfolioPositions,
+        language,
       });
     }
   };
@@ -358,6 +374,51 @@ export function PortfolioStartNode({
                     Add Position
                   </Button>
                 </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <div className="text-subtitle text-primary flex items-center gap-1">
+                  Output Language
+                </div>
+                <Popover open={languageOpen} onOpenChange={setLanguageOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={languageOpen}
+                      className="w-full justify-between h-10 px-3 py-2 bg-node border border-border hover:bg-accent"
+                    >
+                      <span className="text-subtitle">
+                        {SUPPORTED_LANGUAGES.find((l) => l.value === language)?.label || 'English'}
+                      </span>
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 bg-node border border-border shadow-lg">
+                    <Command className="bg-node">
+                      <CommandList className="bg-node">
+                        <CommandEmpty>No language found.</CommandEmpty>
+                        <CommandGroup>
+                          {SUPPORTED_LANGUAGES.map((lang) => (
+                            <CommandItem
+                              key={lang.value}
+                              value={lang.value}
+                              className={cn(
+                                "cursor-pointer bg-node hover:bg-accent",
+                                language === lang.value
+                              )}
+                              onSelect={(currentValue) => {
+                                setLanguage(currentValue);
+                                setLanguageOpen(false);
+                              }}
+                            >
+                              {lang.label}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="flex flex-col gap-2">
                 <div className="text-subtitle text-primary flex items-center gap-1">

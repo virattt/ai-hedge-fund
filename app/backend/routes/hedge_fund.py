@@ -85,7 +85,8 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
                         end_date=request_data.end_date,
                         model_name=request_data.model_name,
                         model_provider=model_provider,
-                        request=request_data,  # Pass the full request for agent-specific model access
+                        request=request_data,
+                        language=request_data.language or "English",
                     )
                 )
                 
@@ -202,7 +203,8 @@ async def backtest(request_data: BacktestRequest, request: Request, db: Session 
             initial_capital=request_data.initial_capital,
             model_name=request_data.model_name,
             model_provider=model_provider,
-            request=request_data,  # Pass the full request for agent-specific model access
+            request=request_data,
+            language=request_data.language or "English",
         )
 
         # Function to detect client disconnection

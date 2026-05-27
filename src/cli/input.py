@@ -9,8 +9,21 @@ from src.utils.analysts import ANALYST_ORDER
 from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider, find_model_by_name
 from src.utils.ollama import ensure_ollama_and_model
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
+
+
+SUPPORTED_LANGUAGES = [
+    ("English", "English"),
+    ("中文 (Chinese)", "Chinese"),
+    ("日本語 (Japanese)", "Japanese"),
+    ("한국어 (Korean)", "Korean"),
+    ("Français (French)", "French"),
+    ("Deutsch (German)", "German"),
+    ("Español (Spanish)", "Spanish"),
+    ("Português (Portuguese)", "Portuguese"),
+    ("Русский (Russian)", "Russian"),
+]
 
 
 def add_common_args(
@@ -43,6 +56,13 @@ def add_common_args(
     if include_ollama:
         parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
     parser.add_argument("--model", type=str, required=False, help="Model name to use (e.g., gpt-4o)")
+    parser.add_argument(
+        "--language",
+        type=str,
+        required=False,
+        default=None,
+        help="Output language for LLM responses (e.g., English, Chinese, Japanese)",
+    )
     return parser
 
 
@@ -189,6 +209,33 @@ def select_model(use_ollama: bool, model_flag: str | None = None) -> tuple[str, 
     return model_name, model_provider or ""
 
 
+def select_language(language_flag: str | None = None) -> str:
+    if language_flag:
+        print(f"\nOutput language: {Fore.CYAN}{language_flag}{Style.RESET_ALL}\n")
+        return language_flag
+
+    choice = questionary.select(
+        "Select output language:",
+        choices=[questionary.Choice(display, value=value) for display, value in SUPPORTED_LANGUAGES],
+        default="English",
+        style=questionary.Style(
+            [
+                ("selected", "fg:green bold"),
+                ("pointer", "fg:green bold"),
+                ("highlighted", "fg:green"),
+                ("answer", "fg:green bold"),
+            ]
+        ),
+    ).ask()
+
+    if not choice:
+        print("\n\nInterrupt received. Exiting...")
+        sys.exit(0)
+
+    print(f"\nOutput language: {Fore.CYAN}{choice}{Style.RESET_ALL}\n")
+    return choice
+
+
 def resolve_dates(start_date: str | None, end_date: str | None, *, default_months_back: int | None = None) -> tuple[str, str]:
     if start_date:
         try:
@@ -221,6 +268,7 @@ class CLIInputs:
     end_date: str
     initial_cash: float
     margin_requirement: float
+    language: str = "English"
     show_reasoning: bool = False
     show_agent_graph: bool = False
     raw_args: Optional[argparse.Namespace] = None
@@ -271,6 +319,7 @@ def parse_cli_inputs(
         "analysts": getattr(args, "analysts", None),
     })
     model_name, model_provider = select_model(getattr(args, "ollama", False), getattr(args, "model", None))
+    language = select_language(getattr(args, "language", None))
     start_date, end_date = resolve_dates(getattr(args, "start_date", None), getattr(args, "end_date", None), default_months_back=default_months_back)
 
     return CLIInputs(
@@ -282,6 +331,7 @@ def parse_cli_inputs(
         end_date=end_date,
         initial_cash=getattr(args, "initial_cash", 100000.0),
         margin_requirement=getattr(args, "margin_requirement", 0.0),
+        language=language,
         show_reasoning=getattr(args, "show_reasoning", False),
         show_agent_graph=getattr(args, "show_agent_graph", False),
         raw_args=args,
