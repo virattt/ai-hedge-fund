@@ -1,12 +1,17 @@
 use axum::{routing::get, Router, Json};
 use serde_json::json;
 use ai_hedge_fund::llm::models::get_models_list;
+use ai_hedge_fund::utils::llm::chatgpt_subscription_status_sync;
 use crate::services::ollama_service::OllamaService;
 
 pub fn router() -> Router {
     Router::new()
         .route("/", get(get_language_models))
         .route("/providers", get(get_language_model_providers))
+        .route(
+            "/chatgpt-subscription/status",
+            get(get_chatgpt_subscription_status),
+        )
 }
 
 async fn get_language_models() -> Json<serde_json::Value> {
@@ -54,4 +59,12 @@ async fn get_language_model_providers() -> Json<serde_json::Value> {
     
     let providers_list: Vec<serde_json::Value> = providers.into_values().collect();
     Json(json!({ "providers": providers_list }))
+}
+
+async fn get_chatgpt_subscription_status() -> Json<serde_json::Value> {
+    let status = chatgpt_subscription_status_sync();
+    Json(json!({
+        "authenticated": status.authenticated,
+        "email": status.email,
+    }))
 }

@@ -11,6 +11,11 @@ use ai_hedge_fund::workflow::run_hedge_fund;
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
+
+    if let Some(result) = ai_hedge_fund::cli::chatgpt::try_run_from_env().await {
+        return result;
+    }
+
     println!("Welcome to the AI Hedge Fund (Rust Port)!");
 
     let data_provider = resolve_data_provider(None);

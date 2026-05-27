@@ -28,5 +28,30 @@
     "display_name": "Gemini 3.1 Pro",
     "model_name": "gemini-3.1-pro-preview",
     "provider": "Google"
+  },
+  {
+    "display_name": "GPT-5.5",
+    "model_name": "gpt-5.5",
+    "provider": "ChatGPT Subscription"
+  },
+  {
+    "display_name": "GPT-5.4",
+    "model_name": "gpt-5.4",
+    "provider": "ChatGPT Subscription"
+  },
+  {
+    "display_name": "GPT-5.4 Mini",
+    "model_name": "gpt-5.4-mini",
+    "provider": "ChatGPT Subscription"
+  },
+  {
+    "display_name": "GPT-5.3 Codex",
+    "model_name": "gpt-5.3-codex",
+    "provider": "ChatGPT Subscription"
+  },
+  {
+    "display_name": "GPT-5.2",
+    "model_name": "gpt-5.2",
+    "provider": "ChatGPT Subscription"
   }
 ]

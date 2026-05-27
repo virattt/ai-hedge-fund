@@ -6,6 +6,9 @@ use anyhow::Result;
 use serde::de::DeserializeOwned;
 use std::env;
 use crate::graph::state::AgentState;
+use crate::llm::chatgpt_subscription::{
+    self, call_codex_responses, ChatGptSubscriptionStatus,
+};
 use crate::llm::models::ModelProvider;
 use crate::utils::api_key::env_api_key;
 
@@ -17,6 +20,7 @@ pub struct ResolvedLlmConfig {
 }
 
 const DEFAULT_MODEL: &str = "gpt-4.1";
+const DEFAULT_SUBSCRIPTION_MODEL: &str = "gpt-5.4-mini";
 
 /// Resolve the LLM provider and model from explicit inputs and environment keys.
 ///
@@ -37,7 +41,14 @@ pub fn resolve_llm_config(
     let requested_model = model_name.unwrap_or(DEFAULT_MODEL);
 
     if let Some(ref provider) = explicit_provider {
-        if provider_has_valid_key(provider) {
+        if *provider == ModelProvider::ChatGPTSubscription {
+            if chatgpt_subscription_authenticated() {
+                return ResolvedLlmConfig {
+                    model_name: normalize_model_for_provider(requested_model, provider),
+                    model_provider: provider.clone(),
+                };
+            }
+        } else if provider_has_valid_key(provider) {
             return ResolvedLlmConfig {
                 model_name: normalize_model_for_provider(requested_model, provider),
                 model_provider: provider.clone(),
@@ -49,6 +60,16 @@ pub fn resolve_llm_config(
         return ResolvedLlmConfig {
             model_name: normalize_model_for_provider(requested_model, &detected),
             model_provider: detected,
+        };
+    }
+
+    if chatgpt_subscription_authenticated() {
+        return ResolvedLlmConfig {
+            model_name: normalize_model_for_provider(
+                requested_model,
+                &ModelProvider::ChatGPTSubscription,
+            ),
+            model_provider: ModelProvider::ChatGPTSubscription,
         };
     }
 
@@ -66,6 +87,29 @@ pub fn log_resolved_llm_config(config: &ResolvedLlmConfig) {
             "Using Ollama ({}) for LLM inference.",
             config.model_name
         );
+        return;
+    }
+
+    if config.model_provider == ModelProvider::ChatGPTSubscription {
+        let status = chatgpt_subscription_status_sync();
+        if status.authenticated {
+            if let Some(email) = status.email {
+                println!(
+                    "Using ChatGPT Subscription ({}) as the LLM provider (signed in as {}).",
+                    config.model_name, email
+                );
+            } else {
+                println!(
+                    "Using ChatGPT Subscription ({}) as the LLM provider (authenticated).",
+                    config.model_name
+                );
+            }
+        } else {
+            println!(
+                "Using ChatGPT Subscription ({}) but not signed in — run `chatgpt login`.",
+                config.model_name
+            );
+        }
         return;
     }
 
@@ -110,11 +154,36 @@ fn detect_provider_from_env() -> Option<ModelProvider> {
     None
 }
 
+fn chatgpt_subscription_authenticated() -> bool {
+    chatgpt_subscription::load_credentials_from_storage().is_some()
+}
+
+pub fn chatgpt_subscription_status_sync() -> ChatGptSubscriptionStatus {
+    if let Some(creds) = chatgpt_subscription::load_credentials_from_storage() {
+        ChatGptSubscriptionStatus {
+            authenticated: true,
+            email: creds.email,
+        }
+    } else {
+        ChatGptSubscriptionStatus {
+            authenticated: false,
+            email: None,
+        }
+    }
+}
+
 fn provider_has_valid_key(provider: &ModelProvider) -> bool {
+    if *provider == ModelProvider::ChatGPTSubscription {
+        return chatgpt_subscription_authenticated();
+    }
     get_api_key_for_provider(provider).is_some()
 }
 
 fn normalize_model_for_provider(model_name: &str, provider: &ModelProvider) -> String {
+    if *provider == ModelProvider::ChatGPTSubscription && model_name == DEFAULT_MODEL {
+        return DEFAULT_SUBSCRIPTION_MODEL.to_string();
+    }
+
     if *provider != ModelProvider::OpenRouter || model_name.contains('/') {
         return model_name.to_string();
     }
@@ -170,6 +239,7 @@ pub fn get_api_key_for_provider(provider: &ModelProvider) -> Option<String> {
         ModelProvider::OpenRouter => env_api_key("OPENROUTER_API_KEY"),
         ModelProvider::xAI => env_api_key("XAI_API_KEY"),
         ModelProvider::AzureOpenAI => env_api_key("AZURE_OPENAI_API_KEY"),
+        ModelProvider::ChatGPTSubscription => None,
         _ => None,
     };
 
@@ -221,9 +291,15 @@ where
 {
     let (model_name, model_provider) = get_agent_model_config(state, agent_name);
     let api_key = get_api_key_for_provider(&model_provider);
+    let subscription_authenticated =
+        model_provider == ModelProvider::ChatGPTSubscription && chatgpt_subscription_authenticated();
 
     // Fall back to local mocked results if API key is absent and we are not querying Ollama
-    if api_key.is_none() && model_provider != ModelProvider::Ollama {
+    // or ChatGPT subscription.
+    if api_key.is_none()
+        && model_provider != ModelProvider::Ollama
+        && !subscription_authenticated
+    {
         let mock_text = get_mock_response_for_prompt(user_prompt);
         if let Some(parsed_json) = extract_json_from_response(&mock_text) {
             if let Ok(res) = serde_json::from_value::<T>(parsed_json) {
@@ -237,6 +313,49 @@ where
     let mut response_body = String::new();
 
     for attempt in 0..max_retries {
+        if model_provider == ModelProvider::ChatGPTSubscription {
+            match chatgpt_subscription::get_valid_access_token().await {
+                Ok(access_token) => {
+                    let account_id = chatgpt_subscription::load_credentials_from_storage()
+                        .and_then(|c| c.account_id);
+                    match call_codex_responses(
+                        &client,
+                        &access_token,
+                        account_id.as_deref(),
+                        &model_name,
+                        system_prompt,
+                        user_prompt,
+                    )
+                    .await
+                    {
+                        Ok(content) => {
+                            if let Some(json_val) = extract_json_from_response(&content) {
+                                if let Ok(deserialized) = serde_json::from_value::<T>(json_val) {
+                                    return Ok(deserialized);
+                                }
+                            }
+                            response_body = content;
+                        }
+                        Err(err) => {
+                            println!(
+                                "ChatGPT subscription LLM attempt {} failed: {err}",
+                                attempt + 1
+                            );
+                        }
+                    }
+                }
+                Err(err) => {
+                    println!(
+                        "ChatGPT subscription auth attempt {} failed: {err}",
+                        attempt + 1
+                    );
+                }
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(500 * (attempt as u64 + 1))).await;
+            continue;
+        }
+
         let res = match &model_provider {
             ModelProvider::Anthropic => {
                 let url = "https://api.anthropic.com/v1/messages";
@@ -446,6 +565,11 @@ pub fn extract_json_from_response(content: &str) -> Option<serde_json::Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::llm::chatgpt_subscription;
+
+    fn env_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        chatgpt_subscription::env_test_guard()
+    }
 
     fn clear_llm_env() {
         for key in [
@@ -460,6 +584,7 @@ mod tests {
 
     #[test]
     fn openrouter_selected_when_openai_missing() {
+        let _guard = env_test_guard();
         clear_llm_env();
         env::set_var("OPENROUTER_API_KEY", "sk-or-test-key");
 
@@ -476,6 +601,7 @@ mod tests {
 
     #[test]
     fn placeholder_keys_are_ignored() {
+        let _guard = env_test_guard();
         clear_llm_env();
         env::set_var("OPENAI_API_KEY", "your-openai-api-key");
         env::set_var("OPENROUTER_API_KEY", "sk-or-real-key");
@@ -487,6 +613,7 @@ mod tests {
 
     #[test]
     fn empty_keys_are_ignored() {
+        let _guard = env_test_guard();
         clear_llm_env();
         env::set_var("OPENAI_API_KEY", "   ");
         env::set_var("OPENROUTER_API_KEY", "sk-or-real-key");
@@ -498,11 +625,134 @@ mod tests {
 
     #[test]
     fn ollama_flag_wins_over_env_keys() {
+        let _guard = env_test_guard();
         clear_llm_env();
         env::set_var("OPENROUTER_API_KEY", "sk-or-real-key");
 
         let resolved = resolve_llm_config(None, true, None);
         assert_eq!(resolved.model_provider, ModelProvider::Ollama);
         clear_llm_env();
+    }
+
+    #[test]
+    fn subscription_selected_when_no_env_keys_and_authenticated() {
+        let _guard = env_test_guard();
+        clear_llm_env();
+        let path = std::env::temp_dir().join(format!(
+            "open-hedge-resolve-auth-{}.json",
+            std::process::id()
+        ));
+        env::set_var("OPEN_HEDGE_CODEX_AUTH_PATH", &path);
+        let creds = chatgpt_subscription::CodexCredentials {
+            access_token: "access".into(),
+            refresh_token: "refresh".into(),
+            expires_at_ms: chatgpt_subscription::now_ms() + 3_600_000,
+            account_id: None,
+            email: Some("user@example.com".into()),
+        };
+        std::fs::write(&path, serde_json::to_string(&creds).unwrap()).unwrap();
+
+        let resolved = resolve_llm_config(None, false, None);
+        assert_eq!(resolved.model_provider, ModelProvider::ChatGPTSubscription);
+        assert_eq!(resolved.model_name, "gpt-5.4-mini");
+
+        let _ = std::fs::remove_file(path);
+        env::remove_var("OPEN_HEDGE_CODEX_AUTH_PATH");
+        clear_llm_env();
+    }
+
+    #[test]
+    fn env_keys_take_precedence_over_subscription() {
+        let _guard = env_test_guard();
+        clear_llm_env();
+        let path = std::env::temp_dir().join(format!(
+            "open-hedge-resolve-auth-env-{}.json",
+            std::process::id()
+        ));
+        env::set_var("OPEN_HEDGE_CODEX_AUTH_PATH", &path);
+        env::set_var("OPENROUTER_API_KEY", "sk-or-real-key");
+        let creds = chatgpt_subscription::CodexCredentials {
+            access_token: "access".into(),
+            refresh_token: "refresh".into(),
+            expires_at_ms: chatgpt_subscription::now_ms() + 3_600_000,
+            account_id: None,
+            email: None,
+        };
+        std::fs::write(&path, serde_json::to_string(&creds).unwrap()).unwrap();
+
+        let resolved = resolve_llm_config(None, false, None);
+        assert_eq!(resolved.model_provider, ModelProvider::OpenRouter);
+
+        let _ = std::fs::remove_file(path);
+        env::remove_var("OPEN_HEDGE_CODEX_AUTH_PATH");
+        clear_llm_env();
+    }
+
+    #[test]
+    fn explicit_subscription_provider_when_authenticated() {
+        let _guard = env_test_guard();
+        clear_llm_env();
+        let path = std::env::temp_dir().join(format!(
+            "open-hedge-resolve-auth-explicit-{}.json",
+            std::process::id()
+        ));
+        env::set_var("OPEN_HEDGE_CODEX_AUTH_PATH", &path);
+        let creds = chatgpt_subscription::CodexCredentials {
+            access_token: "access".into(),
+            refresh_token: "refresh".into(),
+            expires_at_ms: chatgpt_subscription::now_ms() + 3_600_000,
+            account_id: None,
+            email: None,
+        };
+        std::fs::write(&path, serde_json::to_string(&creds).unwrap()).unwrap();
+
+        let resolved = resolve_llm_config(
+            Some("gpt-5.5"),
+            false,
+            Some(ModelProvider::ChatGPTSubscription),
+        );
+        assert_eq!(resolved.model_provider, ModelProvider::ChatGPTSubscription);
+        assert_eq!(resolved.model_name, "gpt-5.5");
+
+        let _ = std::fs::remove_file(path);
+        env::remove_var("OPEN_HEDGE_CODEX_AUTH_PATH");
+        clear_llm_env();
+    }
+
+    #[test]
+    fn subscription_selected_when_explicit_openai_missing_key() {
+        let _guard = env_test_guard();
+        clear_llm_env();
+        let path = std::env::temp_dir().join(format!(
+            "open-hedge-resolve-auth-openai-{}.json",
+            std::process::id()
+        ));
+        env::set_var("OPEN_HEDGE_CODEX_AUTH_PATH", &path);
+        env::set_var("OPENAI_API_KEY", "your-openai-api-key");
+        let creds = chatgpt_subscription::CodexCredentials {
+            access_token: "access".into(),
+            refresh_token: "refresh".into(),
+            expires_at_ms: chatgpt_subscription::now_ms() + 3_600_000,
+            account_id: None,
+            email: Some("user@example.com".into()),
+        };
+        std::fs::write(&path, serde_json::to_string(&creds).unwrap()).unwrap();
+
+        let resolved = resolve_llm_config(None, false, Some(ModelProvider::OpenAI));
+        assert_eq!(resolved.model_provider, ModelProvider::ChatGPTSubscription);
+
+        let _ = std::fs::remove_file(path);
+        env::remove_var("OPEN_HEDGE_CODEX_AUTH_PATH");
+        clear_llm_env();
+    }
+
+    #[test]
+    fn codex_response_text_is_parsed_for_llm_json() {
+        let response = serde_json::json!({
+            "output_text": "```json\n{\"signal\":\"bullish\",\"confidence\":80,\"reasoning\":\"test\"}\n```"
+        });
+        let text = chatgpt_subscription::extract_text_from_codex_response(&response).unwrap();
+        let parsed = extract_json_from_response(&text).unwrap();
+        assert_eq!(parsed.get("signal").and_then(|v| v.as_str()), Some("bullish"));
     }
 }

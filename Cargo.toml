@@ -21,6 +21,11 @@ sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "sqlite", "jso
 tokio-stream = "0.1"
 futures-util = "0.3"
 yahoo-finance-rs = "0.1.2"
+base64 = "0.22"
+sha2 = "0.10"
+rand = "0.8"
+keyring = "3"
+url = "2"
 
 
 [lib]

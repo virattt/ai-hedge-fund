@@ -30,6 +30,10 @@ async fn main() -> Result<()> {
     // Load environment variables (.env)
     dotenvy::dotenv().ok();
 
+    if let Some(result) = ai_hedge_fund::cli::chatgpt::try_run_from_env().await {
+        return result;
+    }
+
     println!("Starting Backtesting Engine (Rust Port)...");
     
     // Parse inputs using clap

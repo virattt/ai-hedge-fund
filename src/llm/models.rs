@@ -17,6 +17,8 @@ pub enum ModelProvider {
     OpenAI,
     Ollama,
     OpenRouter,
+    #[serde(rename = "ChatGPT Subscription")]
+    ChatGPTSubscription,
     GigaChat,
     #[serde(rename = "Azure OpenAI")]
     AzureOpenAI,
@@ -45,6 +47,9 @@ impl ModelProvider {
             "openai" => Some(ModelProvider::OpenAI),
             "ollama" => Some(ModelProvider::Ollama),
             "openrouter" => Some(ModelProvider::OpenRouter),
+            "chatgpt subscription" | "chatgpt-subscription" | "chatgpt_subscription" => {
+                Some(ModelProvider::ChatGPTSubscription)
+            }
             "gigachat" => Some(ModelProvider::GigaChat),
             "azure openai" | "azure_openai" => Some(ModelProvider::AzureOpenAI),
             "xai" => Some(ModelProvider::xAI),
@@ -65,6 +70,7 @@ impl ModelProvider {
             ModelProvider::OpenAI => "OpenAI",
             ModelProvider::Ollama => "Ollama",
             ModelProvider::OpenRouter => "OpenRouter",
+            ModelProvider::ChatGPTSubscription => "ChatGPT Subscription",
             ModelProvider::GigaChat => "GigaChat",
             ModelProvider::AzureOpenAI => "Azure OpenAI",
             ModelProvider::xAI => "xAI",

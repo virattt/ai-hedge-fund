@@ -75,15 +75,15 @@ cp .env.example .env
 Open and edit `.env`:
 
 ```bash
-# Required for agent reasoning — set at least one LLM provider
+# Required for agent reasoning — choose ONE of:
+# 1) BYOK API key (e.g. OPENAI_API_KEY, OPENROUTER_API_KEY)
 OPENAI_API_KEY=your-openai-api-key
 
-# Optional — premium market data from https://financialdatasets.ai/
-# Omit or leave as the placeholder to use Yahoo Finance (free, default)
-FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
+# 2) ChatGPT Plus/Pro subscription (no API key — run `chatgpt login` instead)
+# See docs/chatgpt_subscription.md
 ```
 
-**Important:** You must set at least one LLM API key (e.g. `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY`) for the hedge fund to work. Placeholder values from `.env.example` and empty keys are ignored; if the default provider has no valid key, Open Hedge auto-selects the first configured provider (OpenRouter is checked when OpenAI is absent).
+**Important:** You must configure at least one LLM source: a valid BYOK API key (e.g. `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY`) **or** a ChatGPT subscription sign-in (`cargo run --bin backtester -- chatgpt login`). Placeholder values from `.env.example` and empty keys are ignored; if the default provider has no valid key, Open Hedge auto-selects the first configured BYOK provider (OpenRouter is checked when OpenAI is absent). When no BYOK keys are set but you are signed in to ChatGPT subscription, Codex models are used automatically.
 
 You do **not** need a Financial Datasets key to fetch prices and fundamentals; Open Hedge defaults to Yahoo Finance when `FINANCIAL_DATASETS_API_KEY` is unset or still the `.env.example` placeholder.
 
@@ -146,6 +146,18 @@ You can also specify a `--ollama` flag to run Open Hedge using local LLMs.
 ```bash
 cargo run --bin ai-hedge-fund -- --ticker AAPL,MSFT,NVDA --ollama
 ```
+
+#### ChatGPT Subscription (Plus/Pro)
+
+Use your ChatGPT subscription instead of an OpenAI API key:
+
+```bash
+cargo run --bin backtester -- chatgpt login
+cargo run --bin backtester -- chatgpt status
+cargo run --bin backtester -- chatgpt logout
+```
+
+After sign-in, run backtests or the hedge fund without `OPENAI_API_KEY`. See [docs/chatgpt_subscription.md](docs/chatgpt_subscription.md).
 
 You can optionally specify the start and end dates to make decisions over a specific time period:
 ```bash
