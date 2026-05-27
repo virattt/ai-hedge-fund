@@ -30,6 +30,27 @@ pub struct LLMModel {
     pub provider: ModelProvider,
 }
 
+impl ModelProvider {
+    pub fn value(&self) -> &'static str {
+        match self {
+            ModelProvider::Alibaba => "Alibaba",
+            ModelProvider::Anthropic => "Anthropic",
+            ModelProvider::DeepSeek => "DeepSeek",
+            ModelProvider::Google => "Google",
+            ModelProvider::Groq => "Groq",
+            ModelProvider::Kimi => "Kimi",
+            ModelProvider::Meta => "Meta",
+            ModelProvider::Mistral => "Mistral",
+            ModelProvider::OpenAI => "OpenAI",
+            ModelProvider::Ollama => "Ollama",
+            ModelProvider::OpenRouter => "OpenRouter",
+            ModelProvider::GigaChat => "GigaChat",
+            ModelProvider::AzureOpenAI => "Azure OpenAI",
+            ModelProvider::xAI => "xAI",
+        }
+    }
+}
+
 impl LLMModel {
     pub fn is_custom(&self) -> bool {
         self.model_name == "-"
@@ -111,4 +132,19 @@ pub fn get_model(
     Ok(serde_json::json!({
         "status": "client_placeholder"
     }))
+}
+
+pub fn get_models_list() -> Vec<serde_json::Value> {
+    let models = load_models_from_json("api_models.json");
+    models.into_iter().map(|m| {
+        serde_json::json!({
+            "display_name": m.display_name,
+            "model_name": m.model_name,
+            "provider": m.provider.value()
+        })
+    }).collect()
+}
+
+pub fn get_ollama_models() -> Vec<LLMModel> {
+    load_models_from_json("ollama_models.json")
 }

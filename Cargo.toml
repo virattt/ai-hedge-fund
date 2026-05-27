@@ -15,6 +15,11 @@ dotenvy = "0.15"
 anyhow = "1.0"
 async-trait = "0.1"
 futures = "0.3"
+axum = { version = "0.7", features = ["macros"] }
+tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "sqlite", "json", "chrono"] }
+tokio-stream = "0.1"
+futures-util = "0.3"
 
 
 [lib]
