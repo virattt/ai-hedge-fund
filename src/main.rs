@@ -2,11 +2,11 @@
 //! Main entry point for the AI Hedge Fund trading simulator.
 //! Consolidates analyst recommendations, performs risk management, and outputs final portfolio decisions.
 
-use anyhow::Result;
 use ai_hedge_fund::cli::input::resolve_data_provider;
 use ai_hedge_fund::data::provider::configure_provider;
 use ai_hedge_fund::utils::llm::{log_resolved_llm_config, resolve_llm_config};
-use ai_hedge_fund::workflow::run_hedge_fund;
+use ai_hedge_fund::workflow::{run_hedge_fund, HedgeFundOptions, HedgeFundRunRequest};
+use anyhow::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -25,25 +25,26 @@ async fn main() -> Result<()> {
     log_resolved_llm_config(&llm);
 
     let tickers = vec!["AAPL".to_string(), "MSFT".to_string()];
-    let start_date = "2026-01-01";
     let end_date = "2026-01-05";
-    
+
     let portfolio = serde_json::json!({
         "cash": 100000.0,
         "positions": {}
     });
 
-    let result = run_hedge_fund(
+    let result = run_hedge_fund(HedgeFundRunRequest {
         tickers,
-        start_date,
         end_date,
         portfolio,
-        true,
-        vec!["warren_buffett".to_string(), "ben_graham".to_string()],
-        &llm.model_name,
-        llm.model_provider.value(),
-        Some(data_provider),
-    ).await?;
+        options: HedgeFundOptions {
+            show_reasoning: true,
+            selected_analysts: vec!["warren_buffett".to_string(), "ben_graham".to_string()],
+            model_name: &llm.model_name,
+            model_provider: llm.model_provider.value(),
+            data_provider: Some(data_provider),
+        },
+    })
+    .await?;
 
     println!("Workflow result: {:?}", result);
     Ok(())

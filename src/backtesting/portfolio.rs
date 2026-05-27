@@ -52,7 +52,7 @@ impl Portfolio {
         if quantity == 0 || price <= 0.0 {
             return 0;
         }
-        let pos = self.positions.entry(ticker.to_string()).or_insert_with(PositionDetail::default);
+        let pos = self.positions.entry(ticker.to_string()).or_default();
         let cost = quantity as f64 * price;
         if cost <= self.cash {
             let old_shares = pos.long;
@@ -89,11 +89,15 @@ impl Portfolio {
         if quantity == 0 || price <= 0.0 {
             return 0;
         }
-        let pos = self.positions.entry(ticker.to_string()).or_insert_with(PositionDetail::default);
-        let gains = self.realized_gains.entry(ticker.to_string()).or_insert_with(RealizedGains::default);
+        let pos = self.positions.entry(ticker.to_string()).or_default();
+        let gains = self.realized_gains.entry(ticker.to_string()).or_default();
         let sell_qty = std::cmp::min(quantity as i64, pos.long) as u32;
         if sell_qty > 0 {
-            let avg_cost = if pos.long > 0 { pos.long_cost_basis } else { 0.0 };
+            let avg_cost = if pos.long > 0 {
+                pos.long_cost_basis
+            } else {
+                0.0
+            };
             let realized_gain = (price - avg_cost) * sell_qty as f64;
             gains.long += realized_gain;
             pos.long -= sell_qty as i64;
@@ -111,7 +115,7 @@ impl Portfolio {
             return 0;
         }
         let existing_short_proceeds = self.short_sale_proceeds();
-        let pos = self.positions.entry(ticker.to_string()).or_insert_with(PositionDetail::default);
+        let pos = self.positions.entry(ticker.to_string()).or_default();
         let proceeds = price * quantity as f64;
         let margin_ratio = self.margin_requirement;
         let margin_required = proceeds * margin_ratio;
@@ -163,12 +167,16 @@ impl Portfolio {
         if quantity == 0 || price <= 0.0 {
             return 0;
         }
-        let pos = self.positions.entry(ticker.to_string()).or_insert_with(PositionDetail::default);
-        let gains = self.realized_gains.entry(ticker.to_string()).or_insert_with(RealizedGains::default);
+        let pos = self.positions.entry(ticker.to_string()).or_default();
+        let gains = self.realized_gains.entry(ticker.to_string()).or_default();
         let cover_qty = std::cmp::min(quantity as i64, pos.short) as u32;
         if cover_qty > 0 {
             let cover_cost = cover_qty as f64 * price;
-            let avg_short_price = if pos.short > 0 { pos.short_cost_basis } else { 0.0 };
+            let avg_short_price = if pos.short > 0 {
+                pos.short_cost_basis
+            } else {
+                0.0
+            };
             let realized_gain = (avg_short_price - price) * cover_qty as f64;
             let portion = if pos.short > 0 {
                 cover_qty as f64 / pos.short as f64

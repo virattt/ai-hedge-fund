@@ -2,21 +2,21 @@
 //! Sibling to src/backtesting/engine.py
 //! Main backtesting engine driver coordinating simulation loops, portfolio changes, and performance updates.
 
-use anyhow::{Result, Context};
-use chrono::{NaiveDate, Datelike};
+use anyhow::{Context, Result};
+use chrono::{Datelike, NaiveDate};
 use std::collections::HashMap;
 
-use crate::backtesting::portfolio::Portfolio;
-use crate::backtesting::trader::TradeExecutor;
-use crate::backtesting::metrics::PerformanceMetricsCalculator;
-use crate::backtesting::types::{PerformanceMetrics, PortfolioValuePoint};
+use crate::agents::portfolio_manager::PortfolioDecision;
 use crate::backtesting::benchmarks::BenchmarkCalculator;
 use crate::backtesting::controller::AgentController;
-use crate::backtesting::output::OutputBuilder;
-use crate::utils::display::BacktestRow;
-use crate::agents::portfolio_manager::PortfolioDecision;
+use crate::backtesting::metrics::PerformanceMetricsCalculator;
+use crate::backtesting::output::{DayRowInput, OutputBuilder};
+use crate::backtesting::portfolio::Portfolio;
+use crate::backtesting::trader::TradeExecutor;
+use crate::backtesting::types::{PerformanceMetrics, PortfolioValuePoint};
+use crate::data::provider::{active_provider, configure_provider, DataProvider};
 use crate::tools::api::get_prices;
-use crate::data::provider::{configure_provider, active_provider, DataProvider};
+use crate::utils::display::BacktestRow;
 
 /// Driver engine for executing historical backtests.
 #[derive(Debug)]
@@ -66,7 +66,11 @@ impl BacktestEngine {
             .context("Failed to parse end_date")?;
 
         // 2. Instantiate portfolio, executor, and metrics calculator, and output builder, and benchmark calculator
-        let mut portfolio = Portfolio::new(self.tickers.clone(), self.initial_capital, self.initial_margin_requirement);
+        let mut portfolio = Portfolio::new(
+            self.tickers.clone(),
+            self.initial_capital,
+            self.initial_margin_requirement,
+        );
         let executor = TradeExecutor::new();
         let calculator = PerformanceMetricsCalculator::new();
         let output_builder = OutputBuilder::new(Some(self.initial_capital));
@@ -79,7 +83,10 @@ impl BacktestEngine {
 
         let mut current_dt = start_dt;
 
-        println!("Starting daily simulation from {} to {}...", self.start_date, self.end_date);
+        println!(
+            "Starting daily simulation from {} to {}...",
+            self.start_date, self.end_date
+        );
 
         // Daily Loop
         while current_dt <= end_dt {
@@ -93,14 +100,19 @@ impl BacktestEngine {
             let current_date_str = current_dt.format("%Y-%m-%d").to_string();
             let previous_dt = current_dt - chrono::Duration::days(1);
             let previous_date_str = previous_dt.format("%Y-%m-%d").to_string();
-            let lookback_start = (current_dt - chrono::Duration::days(30)).format("%Y-%m-%d").to_string();
-
             // Fetch daily closing prices
             let mut daily_prices = HashMap::new();
             let mut missing_price = false;
 
             for ticker in &self.tickers {
-                match get_prices(ticker, &previous_date_str, &current_date_str, api_key.as_deref()).await {
+                match get_prices(
+                    ticker,
+                    &previous_date_str,
+                    &current_date_str,
+                    api_key.as_deref(),
+                )
+                .await
+                {
                     Ok(prices) => {
                         if let Some(p) = prices.last() {
                             daily_prices.insert(ticker.clone(), p.close);
@@ -110,7 +122,10 @@ impl BacktestEngine {
                         }
                     }
                     Err(e) => {
-                        println!("Warning: API call failed for {} on {}: {}, skipping day.", ticker, current_date_str, e);
+                        println!(
+                            "Warning: API call failed for {} on {}: {}, skipping day.",
+                            ticker, current_date_str, e
+                        );
                         missing_price = true;
                     }
                 }
@@ -123,20 +138,24 @@ impl BacktestEngine {
             }
 
             // Invoke standard agents sequentially via the controller
-            let agent_output = controller.run_agent(
-                self.tickers.clone(),
-                &lookback_start,
-                &current_date_str,
-                &portfolio,
-                &self.model_name,
-                &self.model_provider,
-                self.selected_analysts.clone(),
-                self.data_provider,
-            ).await?;
+            let agent_output = controller
+                .run_agent(crate::backtesting::controller::AgentRunRequest {
+                    tickers: self.tickers.clone(),
+                    end_date: &current_date_str,
+                    portfolio: &portfolio,
+                    model_name: &self.model_name,
+                    model_provider: &self.model_provider,
+                    selected_analysts: self.selected_analysts.clone(),
+                    data_provider: self.data_provider,
+                })
+                .await?;
 
-            let decisions_json = agent_output.decisions.as_ref()
+            let decisions_json = agent_output
+                .decisions
+                .as_ref()
                 .context("Missing decisions in agent state")?;
-            let decisions: HashMap<String, PortfolioDecision> = serde_json::from_value(decisions_json.clone())?;
+            let decisions: HashMap<String, PortfolioDecision> =
+                serde_json::from_value(decisions_json.clone())?;
 
             // Execute Trades
             let mut executed_trades = HashMap::new();
@@ -145,15 +164,23 @@ impl BacktestEngine {
                 if let Some(dec) = decisions.get(ticker) {
                     if dec.action != "hold" && dec.quantity > 0 {
                         let price = *daily_prices.get(ticker).unwrap();
-                        executed_qty = executor.execute_trade(ticker, &dec.action, dec.quantity, price, &mut portfolio);
+                        executed_qty = executor.execute_trade(
+                            ticker,
+                            &dec.action,
+                            dec.quantity,
+                            price,
+                            &mut portfolio,
+                        );
                     }
                 }
                 executed_trades.insert(ticker.clone(), executed_qty);
             }
 
             // Calculate Portfolio Value (NVI) and Exposures
-            let total_value = crate::backtesting::valuation::calculate_portfolio_value(&portfolio, &daily_prices);
-            let exposures = crate::backtesting::valuation::compute_exposures(&portfolio, &daily_prices);
+            let total_value =
+                crate::backtesting::valuation::calculate_portfolio_value(&portfolio, &daily_prices);
+            let exposures =
+                crate::backtesting::valuation::compute_exposures(&portfolio, &daily_prices);
 
             let point = PortfolioValuePoint {
                 date: current_dt,
@@ -173,20 +200,22 @@ impl BacktestEngine {
             }
 
             // Fetch S&P 500 comparison return
-            let benchmark_return = benchmark.get_return_pct("SPY", &self.start_date, &current_date_str).await;
+            let benchmark_return = benchmark
+                .get_return_pct("SPY", &self.start_date, &current_date_str)
+                .await;
 
             // Build daily rows and prepend
-            let rows = output_builder.build_day_rows(
-                &current_date_str,
-                &self.tickers,
-                &agent_output,
-                &executed_trades,
-                &daily_prices,
-                &portfolio,
-                &performance_metrics,
+            let rows = output_builder.build_day_rows(DayRowInput {
+                date_str: &current_date_str,
+                tickers: &self.tickers,
+                agent_output: &agent_output,
+                executed_trades: &executed_trades,
+                current_prices: &daily_prices,
+                portfolio: &portfolio,
+                performance_metrics: &performance_metrics,
                 total_value,
-                benchmark_return,
-            );
+                benchmark_return_pct: benchmark_return,
+            });
 
             let mut new_table_rows = rows;
             new_table_rows.extend(table_rows);

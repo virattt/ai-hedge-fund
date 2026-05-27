@@ -2,49 +2,66 @@
 //! Sibling to src/agents/nassim_taleb.py
 //! Analyzes stocks using Nassim Nicholas Taleb's antifragility, tail-risk, and convexity principles.
 
-use anyhow::{Result, Context};
-use chrono::Duration;
+use crate::data::models::{CompanyNews, FinancialMetrics, InsiderTrade, LineItem, Price};
 use crate::graph::state::AgentState;
-use crate::tools::api::{get_financial_metrics, get_market_cap, search_line_items, get_insider_trades, get_company_news, get_prices};
-use crate::data::models::{FinancialMetrics, LineItem, InsiderTrade, CompanyNews, Price};
+use crate::tools::api::{
+    get_company_news, get_financial_metrics, get_insider_trades, get_market_cap, get_prices,
+    search_line_items,
+};
 use crate::utils::llm::call_llm;
+use anyhow::{Context, Result};
+use chrono::Duration;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct NassimTalebSignal {
-    pub signal: String,      // "bullish" | "bearish" | "neutral"
-    pub confidence: u32,     // 0-100
+    pub signal: String,  // "bullish" | "bearish" | "neutral"
+    pub confidence: u32, // 0-100
     pub reasoning: String,
 }
 
 pub async fn nassim_taleb_agent(state: &mut AgentState, agent_id: &str) -> Result<()> {
     println!("Running Nassim Taleb Agent: {}", agent_id);
 
-    let start_date_str = state.data.get("start_date")
+    let _start_date_str = state
+        .data
+        .get("start_date")
         .and_then(|v| v.as_str())
         .context("Missing start_date in nassim_taleb_agent")?;
-    
-    let end_date_str = state.data.get("end_date")
+
+    let end_date_str = state
+        .data
+        .get("end_date")
         .and_then(|v| v.as_str())
         .context("Missing end_date in nassim_taleb_agent")?;
-    
-    let tickers_json = state.data.get("tickers")
+
+    let tickers_json = state
+        .data
+        .get("tickers")
         .context("Missing tickers in nassim_taleb_agent")?;
     let tickers: Vec<String> = serde_json::from_value(tickers_json.clone())?;
 
-    let api_key = state.metadata.get("FINANCIAL_DATASETS_API_KEY")
+    let api_key = state
+        .metadata
+        .get("FINANCIAL_DATASETS_API_KEY")
         .and_then(|v| v.as_str());
 
     // Lookback one year for price, insider trades, and news
     let end_dt = chrono::NaiveDate::parse_from_str(end_date_str, "%Y-%m-%d")
         .context("Failed to parse end_date in nassim_taleb_agent")?;
-    let one_year_ago = (end_dt - Duration::days(365)).format("%Y-%m-%d").to_string();
+    let one_year_ago = (end_dt - Duration::days(365))
+        .format("%Y-%m-%d")
+        .to_string();
 
     let mut taleb_analysis = serde_json::Map::new();
 
     for ticker in &tickers {
         // Fetch raw data
-        let prices = get_prices(ticker, &one_year_ago, end_date_str, api_key).await.unwrap_or_default();
-        let metrics = get_financial_metrics(ticker, end_date_str, "ttm", 10, api_key).await.unwrap_or_default();
+        let prices = get_prices(ticker, &one_year_ago, end_date_str, api_key)
+            .await
+            .unwrap_or_default();
+        let metrics = get_financial_metrics(ticker, end_date_str, "ttm", 10, api_key)
+            .await
+            .unwrap_or_default();
         let line_items = search_line_items(
             ticker,
             vec![
@@ -64,11 +81,21 @@ pub async fn nassim_taleb_agent(state: &mut AgentState, agent_id: &str) -> Resul
             "ttm",
             5,
             api_key,
-        ).await.unwrap_or_default();
+        )
+        .await
+        .unwrap_or_default();
 
-        let insider_trades = get_insider_trades(ticker, end_date_str, Some(&one_year_ago), 100, api_key).await.unwrap_or_default();
-        let news = get_company_news(ticker, end_date_str, Some(&one_year_ago), 100, api_key).await.unwrap_or_default();
-        let market_cap = get_market_cap(ticker, end_date_str, api_key).await.unwrap_or(None).unwrap_or(0.0);
+        let insider_trades =
+            get_insider_trades(ticker, end_date_str, Some(&one_year_ago), 100, api_key)
+                .await
+                .unwrap_or_default();
+        let news = get_company_news(ticker, end_date_str, Some(&one_year_ago), 100, api_key)
+            .await
+            .unwrap_or_default();
+        let market_cap = get_market_cap(ticker, end_date_str, api_key)
+            .await
+            .unwrap_or(None)
+            .unwrap_or(0.0);
 
         // Sub-analyses
         let tail_risk = analyze_tail_risk(&prices);
@@ -120,10 +147,15 @@ pub async fn nassim_taleb_agent(state: &mut AgentState, agent_id: &str) -> Resul
         );
     }
 
-    let analyst_signals = state.data.entry("analyst_signals".to_string())
+    let analyst_signals = state
+        .data
+        .entry("analyst_signals".to_string())
         .or_insert_with(|| serde_json::json!({}));
     if let Some(obj) = analyst_signals.as_object_mut() {
-        obj.insert(agent_id.to_string(), serde_json::Value::Object(taleb_analysis));
+        obj.insert(
+            agent_id.to_string(),
+            serde_json::Value::Object(taleb_analysis),
+        );
     }
 
     Ok(())
@@ -149,12 +181,20 @@ fn compute_returns(prices: &[Price]) -> Vec<f64> {
 pub fn analyze_tail_risk(prices: &[Price]) -> TalebSubResult {
     let max_score = 8;
     if prices.len() < 20 {
-        return TalebSubResult { score: 0, max_score, details: "Insufficient price data for tail risk analysis".to_string() };
+        return TalebSubResult {
+            score: 0,
+            max_score,
+            details: "Insufficient price data for tail risk analysis".to_string(),
+        };
     }
 
     let returns = compute_returns(prices);
     if returns.is_empty() {
-        return TalebSubResult { score: 0, max_score, details: "Insufficient price data for tail risk analysis".to_string() };
+        return TalebSubResult {
+            score: 0,
+            max_score,
+            details: "Insufficient price data for tail risk analysis".to_string(),
+        };
     }
 
     let mut score = 0;
@@ -210,7 +250,11 @@ pub fn analyze_tail_risk(prices: &[Price]) -> TalebSubResult {
 
         let right_tail = pos_returns[(pos_returns.len() as f64 * 0.95) as usize];
         let left_tail = neg_returns[(neg_returns.len() as f64 * 0.05) as usize].abs();
-        let tail_ratio = if left_tail > 0.0 { right_tail / left_tail } else { 1.0 };
+        let tail_ratio = if left_tail > 0.0 {
+            right_tail / left_tail
+        } else {
+            1.0
+        };
 
         if tail_ratio > 1.2 {
             score += 2;
@@ -219,7 +263,10 @@ pub fn analyze_tail_risk(prices: &[Price]) -> TalebSubResult {
             score += 1;
             details.push(format!("Balanced tails (tail ratio {:.2})", tail_ratio));
         } else {
-            details.push(format!("Asymmetric downside (tail ratio {:.2})", tail_ratio));
+            details.push(format!(
+                "Asymmetric downside (tail ratio {:.2})",
+                tail_ratio
+            ));
         }
     }
 
@@ -245,19 +292,34 @@ pub fn analyze_tail_risk(prices: &[Price]) -> TalebSubResult {
         score += 1;
         details.push(format!("Moderate drawdown ({:.1}%)", max_dd * 100.0));
     } else {
-        details.push(format!("Severe drawdown ({:.1}%) - fragile", max_dd * 100.0));
+        details.push(format!(
+            "Severe drawdown ({:.1}%) - fragile",
+            max_dd * 100.0
+        ));
     }
 
-    TalebSubResult { score, max_score, details: details.join("; ") }
+    TalebSubResult {
+        score,
+        max_score,
+        details: details.join("; "),
+    }
 }
 
-pub fn analyze_antifragility(metrics: &[FinancialMetrics], line_items: &[LineItem], market_cap: f64) -> TalebSubResult {
+pub fn analyze_antifragility(
+    metrics: &[FinancialMetrics],
+    line_items: &[LineItem],
+    market_cap: f64,
+) -> TalebSubResult {
     let max_score = 10;
     let mut score = 0;
     let mut details = Vec::new();
 
     if metrics.is_empty() && line_items.is_empty() {
-        return TalebSubResult { score: 0, max_score, details: "Insufficient data for antifragility analysis".to_string() };
+        return TalebSubResult {
+            score: 0,
+            max_score,
+            details: "Insufficient data for antifragility analysis".to_string(),
+        };
     }
 
     let latest_metrics = metrics.first();
@@ -272,7 +334,11 @@ pub fn analyze_antifragility(metrics: &[FinancialMetrics], line_items: &[LineIte
 
         if net_cash > 0.0 && market_cap > 0.0 && cash > 0.20 * market_cap {
             score += 3;
-            details.push(format!("War chest: net cash ${:.0}, cash is {:.0}% of market cap", net_cash, (cash / market_cap) * 100.0));
+            details.push(format!(
+                "War chest: net cash ${:.0}, cash is {:.0}% of market cap",
+                net_cash,
+                (cash / market_cap) * 100.0
+            ));
         } else if net_cash > 0.0 {
             score += 2;
             details.push(format!("Net cash positive (${:.0})", net_cash));
@@ -310,32 +376,62 @@ pub fn analyze_antifragility(metrics: &[FinancialMetrics], line_items: &[LineIte
 
         if cv < 0.15 && mean > 0.15 {
             score += 3;
-            details.push(format!("Stable high margins (avg {:.1}%, CV {:.2}) - antifragile pricing power", mean * 100.0, cv));
+            details.push(format!(
+                "Stable high margins (avg {:.1}%, CV {:.2}) - antifragile pricing power",
+                mean * 100.0,
+                cv
+            ));
         } else if cv < 0.30 && mean > 0.10 {
             score += 2;
-            details.push(format!("Reasonable margin stability (avg {:.1}%, CV {:.2})", mean * 100.0, cv));
+            details.push(format!(
+                "Reasonable margin stability (avg {:.1}%, CV {:.2})",
+                mean * 100.0,
+                cv
+            ));
         } else if cv < 0.30 {
             score += 1;
-            details.push(format!("Margins somewhat stable (CV {:.2}) but low (avg {:.1}%)", cv, mean * 100.0));
+            details.push(format!(
+                "Margins somewhat stable (CV {:.2}) but low (avg {:.1}%)",
+                cv,
+                mean * 100.0
+            ));
         } else {
-            details.push(format!("Volatile margins (CV {:.2}) - fragile pricing power", cv));
+            details.push(format!(
+                "Volatile margins (CV {:.2}) - fragile pricing power",
+                cv
+            ));
         }
     }
 
     // 4. FCF consistency
-    let fcf_values: Vec<f64> = line_items.iter().filter_map(|li| li.free_cash_flow).collect();
+    let fcf_values: Vec<f64> = line_items
+        .iter()
+        .filter_map(|li| li.free_cash_flow)
+        .collect();
     if !fcf_values.is_empty() {
         let positive_count = fcf_values.iter().filter(|&&v| v > 0.0).count();
         if positive_count == fcf_values.len() {
             score += 2;
-            details.push(format!("Consistent FCF generation ({}/{} periods positive)", positive_count, fcf_values.len()));
+            details.push(format!(
+                "Consistent FCF generation ({}/{} periods positive)",
+                positive_count,
+                fcf_values.len()
+            ));
         } else if positive_count > fcf_values.len() / 2 {
             score += 1;
-            details.push(format!("Majority positive FCF ({}/{} periods)", positive_count, fcf_values.len()));
+            details.push(format!(
+                "Majority positive FCF ({}/{} periods)",
+                positive_count,
+                fcf_values.len()
+            ));
         }
     }
 
-    TalebSubResult { score, max_score, details: details.join("; ") }
+    TalebSubResult {
+        score,
+        max_score,
+        details: details.join("; "),
+    }
 }
 
 pub fn analyze_convexity(
@@ -349,7 +445,11 @@ pub fn analyze_convexity(
     let mut details = Vec::new();
 
     if metrics.is_empty() && line_items.is_empty() && prices.is_empty() {
-        return TalebSubResult { score: 0, max_score, details: "Insufficient data for convexity analysis".to_string() };
+        return TalebSubResult {
+            score: 0,
+            max_score,
+            details: "Insufficient data for convexity analysis".to_string(),
+        };
     }
 
     let latest_item = line_items.first();
@@ -361,10 +461,16 @@ pub fn analyze_convexity(
                 let rd_ratio = rd.abs() / rev;
                 if rd_ratio > 0.15 {
                     score += 3;
-                    details.push(format!("Significant embedded optionality via R&D ({:.1}% of revenue)", rd_ratio * 100.0));
+                    details.push(format!(
+                        "Significant embedded optionality via R&D ({:.1}% of revenue)",
+                        rd_ratio * 100.0
+                    ));
                 } else if rd_ratio > 0.08 {
                     score += 2;
-                    details.push(format!("Meaningful R&D investment ({:.1}% of revenue)", rd_ratio * 100.0));
+                    details.push(format!(
+                        "Meaningful R&D investment ({:.1}% of revenue)",
+                        rd_ratio * 100.0
+                    ));
                 } else if rd_ratio > 0.03 {
                     score += 1;
                     details.push(format!("Modest R&D ({:.1}% of revenue)", rd_ratio * 100.0));
@@ -381,14 +487,24 @@ pub fn analyze_convexity(
         if upside.len() > 10 && downside.len() > 10 {
             let avg_up = upside.iter().sum::<f64>() / upside.len() as f64;
             let avg_down = (downside.iter().sum::<f64>() / downside.len() as f64).abs();
-            let up_down_ratio = if avg_down > 0.0 { avg_up / avg_down } else { 1.0 };
+            let up_down_ratio = if avg_down > 0.0 {
+                avg_up / avg_down
+            } else {
+                1.0
+            };
 
             if up_down_ratio > 1.3 {
                 score += 2;
-                details.push(format!("Convex return profile (up/down ratio {:.2})", up_down_ratio));
+                details.push(format!(
+                    "Convex return profile (up/down ratio {:.2})",
+                    up_down_ratio
+                ));
             } else if up_down_ratio > 1.0 {
                 score += 1;
-                details.push(format!("Slight positive asymmetry (up/down ratio {:.2})", up_down_ratio));
+                details.push(format!(
+                    "Slight positive asymmetry (up/down ratio {:.2})",
+                    up_down_ratio
+                ));
             }
         }
     }
@@ -400,13 +516,22 @@ pub fn analyze_convexity(
                 let cash_ratio = cash / market_cap;
                 if cash_ratio > 0.30 {
                     score += 3;
-                    details.push(format!("Cash is a call option on future opportunities ({:.0}% of market cap)", cash_ratio * 100.0));
+                    details.push(format!(
+                        "Cash is a call option on future opportunities ({:.0}% of market cap)",
+                        cash_ratio * 100.0
+                    ));
                 } else if cash_ratio > 0.15 {
                     score += 2;
-                    details.push(format!("Strong cash position ({:.0}% of market cap)", cash_ratio * 100.0));
+                    details.push(format!(
+                        "Strong cash position ({:.0}% of market cap)",
+                        cash_ratio * 100.0
+                    ));
                 } else if cash_ratio > 0.05 {
                     score += 1;
-                    details.push(format!("Moderate cash buffer ({:.0}% of market cap)", cash_ratio * 100.0));
+                    details.push(format!(
+                        "Moderate cash buffer ({:.0}% of market cap)",
+                        cash_ratio * 100.0
+                    ));
                 }
             }
         }
@@ -429,14 +554,21 @@ pub fn analyze_convexity(
     if let Some(fy) = fcf_yield {
         if fy > 0.10 {
             score += 2;
-            details.push(format!("High FCF yield ({:.1}%) provides margin for convex bet", fy * 100.0));
+            details.push(format!(
+                "High FCF yield ({:.1}%) provides margin for convex bet",
+                fy * 100.0
+            ));
         } else if fy > 0.05 {
             score += 1;
             details.push(format!("Decent FCF yield ({:.1}%)", fy * 100.0));
         }
     }
 
-    TalebSubResult { score, max_score, details: details.join("; ") }
+    TalebSubResult {
+        score,
+        max_score,
+        details: details.join("; "),
+    }
 }
 
 pub fn analyze_fragility(metrics: &[FinancialMetrics], _line_items: &[LineItem]) -> TalebSubResult {
@@ -445,7 +577,11 @@ pub fn analyze_fragility(metrics: &[FinancialMetrics], _line_items: &[LineItem])
     let mut details = Vec::new();
 
     if metrics.is_empty() {
-        return TalebSubResult { score: 0, max_score, details: "Insufficient data for fragility analysis".to_string() };
+        return TalebSubResult {
+            score: 0,
+            max_score,
+            details: "Insufficient data for fragility analysis".to_string(),
+        };
     }
 
     let latest = &metrics[0];
@@ -471,17 +607,26 @@ pub fn analyze_fragility(metrics: &[FinancialMetrics], _line_items: &[LineItem])
         let coverage = if de != 0.0 { ebit / de.abs() } else { 999.0 };
         if coverage > 10.0 {
             score += 2;
-            details.push(format!("Interest coverage {:.1}x - debt is irrelevant", coverage));
+            details.push(format!(
+                "Interest coverage {:.1}x - debt is irrelevant",
+                coverage
+            ));
         } else if coverage > 5.0 {
             score += 1;
             details.push(format!("Comfortable interest coverage ({:.1}x)", coverage));
         } else {
-            details.push(format!("Low interest coverage ({:.1}x) - fragile", coverage));
+            details.push(format!(
+                "Low interest coverage ({:.1}x) - fragile",
+                coverage
+            ));
         }
     }
 
     // 3. Earnings volatility (std across periods)
-    let eg_vals: Vec<f64> = metrics.iter().filter_map(|m| m.earnings_per_share_growth).collect();
+    let eg_vals: Vec<f64> = metrics
+        .iter()
+        .filter_map(|m| m.earnings_per_share_growth)
+        .collect();
     if eg_vals.len() >= 3 {
         let n = eg_vals.len() as f64;
         let mean = eg_vals.iter().sum::<f64>() / n;
@@ -493,9 +638,15 @@ pub fn analyze_fragility(metrics: &[FinancialMetrics], _line_items: &[LineItem])
             details.push(format!("Stable earnings (growth std {:.2}) - robust", std));
         } else if std < 0.50 {
             score += 1;
-            details.push(format!("Moderate earnings volatility (growth std {:.2})", std));
+            details.push(format!(
+                "Moderate earnings volatility (growth std {:.2})",
+                std
+            ));
         } else {
-            details.push(format!("Highly volatile earnings (growth std {:.2}) - fragile", std));
+            details.push(format!(
+                "Highly volatile earnings (growth std {:.2}) - fragile",
+                std
+            ));
         }
     }
 
@@ -507,7 +658,11 @@ pub fn analyze_fragility(metrics: &[FinancialMetrics], _line_items: &[LineItem])
         }
     }
 
-    TalebSubResult { score, max_score, details: details.join("; ") }
+    TalebSubResult {
+        score,
+        max_score,
+        details: details.join("; "),
+    }
 }
 
 pub fn analyze_skin_in_game(insider_trades: &[InsiderTrade]) -> TalebSubResult {
@@ -516,7 +671,11 @@ pub fn analyze_skin_in_game(insider_trades: &[InsiderTrade]) -> TalebSubResult {
     let mut details = Vec::new();
 
     if insider_trades.is_empty() {
-        return TalebSubResult { score: 1, max_score, details: "No insider trade data - neutral assumption".to_string() };
+        return TalebSubResult {
+            score: 1,
+            max_score,
+            details: "No insider trade data - neutral assumption".to_string(),
+        };
     }
 
     let mut shares_bought = 0.0;
@@ -537,30 +696,51 @@ pub fn analyze_skin_in_game(insider_trades: &[InsiderTrade]) -> TalebSubResult {
         let buy_sell_ratio = net / shares_sold.max(1.0);
         if buy_sell_ratio > 2.0 {
             score = 4;
-            details.push(format!("Strong skin in the game - net insider buying {:.0} shares (ratio {:.1}x)", net, buy_sell_ratio));
+            details.push(format!(
+                "Strong skin in the game - net insider buying {:.0} shares (ratio {:.1}x)",
+                net, buy_sell_ratio
+            ));
         } else if buy_sell_ratio > 0.5 {
             score = 3;
-            details.push(format!("Moderate insider conviction - net buying {:.0} shares", net));
+            details.push(format!(
+                "Moderate insider conviction - net buying {:.0} shares",
+                net
+            ));
         } else {
             score = 2;
             details.push(format!("Net insider buying of {:.0} shares", net));
         }
     } else {
-        details.push(format!("Insiders selling - no skin in the game (net {:.0} shares)", net));
+        details.push(format!(
+            "Insiders selling - no skin in the game (net {:.0} shares)",
+            net
+        ));
     }
 
-    TalebSubResult { score, max_score, details: details.join("; ") }
+    TalebSubResult {
+        score,
+        max_score,
+        details: details.join("; "),
+    }
 }
 
 pub fn analyze_volatility_regime(prices: &[Price]) -> TalebSubResult {
     let max_score = 6;
     if prices.len() < 30 {
-        return TalebSubResult { score: 0, max_score, details: "Insufficient price data for volatility analysis".to_string() };
+        return TalebSubResult {
+            score: 0,
+            max_score,
+            details: "Insufficient price data for volatility analysis".to_string(),
+        };
     }
 
     let returns = compute_returns(prices);
     if returns.len() < 21 {
-        return TalebSubResult { score: 0, max_score, details: "Insufficient data for volatility analysis".to_string() };
+        return TalebSubResult {
+            score: 0,
+            max_score,
+            details: "Insufficient data for volatility analysis".to_string(),
+        };
     }
 
     let mut score = 0;
@@ -578,27 +758,50 @@ pub fn analyze_volatility_regime(prices: &[Price]) -> TalebSubResult {
     }
 
     if hist_vols.is_empty() {
-        return TalebSubResult { score: 0, max_score, details: "Insufficient history for volatility regime".to_string() };
+        return TalebSubResult {
+            score: 0,
+            max_score,
+            details: "Insufficient history for volatility regime".to_string(),
+        };
     }
 
     let current_vol = hist_vols[hist_vols.len() - 1];
     let avg_vol: f64 = hist_vols.iter().sum::<f64>() / hist_vols.len() as f64;
-    let vol_regime = if avg_vol > 0.0 { current_vol / avg_vol } else { 1.0 };
+    let vol_regime = if avg_vol > 0.0 {
+        current_vol / avg_vol
+    } else {
+        1.0
+    };
 
     if vol_regime < 0.7 {
-        details.push(format!("Dangerously low vol (regime {:.2}) - turkey problem", vol_regime));
+        details.push(format!(
+            "Dangerously low vol (regime {:.2}) - turkey problem",
+            vol_regime
+        ));
     } else if vol_regime < 0.9 {
         score += 1;
-        details.push(format!("Below-average vol (regime {:.2}) - complacency", vol_regime));
+        details.push(format!(
+            "Below-average vol (regime {:.2}) - complacency",
+            vol_regime
+        ));
     } else if vol_regime <= 1.3 {
         score += 3;
-        details.push(format!("Normal vol regime ({:.2}) - fair pricing", vol_regime));
+        details.push(format!(
+            "Normal vol regime ({:.2}) - fair pricing",
+            vol_regime
+        ));
     } else if vol_regime <= 2.0 {
         score += 4;
-        details.push(format!("Elevated vol (regime {:.2}) - opportunity for antifragile", vol_regime));
+        details.push(format!(
+            "Elevated vol (regime {:.2}) - opportunity for antifragile",
+            vol_regime
+        ));
     } else {
         score += 2;
-        details.push(format!("Extreme vol (regime {:.2}) - crisis mode", vol_regime));
+        details.push(format!(
+            "Extreme vol (regime {:.2}) - crisis mode",
+            vol_regime
+        ));
     }
 
     // Vol of Vol
@@ -613,14 +816,21 @@ pub fn analyze_volatility_regime(prices: &[Price]) -> TalebSubResult {
         let median_vov = 0.02; // Static proxy
         if current_vov > 2.0 * median_vov {
             score += 2;
-            details.push(format!("Highly unstable vol (vol-of-vol {:.4} vs proxy)", current_vov));
+            details.push(format!(
+                "Highly unstable vol (vol-of-vol {:.4} vs proxy)",
+                current_vov
+            ));
         } else if current_vov > median_vov {
             score += 1;
             details.push(format!("Elevated vol-of-vol ({:.4})", current_vov));
         }
     }
 
-    TalebSubResult { score, max_score, details: details.join("; ") }
+    TalebSubResult {
+        score,
+        max_score,
+        details: details.join("; "),
+    }
 }
 
 pub fn analyze_black_swan_sentinel(news: &[CompanyNews], prices: &[Price]) -> TalebSubResult {
@@ -630,8 +840,14 @@ pub fn analyze_black_swan_sentinel(news: &[CompanyNews], prices: &[Price]) -> Ta
 
     let mut neg_ratio = 0.0;
     if !news.is_empty() {
-        let neg_count = news.iter()
-            .filter(|n| n.sentiment.as_ref().map(|s| s.to_lowercase() == "negative" || s.to_lowercase() == "bearish").unwrap_or(false))
+        let neg_count = news
+            .iter()
+            .filter(|n| {
+                n.sentiment
+                    .as_ref()
+                    .map(|s| s.to_lowercase() == "negative" || s.to_lowercase() == "bearish")
+                    .unwrap_or(false)
+            })
             .count();
         neg_ratio = neg_count as f64 / news.len() as f64;
     }
@@ -639,7 +855,7 @@ pub fn analyze_black_swan_sentinel(news: &[CompanyNews], prices: &[Price]) -> Ta
     let mut volume_spike = 1.0;
     let mut recent_return = 0.0;
     if prices.len() >= 10 {
-        let mut volumes: Vec<f64> = prices.iter().map(|p| p.volume as f64).collect();
+        let volumes: Vec<f64> = prices.iter().map(|p| p.volume as f64).collect();
         let recent_vol = volumes[volumes.len() - 5..].iter().sum::<f64>() / 5.0;
         let avg_vol = volumes.iter().sum::<f64>() / volumes.len() as f64;
         if avg_vol > 0.0 {
@@ -653,18 +869,33 @@ pub fn analyze_black_swan_sentinel(news: &[CompanyNews], prices: &[Price]) -> Ta
 
     if neg_ratio > 0.7 && volume_spike > 2.0 {
         score = 0;
-        details.push(format!("Black swan warning - {:.0}% negative news, {:.1}x volume spike", neg_ratio * 100.0, volume_spike));
+        details.push(format!(
+            "Black swan warning - {:.0}% negative news, {:.1}x volume spike",
+            neg_ratio * 100.0,
+            volume_spike
+        ));
     } else if neg_ratio > 0.5 || volume_spike > 2.5 {
         score = 1;
-        details.push(format!("Elevated stress signals (neg news {:.0}%, volume {:.1}x)", neg_ratio * 100.0, volume_spike));
+        details.push(format!(
+            "Elevated stress signals (neg news {:.0}%, volume {:.1}x)",
+            neg_ratio * 100.0,
+            volume_spike
+        ));
     } else if neg_ratio > 0.3 && recent_return.abs() > 0.10 {
         score = 1;
-        details.push(format!("Moderate stress with price dislocation ({:.1}% move)", recent_return * 100.0));
+        details.push(format!(
+            "Moderate stress with price dislocation ({:.1}% move)",
+            recent_return * 100.0
+        ));
     } else if neg_ratio < 0.3 && volume_spike < 1.5 {
         score = 3;
         details.push("No black swan signals detected".to_string());
     } else {
-        details.push(format!("Normal conditions (neg news {:.0}%, volume {:.1}x)", neg_ratio * 100.0, volume_spike));
+        details.push(format!(
+            "Normal conditions (neg news {:.0}%, volume {:.1}x)",
+            neg_ratio * 100.0,
+            volume_spike
+        ));
     }
 
     if neg_ratio > 0.4 && volume_spike < 1.5 && score < 4 {
@@ -672,7 +903,11 @@ pub fn analyze_black_swan_sentinel(news: &[CompanyNews], prices: &[Price]) -> Ta
         details.push("Contrarian opportunity - negative sentiment without panic".to_string());
     }
 
-    TalebSubResult { score, max_score, details: details.join("; ") }
+    TalebSubResult {
+        score,
+        max_score,
+        details: details.join("; "),
+    }
 }
 
 pub async fn generate_taleb_output(
@@ -693,11 +928,5 @@ pub async fn generate_taleb_output(
         serde_json::to_string_pretty(facts)?
     );
 
-    call_llm(
-        system_prompt,
-        &user_prompt,
-        Some(agent_id),
-        Some(state),
-        3,
-    ).await
+    call_llm(system_prompt, &user_prompt, Some(agent_id), Some(state), 3).await
 }

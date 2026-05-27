@@ -70,10 +70,7 @@ mod tests {
 
     #[test]
     fn defaults_to_yahoo_without_api_key() {
-        assert_eq!(
-            DataProvider::resolve(None),
-            DataProvider::YahooFinance
-        );
+        assert_eq!(DataProvider::resolve(None), DataProvider::YahooFinance);
     }
 
     #[test]

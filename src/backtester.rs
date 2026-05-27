@@ -2,17 +2,17 @@
 //! Sibling to src/backtester.py
 //! CLI entry point for executing historical backtests on agent strategies.
 
-use anyhow::Result;
 use ai_hedge_fund::backtesting::engine::BacktestEngine;
 use ai_hedge_fund::backtesting::types::PerformanceMetrics;
 use ai_hedge_fund::cli::input::resolve_data_provider;
 use ai_hedge_fund::data::provider::configure_provider;
 use ai_hedge_fund::utils::llm::{log_resolved_llm_config, resolve_llm_config};
+use anyhow::Result;
 
 /// Runs the backtest, handling potential runtime errors or interruptions.
 pub async fn run_backtest(backtester: &mut BacktestEngine) -> Result<Option<PerformanceMetrics>> {
     println!("Running historical backtest simulation...");
-    
+
     match backtester.run_backtest().await {
         Ok(metrics) => {
             println!("Backtest completed successfully!");
@@ -35,16 +35,17 @@ async fn main() -> Result<()> {
     }
 
     println!("Starting Backtesting Engine (Rust Port)...");
-    
+
     // Parse inputs using clap
     let cli = ai_hedge_fund::cli::input::parse_cli_inputs();
 
     let data_provider = resolve_data_provider(cli.data_provider.as_deref());
     configure_provider(Some(data_provider));
-    
+
     // Resolve dates
-    let (start_date, end_date) = ai_hedge_fund::cli::input::resolve_dates(cli.start_date, cli.end_date, Some(1));
-    
+    let (start_date, end_date) =
+        ai_hedge_fund::cli::input::resolve_dates(cli.start_date, cli.end_date, Some(1));
+
     // Fallback to default tickers if empty
     let tickers = if cli.tickers.is_empty() {
         vec!["AAPL".to_string(), "MSFT".to_string()]

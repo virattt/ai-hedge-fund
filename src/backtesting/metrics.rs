@@ -50,13 +50,17 @@ impl PerformanceMetricsCalculator {
         let (sharpe_ratio, sortino_ratio) = if risk_metrics_available {
             let n = daily_returns.len() as f64;
             let daily_rf = self.annual_rf_rate / self.annual_trading_days;
-            
+
             // Excess returns
             let excess: Vec<f64> = daily_returns.iter().map(|&r| r - daily_rf).collect();
             let mean_excess = excess.iter().sum::<f64>() / n;
-            
+
             // Variance and Std Dev (ddof = 1 to match Pandas)
-            let variance = excess.iter().map(|&x| (x - mean_excess).powi(2)).sum::<f64>() / (n - 1.0);
+            let variance = excess
+                .iter()
+                .map(|&x| (x - mean_excess).powi(2))
+                .sum::<f64>()
+                / (n - 1.0);
             let std_dev = variance.sqrt();
 
             let sharpe_ratio = if std_dev > 1e-12 {
@@ -66,7 +70,8 @@ impl PerformanceMetricsCalculator {
             };
 
             // Downside deviation
-            let downside_sum_sq: f64 = excess.iter()
+            let downside_sum_sq: f64 = excess
+                .iter()
                 .map(|&x| if x < 0.0 { x.powi(2) } else { 0.0 })
                 .sum();
             let downside_dev = (downside_sum_sq / n).sqrt();
@@ -88,23 +93,19 @@ impl PerformanceMetricsCalculator {
         let mut max_drawdown = 0.0;
         let mut max_drawdown_date = None;
         let mut peak = values[0].portfolio_value;
-        
+
         for point in values {
             let val = point.portfolio_value;
             if val > peak {
                 peak = val;
             }
-            let dd = if peak > 0.0 {
-                (peak - val) / peak
-            } else {
-                0.0
-            };
+            let dd = if peak > 0.0 { (peak - val) / peak } else { 0.0 };
             if dd > max_drawdown {
                 max_drawdown = dd;
                 max_drawdown_date = Some(point.date.format("%Y-%m-%d").to_string());
             }
         }
-        
+
         // Convert to percentage (as in Python, max_drawdown is percentage, e.g. -15.4%)
         let max_drawdown_pct = -max_drawdown * 100.0;
 
@@ -127,5 +128,11 @@ impl PerformanceMetricsCalculator {
             gross_exposure: Some(last_point.gross_exposure),
             net_exposure: Some(last_point.net_exposure),
         })
+    }
+}
+
+impl Default for PerformanceMetricsCalculator {
+    fn default() -> Self {
+        Self::new()
     }
 }

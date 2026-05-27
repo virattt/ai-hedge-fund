@@ -9,11 +9,13 @@ use rand::RngCore;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+#[cfg(test)]
+use std::net::TcpListener as StdTcpListener;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::OnceLock;
 #[cfg(test)]
 use std::sync::Mutex as StdMutex;
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -121,16 +123,16 @@ pub fn generate_pkce_pair() -> PkcePair {
     hasher.update(verifier.as_bytes());
     let challenge = URL_SAFE_NO_PAD.encode(hasher.finalize());
 
-    PkcePair { verifier, challenge }
+    PkcePair {
+        verifier,
+        challenge,
+    }
 }
 
 pub fn generate_oauth_state() -> String {
     let mut state_bytes = [0u8; 16];
     rand::thread_rng().fill_bytes(&mut state_bytes);
-    state_bytes
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+    state_bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 pub fn extract_jwt_claims(jwt: &str) -> (Option<String>, Option<String>) {
@@ -250,8 +252,12 @@ pub fn load_credentials_from_storage() -> Option<CodexCredentials> {
 }
 
 fn persist_credentials(creds: &CodexCredentials) -> Result<()> {
-    write_credentials_to_file(creds)
-        .with_context(|| format!("Failed to save credentials to {}", auth_file_path().display()))?;
+    write_credentials_to_file(creds).with_context(|| {
+        format!(
+            "Failed to save credentials to {}",
+            auth_file_path().display()
+        )
+    })?;
     let _ = write_credentials_to_keyring(creds);
     Ok(())
 }
@@ -282,11 +288,7 @@ pub fn is_authenticated_sync() -> bool {
 
 pub async fn is_authenticated() -> bool {
     ensure_credentials_loaded().await;
-    auth_state()
-        .credentials
-        .lock()
-        .await
-        .is_some()
+    auth_state().credentials.lock().await.is_some()
 }
 
 pub async fn status() -> ChatGptSubscriptionStatus {
@@ -362,20 +364,24 @@ fn open_auth_url(url: &str) -> Result<()> {
     }
 }
 
-async fn start_oauth_callback_server() -> Result<(String, tokio::sync::oneshot::Receiver<Result<OAuthCallback>>)> {
+async fn start_oauth_callback_server() -> Result<(
+    String,
+    tokio::sync::oneshot::Receiver<Result<OAuthCallback>>,
+)> {
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     for port in [CODEX_CALLBACK_PORT, CODEX_CALLBACK_FALLBACK_PORT] {
         let addr = format!("{CODEX_CALLBACK_HOST}:{port}");
         if let Ok(listener) = TcpListener::bind(&addr).await {
-            let redirect_uri =
-                format!("http://{CODEX_CALLBACK_HOST}:{port}{CODEX_CALLBACK_PATH}");
+            let redirect_uri = format!("http://{CODEX_CALLBACK_HOST}:{port}{CODEX_CALLBACK_PATH}");
             tokio::spawn(run_callback_server(listener, tx));
             return Ok((redirect_uri, rx));
         }
     }
 
-    Err(anyhow!("Failed to bind OAuth callback server on ports 1455/1457"))
+    Err(anyhow!(
+        "Failed to bind OAuth callback server on ports 1455/1457"
+    ))
 }
 
 async fn run_callback_server(
@@ -429,8 +435,7 @@ async fn run_callback_server(
 }
 
 fn token_endpoint_url() -> String {
-    std::env::var("OPEN_HEDGE_CODEX_TOKEN_URL")
-        .unwrap_or_else(|_| OPENAI_TOKEN_URL.to_string())
+    std::env::var("OPEN_HEDGE_CODEX_TOKEN_URL").unwrap_or_else(|_| OPENAI_TOKEN_URL.to_string())
 }
 
 async fn exchange_code(
@@ -463,7 +468,10 @@ async fn exchange_code(
     serde_json::from_str(&text).context("Failed to parse token response")
 }
 
-async fn refresh_token(client: &Client, refresh_token: &str) -> Result<CodexCredentials, RefreshError> {
+async fn refresh_token(
+    client: &Client,
+    refresh_token: &str,
+) -> Result<CodexCredentials, RefreshError> {
     let body = [
         ("grant_type", "refresh_token"),
         ("client_id", CLIENT_ID),
@@ -492,8 +500,8 @@ async fn refresh_token(client: &Client, refresh_token: &str) -> Result<CodexCred
         return Err(RefreshError::Transient(err));
     }
 
-    let tokens: TokenResponse = serde_json::from_str(&text)
-        .map_err(|e| RefreshError::Transient(e.into()))?;
+    let tokens: TokenResponse =
+        serde_json::from_str(&text).map_err(|e| RefreshError::Transient(e.into()))?;
 
     Ok(tokens_to_credentials(&tokens))
 }
@@ -549,12 +557,9 @@ pub async fn get_valid_access_token() -> Result<String> {
     ensure_credentials_loaded().await;
     let state = auth_state();
 
-    let creds = state
-        .credentials
-        .lock()
-        .await
-        .clone()
-        .ok_or_else(|| anyhow!("ChatGPT subscription is not authenticated. Run `chatgpt login`."))?;
+    let creds = state.credentials.lock().await.clone().ok_or_else(|| {
+        anyhow!("ChatGPT subscription is not authenticated. Run `chatgpt login`.")
+    })?;
 
     if !creds.is_expired() {
         return Ok(creds.access_token);
@@ -575,7 +580,9 @@ pub async fn get_valid_access_token() -> Result<String> {
         .await
         .as_ref()
         .map(|c| c.refresh_token.clone())
-        .ok_or_else(|| anyhow!("ChatGPT subscription is not authenticated. Run `chatgpt login`."))?;
+        .ok_or_else(|| {
+            anyhow!("ChatGPT subscription is not authenticated. Run `chatgpt login`.")
+        })?;
 
     let client = Client::new();
     let refreshed = match refresh_token(&client, &refresh_token_value).await {
@@ -596,7 +603,11 @@ pub async fn get_valid_access_token() -> Result<String> {
     Ok(refreshed.access_token)
 }
 
-pub fn build_codex_request_body(model: &str, instructions: &str, user_prompt: &str) -> serde_json::Value {
+pub fn build_codex_request_body(
+    model: &str,
+    instructions: &str,
+    user_prompt: &str,
+) -> serde_json::Value {
     serde_json::json!({
         "model": model,
         "instructions": instructions,
@@ -763,8 +774,7 @@ pub async fn call_codex_responses(
         return parse_codex_sse_response(&body);
     }
 
-    let json: serde_json::Value =
-        serde_json::from_str(&body).unwrap_or(serde_json::Value::Null);
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap_or(serde_json::Value::Null);
     extract_text_from_codex_response(&json)
         .ok_or_else(|| anyhow!("Codex response did not contain text output: {body}"))
 }
@@ -847,7 +857,10 @@ mod tests {
     #[test]
     fn build_codex_request_body_matches_responses_api() {
         let body = build_codex_request_body("gpt-5.4-mini", "system", "user");
-        assert_eq!(body.get("model").and_then(|v| v.as_str()), Some("gpt-5.4-mini"));
+        assert_eq!(
+            body.get("model").and_then(|v| v.as_str()),
+            Some("gpt-5.4-mini")
+        );
         assert_eq!(
             body.get("instructions").and_then(|v| v.as_str()),
             Some("system")
@@ -941,10 +954,8 @@ mod tests {
     #[test]
     fn file_fallback_persists_credentials() {
         let _guard = env_test_guard();
-        let path = std::env::temp_dir().join(format!(
-            "open-hedge-codex-auth-{}.json",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("open-hedge-codex-auth-{}.json", std::process::id()));
         std::env::set_var("OPEN_HEDGE_CODEX_AUTH_PATH", &path);
 
         let creds = CodexCredentials {
@@ -966,16 +977,15 @@ mod tests {
 
     #[tokio::test]
     async fn refresh_dedup_returns_same_token() {
-        let _guard = env_test_guard();
         let state = auth_state();
         state.auth_generation.store(0, Ordering::SeqCst);
-        *state.credentials.lock().await = Some(CodexCredentials {
+        set_test_credentials(Some(CodexCredentials {
             access_token: "old".into(),
             refresh_token: "refresh".into(),
             expires_at_ms: now_ms() + 3_600_000,
             account_id: None,
             email: None,
-        });
+        }));
 
         let token = get_valid_access_token().await.unwrap();
         assert_eq!(token, "old");
@@ -983,11 +993,26 @@ mod tests {
 
     #[tokio::test]
     async fn refresh_token_success_updates_credentials() {
-        let _guard = env_test_guard();
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let token_url = format!("http://{addr}/oauth/token");
-        std::env::set_var("OPEN_HEDGE_CODEX_TOKEN_URL", &token_url);
+        let listener = StdTcpListener::bind("127.0.0.1:0").unwrap();
+        let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+        let token_url = format!("http://{}/oauth/token", listener.local_addr().unwrap());
+        let path = std::env::temp_dir().join(format!(
+            "open-hedge-codex-auth-refresh-ok-{}.json",
+            std::process::id()
+        ));
+
+        {
+            let _guard = env_test_guard();
+            std::env::set_var("OPEN_HEDGE_CODEX_TOKEN_URL", &token_url);
+            std::env::set_var("OPEN_HEDGE_CODEX_AUTH_PATH", &path);
+            set_test_credentials(Some(CodexCredentials {
+                access_token: "old".into(),
+                refresh_token: "refresh".into(),
+                expires_at_ms: 0,
+                account_id: None,
+                email: None,
+            }));
+        }
 
         tokio::spawn(async move {
             if let Ok((mut stream, _)) = listener.accept().await {
@@ -1007,19 +1032,6 @@ mod tests {
             }
         });
 
-        let path = std::env::temp_dir().join(format!(
-            "open-hedge-codex-auth-refresh-ok-{}.json",
-            std::process::id()
-        ));
-        std::env::set_var("OPEN_HEDGE_CODEX_AUTH_PATH", &path);
-        set_test_credentials(Some(CodexCredentials {
-            access_token: "old".into(),
-            refresh_token: "refresh".into(),
-            expires_at_ms: 0,
-            account_id: None,
-            email: None,
-        }));
-
         let token = get_valid_access_token().await.unwrap();
         assert_eq!(token, "fresh_access");
 
@@ -1031,11 +1043,34 @@ mod tests {
 
     #[tokio::test]
     async fn fatal_refresh_clears_credentials() {
-        let _guard = env_test_guard();
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let token_url = format!("http://{addr}/oauth/token");
-        std::env::set_var("OPEN_HEDGE_CODEX_TOKEN_URL", &token_url);
+        let listener = StdTcpListener::bind("127.0.0.1:0").unwrap();
+        let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+        let token_url = format!("http://{}/oauth/token", listener.local_addr().unwrap());
+        let path = std::env::temp_dir().join(format!(
+            "open-hedge-codex-auth-refresh-fatal-{}.json",
+            std::process::id()
+        ));
+
+        {
+            let _guard = env_test_guard();
+            std::env::set_var("OPEN_HEDGE_CODEX_TOKEN_URL", &token_url);
+            std::env::set_var("OPEN_HEDGE_CODEX_AUTH_PATH", &path);
+            write_credentials_to_file(&CodexCredentials {
+                access_token: "old".into(),
+                refresh_token: "refresh".into(),
+                expires_at_ms: 0,
+                account_id: None,
+                email: None,
+            })
+            .unwrap();
+            set_test_credentials(Some(CodexCredentials {
+                access_token: "old".into(),
+                refresh_token: "refresh".into(),
+                expires_at_ms: 0,
+                account_id: None,
+                email: None,
+            }));
+        }
 
         tokio::spawn(async move {
             if let Ok((mut stream, _)) = listener.accept().await {
@@ -1045,27 +1080,6 @@ mod tests {
                 let _ = stream.write_all(response.as_bytes()).await;
             }
         });
-
-        let path = std::env::temp_dir().join(format!(
-            "open-hedge-codex-auth-refresh-fatal-{}.json",
-            std::process::id()
-        ));
-        std::env::set_var("OPEN_HEDGE_CODEX_AUTH_PATH", &path);
-        write_credentials_to_file(&CodexCredentials {
-            access_token: "old".into(),
-            refresh_token: "refresh".into(),
-            expires_at_ms: 0,
-            account_id: None,
-            email: None,
-        })
-        .unwrap();
-        set_test_credentials(Some(CodexCredentials {
-            access_token: "old".into(),
-            refresh_token: "refresh".into(),
-            expires_at_ms: 0,
-            account_id: None,
-            email: None,
-        }));
 
         let result = get_valid_access_token().await;
         assert!(result.is_err());

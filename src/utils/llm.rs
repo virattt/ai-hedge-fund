@@ -2,15 +2,13 @@
 //! Unified LLM client dispatcher querying live models (OpenAI, Anthropic, Gemini, DeepSeek, Groq, Ollama) over reqwest APIs,
 //! with markdown/brace JSON extraction, error retry loops, and deterministic test fallbacks.
 
+use crate::graph::state::AgentState;
+use crate::llm::chatgpt_subscription::{self, call_codex_responses, ChatGptSubscriptionStatus};
+use crate::llm::models::ModelProvider;
+use crate::utils::api_key::env_api_key;
 use anyhow::Result;
 use serde::de::DeserializeOwned;
 use std::env;
-use crate::graph::state::AgentState;
-use crate::llm::chatgpt_subscription::{
-    self, call_codex_responses, ChatGptSubscriptionStatus,
-};
-use crate::llm::models::ModelProvider;
-use crate::utils::api_key::env_api_key;
 
 /// Resolved LLM model and provider after environment-based auto-detection.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,10 +81,7 @@ pub fn resolve_llm_config(
 /// Log the resolved LLM configuration for CLI / server entry points.
 pub fn log_resolved_llm_config(config: &ResolvedLlmConfig) {
     if config.model_provider == ModelProvider::Ollama {
-        println!(
-            "Using Ollama ({}) for LLM inference.",
-            config.model_name
-        );
+        println!("Using Ollama ({}) for LLM inference.", config.model_name);
         return;
     }
 
@@ -136,7 +131,7 @@ fn detect_provider_from_env() -> Option<ModelProvider> {
         (ModelProvider::DeepSeek, "DEEPSEEK_API_KEY"),
         (ModelProvider::Google, "GOOGLE_API_KEY"),
         (ModelProvider::Kimi, "MOONSHOT_API_KEY"),
-        (ModelProvider::xAI, "XAI_API_KEY"),
+        (ModelProvider::XAi, "XAI_API_KEY"),
         (ModelProvider::GigaChat, "GIGACHAT_API_KEY"),
         (ModelProvider::AzureOpenAI, "AZURE_OPENAI_API_KEY"),
     ];
@@ -208,13 +203,18 @@ fn normalize_model_for_provider(model_name: &str, provider: &ModelProvider) -> S
 }
 
 /// Resolves model configuration for a specific agent from state metadata.
-pub fn get_agent_model_config(state: Option<&AgentState>, _agent_name: Option<&str>) -> (String, ModelProvider) {
+pub fn get_agent_model_config(
+    state: Option<&AgentState>,
+    _agent_name: Option<&str>,
+) -> (String, ModelProvider) {
     let (model_name, explicit_provider) = if let Some(s) = state {
-        let name = s.metadata
+        let name = s
+            .metadata
             .get("model_name")
             .and_then(|v| v.as_str())
             .map(str::to_string);
-        let provider = s.metadata
+        let provider = s
+            .metadata
             .get("model_provider")
             .and_then(|v| v.as_str())
             .and_then(ModelProvider::from_label);
@@ -229,21 +229,21 @@ pub fn get_agent_model_config(state: Option<&AgentState>, _agent_name: Option<&s
 
 /// Helper function to retrieve the API key from environment for a model provider.
 pub fn get_api_key_for_provider(provider: &ModelProvider) -> Option<String> {
-    let raw_key = match provider {
+    match provider {
         ModelProvider::OpenAI => env_api_key("OPENAI_API_KEY"),
         ModelProvider::Anthropic => env_api_key("ANTHROPIC_API_KEY"),
         ModelProvider::DeepSeek => env_api_key("DEEPSEEK_API_KEY"),
         ModelProvider::Google => env_api_key("GOOGLE_API_KEY"),
         ModelProvider::Groq => env_api_key("GROQ_API_KEY"),
-        ModelProvider::Kimi => env_api_key("MOONSHOT_API_KEY").or_else(|| env_api_key("KIMI_API_KEY")),
+        ModelProvider::Kimi => {
+            env_api_key("MOONSHOT_API_KEY").or_else(|| env_api_key("KIMI_API_KEY"))
+        }
         ModelProvider::OpenRouter => env_api_key("OPENROUTER_API_KEY"),
-        ModelProvider::xAI => env_api_key("XAI_API_KEY"),
+        ModelProvider::XAi => env_api_key("XAI_API_KEY"),
         ModelProvider::AzureOpenAI => env_api_key("AZURE_OPENAI_API_KEY"),
         ModelProvider::ChatGPTSubscription => None,
         _ => None,
-    };
-
-    raw_key
+    }
 }
 
 /// Generates a deterministic mock response for testing offline or when API credentials are absent.
@@ -251,23 +251,57 @@ pub fn get_mock_response_for_prompt(user_prompt: &str) -> String {
     let mut ticker = "AAPL";
     if let Some(start) = user_prompt.find("Ticker:") {
         let after = &user_prompt[start + 7..];
-        ticker = after.split_whitespace().next().unwrap_or("AAPL").trim_matches(|c| c == ',' || c == ':');
+        ticker = after
+            .split_whitespace()
+            .next()
+            .unwrap_or("AAPL")
+            .trim_matches(|c| c == ',' || c == ':');
     }
 
     // Hash the ticker name to produce varying signals deterministically
     let char_sum: usize = ticker.chars().map(|c| c as usize).sum();
     let (signal, confidence, reasoning) = match char_sum % 3 {
-        0 => ("bullish", 75, format!("Mocked analysis for {}: Solid balance sheet and margin of safety.", ticker)),
-        1 => ("bearish", 80, format!("Mocked analysis for {}: High leverage and rich valuation.", ticker)),
-        _ => ("neutral", 60, format!("Mocked analysis for {}: Strong moat but currently fairly valued.", ticker)),
+        0 => (
+            "bullish",
+            75,
+            format!(
+                "Mocked analysis for {}: Solid balance sheet and margin of safety.",
+                ticker
+            ),
+        ),
+        1 => (
+            "bearish",
+            80,
+            format!(
+                "Mocked analysis for {}: High leverage and rich valuation.",
+                ticker
+            ),
+        ),
+        _ => (
+            "neutral",
+            60,
+            format!(
+                "Mocked analysis for {}: Strong moat but currently fairly valued.",
+                ticker
+            ),
+        ),
     };
 
-    if user_prompt.contains("decisions") || user_prompt.contains("Portfolio") || user_prompt.contains("quantity") {
+    if user_prompt.contains("decisions")
+        || user_prompt.contains("Portfolio")
+        || user_prompt.contains("quantity")
+    {
         // Return a mock portfolio decision map
         format!(
             r#"{{"{}": {{"action": "{}", "quantity": 100, "confidence": 0.8, "reasoning": "Mocked allocation decision"}}}}"#,
             ticker,
-            if signal == "bullish" { "buy" } else if signal == "bearish" { "short" } else { "hold" }
+            if signal == "bullish" {
+                "buy"
+            } else if signal == "bearish" {
+                "short"
+            } else {
+                "hold"
+            }
         )
     } else {
         // General analyst recommendation signal
@@ -291,15 +325,12 @@ where
 {
     let (model_name, model_provider) = get_agent_model_config(state, agent_name);
     let api_key = get_api_key_for_provider(&model_provider);
-    let subscription_authenticated =
-        model_provider == ModelProvider::ChatGPTSubscription && chatgpt_subscription_authenticated();
+    let subscription_authenticated = model_provider == ModelProvider::ChatGPTSubscription
+        && chatgpt_subscription_authenticated();
 
     // Fall back to local mocked results if API key is absent and we are not querying Ollama
     // or ChatGPT subscription.
-    if api_key.is_none()
-        && model_provider != ModelProvider::Ollama
-        && !subscription_authenticated
-    {
+    if api_key.is_none() && model_provider != ModelProvider::Ollama && !subscription_authenticated {
         let mock_text = get_mock_response_for_prompt(user_prompt);
         if let Some(parsed_json) = extract_json_from_response(&mock_text) {
             if let Ok(res) = serde_json::from_value::<T>(parsed_json) {
@@ -367,7 +398,8 @@ where
                     ],
                     "max_tokens": 1024
                 });
-                client.post(url)
+                client
+                    .post(url)
                     .header("x-api-key", api_key.clone().unwrap_or_default())
                     .header("anthropic-version", "2023-06-01")
                     .header("content-type", "application/json")
@@ -394,10 +426,7 @@ where
                         "responseMimeType": "application/json"
                     }
                 });
-                client.post(&url)
-                    .json(&payload)
-                    .send()
-                    .await
+                client.post(&url).json(&payload).send().await
             }
             _ => {
                 // OpenAI-compatible chat endpoints
@@ -406,9 +435,10 @@ where
                     ModelProvider::Groq => "https://api.groq.com/openai/v1/chat/completions",
                     ModelProvider::Kimi => "https://api.moonshot.cn/v1/chat/completions",
                     ModelProvider::OpenRouter => "https://openrouter.ai/api/v1/chat/completions",
-                    ModelProvider::xAI => "https://api.x.ai/v1/chat/completions",
+                    ModelProvider::XAi => "https://api.x.ai/v1/chat/completions",
                     ModelProvider::Ollama => {
-                        let host = env::var("OLLAMA_HOST").unwrap_or_else(|_| "localhost".to_string());
+                        let host =
+                            env::var("OLLAMA_HOST").unwrap_or_else(|_| "localhost".to_string());
                         &format!("http://{}:11434/v1/chat/completions", host)
                     }
                     _ => "https://api.openai.com/v1/chat/completions",
@@ -443,41 +473,38 @@ where
                 let status = http_res.status();
                 if status.is_success() {
                     let parsed: serde_json::Value = http_res.json().await.unwrap_or_default();
-                    
+
                     // Extract text content depending on provider output structures
                     let content = match &model_provider {
-                        ModelProvider::Anthropic => {
-                            parsed.get("content")
-                                .and_then(|c| c.as_array())
-                                .and_then(|a| a.first())
-                                .and_then(|item| item.get("text"))
-                                .and_then(|t| t.as_str())
-                                .unwrap_or("")
-                                .to_string()
-                        }
-                        ModelProvider::Google => {
-                            parsed.get("candidates")
-                                .and_then(|c| c.as_array())
-                                .and_then(|a| a.first())
-                                .and_then(|item| item.get("content"))
-                                .and_then(|cnt| cnt.get("parts"))
-                                .and_then(|p| p.as_array())
-                                .and_then(|p_arr| p_arr.first())
-                                .and_then(|part| part.get("text"))
-                                .and_then(|t| t.as_str())
-                                .unwrap_or("")
-                                .to_string()
-                        }
-                        _ => {
-                            parsed.get("choices")
-                                .and_then(|c| c.as_array())
-                                .and_then(|a| a.first())
-                                .and_then(|item| item.get("message"))
-                                .and_then(|msg| msg.get("content"))
-                                .and_then(|cnt| cnt.as_str())
-                                .unwrap_or("")
-                                .to_string()
-                        }
+                        ModelProvider::Anthropic => parsed
+                            .get("content")
+                            .and_then(|c| c.as_array())
+                            .and_then(|a| a.first())
+                            .and_then(|item| item.get("text"))
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        ModelProvider::Google => parsed
+                            .get("candidates")
+                            .and_then(|c| c.as_array())
+                            .and_then(|a| a.first())
+                            .and_then(|item| item.get("content"))
+                            .and_then(|cnt| cnt.get("parts"))
+                            .and_then(|p| p.as_array())
+                            .and_then(|p_arr| p_arr.first())
+                            .and_then(|part| part.get("text"))
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        _ => parsed
+                            .get("choices")
+                            .and_then(|c| c.as_array())
+                            .and_then(|a| a.first())
+                            .and_then(|item| item.get("message"))
+                            .and_then(|msg| msg.get("content"))
+                            .and_then(|cnt| cnt.as_str())
+                            .unwrap_or("")
+                            .to_string(),
                     };
 
                     if let Some(json_val) = extract_json_from_response(&content) {
@@ -507,7 +534,10 @@ where
         }
     }
 
-    println!("Warning: call_llm failed to get a structured response after {} attempts.", max_retries);
+    println!(
+        "Warning: call_llm failed to get a structured response after {} attempts.",
+        max_retries
+    );
     Ok(T::default())
 }
 
@@ -588,11 +618,7 @@ mod tests {
         clear_llm_env();
         env::set_var("OPENROUTER_API_KEY", "sk-or-test-key");
 
-        let resolved = resolve_llm_config(
-            Some("gpt-4.1"),
-            false,
-            Some(ModelProvider::OpenAI),
-        );
+        let resolved = resolve_llm_config(Some("gpt-4.1"), false, Some(ModelProvider::OpenAI));
 
         assert_eq!(resolved.model_provider, ModelProvider::OpenRouter);
         assert_eq!(resolved.model_name, "openai/gpt-4.1");
@@ -753,6 +779,9 @@ mod tests {
         });
         let text = chatgpt_subscription::extract_text_from_codex_response(&response).unwrap();
         let parsed = extract_json_from_response(&text).unwrap();
-        assert_eq!(parsed.get("signal").and_then(|v| v.as_str()), Some("bullish"));
+        assert_eq!(
+            parsed.get("signal").and_then(|v| v.as_str()),
+            Some("bullish")
+        );
     }
 }

@@ -22,7 +22,7 @@ pub enum ModelProvider {
     GigaChat,
     #[serde(rename = "Azure OpenAI")]
     AzureOpenAI,
-    xAI,
+    XAi,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -52,7 +52,7 @@ impl ModelProvider {
             }
             "gigachat" => Some(ModelProvider::GigaChat),
             "azure openai" | "azure_openai" => Some(ModelProvider::AzureOpenAI),
-            "xai" => Some(ModelProvider::xAI),
+            "xai" => Some(ModelProvider::XAi),
             _ => None,
         }
     }
@@ -73,7 +73,7 @@ impl ModelProvider {
             ModelProvider::ChatGPTSubscription => "ChatGPT Subscription",
             ModelProvider::GigaChat => "GigaChat",
             ModelProvider::AzureOpenAI => "Azure OpenAI",
-            ModelProvider::xAI => "xAI",
+            ModelProvider::XAi => "xAI",
         }
     }
 }
@@ -115,8 +115,8 @@ impl LLMModel {
 
 /// Helper function to load model configurations.
 pub fn load_models_from_json(json_path: &str) -> Vec<LLMModel> {
-    let filename = if json_path.contains("/") {
-        json_path.split('/').last().unwrap_or(json_path)
+    let filename = if json_path.contains('/') {
+        json_path.split('/').next_back().unwrap_or(json_path)
     } else {
         json_path
     };
@@ -143,9 +143,10 @@ pub fn load_models_from_json(json_path: &str) -> Vec<LLMModel> {
 pub fn get_model_info(model_name: &str, model_provider: &str) -> Option<LLMModel> {
     let mut models = load_models_from_json("api_models.json");
     models.extend(load_models_from_json("ollama_models.json"));
-    
+
     models.into_iter().find(|m| {
-        m.model_name == model_name && format!("{:?}", m.provider).to_lowercase() == model_provider.to_lowercase()
+        m.model_name == model_name
+            && format!("{:?}", m.provider).to_lowercase() == model_provider.to_lowercase()
     })
 }
 
@@ -155,7 +156,10 @@ pub fn get_model(
     model_provider: ModelProvider,
     _api_keys: Option<std::collections::HashMap<String, String>>,
 ) -> Result<serde_json::Value, anyhow::Error> {
-    println!("Initializing model connection for {} ({:?})", model_name, model_provider);
+    println!(
+        "Initializing model connection for {} ({:?})",
+        model_name, model_provider
+    );
     Ok(serde_json::json!({
         "status": "client_placeholder"
     }))
@@ -163,13 +167,16 @@ pub fn get_model(
 
 pub fn get_models_list() -> Vec<serde_json::Value> {
     let models = load_models_from_json("api_models.json");
-    models.into_iter().map(|m| {
-        serde_json::json!({
-            "display_name": m.display_name,
-            "model_name": m.model_name,
-            "provider": m.provider.value()
+    models
+        .into_iter()
+        .map(|m| {
+            serde_json::json!({
+                "display_name": m.display_name,
+                "model_name": m.model_name,
+                "provider": m.provider.value()
+            })
         })
-    }).collect()
+        .collect()
 }
 
 pub fn get_ollama_models() -> Vec<LLMModel> {

@@ -1,8 +1,8 @@
-use axum::{routing::get, Router, Json};
-use serde_json::json;
+use crate::services::ollama_service::OllamaService;
 use ai_hedge_fund::llm::models::get_models_list;
 use ai_hedge_fund::utils::llm::chatgpt_subscription_status_sync;
-use crate::services::ollama_service::OllamaService;
+use axum::{routing::get, Json, Router};
+use serde_json::json;
 
 pub fn router() -> Router {
     Router::new()
@@ -16,7 +16,7 @@ pub fn router() -> Router {
 
 async fn get_language_models() -> Json<serde_json::Value> {
     let mut models = get_models_list();
-    
+
     // Add available Ollama models
     let ollama_status = OllamaService::check_ollama_status().await;
     if ollama_status.server_running {
@@ -37,17 +37,20 @@ async fn get_language_models() -> Json<serde_json::Value> {
 
 async fn get_language_model_providers() -> Json<serde_json::Value> {
     let models = get_models_list();
-    
-    let mut providers: std::collections::HashMap<String, serde_json::Value> = std::collections::HashMap::new();
+
+    let mut providers: std::collections::HashMap<String, serde_json::Value> =
+        std::collections::HashMap::new();
     for model in models {
         if let Some(provider_name) = model.get("provider").and_then(|v| v.as_str()) {
-            let entry = providers.entry(provider_name.to_string()).or_insert_with(|| {
-                json!({
-                    "name": provider_name,
-                    "models": []
-                })
-            });
-            
+            let entry = providers
+                .entry(provider_name.to_string())
+                .or_insert_with(|| {
+                    json!({
+                        "name": provider_name,
+                        "models": []
+                    })
+                });
+
             if let Some(models_arr) = entry.get_mut("models").and_then(|v| v.as_array_mut()) {
                 models_arr.push(json!({
                     "display_name": model.get("display_name"),
@@ -56,7 +59,7 @@ async fn get_language_model_providers() -> Json<serde_json::Value> {
             }
         }
     }
-    
+
     let providers_list: Vec<serde_json::Value> = providers.into_values().collect();
     Json(json!({ "providers": providers_list }))
 }

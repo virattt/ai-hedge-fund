@@ -2,42 +2,52 @@
 //! Sibling to src/agents/bill_ackman.py
 //! Analyzes stocks using Bill Ackman's activist value investing principles.
 
-use anyhow::{Result, Context};
+use crate::data::models::{FinancialMetrics, LineItem};
 use crate::graph::state::AgentState;
 use crate::tools::api::{get_financial_metrics, get_market_cap, search_line_items};
-use crate::data::models::{FinancialMetrics, LineItem};
 use crate::utils::llm::call_llm;
+use anyhow::{Context, Result};
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct BillAckmanSignal {
-    pub signal: String,      // "bullish" | "bearish" | "neutral"
-    pub confidence: u32,     // 0-100
+    pub signal: String,  // "bullish" | "bearish" | "neutral"
+    pub confidence: u32, // 0-100
     pub reasoning: String,
 }
 
 pub async fn bill_ackman_agent(state: &mut AgentState, agent_id: &str) -> Result<()> {
     println!("Running Bill Ackman Agent: {}", agent_id);
 
-    let start_date = state.data.get("start_date")
+    let _start_date = state
+        .data
+        .get("start_date")
         .and_then(|v| v.as_str())
         .context("Missing start_date in bill_ackman_agent")?;
-    
-    let end_date = state.data.get("end_date")
+
+    let end_date = state
+        .data
+        .get("end_date")
         .and_then(|v| v.as_str())
         .context("Missing end_date in bill_ackman_agent")?;
-    
-    let tickers_json = state.data.get("tickers")
+
+    let tickers_json = state
+        .data
+        .get("tickers")
         .context("Missing tickers in bill_ackman_agent")?;
     let tickers: Vec<String> = serde_json::from_value(tickers_json.clone())?;
 
-    let api_key = state.metadata.get("FINANCIAL_DATASETS_API_KEY")
+    let api_key = state
+        .metadata
+        .get("FINANCIAL_DATASETS_API_KEY")
         .and_then(|v| v.as_str());
 
     let mut ackman_analysis = serde_json::Map::new();
 
     for ticker in &tickers {
         // Fetch raw data
-        let metrics = get_financial_metrics(ticker, end_date, "annual", 5, api_key).await.unwrap_or_default();
+        let metrics = get_financial_metrics(ticker, end_date, "annual", 5, api_key)
+            .await
+            .unwrap_or_default();
         let financial_line_items = search_line_items(
             ticker,
             vec![
@@ -54,9 +64,14 @@ pub async fn bill_ackman_agent(state: &mut AgentState, agent_id: &str) -> Result
             "annual",
             5,
             api_key,
-        ).await.unwrap_or_default();
+        )
+        .await
+        .unwrap_or_default();
 
-        let market_cap = get_market_cap(ticker, end_date, api_key).await.unwrap_or(None).unwrap_or(0.0);
+        let market_cap = get_market_cap(ticker, end_date, api_key)
+            .await
+            .unwrap_or(None)
+            .unwrap_or(0.0);
 
         // Perform sub-analyses
         let quality = analyze_business_quality(&metrics, &financial_line_items);
@@ -112,10 +127,15 @@ pub async fn bill_ackman_agent(state: &mut AgentState, agent_id: &str) -> Result
         );
     }
 
-    let analyst_signals = state.data.entry("analyst_signals".to_string())
+    let analyst_signals = state
+        .data
+        .entry("analyst_signals".to_string())
         .or_insert_with(|| serde_json::json!({}));
     if let Some(obj) = analyst_signals.as_object_mut() {
-        obj.insert(agent_id.to_string(), serde_json::Value::Object(ackman_analysis));
+        obj.insert(
+            agent_id.to_string(),
+            serde_json::Value::Object(ackman_analysis),
+        );
     }
 
     Ok(())
@@ -126,16 +146,25 @@ pub struct AckmanSubResult {
     pub details: String,
 }
 
-pub fn analyze_business_quality(metrics: &[FinancialMetrics], financial_line_items: &[LineItem]) -> AckmanSubResult {
+pub fn analyze_business_quality(
+    metrics: &[FinancialMetrics],
+    financial_line_items: &[LineItem],
+) -> AckmanSubResult {
     let mut score = 0;
     let mut details = Vec::new();
 
     if metrics.is_empty() || financial_line_items.is_empty() {
-        return AckmanSubResult { score: 0, details: "Insufficient data to analyze business quality".to_string() };
+        return AckmanSubResult {
+            score: 0,
+            details: "Insufficient data to analyze business quality".to_string(),
+        };
     }
 
     // 1. Revenue growth (reverse chronological: newest first)
-    let revenues: Vec<f64> = financial_line_items.iter().filter_map(|item| item.revenue).collect();
+    let revenues: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.revenue)
+        .collect();
     if revenues.len() >= 2 {
         let initial = revenues[revenues.len() - 1];
         let final_val = revenues[0];
@@ -143,10 +172,16 @@ pub fn analyze_business_quality(metrics: &[FinancialMetrics], financial_line_ite
             let growth_rate = (final_val - initial) / initial;
             if growth_rate > 0.5 {
                 score += 2;
-                details.push(format!("Revenue grew by {:.1}% over the full period (strong growth).", growth_rate * 100.0));
+                details.push(format!(
+                    "Revenue grew by {:.1}% over the full period (strong growth).",
+                    growth_rate * 100.0
+                ));
             } else {
                 score += 1;
-                details.push(format!("Revenue growth is positive but under 50% cumulatively ({:.1}%).", growth_rate * 100.0));
+                details.push(format!(
+                    "Revenue growth is positive but under 50% cumulatively ({:.1}%).",
+                    growth_rate * 100.0
+                ));
             }
         } else {
             details.push("Revenue did not grow significantly or data insufficient.".to_string());
@@ -156,8 +191,14 @@ pub fn analyze_business_quality(metrics: &[FinancialMetrics], financial_line_ite
     }
 
     // 2. Margin and FCF consistency
-    let op_margin_vals: Vec<f64> = financial_line_items.iter().filter_map(|item| item.operating_margin).collect();
-    let fcf_vals: Vec<f64> = financial_line_items.iter().filter_map(|item| item.free_cash_flow).collect();
+    let op_margin_vals: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.operating_margin)
+        .collect();
+    let fcf_vals: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.free_cash_flow)
+        .collect();
 
     if !op_margin_vals.is_empty() {
         let above_15 = op_margin_vals.iter().filter(|&&m| m > 0.15).count();
@@ -183,25 +224,40 @@ pub fn analyze_business_quality(metrics: &[FinancialMetrics], financial_line_ite
     if let Some(roe) = metrics[0].return_on_equity {
         if roe > 0.15 {
             score += 2;
-            details.push(format!("High ROE of {:.1}%, indicating a competitive advantage.", roe * 100.0));
+            details.push(format!(
+                "High ROE of {:.1}%, indicating a competitive advantage.",
+                roe * 100.0
+            ));
         } else {
             details.push(format!("ROE of {:.1}% is moderate.", roe * 100.0));
         }
     }
 
-    AckmanSubResult { score, details: details.join("; ") }
+    AckmanSubResult {
+        score,
+        details: details.join("; "),
+    }
 }
 
-pub fn analyze_financial_discipline(metrics: &[FinancialMetrics], financial_line_items: &[LineItem]) -> AckmanSubResult {
+pub fn analyze_financial_discipline(
+    metrics: &[FinancialMetrics],
+    financial_line_items: &[LineItem],
+) -> AckmanSubResult {
     let mut score = 0;
     let mut details = Vec::new();
 
     if metrics.is_empty() || financial_line_items.is_empty() {
-        return AckmanSubResult { score: 0, details: "Insufficient data to analyze financial discipline".to_string() };
+        return AckmanSubResult {
+            score: 0,
+            details: "Insufficient data to analyze financial discipline".to_string(),
+        };
     }
 
     // 1. Debt to equity trends
-    let debt_to_equity_vals: Vec<f64> = financial_line_items.iter().filter_map(|item| item.debt_to_equity).collect();
+    let debt_to_equity_vals: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.debt_to_equity)
+        .collect();
     if !debt_to_equity_vals.is_empty() {
         let below_one_count = debt_to_equity_vals.iter().filter(|&&d| d < 1.0).count();
         if below_one_count >= (debt_to_equity_vals.len() / 2 + 1) {
@@ -232,7 +288,10 @@ pub fn analyze_financial_discipline(metrics: &[FinancialMetrics], financial_line
     }
 
     // 2. Dividends history
-    let dividends_list: Vec<f64> = financial_line_items.iter().filter_map(|item| item.dividends_and_other_cash_distributions).collect();
+    let dividends_list: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.dividends_and_other_cash_distributions)
+        .collect();
     if !dividends_list.is_empty() {
         let paying_dividends_count = dividends_list.iter().filter(|&&d| d < 0.0).count();
         if paying_dividends_count >= (dividends_list.len() / 2 + 1) {
@@ -242,15 +301,19 @@ pub fn analyze_financial_discipline(metrics: &[FinancialMetrics], financial_line
     }
 
     // 3. Buybacks trend
-    let shares: Vec<f64> = financial_line_items.iter().filter_map(|item| item.outstanding_shares.map(|s| s as f64)).collect();
-    if shares.len() >= 2 {
-        if shares[0] < shares[shares.len() - 1] {
-            score += 1;
-            details.push("Outstanding shares decreased over time (buybacks).".to_string());
-        }
+    let shares: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.outstanding_shares.map(|s| s as f64))
+        .collect();
+    if shares.len() >= 2 && shares[0] < shares[shares.len() - 1] {
+        score += 1;
+        details.push("Outstanding shares decreased over time (buybacks).".to_string());
     }
 
-    AckmanSubResult { score, details: details.join("; ") }
+    AckmanSubResult {
+        score,
+        details: details.join("; "),
+    }
 }
 
 pub fn analyze_activism_potential(financial_line_items: &[LineItem]) -> AckmanSubResult {
@@ -258,19 +321,35 @@ pub fn analyze_activism_potential(financial_line_items: &[LineItem]) -> AckmanSu
     let mut details = Vec::new();
 
     if financial_line_items.is_empty() {
-        return AckmanSubResult { score: 0, details: "Insufficient data for activism potential".to_string() };
+        return AckmanSubResult {
+            score: 0,
+            details: "Insufficient data for activism potential".to_string(),
+        };
     }
 
-    let revenues: Vec<f64> = financial_line_items.iter().filter_map(|item| item.revenue).collect();
-    let op_margins: Vec<f64> = financial_line_items.iter().filter_map(|item| item.operating_margin).collect();
+    let revenues: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.revenue)
+        .collect();
+    let op_margins: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.operating_margin)
+        .collect();
 
     if revenues.len() < 2 || op_margins.is_empty() {
-        return AckmanSubResult { score: 0, details: "Not enough data to assess activism potential.".to_string() };
+        return AckmanSubResult {
+            score: 0,
+            details: "Not enough data to assess activism potential.".to_string(),
+        };
     }
 
     let initial = revenues[revenues.len() - 1];
     let final_val = revenues[0];
-    let revenue_growth = if initial > 0.0 { (final_val - initial) / initial } else { 0.0 };
+    let revenue_growth = if initial > 0.0 {
+        (final_val - initial) / initial
+    } else {
+        0.0
+    };
     let avg_margin = op_margins.iter().sum::<f64>() / op_margins.len() as f64;
 
     if revenue_growth > 0.15 && avg_margin < 0.10 {
@@ -280,7 +359,10 @@ pub fn analyze_activism_potential(financial_line_items: &[LineItem]) -> AckmanSu
         details.push("No clear sign of activism opportunity.".to_string());
     }
 
-    AckmanSubResult { score, details: details.join("; ") }
+    AckmanSubResult {
+        score,
+        details: details.join("; "),
+    }
 }
 
 pub struct AckmanValResult {
@@ -292,14 +374,24 @@ pub struct AckmanValResult {
 
 pub fn analyze_valuation(financial_line_items: &[LineItem], market_cap: f64) -> AckmanValResult {
     if financial_line_items.is_empty() || market_cap <= 0.0 {
-        return AckmanValResult { score: 0, details: "Insufficient data to perform valuation".to_string(), intrinsic_value: None, margin_of_safety: None };
+        return AckmanValResult {
+            score: 0,
+            details: "Insufficient data to perform valuation".to_string(),
+            intrinsic_value: None,
+            margin_of_safety: None,
+        };
     }
 
     let latest = &financial_line_items[0];
     let fcf = latest.free_cash_flow.unwrap_or(0.0);
 
     if fcf <= 0.0 {
-        return AckmanValResult { score: 0, details: format!("No positive FCF for valuation; FCF = {:.2}", fcf), intrinsic_value: None, margin_of_safety: None };
+        return AckmanValResult {
+            score: 0,
+            details: format!("No positive FCF for valuation; FCF = {:.2}", fcf),
+            intrinsic_value: None,
+            margin_of_safety: None,
+        };
     }
 
     let growth_rate = 0.06_f64;
@@ -314,7 +406,8 @@ pub fn analyze_valuation(financial_line_items: &[LineItem], market_cap: f64) -> 
         present_value += pv;
     }
 
-    let terminal_value = (fcf * (1.0_f64 + growth_rate).powi(projection_years) * terminal_multiple) / (1.0_f64 + discount_rate).powi(projection_years);
+    let terminal_value = (fcf * (1.0_f64 + growth_rate).powi(projection_years) * terminal_multiple)
+        / (1.0_f64 + discount_rate).powi(projection_years);
     let intrinsic_value = present_value + terminal_value;
     let margin_of_safety = (intrinsic_value - market_cap) / market_cap;
 
@@ -325,7 +418,7 @@ pub fn analyze_valuation(financial_line_items: &[LineItem], market_cap: f64) -> 
         score += 1;
     }
 
-    let details = vec![
+    let details = [
         format!("Calculated intrinsic value: ~{:.2}", intrinsic_value),
         format!("Market cap: ~{:.2}", market_cap),
         format!("Margin of safety: {:.2}%", margin_of_safety * 100.0),
@@ -359,11 +452,5 @@ pub async fn generate_ackman_output(
         serde_json::to_string_pretty(facts)?
     );
 
-    call_llm(
-        system_prompt,
-        &user_prompt,
-        Some(agent_id),
-        Some(state),
-        3,
-    ).await
+    call_llm(system_prompt, &user_prompt, Some(agent_id), Some(state), 3).await
 }

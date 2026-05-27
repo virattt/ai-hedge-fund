@@ -155,24 +155,63 @@ pub fn get_analysts_list() -> Vec<AnalystConfig> {
 /// Returns a mapping of analyst identifiers to their internal node execution tags.
 pub fn get_analyst_nodes() -> HashMap<String, String> {
     let mut map = HashMap::new();
-    map.insert("aswath_damodaran".to_string(), "aswath_damodaran_agent".to_string());
+    map.insert(
+        "aswath_damodaran".to_string(),
+        "aswath_damodaran_agent".to_string(),
+    );
     map.insert("ben_graham".to_string(), "ben_graham_agent".to_string());
     map.insert("bill_ackman".to_string(), "bill_ackman_agent".to_string());
     map.insert("cathie_wood".to_string(), "cathie_wood_agent".to_string());
-    map.insert("charlie_munger".to_string(), "charlie_munger_agent".to_string());
-    map.insert("michael_burry".to_string(), "michael_burry_agent".to_string());
-    map.insert("mohnish_pabrai".to_string(), "mohnish_pabrai_agent".to_string());
+    map.insert(
+        "charlie_munger".to_string(),
+        "charlie_munger_agent".to_string(),
+    );
+    map.insert(
+        "michael_burry".to_string(),
+        "michael_burry_agent".to_string(),
+    );
+    map.insert(
+        "mohnish_pabrai".to_string(),
+        "mohnish_pabrai_agent".to_string(),
+    );
     map.insert("nassim_taleb".to_string(), "nassim_taleb_agent".to_string());
     map.insert("peter_lynch".to_string(), "peter_lynch_agent".to_string());
     map.insert("phil_fisher".to_string(), "phil_fisher_agent".to_string());
-    map.insert("rakesh_jhunjhunwala".to_string(), "rakesh_jhunjhunwala_agent".to_string());
-    map.insert("stanley_druckenmiller".to_string(), "stanley_druckenmiller_agent".to_string());
-    map.insert("warren_buffett".to_string(), "warren_buffett_agent".to_string());
-    map.insert("technical_analyst".to_string(), "technical_analyst_agent".to_string());
-    map.insert("fundamentals_analyst".to_string(), "fundamentals_analyst_agent".to_string());
-    map.insert("growth_analyst".to_string(), "growth_analyst_agent".to_string());
-    map.insert("news_sentiment_analyst".to_string(), "news_sentiment_agent".to_string());
-    map.insert("sentiment_analyst".to_string(), "sentiment_analyst_agent".to_string());
-    map.insert("valuation_analyst".to_string(), "valuation_analyst_agent".to_string());
+    map.insert(
+        "rakesh_jhunjhunwala".to_string(),
+        "rakesh_jhunjhunwala_agent".to_string(),
+    );
+    map.insert(
+        "stanley_druckenmiller".to_string(),
+        "stanley_druckenmiller_agent".to_string(),
+    );
+    map.insert(
+        "warren_buffett".to_string(),
+        "warren_buffett_agent".to_string(),
+    );
+    map.insert(
+        "technical_analyst".to_string(),
+        "technical_analyst_agent".to_string(),
+    );
+    map.insert(
+        "fundamentals_analyst".to_string(),
+        "fundamentals_analyst_agent".to_string(),
+    );
+    map.insert(
+        "growth_analyst".to_string(),
+        "growth_analyst_agent".to_string(),
+    );
+    map.insert(
+        "news_sentiment_analyst".to_string(),
+        "news_sentiment_agent".to_string(),
+    );
+    map.insert(
+        "sentiment_analyst".to_string(),
+        "sentiment_analyst_agent".to_string(),
+    );
+    map.insert(
+        "valuation_analyst".to_string(),
+        "valuation_analyst_agent".to_string(),
+    );
     map
 }

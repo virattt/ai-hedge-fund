@@ -84,7 +84,7 @@ pub struct LineItem {
     pub report_period: String,
     pub period: String,
     pub currency: String,
-    
+
     // Dynamic fields representing the standard line items (we represent them as options)
     pub capital_expenditure: Option<f64>,
     pub depreciation_and_amortization: Option<f64>,

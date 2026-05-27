@@ -1,6 +1,6 @@
 use ai_hedge_fund::utils::ollama;
-use serde::{Serialize, Deserialize};
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OllamaStatus {
@@ -49,18 +49,18 @@ impl OllamaService {
         let system = std::env::consts::OS;
         let success = if system == "windows" {
             std::process::Command::new("taskkill")
-                .args(&["/F", "/IM", "ollama.exe"])
+                .args(["/F", "/IM", "ollama.exe"])
                 .status()
                 .map(|s| s.success())
                 .unwrap_or(false)
         } else {
             std::process::Command::new("pkill")
-                .args(&["-f", "ollama serve"])
+                .args(["-f", "ollama serve"])
                 .status()
                 .map(|s| s.success())
                 .unwrap_or(false)
         };
-        
+
         let message = if success {
             "Ollama server stopped successfully".to_string()
         } else {

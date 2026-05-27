@@ -3,7 +3,7 @@
 //! Porting skeleton for test suite: test_results.py.
 
 #[test]
+#[ignore = "placeholder; migrate assertions from test_results.py"]
 fn test_placeholder_results() {
     // TODO: Port assertions matching the Python test suite in test_results.py.
-    assert!(true);
 }

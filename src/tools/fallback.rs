@@ -10,9 +10,7 @@ use yfinance::{
     Ticker, YfClient,
 };
 
-use crate::data::models::{
-    CompanyNews, FinancialMetrics, InsiderTrade, LineItem,
-};
+use crate::data::models::{CompanyNews, FinancialMetrics, InsiderTrade, LineItem};
 use crate::utils::financial_data::{
     calculate_gross_margin, calculate_net_margin, calculate_shareholders_equity,
     calculate_working_capital,
@@ -31,15 +29,13 @@ pub async fn get_financial_metrics_fallback(
 
     let quarterly = period == "quarterly" || period == "ttm";
     let effective_limit = effective_fundamentals_limit(limit, quarterly);
-    let income = fetch_fundamentals(&ticker_obj, FundamentalsKind::IncomeStatement, quarterly).await;
+    let income =
+        fetch_fundamentals(&ticker_obj, FundamentalsKind::IncomeStatement, quarterly).await;
     let balance = fetch_fundamentals(&ticker_obj, FundamentalsKind::BalanceSheet, quarterly).await;
     let cashflow = fetch_fundamentals(&ticker_obj, FundamentalsKind::CashFlow, quarterly).await;
 
     let cutoff = NaiveDate::parse_from_str(end_date, "%Y-%m-%d").ok();
-    let mut dates: Vec<NaiveDate> = income
-        .as_ref()
-        .map(|f| f.dates())
-        .unwrap_or_default();
+    let mut dates: Vec<NaiveDate> = income.as_ref().map(|f| f.dates()).unwrap_or_default();
     if dates.is_empty() {
         dates = balance.as_ref().map(|f| f.dates()).unwrap_or_default();
     }
@@ -51,9 +47,7 @@ pub async fn get_financial_metrics_fallback(
     dates.truncate(effective_limit as usize);
 
     if dates.is_empty() {
-        dates.push(
-            cutoff.unwrap_or_else(|| chrono::Local::now().date_naive()),
-        );
+        dates.push(cutoff.unwrap_or_else(|| chrono::Local::now().date_naive()));
     }
 
     let earnings = if quarterly {
@@ -69,7 +63,6 @@ pub async fn get_financial_metrics_fallback(
             let net_income = metric_value(&income, "NetIncome", date);
             let gross_profit = metric_value(&income, "GrossProfit", date);
             let operating_income = metric_value(&income, "OperatingIncome", date);
-            let ebitda = metric_value(&income, "EBITDA", date);
             let total_assets = metric_value(&balance, "TotalAssets", date);
             let total_liabilities =
                 metric_value(&balance, "TotalLiabilitiesNetMinorityInterest", date);
@@ -91,8 +84,16 @@ pub async fn get_financial_metrics_fallback(
                 market_cap: info.market_cap.map(|v| v as f64),
                 enterprise_value: None,
                 price_to_earnings_ratio: info.trailing_pe,
-                price_to_book_ratio: raw_module_f64(&info.raw, "defaultKeyStatistics", "priceToBook"),
-                price_to_sales_ratio: raw_module_f64(&info.raw, "summaryDetail", "priceToSalesTrailing12Months"),
+                price_to_book_ratio: raw_module_f64(
+                    &info.raw,
+                    "defaultKeyStatistics",
+                    "priceToBook",
+                ),
+                price_to_sales_ratio: raw_module_f64(
+                    &info.raw,
+                    "summaryDetail",
+                    "priceToSalesTrailing12Months",
+                ),
                 enterprise_value_to_ebitda_ratio: None,
                 enterprise_value_to_revenue_ratio: None,
                 free_cash_flow_yield: safe_ratio(free_cash_flow, info.market_cap.map(|v| v as f64)),
@@ -128,7 +129,11 @@ pub async fn get_financial_metrics_fallback(
                 ebitda_growth: None,
                 payout_ratio: None,
                 earnings_per_share: eps.or(info.trailing_eps),
-                book_value_per_share: raw_module_f64(&info.raw, "defaultKeyStatistics", "bookValue"),
+                book_value_per_share: raw_module_f64(
+                    &info.raw,
+                    "defaultKeyStatistics",
+                    "bookValue",
+                ),
                 free_cash_flow_per_share: None,
                 revenue,
                 beta: info.beta,
@@ -160,15 +165,13 @@ pub async fn search_line_items_fallback(
     let ticker_obj = Ticker::new(&client, ticker);
     let quarterly = period == "quarterly" || period == "ttm";
 
-    let income = fetch_fundamentals(&ticker_obj, FundamentalsKind::IncomeStatement, quarterly).await;
+    let income =
+        fetch_fundamentals(&ticker_obj, FundamentalsKind::IncomeStatement, quarterly).await;
     let balance = fetch_fundamentals(&ticker_obj, FundamentalsKind::BalanceSheet, quarterly).await;
     let cashflow = fetch_fundamentals(&ticker_obj, FundamentalsKind::CashFlow, quarterly).await;
 
     let cutoff = NaiveDate::parse_from_str(end_date, "%Y-%m-%d").ok();
-    let mut dates: Vec<NaiveDate> = income
-        .as_ref()
-        .map(|f| f.dates())
-        .unwrap_or_default();
+    let mut dates: Vec<NaiveDate> = income.as_ref().map(|f| f.dates()).unwrap_or_default();
     if dates.is_empty() {
         dates = balance.as_ref().map(|f| f.dates()).unwrap_or_default();
     }
@@ -285,8 +288,7 @@ pub async fn get_insider_trades_fallback(
     let holders = ticker_obj.holders().await?;
 
     let end_dt = NaiveDate::parse_from_str(end_date, "%Y-%m-%d").ok();
-    let start_dt = start_date
-        .and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+    let start_dt = start_date.and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
 
     let mut trades: Vec<InsiderTrade> = holders
         .insider_transactions
@@ -318,16 +320,14 @@ pub async fn get_company_news_fallback(
         .await?;
 
     let end_dt = NaiveDate::parse_from_str(end_date, "%Y-%m-%d").ok();
-    let start_dt = start_date
-        .and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+    let start_dt = start_date.and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
 
     let news: Vec<CompanyNews> = articles
         .into_iter()
         .filter_map(|article| {
-            let date = article.published_at.and_then(|ts| {
-                chrono::DateTime::from_timestamp(ts, 0)
-                    .map(|dt| dt.date_naive())
-            })?;
+            let date = article
+                .published_at
+                .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0).map(|dt| dt.date_naive()))?;
 
             if let Some(end) = end_dt {
                 if date > end {
@@ -344,7 +344,9 @@ pub async fn get_company_news_fallback(
                 ticker: ticker.to_string(),
                 title: article.title,
                 author: None,
-                source: article.publisher.unwrap_or_else(|| "Yahoo Finance".to_string()),
+                source: article
+                    .publisher
+                    .unwrap_or_else(|| "Yahoo Finance".to_string()),
                 date: date.format("%Y-%m-%d").to_string(),
                 url: article.link.unwrap_or_default(),
                 sentiment: Some("neutral".to_string()),
@@ -386,10 +388,12 @@ fn book_value_per_share(equity: Option<f64>, shares: Option<f64>) -> Option<f64>
 }
 
 fn map_insider_transaction(ticker: &str, tx: &InsiderTransaction) -> Option<InsiderTrade> {
-    let filing_date = tx
-        .start_date
-        .clone()
-        .unwrap_or_else(|| chrono::Local::now().date_naive().format("%Y-%m-%d").to_string());
+    let filing_date = tx.start_date.clone().unwrap_or_else(|| {
+        chrono::Local::now()
+            .date_naive()
+            .format("%Y-%m-%d")
+            .to_string()
+    });
     let transaction_date = tx.start_date.clone();
     let shares = signed_transaction_shares(tx.shares, tx.transaction.as_deref())?;
     let value = tx.value.map(|v| v as f64);
@@ -544,15 +548,13 @@ fn raw_module_f64(
     module: &str,
     key: &str,
 ) -> Option<f64> {
-    raw.get(module)
-        .and_then(|m| m.get(key))
-        .and_then(|v| {
-            if let Some(obj) = v.as_object() {
-                obj.get("raw").and_then(|r| r.as_f64())
-            } else {
-                v.as_f64()
-            }
-        })
+    raw.get(module).and_then(|m| m.get(key)).and_then(|v| {
+        if let Some(obj) = v.as_object() {
+            obj.get("raw").and_then(|r| r.as_f64())
+        } else {
+            v.as_f64()
+        }
+    })
 }
 
 fn filter_line_item_fields(item: &mut LineItem, requested: &[String]) {

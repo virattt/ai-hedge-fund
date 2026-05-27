@@ -2,31 +2,37 @@
 //! Sibling to src/agents/rakesh_jhunjhunwala.py
 //! Analyzes stocks using Rakesh Jhunjhunwala's compound growth, profitability moats, and valuation principles.
 
-use anyhow::{Result, Context};
+use crate::data::models::LineItem;
 use crate::graph::state::AgentState;
-use crate::tools::api::{get_financial_metrics, get_market_cap, search_line_items};
-use crate::data::models::{FinancialMetrics, LineItem};
+use crate::tools::api::{get_market_cap, search_line_items};
 use crate::utils::llm::call_llm;
+use anyhow::{Context, Result};
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct RakeshJhunjhunwalaSignal {
-    pub signal: String,      // "bullish" | "bearish" | "neutral"
-    pub confidence: u32,     // 0-100
+    pub signal: String,  // "bullish" | "bearish" | "neutral"
+    pub confidence: u32, // 0-100
     pub reasoning: String,
 }
 
 pub async fn rakesh_jhunjhunwala_agent(state: &mut AgentState, agent_id: &str) -> Result<()> {
     println!("Running Rakesh Jhunjhunwala Agent: {}", agent_id);
 
-    let end_date = state.data.get("end_date")
+    let end_date = state
+        .data
+        .get("end_date")
         .and_then(|v| v.as_str())
         .context("Missing end_date in rakesh_jhunjhunwala_agent")?;
-    
-    let tickers_json = state.data.get("tickers")
+
+    let tickers_json = state
+        .data
+        .get("tickers")
         .context("Missing tickers in rakesh_jhunjhunwala_agent")?;
     let tickers: Vec<String> = serde_json::from_value(tickers_json.clone())?;
 
-    let api_key = state.metadata.get("FINANCIAL_DATASETS_API_KEY")
+    let api_key = state
+        .metadata
+        .get("FINANCIAL_DATASETS_API_KEY")
         .and_then(|v| v.as_str());
 
     let mut jhunjhunwala_analysis = serde_json::Map::new();
@@ -54,9 +60,14 @@ pub async fn rakesh_jhunjhunwala_agent(state: &mut AgentState, agent_id: &str) -
             "annual",
             5,
             api_key,
-        ).await.unwrap_or_default();
+        )
+        .await
+        .unwrap_or_default();
 
-        let market_cap = get_market_cap(ticker, end_date, api_key).await.unwrap_or(None).unwrap_or(0.0);
+        let market_cap = get_market_cap(ticker, end_date, api_key)
+            .await
+            .unwrap_or(None)
+            .unwrap_or(0.0);
 
         // Sub-analyses
         let growth = analyze_growth(&financial_line_items);
@@ -65,12 +76,20 @@ pub async fn rakesh_jhunjhunwala_agent(state: &mut AgentState, agent_id: &str) -
         let cash_flow = analyze_cash_flow(&financial_line_items);
         let management = analyze_management_actions(&financial_line_items);
 
-        let total_score = growth.score + profitability.score + balance_sheet.score + cash_flow.score + management.score;
+        let total_score = growth.score
+            + profitability.score
+            + balance_sheet.score
+            + cash_flow.score
+            + management.score;
         let max_score = 24.0;
 
         let intrinsic_value = calculate_intrinsic_value(&financial_line_items);
         let margin_of_safety = if let Some(iv) = intrinsic_value {
-            if market_cap > 0.0 { Some((iv - market_cap) / market_cap) } else { None }
+            if market_cap > 0.0 {
+                Some((iv - market_cap) / market_cap)
+            } else {
+                None
+            }
         } else {
             None
         };
@@ -91,16 +110,15 @@ pub async fn rakesh_jhunjhunwala_agent(state: &mut AgentState, agent_id: &str) -
             }
         };
 
-        let confidence = match margin_of_safety {
+        let _confidence = match margin_of_safety {
             Some(mos) => (mos.abs() * 150.0).clamp(20.0, 95.0).round() as u32,
-            None => (total_score as f64 / max_score * 100.0).clamp(10.0, 80.0).round() as u32,
+            None => (total_score as f64 / max_score * 100.0)
+                .clamp(10.0, 80.0)
+                .round() as u32,
         };
 
-        let intrinsic_value_analysis = analyze_rakesh_jhunjhunwala_style(
-            &financial_line_items,
-            intrinsic_value,
-            market_cap,
-        );
+        let intrinsic_value_analysis =
+            analyze_rakesh_jhunjhunwala_style(&financial_line_items, intrinsic_value, market_cap);
 
         let facts = serde_json::json!({
             "signal": signal,
@@ -144,10 +162,15 @@ pub async fn rakesh_jhunjhunwala_agent(state: &mut AgentState, agent_id: &str) -
         );
     }
 
-    let analyst_signals = state.data.entry("analyst_signals".to_string())
+    let analyst_signals = state
+        .data
+        .entry("analyst_signals".to_string())
         .or_insert_with(|| serde_json::json!({}));
     if let Some(obj) = analyst_signals.as_object_mut() {
-        obj.insert(agent_id.to_string(), serde_json::Value::Object(jhunjhunwala_analysis));
+        obj.insert(
+            agent_id.to_string(),
+            serde_json::Value::Object(jhunjhunwala_analysis),
+        );
     }
 
     Ok(())
@@ -163,13 +186,20 @@ pub fn analyze_profitability(financial_line_items: &[LineItem]) -> JhunjhunwalaS
     let mut details = Vec::new();
 
     if financial_line_items.is_empty() {
-        return JhunjhunwalaSubResult { score: 0, details: "No profitability data available".to_string() };
+        return JhunjhunwalaSubResult {
+            score: 0,
+            details: "No profitability data available".to_string(),
+        };
     }
 
     let latest = &financial_line_items[0];
 
     // 1. Return on Equity (ROE)
-    if let (Some(net_inc), Some(assets), Some(liab)) = (latest.net_income, latest.total_assets, latest.total_liabilities) {
+    if let (Some(net_inc), Some(assets), Some(liab)) = (
+        latest.net_income,
+        latest.total_assets,
+        latest.total_liabilities,
+    ) {
         if net_inc > 0.0 && assets > 0.0 {
             let equity = assets - liab;
             if equity > 0.0 {
@@ -207,7 +237,10 @@ pub fn analyze_profitability(financial_line_items: &[LineItem]) -> JhunjhunwalaS
     }
 
     // 3. EPS CAGR (3-year)
-    let eps_values: Vec<f64> = financial_line_items.iter().filter_map(|item| item.earnings_per_share).collect();
+    let eps_values: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.earnings_per_share)
+        .collect();
     if eps_values.len() >= 3 {
         let initial_eps = eps_values[eps_values.len() - 1];
         let final_eps = eps_values[0];
@@ -227,7 +260,10 @@ pub fn analyze_profitability(financial_line_items: &[LineItem]) -> JhunjhunwalaS
         }
     }
 
-    JhunjhunwalaSubResult { score, details: details.join("; ") }
+    JhunjhunwalaSubResult {
+        score,
+        details: details.join("; "),
+    }
 }
 
 pub fn analyze_growth(financial_line_items: &[LineItem]) -> JhunjhunwalaSubResult {
@@ -235,11 +271,17 @@ pub fn analyze_growth(financial_line_items: &[LineItem]) -> JhunjhunwalaSubResul
     let mut details = Vec::new();
 
     if financial_line_items.len() < 3 {
-        return JhunjhunwalaSubResult { score: 0, details: "Insufficient data for growth analysis".to_string() };
+        return JhunjhunwalaSubResult {
+            score: 0,
+            details: "Insufficient data for growth analysis".to_string(),
+        };
     }
 
     // 1. Revenue CAGR Analysis
-    let revenues: Vec<f64> = financial_line_items.iter().filter_map(|item| item.revenue).collect();
+    let revenues: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.revenue)
+        .collect();
     if revenues.len() >= 3 {
         let initial = revenues[revenues.len() - 1];
         let final_val = revenues[0];
@@ -260,7 +302,10 @@ pub fn analyze_growth(financial_line_items: &[LineItem]) -> JhunjhunwalaSubResul
     }
 
     // 2. Net Income CAGR Analysis
-    let net_incomes: Vec<f64> = financial_line_items.iter().filter_map(|item| item.net_income).collect();
+    let net_incomes: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.net_income)
+        .collect();
     if net_incomes.len() >= 3 {
         let initial = net_incomes[net_incomes.len() - 1];
         let final_val = net_incomes[0];
@@ -285,18 +330,24 @@ pub fn analyze_growth(financial_line_items: &[LineItem]) -> JhunjhunwalaSubResul
         let revs_chrono: Vec<f64> = revenues.iter().rev().cloned().collect();
         let mut declining_years = 0;
         for i in 1..revs_chrono.len() {
-            if revs_chrono[i] < revs_chrono[i-1] {
+            if revs_chrono[i] < revs_chrono[i - 1] {
                 declining_years += 1;
             }
         }
         let consistency = 1.0 - (declining_years as f64 / (revs_chrono.len() - 1) as f64);
         if consistency >= 0.8 {
             score += 1;
-            details.push(format!("Consistent growth pattern ({:.0}% of years)", consistency * 100.0));
+            details.push(format!(
+                "Consistent growth pattern ({:.0}% of years)",
+                consistency * 100.0
+            ));
         }
     }
 
-    JhunjhunwalaSubResult { score, details: details.join("; ") }
+    JhunjhunwalaSubResult {
+        score,
+        details: details.join("; "),
+    }
 }
 
 pub fn analyze_balance_sheet(financial_line_items: &[LineItem]) -> JhunjhunwalaSubResult {
@@ -304,7 +355,10 @@ pub fn analyze_balance_sheet(financial_line_items: &[LineItem]) -> JhunjhunwalaS
     let mut details = Vec::new();
 
     if financial_line_items.is_empty() {
-        return JhunjhunwalaSubResult { score: 0, details: "No balance sheet data".to_string() };
+        return JhunjhunwalaSubResult {
+            score: 0,
+            details: "No balance sheet data".to_string(),
+        };
     }
 
     let latest = &financial_line_items[0];
@@ -324,12 +378,16 @@ pub fn analyze_balance_sheet(financial_line_items: &[LineItem]) -> JhunjhunwalaS
     }
 
     // 2. Current Ratio
-    if let (Some(cur_assets), Some(cur_liab)) = (latest.current_assets, latest.current_liabilities) {
+    if let (Some(cur_assets), Some(cur_liab)) = (latest.current_assets, latest.current_liabilities)
+    {
         if cur_liab > 0.0 {
             let ratio = cur_assets / cur_liab;
             if ratio > 2.0 {
                 score += 2;
-                details.push(format!("Excellent liquidity with current ratio: {:.2}", ratio));
+                details.push(format!(
+                    "Excellent liquidity with current ratio: {:.2}",
+                    ratio
+                ));
             } else if ratio > 1.5 {
                 score += 1;
                 details.push(format!("Good liquidity with current ratio: {:.2}", ratio));
@@ -337,7 +395,10 @@ pub fn analyze_balance_sheet(financial_line_items: &[LineItem]) -> JhunjhunwalaS
         }
     }
 
-    JhunjhunwalaSubResult { score, details: details.join("; ") }
+    JhunjhunwalaSubResult {
+        score,
+        details: details.join("; "),
+    }
 }
 
 pub fn analyze_cash_flow(financial_line_items: &[LineItem]) -> JhunjhunwalaSubResult {
@@ -345,7 +406,10 @@ pub fn analyze_cash_flow(financial_line_items: &[LineItem]) -> JhunjhunwalaSubRe
     let mut details = Vec::new();
 
     if financial_line_items.is_empty() {
-        return JhunjhunwalaSubResult { score: 0, details: "No cash flow data".to_string() };
+        return JhunjhunwalaSubResult {
+            score: 0,
+            details: "No cash flow data".to_string(),
+        };
     }
 
     let latest = &financial_line_items[0];
@@ -364,7 +428,10 @@ pub fn analyze_cash_flow(financial_line_items: &[LineItem]) -> JhunjhunwalaSubRe
         }
     }
 
-    JhunjhunwalaSubResult { score, details: details.join("; ") }
+    JhunjhunwalaSubResult {
+        score,
+        details: details.join("; "),
+    }
 }
 
 pub fn analyze_management_actions(financial_line_items: &[LineItem]) -> JhunjhunwalaSubResult {
@@ -372,7 +439,10 @@ pub fn analyze_management_actions(financial_line_items: &[LineItem]) -> Jhunjhun
     let mut details = Vec::new();
 
     if financial_line_items.is_empty() {
-        return JhunjhunwalaSubResult { score: 0, details: "No management action data".to_string() };
+        return JhunjhunwalaSubResult {
+            score: 0,
+            details: "No management action data".to_string(),
+        };
     }
 
     let latest = &financial_line_items[0];
@@ -386,7 +456,10 @@ pub fn analyze_management_actions(financial_line_items: &[LineItem]) -> Jhunjhun
         }
     }
 
-    JhunjhunwalaSubResult { score, details: details.join("; ") }
+    JhunjhunwalaSubResult {
+        score,
+        details: details.join("; "),
+    }
 }
 
 pub fn assess_quality_metrics(financial_line_items: &[LineItem]) -> f64 {
@@ -398,14 +471,23 @@ pub fn assess_quality_metrics(financial_line_items: &[LineItem]) -> f64 {
     let mut quality_factors = Vec::new();
 
     // 1. ROE Quality
-    if let (Some(net_inc), Some(assets), Some(liab)) = (latest.net_income, latest.total_assets, latest.total_liabilities) {
+    if let (Some(net_inc), Some(assets), Some(liab)) = (
+        latest.net_income,
+        latest.total_assets,
+        latest.total_liabilities,
+    ) {
         let equity = assets - liab;
         if equity > 0.0 && net_inc > 0.0 {
             let roe = net_inc / equity;
-            if roe > 0.20 { quality_factors.push(1.0); }
-            else if roe > 0.15 { quality_factors.push(0.8); }
-            else if roe > 0.10 { quality_factors.push(0.6); }
-            else { quality_factors.push(0.3); }
+            if roe > 0.20 {
+                quality_factors.push(1.0);
+            } else if roe > 0.15 {
+                quality_factors.push(0.8);
+            } else if roe > 0.10 {
+                quality_factors.push(0.6);
+            } else {
+                quality_factors.push(0.3);
+            }
         } else {
             quality_factors.push(0.0);
         }
@@ -417,21 +499,30 @@ pub fn assess_quality_metrics(financial_line_items: &[LineItem]) -> f64 {
     if let (Some(assets), Some(liabilities)) = (latest.total_assets, latest.total_liabilities) {
         if assets > 0.0 {
             let ratio = liabilities / assets;
-            if ratio < 0.3 { quality_factors.push(1.0); }
-            else if ratio < 0.5 { quality_factors.push(0.7); }
-            else if ratio < 0.7 { quality_factors.push(0.4); }
-            else { quality_factors.push(0.1); }
+            if ratio < 0.3 {
+                quality_factors.push(1.0);
+            } else if ratio < 0.5 {
+                quality_factors.push(0.7);
+            } else if ratio < 0.7 {
+                quality_factors.push(0.4);
+            } else {
+                quality_factors.push(0.1);
+            }
         }
     } else {
         quality_factors.push(0.5);
     }
 
     // 3. Growth Consistency
-    let net_incomes: Vec<f64> = financial_line_items.iter().filter_map(|item| item.net_income).collect();
+    let net_incomes: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.net_income)
+        .collect();
     if net_incomes.len() >= 3 {
         let mut declining_years = 0;
         for i in 1..net_incomes.len() {
-            if net_incomes[i] > net_incomes[i-1] { // since newest first, declining means newest < older
+            if net_incomes[i] > net_incomes[i - 1] {
+                // since newest first, declining means newest < older
                 declining_years += 1;
             }
         }
@@ -455,7 +546,10 @@ pub fn calculate_intrinsic_value(financial_line_items: &[LineItem]) -> Option<f6
         return None;
     }
 
-    let net_incomes: Vec<f64> = financial_line_items.iter().filter_map(|item| item.net_income).collect();
+    let net_incomes: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.net_income)
+        .collect();
     if net_incomes.len() < 2 {
         return Some(net_income * 12.0);
     }
@@ -513,7 +607,11 @@ pub fn analyze_rakesh_jhunjhunwala_style(
     let cash_flow = analyze_cash_flow(financial_line_items);
     let management = analyze_management_actions(financial_line_items);
 
-    let total_score = profitability.score + growth.score + balance_sheet.score + cash_flow.score + management.score;
+    let total_score = profitability.score
+        + growth.score
+        + balance_sheet.score
+        + cash_flow.score
+        + management.score;
     let valuation_gap = intrinsic_value.map(|iv| iv - current_price);
 
     serde_json::json!({
@@ -546,11 +644,5 @@ pub async fn generate_jhunjhunwala_output(
         serde_json::to_string_pretty(facts)?
     );
 
-    call_llm(
-        system_prompt,
-        &user_prompt,
-        Some(agent_id),
-        Some(state),
-        3,
-    ).await
+    call_llm(system_prompt, &user_prompt, Some(agent_id), Some(state), 3).await
 }

@@ -2,28 +2,36 @@
 //! Sibling to src/agents/technicals.py
 //! Combines trend following, mean reversion, momentum, and volatility indicators for weighted ensemble trading signals.
 
-use anyhow::{Result, Context};
 use crate::graph::state::AgentState;
 use crate::tools::api::get_prices;
+use anyhow::{Context, Result};
 
 /// Performs sophisticated technical indicator analysis and updates state signals.
 pub async fn technical_analyst_agent(state: &mut AgentState, agent_id: &str) -> Result<()> {
     println!("Running Technical Analyst Agent: {}", agent_id);
 
-    let start_date = state.data.get("start_date")
+    let start_date = state
+        .data
+        .get("start_date")
         .and_then(|v| v.as_str())
         .context("Missing start_date in state data")?;
-    
-    let end_date = state.data.get("end_date")
+
+    let end_date = state
+        .data
+        .get("end_date")
         .and_then(|v| v.as_str())
         .context("Missing end_date in state data")?;
-    
-    let tickers_json = state.data.get("tickers")
+
+    let tickers_json = state
+        .data
+        .get("tickers")
         .context("Missing tickers in state data")?;
-    
+
     let tickers: Vec<String> = serde_json::from_value(tickers_json.clone())?;
-    
-    let api_key = state.metadata.get("FINANCIAL_DATASETS_API_KEY")
+
+    let api_key = state
+        .metadata
+        .get("FINANCIAL_DATASETS_API_KEY")
         .and_then(|v| v.as_str());
 
     let mut technical_analysis = serde_json::Map::new();
@@ -72,10 +80,20 @@ pub async fn technical_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
         // 2. Mean Reversion
         let ma_50 = calculate_sma(&closes, 50);
         let std_50 = calculate_stddev(&closes, 50);
-        let z_score = (closes[last_idx] - ma_50[last_idx]) / if std_50[last_idx] == 0.0 { 1e-8 } else { std_50[last_idx] };
+        let z_score = (closes[last_idx] - ma_50[last_idx])
+            / if std_50[last_idx] == 0.0 {
+                1e-8
+            } else {
+                std_50[last_idx]
+            };
 
         let (bb_upper, bb_lower) = calculate_bollinger_bands(&closes, 20);
-        let price_vs_bb = (closes[last_idx] - bb_lower[last_idx]) / if (bb_upper[last_idx] - bb_lower[last_idx]) == 0.0 { 1e-8 } else { bb_upper[last_idx] - bb_lower[last_idx] };
+        let price_vs_bb = (closes[last_idx] - bb_lower[last_idx])
+            / if (bb_upper[last_idx] - bb_lower[last_idx]) == 0.0 {
+                1e-8
+            } else {
+                bb_upper[last_idx] - bb_lower[last_idx]
+            };
 
         let rsi_14 = calculate_rsi(&closes, 14);
         let rsi_28 = calculate_rsi(&closes, 28);
@@ -99,7 +117,12 @@ pub async fn technical_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
         let mom_6m: f64 = daily_returns.iter().rev().take(126).sum();
 
         let volume_ma_21 = calculate_sma(&volumes, 21);
-        let volume_momentum = volumes[last_idx] / if volume_ma_21[last_idx] == 0.0 { 1e-8 } else { volume_ma_21[last_idx] };
+        let volume_momentum = volumes[last_idx]
+            / if volume_ma_21[last_idx] == 0.0 {
+                1e-8
+            } else {
+                volume_ma_21[last_idx]
+            };
 
         let momentum_score = 0.4 * mom_1m + 0.3 * mom_3m + 0.3 * mom_6m;
         let volume_confirmation = volume_momentum > 1.0;
@@ -120,7 +143,8 @@ pub async fn technical_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
             } else {
                 let slice = &daily_returns[i - 21..=i];
                 let mean = slice.iter().sum::<f64>() / slice.len() as f64;
-                let variance = slice.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / slice.len() as f64;
+                let variance =
+                    slice.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / slice.len() as f64;
                 rolling_std_21.push(variance.sqrt() * 252.0_f64.sqrt());
             }
         }
@@ -135,7 +159,8 @@ pub async fn technical_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
             } else {
                 let slice = &rolling_std_21[i - 63..=i];
                 let mean = slice.iter().sum::<f64>() / slice.len() as f64;
-                let variance = slice.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / slice.len() as f64;
+                let variance =
+                    slice.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / slice.len() as f64;
                 rolling_vol_std_63.push(variance.sqrt());
             }
         }
@@ -143,7 +168,12 @@ pub async fn technical_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
         let vol_z_score = (hist_vol - vol_ma) / if vol_std_63 == 0.0 { 1e-8 } else { vol_std_63 };
 
         let atr = calculate_atr(&highs, &lows, &closes, 14);
-        let atr_ratio = atr[last_idx] / if closes[last_idx] == 0.0 { 1e-8 } else { closes[last_idx] };
+        let atr_ratio = atr[last_idx]
+            / if closes[last_idx] == 0.0 {
+                1e-8
+            } else {
+                closes[last_idx]
+            };
 
         let (vol_signal, vol_confidence) = if vol_regime < 0.8 && vol_z_score < -1.0 {
             ("bullish", (vol_z_score.abs() / 3.0).min(1.0))
@@ -178,15 +208,22 @@ pub async fn technical_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
             }
         };
 
-        let weighted_score =
-            signal_values(trend_signal) * 0.25 * trend_confidence +
-            signal_values(mr_signal) * 0.20 * mr_confidence +
-            signal_values(mom_signal) * 0.25 * mom_confidence +
-            signal_values(vol_signal) * 0.15 * vol_confidence +
-            signal_values(sa_signal) * 0.15 * sa_confidence;
+        let weighted_score = signal_values(trend_signal) * 0.25 * trend_confidence
+            + signal_values(mr_signal) * 0.20 * mr_confidence
+            + signal_values(mom_signal) * 0.25 * mom_confidence
+            + signal_values(vol_signal) * 0.15 * vol_confidence
+            + signal_values(sa_signal) * 0.15 * sa_confidence;
 
-        let total_conf = 0.25 * trend_confidence + 0.20 * mr_confidence + 0.25 * mom_confidence + 0.15 * vol_confidence + 0.15 * sa_confidence;
-        let final_score = if total_conf > 0.0 { weighted_score / total_conf } else { 0.0 };
+        let total_conf = 0.25 * trend_confidence
+            + 0.20 * mr_confidence
+            + 0.25 * mom_confidence
+            + 0.15 * vol_confidence
+            + 0.15 * sa_confidence;
+        let final_score = if total_conf > 0.0 {
+            weighted_score / total_conf
+        } else {
+            0.0
+        };
 
         let overall_signal = if final_score > 0.2 {
             "bullish"
@@ -256,11 +293,16 @@ pub async fn technical_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
         );
     }
 
-    let analyst_signals = state.data.entry("analyst_signals".to_string())
+    let analyst_signals = state
+        .data
+        .entry("analyst_signals".to_string())
         .or_insert_with(|| serde_json::json!({}));
-    
+
     if let Some(obj) = analyst_signals.as_object_mut() {
-        obj.insert(agent_id.to_string(), serde_json::Value::Object(technical_analysis));
+        obj.insert(
+            agent_id.to_string(),
+            serde_json::Value::Object(technical_analysis),
+        );
     }
 
     Ok(())
@@ -290,10 +332,15 @@ pub fn calculate_stddev(data: &[f64], window: usize) -> Vec<f64> {
         let size = if i < window - 1 { i + 1 } else { window };
         let start = i + 1 - size;
         let mean = sma[i];
-        let variance = data[start..=i].iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / size as f64;
+        let variance = data[start..=i]
+            .iter()
+            .map(|&x| (x - mean).powi(2))
+            .sum::<f64>()
+            / size as f64;
         std[i] = variance.sqrt();
     }
-    std}
+    std
+}
 
 pub fn calculate_ema(data: &[f64], window: usize) -> Vec<f64> {
     let mut ema = vec![0.0; data.len()];
@@ -327,9 +374,13 @@ pub fn calculate_rsi(data: &[f64], window: usize) -> Vec<f64> {
 
     let mut avg_gain = gains[1..=window].iter().sum::<f64>() / window as f64;
     let mut avg_loss = losses[1..=window].iter().sum::<f64>() / window as f64;
-    
+
     rsi[window] = if avg_loss == 0.0 {
-        if avg_gain == 0.0 { 50.0 } else { 100.0 }
+        if avg_gain == 0.0 {
+            50.0
+        } else {
+            100.0
+        }
     } else {
         100.0 - (100.0 / (1.0 + avg_gain / avg_loss))
     };
@@ -338,7 +389,11 @@ pub fn calculate_rsi(data: &[f64], window: usize) -> Vec<f64> {
         avg_gain = (avg_gain * (window - 1) as f64 + gains[i]) / window as f64;
         avg_loss = (avg_loss * (window - 1) as f64 + losses[i]) / window as f64;
         rsi[i] = if avg_loss == 0.0 {
-            if avg_gain == 0.0 { 50.0 } else { 100.0 }
+            if avg_gain == 0.0 {
+                50.0
+            } else {
+                100.0
+            }
         } else {
             100.0 - (100.0 / (1.0 + avg_gain / avg_loss))
         };
@@ -359,7 +414,7 @@ pub fn calculate_bollinger_bands(data: &[f64], window: usize) -> (Vec<f64>, Vec<
 }
 
 pub fn calculate_adx(highs: &[f64], lows: &[f64], closes: &[f64], period: usize) -> Vec<f64> {
-    let mut adx = vec![50.0; closes.len()];
+    let adx = vec![50.0; closes.len()];
     if closes.len() < period * 2 {
         return adx;
     }
@@ -426,11 +481,11 @@ pub fn calculate_hurst_exponent(closes: &[f64], max_lag: usize) -> f64 {
         for i in 0..(closes.len() - lag) {
             diffs.push(closes[i + lag] - closes[i]);
         }
-        
+
         let mean = diffs.iter().sum::<f64>() / diffs.len() as f64;
         let variance = diffs.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / diffs.len() as f64;
         let std_dev = variance.sqrt().max(1e-8);
-        
+
         lags.push(lag as f64);
         tau.push(std_dev);
     }
@@ -464,6 +519,10 @@ pub fn calculate_skewness(returns: &[f64], window: usize) -> f64 {
     if std_dev == 0.0 {
         return 0.0;
     }
-    let skew: f64 = slice.iter().map(|&x| ((x - mean) / std_dev).powi(3)).sum::<f64>() / slice.len() as f64;
+    let skew: f64 = slice
+        .iter()
+        .map(|&x| ((x - mean) / std_dev).powi(3))
+        .sum::<f64>()
+        / slice.len() as f64;
     skew
 }

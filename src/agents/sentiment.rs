@@ -2,23 +2,29 @@
 //! Sibling to src/agents/sentiment.py
 //! Analyzes market sentiment by aggregating insider transaction volumes and company news sentiment.
 
-use anyhow::{Result, Context};
 use crate::graph::state::AgentState;
-use crate::tools::api::{get_insider_trades, get_company_news};
+use crate::tools::api::{get_company_news, get_insider_trades};
+use anyhow::{Context, Result};
 
 /// Performs insider trading and news sentiment analysis, updating agent state.
 pub async fn sentiment_analyst_agent(state: &mut AgentState, agent_id: &str) -> Result<()> {
     println!("Running Sentiment Analyst Agent: {}", agent_id);
 
-    let end_date = state.data.get("end_date")
+    let end_date = state
+        .data
+        .get("end_date")
         .and_then(|v| v.as_str())
         .context("Missing end_date in sentiment_analyst_agent")?;
 
-    let tickers_json = state.data.get("tickers")
+    let tickers_json = state
+        .data
+        .get("tickers")
         .context("Missing tickers in sentiment_analyst_agent")?;
     let tickers: Vec<String> = serde_json::from_value(tickers_json.clone())?;
 
-    let api_key = state.metadata.get("FINANCIAL_DATASETS_API_KEY")
+    let api_key = state
+        .metadata
+        .get("FINANCIAL_DATASETS_API_KEY")
         .and_then(|v| v.as_str());
 
     let mut sentiment_analysis = serde_json::Map::new();
@@ -68,16 +74,20 @@ pub async fn sentiment_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
         let insider_weight = 0.3;
         let news_weight = 0.7;
 
-        let insider_bullish_count = insider_signals.iter().filter(|&&s| s == "bullish").count() as f64;
-        let insider_bearish_count = insider_signals.iter().filter(|&&s| s == "bearish").count() as f64;
+        let insider_bullish_count =
+            insider_signals.iter().filter(|&&s| s == "bullish").count() as f64;
+        let insider_bearish_count =
+            insider_signals.iter().filter(|&&s| s == "bearish").count() as f64;
 
         let news_bullish_count = news_signals.iter().filter(|&&s| s == "bullish").count() as f64;
         let news_bearish_count = news_signals.iter().filter(|&&s| s == "bearish").count() as f64;
         let news_neutral_count = news_signals.iter().filter(|&&s| s == "neutral").count() as f64;
 
         // Calculate weighted signal counts
-        let bullish_signals = insider_bullish_count * insider_weight + news_bullish_count * news_weight;
-        let bearish_signals = insider_bearish_count * insider_weight + news_bearish_count * news_weight;
+        let bullish_signals =
+            insider_bullish_count * insider_weight + news_bullish_count * news_weight;
+        let bearish_signals =
+            insider_bearish_count * insider_weight + news_bearish_count * news_weight;
 
         let overall_signal = if bullish_signals > bearish_signals {
             "bullish"
@@ -88,10 +98,15 @@ pub async fn sentiment_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
         };
 
         // Calculate confidence level based on the weighted proportion
-        let total_weighted_signals = (insider_signals.len() as f64) * insider_weight + (news_signals.len() as f64) * news_weight;
+        let total_weighted_signals = (insider_signals.len() as f64) * insider_weight
+            + (news_signals.len() as f64) * news_weight;
         let mut confidence = 0.0;
         if total_weighted_signals > 0.0 {
-            let max_signals = if bullish_signals > bearish_signals { bullish_signals } else { bearish_signals };
+            let max_signals = if bullish_signals > bearish_signals {
+                bullish_signals
+            } else {
+                bearish_signals
+            };
             confidence = ((max_signals / total_weighted_signals) * 100.0 * 100.0).round() / 100.0;
         }
 
@@ -103,7 +118,11 @@ pub async fn sentiment_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
             "neutral"
         };
 
-        let max_insider_count = if insider_bullish_count > insider_bearish_count { insider_bullish_count } else { insider_bearish_count };
+        let max_insider_count = if insider_bullish_count > insider_bearish_count {
+            insider_bullish_count
+        } else {
+            insider_bearish_count
+        };
         let insider_confidence = if !insider_signals.is_empty() {
             ((max_insider_count / insider_signals.len() as f64) * 100.0).round() as u64
         } else {
@@ -118,7 +137,11 @@ pub async fn sentiment_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
             "neutral"
         };
 
-        let max_news_count = if news_bullish_count > news_bearish_count { news_bullish_count } else { news_bearish_count };
+        let max_news_count = if news_bullish_count > news_bearish_count {
+            news_bullish_count
+        } else {
+            news_bearish_count
+        };
         let news_confidence = if !news_signals.is_empty() {
             ((max_news_count / news_signals.len() as f64) * 100.0).round() as u64
         } else {
@@ -172,19 +195,29 @@ pub async fn sentiment_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
     }
 
     // Print the reasoning if show_reasoning is enabled
-    let show_reasoning = state.metadata.get("show_reasoning")
+    let show_reasoning = state
+        .metadata
+        .get("show_reasoning")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
     if show_reasoning {
-        crate::graph::state::show_agent_reasoning(&serde_json::json!(sentiment_analysis), "Sentiment Analysis Agent");
+        crate::graph::state::show_agent_reasoning(
+            &serde_json::json!(sentiment_analysis),
+            "Sentiment Analysis Agent",
+        );
     }
 
     // Add sentiment analysis to state's analyst signals
-    let analyst_signals = state.data.entry("analyst_signals".to_string())
+    let analyst_signals = state
+        .data
+        .entry("analyst_signals".to_string())
         .or_insert_with(|| serde_json::json!({}));
     if let Some(obj) = analyst_signals.as_object_mut() {
-        obj.insert(agent_id.to_string(), serde_json::Value::Object(sentiment_analysis.clone()));
+        obj.insert(
+            agent_id.to_string(),
+            serde_json::Value::Object(sentiment_analysis.clone()),
+        );
     }
 
     // Add a HumanMessage representing the aggregate analysis to the state messages list
@@ -197,4 +230,3 @@ pub async fn sentiment_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
 
     Ok(())
 }
-

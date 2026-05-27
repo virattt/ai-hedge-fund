@@ -2,37 +2,45 @@
 //! Sibling to src/agents/news_sentiment.py
 //! Analyzes recent news sentiment for tickers using a combined mathematical and LLM-assisted approach.
 
-use anyhow::{Result, Context};
-use std::collections::HashMap;
+use crate::data::models::CompanyNews;
 use crate::graph::state::AgentState;
 use crate::tools::api::get_company_news;
-use crate::data::models::CompanyNews;
 use crate::utils::llm::call_llm;
+use anyhow::{Context, Result};
+use std::collections::HashMap;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct Sentiment {
-    pub sentiment: String,   // "positive" | "negative" | "neutral"
-    pub confidence: u32,     // 0-100
+    pub sentiment: String, // "positive" | "negative" | "neutral"
+    pub confidence: u32,   // 0-100
 }
 
 pub async fn news_sentiment_agent(state: &mut AgentState, agent_id: &str) -> Result<()> {
     println!("Running News Sentiment Agent: {}", agent_id);
 
-    let end_date = state.data.get("end_date")
+    let end_date = state
+        .data
+        .get("end_date")
         .and_then(|v| v.as_str())
         .context("Missing end_date in news_sentiment_agent")?;
-    
-    let tickers_json = state.data.get("tickers")
+
+    let tickers_json = state
+        .data
+        .get("tickers")
         .context("Missing tickers in news_sentiment_agent")?;
     let tickers: Vec<String> = serde_json::from_value(tickers_json.clone())?;
 
-    let api_key = state.metadata.get("FINANCIAL_DATASETS_API_KEY")
+    let api_key = state
+        .metadata
+        .get("FINANCIAL_DATASETS_API_KEY")
         .and_then(|v| v.as_str());
 
     let mut sentiment_analysis = serde_json::Map::new();
 
     for ticker in &tickers {
-        let mut company_news = get_company_news(ticker, end_date, None, 100, api_key).await.unwrap_or_default();
+        let mut company_news = get_company_news(ticker, end_date, None, 100, api_key)
+            .await
+            .unwrap_or_default();
         let mut news_signals = Vec::new();
         let mut sentiment_confidences = HashMap::new();
         let mut sentiments_classified_by_llm = 0;
@@ -41,16 +49,16 @@ pub async fn news_sentiment_agent(state: &mut AgentState, agent_id: &str) -> Res
             // We want to inspect the 10 most recent articles
             let limit_len = 10.min(company_news.len());
             let mut articles_to_classify = Vec::new();
-            for i in 0..limit_len {
-                if company_news[i].sentiment.is_none() {
+            for (i, news) in company_news.iter().take(limit_len).enumerate() {
+                if news.sentiment.is_none() {
                     articles_to_classify.push(i);
                 }
             }
 
             // Limit LLM classification to 5 articles
             let classify_limit = 5.min(articles_to_classify.len());
-            for i in 0..classify_limit {
-                let idx = articles_to_classify[i];
+            for idx in articles_to_classify.iter().take(classify_limit) {
+                let idx = *idx;
                 let headline = &company_news[idx].title;
 
                 let system_prompt = "You are a financial news sentiment analyzer. Classify headline sentiment for the specified ticker only.";
@@ -63,13 +71,10 @@ pub async fn news_sentiment_agent(state: &mut AgentState, agent_id: &str) -> Res
                     ticker, headline
                 );
 
-                let classification: Sentiment = call_llm(
-                    system_prompt,
-                    &user_prompt,
-                    Some(agent_id),
-                    Some(state),
-                    3,
-                ).await.unwrap_or_default();
+                let classification: Sentiment =
+                    call_llm(system_prompt, &user_prompt, Some(agent_id), Some(state), 3)
+                        .await
+                        .unwrap_or_default();
 
                 let resolved_sentiment = if classification.sentiment.is_empty() {
                     "neutral".to_string()
@@ -78,7 +83,8 @@ pub async fn news_sentiment_agent(state: &mut AgentState, agent_id: &str) -> Res
                 };
 
                 company_news[idx].sentiment = Some(resolved_sentiment.clone());
-                sentiment_confidences.insert(company_news[idx].url.clone(), classification.confidence);
+                sentiment_confidences
+                    .insert(company_news[idx].url.clone(), classification.confidence);
                 sentiments_classified_by_llm += 1;
             }
 
@@ -141,10 +147,15 @@ pub async fn news_sentiment_agent(state: &mut AgentState, agent_id: &str) -> Res
         );
     }
 
-    let analyst_signals = state.data.entry("analyst_signals".to_string())
+    let analyst_signals = state
+        .data
+        .entry("analyst_signals".to_string())
         .or_insert_with(|| serde_json::json!({}));
     if let Some(obj) = analyst_signals.as_object_mut() {
-        obj.insert(agent_id.to_string(), serde_json::Value::Object(sentiment_analysis));
+        obj.insert(
+            agent_id.to_string(),
+            serde_json::Value::Object(sentiment_analysis),
+        );
     }
 
     Ok(())
@@ -182,7 +193,8 @@ fn calculate_confidence_score(
         }
 
         if !llm_confidences.is_empty() {
-            let avg_llm_confidence = llm_confidences.iter().sum::<f64>() / llm_confidences.len() as f64;
+            let avg_llm_confidence =
+                llm_confidences.iter().sum::<f64>() / llm_confidences.len() as f64;
             let blended = 0.7 * avg_llm_confidence + 0.3 * signal_proportion;
             return (blended * 100.0).round() / 100.0;
         }

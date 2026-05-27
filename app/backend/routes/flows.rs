@@ -1,26 +1,24 @@
-use axum::{
-    routing::{get, post, put, delete},
-    Router,
-    Json,
-    extract::{Path, State, Query},
-    http::StatusCode,
-};
-use sqlx::SqlitePool;
-use serde::Deserialize;
-use crate::repositories::flow_repository::FlowRepository;
-use crate::models::schemas::{
-    FlowCreateRequest,
-    FlowUpdateRequest,
-    FlowResponse,
-    FlowSummaryResponse,
-    ErrorResponse,
-};
 use crate::database::models::HedgeFundFlow;
+use crate::models::schemas::{
+    ErrorResponse, FlowCreateRequest, FlowResponse, FlowSummaryResponse, FlowUpdateRequest,
+};
+use crate::repositories::flow_repository::{FlowCreateInput, FlowRepository, FlowUpdateInput};
+use axum::{
+    extract::{Path, Query, State},
+    http::StatusCode,
+    routing::{get, post},
+    Json, Router,
+};
+use serde::Deserialize;
+use sqlx::SqlitePool;
 
 pub fn router() -> Router<SqlitePool> {
     Router::new()
         .route("/", post(create_flow).get(get_flows))
-        .route("/:flow_id", get(get_flow).put(update_flow).delete(delete_flow))
+        .route(
+            "/:flow_id",
+            get(get_flow).put(update_flow).delete(delete_flow),
+        )
         .route("/:flow_id/duplicate", post(duplicate_flow))
         .route("/search/:name", get(search_flows))
 }
@@ -60,18 +58,23 @@ async fn create_flow(
     let repo = FlowRepository::new(&db);
     let nodes_val = serde_json::to_value(&req.nodes).unwrap_or(serde_json::Value::Null);
     let edges_val = serde_json::to_value(&req.edges).unwrap_or(serde_json::Value::Null);
-    let tags_val = req.tags.map(|t| serde_json::to_value(t).unwrap_or(serde_json::Value::Null));
+    let tags_val = req
+        .tags
+        .map(|t| serde_json::to_value(t).unwrap_or(serde_json::Value::Null));
 
-    match repo.create_flow(
-        &req.name,
-        &nodes_val,
-        &edges_val,
-        req.description.as_deref(),
-        req.viewport.as_ref(),
-        req.data.as_ref(),
-        req.is_template,
-        tags_val.as_ref(),
-    ).await {
+    match repo
+        .create_flow(FlowCreateInput {
+            name: &req.name,
+            nodes: &nodes_val,
+            edges: &edges_val,
+            description: req.description.as_deref(),
+            viewport: req.viewport.as_ref(),
+            data: req.data.as_ref(),
+            is_template: req.is_template,
+            tags: tags_val.as_ref(),
+        })
+        .await
+    {
         Ok(flow) => Ok(Json(map_flow_to_response(flow))),
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -140,21 +143,30 @@ async fn update_flow(
     Json(req): Json<FlowUpdateRequest>,
 ) -> Result<Json<FlowResponse>, (StatusCode, Json<ErrorResponse>)> {
     let repo = FlowRepository::new(&db);
-    let nodes_val = req.nodes.map(|n| serde_json::to_value(n).unwrap_or(serde_json::Value::Null));
-    let edges_val = req.edges.map(|e| serde_json::to_value(e).unwrap_or(serde_json::Value::Null));
-    let tags_val = req.tags.map(|t| serde_json::to_value(t).unwrap_or(serde_json::Value::Null));
+    let nodes_val = req
+        .nodes
+        .map(|n| serde_json::to_value(n).unwrap_or(serde_json::Value::Null));
+    let edges_val = req
+        .edges
+        .map(|e| serde_json::to_value(e).unwrap_or(serde_json::Value::Null));
+    let tags_val = req
+        .tags
+        .map(|t| serde_json::to_value(t).unwrap_or(serde_json::Value::Null));
 
-    match repo.update_flow(
-        flow_id,
-        req.name.as_deref(),
-        req.description.as_deref(),
-        nodes_val.as_ref(),
-        edges_val.as_ref(),
-        req.viewport.as_ref(),
-        req.data.as_ref(),
-        req.is_template,
-        tags_val.as_ref(),
-    ).await {
+    match repo
+        .update_flow(FlowUpdateInput {
+            flow_id,
+            name: req.name.as_deref(),
+            description: req.description.as_deref(),
+            nodes: nodes_val.as_ref(),
+            edges: edges_val.as_ref(),
+            viewport: req.viewport.as_ref(),
+            data: req.data.as_ref(),
+            is_template: req.is_template,
+            tags: tags_val.as_ref(),
+        })
+        .await
+    {
         Ok(Some(flow)) => Ok(Json(map_flow_to_response(flow))),
         Ok(None) => Err((
             StatusCode::NOT_FOUND,
@@ -179,7 +191,9 @@ async fn delete_flow(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
     let repo = FlowRepository::new(&db);
     match repo.delete_flow(flow_id).await {
-        Ok(true) => Ok(Json(serde_json::json!({ "message": "Flow deleted successfully" }))),
+        Ok(true) => Ok(Json(
+            serde_json::json!({ "message": "Flow deleted successfully" }),
+        )),
         Ok(false) => Err((
             StatusCode::NOT_FOUND,
             Json(ErrorResponse {
@@ -208,7 +222,10 @@ async fn duplicate_flow(
     Query(query): Query<DuplicateFlowQuery>,
 ) -> Result<Json<FlowResponse>, (StatusCode, Json<ErrorResponse>)> {
     let repo = FlowRepository::new(&db);
-    match repo.duplicate_flow(flow_id, query.new_name.as_deref()).await {
+    match repo
+        .duplicate_flow(flow_id, query.new_name.as_deref())
+        .await
+    {
         Ok(Some(flow)) => Ok(Json(map_flow_to_response(flow))),
         Ok(None) => Err((
             StatusCode::NOT_FOUND,

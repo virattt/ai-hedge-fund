@@ -2,48 +2,62 @@
 //! Sibling to src/agents/michael_burry.py
 //! Analyzes stocks using Dr. Michael J. Burry's deep‑value, contrarian framework.
 
-use anyhow::{Result, Context};
-use chrono::Duration;
+use crate::data::models::{CompanyNews, FinancialMetrics, InsiderTrade, LineItem};
 use crate::graph::state::AgentState;
-use crate::tools::api::{get_financial_metrics, get_market_cap, search_line_items, get_insider_trades, get_company_news};
-use crate::data::models::{FinancialMetrics, LineItem, InsiderTrade, CompanyNews};
+use crate::tools::api::{
+    get_company_news, get_financial_metrics, get_insider_trades, get_market_cap, search_line_items,
+};
 use crate::utils::llm::call_llm;
+use anyhow::{Context, Result};
+use chrono::Duration;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct MichaelBurrySignal {
-    pub signal: String,      // "bullish" | "bearish" | "neutral"
-    pub confidence: u32,     // 0-100
+    pub signal: String,  // "bullish" | "bearish" | "neutral"
+    pub confidence: u32, // 0-100
     pub reasoning: String,
 }
 
 pub async fn michael_burry_agent(state: &mut AgentState, agent_id: &str) -> Result<()> {
     println!("Running Michael Burry Agent: {}", agent_id);
 
-    let start_date_str = state.data.get("start_date")
+    let _start_date_str = state
+        .data
+        .get("start_date")
         .and_then(|v| v.as_str())
         .context("Missing start_date in michael_burry_agent")?;
-    
-    let end_date_str = state.data.get("end_date")
+
+    let end_date_str = state
+        .data
+        .get("end_date")
         .and_then(|v| v.as_str())
         .context("Missing end_date in michael_burry_agent")?;
-    
-    let tickers_json = state.data.get("tickers")
+
+    let tickers_json = state
+        .data
+        .get("tickers")
         .context("Missing tickers in michael_burry_agent")?;
     let tickers: Vec<String> = serde_json::from_value(tickers_json.clone())?;
 
-    let api_key = state.metadata.get("FINANCIAL_DATASETS_API_KEY")
+    let api_key = state
+        .metadata
+        .get("FINANCIAL_DATASETS_API_KEY")
         .and_then(|v| v.as_str());
 
     // Lookback one year for insider trades and news
     let end_dt = chrono::NaiveDate::parse_from_str(end_date_str, "%Y-%m-%d")
         .context("Failed to parse end_date in michael_burry_agent")?;
-    let one_year_ago = (end_dt - Duration::days(365)).format("%Y-%m-%d").to_string();
+    let one_year_ago = (end_dt - Duration::days(365))
+        .format("%Y-%m-%d")
+        .to_string();
 
     let mut burry_analysis = serde_json::Map::new();
 
     for ticker in &tickers {
         // Fetch raw data
-        let metrics = get_financial_metrics(ticker, end_date_str, "ttm", 5, api_key).await.unwrap_or_default();
+        let metrics = get_financial_metrics(ticker, end_date_str, "ttm", 5, api_key)
+            .await
+            .unwrap_or_default();
         let line_items = search_line_items(
             ticker,
             vec![
@@ -60,11 +74,21 @@ pub async fn michael_burry_agent(state: &mut AgentState, agent_id: &str) -> Resu
             "ttm",
             5,
             api_key,
-        ).await.unwrap_or_default();
+        )
+        .await
+        .unwrap_or_default();
 
-        let insider_trades = get_insider_trades(ticker, end_date_str, Some(&one_year_ago), 100, api_key).await.unwrap_or_default();
-        let news = get_company_news(ticker, end_date_str, Some(&one_year_ago), 250, api_key).await.unwrap_or_default();
-        let market_cap = get_market_cap(ticker, end_date_str, api_key).await.unwrap_or(None).unwrap_or(0.0);
+        let insider_trades =
+            get_insider_trades(ticker, end_date_str, Some(&one_year_ago), 100, api_key)
+                .await
+                .unwrap_or_default();
+        let news = get_company_news(ticker, end_date_str, Some(&one_year_ago), 250, api_key)
+            .await
+            .unwrap_or_default();
+        let market_cap = get_market_cap(ticker, end_date_str, api_key)
+            .await
+            .unwrap_or(None)
+            .unwrap_or(0.0);
 
         // Perform sub-analyses
         let value = analyze_value(&metrics, &line_items, market_cap);
@@ -73,7 +97,8 @@ pub async fn michael_burry_agent(state: &mut AgentState, agent_id: &str) -> Resu
         let contrarian = analyze_contrarian_sentiment(&news);
 
         let total_score = value.score + balance_sheet.score + insider.score + contrarian.score;
-        let max_score = value.max_score + balance_sheet.max_score + insider.max_score + contrarian.max_score;
+        let max_score =
+            value.max_score + balance_sheet.max_score + insider.max_score + contrarian.max_score;
 
         let signal = if total_score as f64 >= 0.7 * max_score as f64 {
             "bullish"
@@ -122,10 +147,15 @@ pub async fn michael_burry_agent(state: &mut AgentState, agent_id: &str) -> Resu
         );
     }
 
-    let analyst_signals = state.data.entry("analyst_signals".to_string())
+    let analyst_signals = state
+        .data
+        .entry("analyst_signals".to_string())
         .or_insert_with(|| serde_json::json!({}));
     if let Some(obj) = analyst_signals.as_object_mut() {
-        obj.insert(agent_id.to_string(), serde_json::Value::Object(burry_analysis));
+        obj.insert(
+            agent_id.to_string(),
+            serde_json::Value::Object(burry_analysis),
+        );
     }
 
     Ok(())
@@ -137,7 +167,11 @@ pub struct BurrySubResult {
     pub details: String,
 }
 
-pub fn analyze_value(metrics: &[FinancialMetrics], line_items: &[LineItem], market_cap: f64) -> BurrySubResult {
+pub fn analyze_value(
+    metrics: &[FinancialMetrics],
+    line_items: &[LineItem],
+    market_cap: f64,
+) -> BurrySubResult {
     let mut score = 0;
     let max_score = 6;
     let mut details = Vec::new();
@@ -184,10 +218,17 @@ pub fn analyze_value(metrics: &[FinancialMetrics], line_items: &[LineItem], mark
         details.push("Financial metrics unavailable".to_string());
     }
 
-    BurrySubResult { score, max_score, details: details.join("; ") }
+    BurrySubResult {
+        score,
+        max_score,
+        details: details.join("; "),
+    }
 }
 
-pub fn analyze_balance_sheet(metrics: &[FinancialMetrics], line_items: &[LineItem]) -> BurrySubResult {
+pub fn analyze_balance_sheet(
+    metrics: &[FinancialMetrics],
+    line_items: &[LineItem],
+) -> BurrySubResult {
     let mut score = 0;
     let max_score = 3;
     let mut details = Vec::new();
@@ -228,7 +269,11 @@ pub fn analyze_balance_sheet(metrics: &[FinancialMetrics], line_items: &[LineIte
         details.push("Line items data unavailable".to_string());
     }
 
-    BurrySubResult { score, max_score, details: details.join("; ") }
+    BurrySubResult {
+        score,
+        max_score,
+        details: details.join("; "),
+    }
 }
 
 pub fn analyze_insider_activity(insider_trades: &[InsiderTrade]) -> BurrySubResult {
@@ -238,7 +283,11 @@ pub fn analyze_insider_activity(insider_trades: &[InsiderTrade]) -> BurrySubResu
 
     if insider_trades.is_empty() {
         details.push("No insider trade data".to_string());
-        return BurrySubResult { score, max_score, details: details.join("; ") };
+        return BurrySubResult {
+            score,
+            max_score,
+            details: details.join("; "),
+        };
     }
 
     let mut shares_bought = 0.0;
@@ -266,7 +315,11 @@ pub fn analyze_insider_activity(insider_trades: &[InsiderTrade]) -> BurrySubResu
         details.push("Net insider selling".to_string());
     }
 
-    BurrySubResult { score, max_score, details: details.join("; ") }
+    BurrySubResult {
+        score,
+        max_score,
+        details: details.join("; "),
+    }
 }
 
 pub fn analyze_contrarian_sentiment(news: &[CompanyNews]) -> BurrySubResult {
@@ -276,21 +329,38 @@ pub fn analyze_contrarian_sentiment(news: &[CompanyNews]) -> BurrySubResult {
 
     if news.is_empty() {
         details.push("No recent news".to_string());
-        return BurrySubResult { score, max_score, details: details.join("; ") };
+        return BurrySubResult {
+            score,
+            max_score,
+            details: details.join("; "),
+        };
     }
 
-    let sentiment_negative_count = news.iter()
-        .filter(|n| n.sentiment.as_ref().map(|s| s.to_lowercase() == "negative" || s.to_lowercase() == "bearish").unwrap_or(false))
+    let sentiment_negative_count = news
+        .iter()
+        .filter(|n| {
+            n.sentiment
+                .as_ref()
+                .map(|s| s.to_lowercase() == "negative" || s.to_lowercase() == "bearish")
+                .unwrap_or(false)
+        })
         .count();
 
     if sentiment_negative_count >= 5 {
         score += 1;
-        details.push(format!("{} negative headlines (contrarian opportunity)", sentiment_negative_count));
+        details.push(format!(
+            "{} negative headlines (contrarian opportunity)",
+            sentiment_negative_count
+        ));
     } else {
         details.push("Limited negative press".to_string());
     }
 
-    BurrySubResult { score, max_score, details: details.join("; ") }
+    BurrySubResult {
+        score,
+        max_score,
+        details: details.join("; "),
+    }
 }
 
 pub async fn generate_burry_output(
@@ -311,11 +381,5 @@ pub async fn generate_burry_output(
         serde_json::to_string_pretty(facts)?
     );
 
-    call_llm(
-        system_prompt,
-        &user_prompt,
-        Some(agent_id),
-        Some(state),
-        3,
-    ).await
+    call_llm(system_prompt, &user_prompt, Some(agent_id), Some(state), 3).await
 }

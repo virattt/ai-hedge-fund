@@ -47,7 +47,9 @@ pub async fn make_api_request(
 
     let max_retries = 3;
     for attempt in 0..=max_retries {
-        let req = builder.try_clone().context("Failed to clone request builder")?;
+        let req = builder
+            .try_clone()
+            .context("Failed to clone request builder")?;
         let response = req.send().await;
 
         match response {
@@ -135,7 +137,11 @@ pub async fn get_prices_yfinance(
             .context("Invalid end_date for Yahoo Finance query")?;
 
         let start_ts = Utc
-            .from_local_datetime(&start_dt.and_hms_opt(0, 0, 0).context("Invalid start time")?)
+            .from_local_datetime(
+                &start_dt
+                    .and_hms_opt(0, 0, 0)
+                    .context("Invalid start time")?,
+            )
             .single()
             .context("Invalid start timestamp")?
             .timestamp();
@@ -290,7 +296,10 @@ pub async fn search_line_items(
     };
 
     if !items.is_empty() {
-        cache.lock().unwrap().set_line_items(&cache_key, items.clone());
+        cache
+            .lock()
+            .unwrap()
+            .set_line_items(&cache_key, items.clone());
     }
 
     Ok(items)
@@ -315,7 +324,9 @@ pub async fn get_insider_trades(
         DataProvider::YahooFinance => {
             get_insider_trades_fallback(ticker, end_date, start_date, limit).await?
         }
-        DataProvider::FinancialDatasets => fetch_insider_trades_fd(ticker, end_date, start_date, limit, api_key).await?,
+        DataProvider::FinancialDatasets => {
+            fetch_insider_trades_fd(ticker, end_date, start_date, limit, api_key).await?
+        }
     };
 
     if !trades.is_empty() {
@@ -403,7 +414,10 @@ pub async fn get_company_news(
     };
 
     if !news.is_empty() {
-        cache.lock().unwrap().set_company_news(&cache_key, news.clone());
+        cache
+            .lock()
+            .unwrap()
+            .set_company_news(&cache_key, news.clone());
     }
 
     Ok(news)

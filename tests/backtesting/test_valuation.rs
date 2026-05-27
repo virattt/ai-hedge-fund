@@ -1,9 +1,11 @@
 // Source: tests/backtesting/test_valuation.rs
 //! Mathematical verification of portfolio valuation, exposure metrics, and summaries.
 
-use std::collections::HashMap;
 use ai_hedge_fund::backtesting::portfolio::Portfolio;
-use ai_hedge_fund::backtesting::valuation::{calculate_portfolio_value, compute_exposures, compute_portfolio_summary};
+use ai_hedge_fund::backtesting::valuation::{
+    calculate_portfolio_value, compute_exposures, compute_portfolio_summary,
+};
+use std::collections::HashMap;
 
 #[test]
 fn test_calculate_portfolio_value() {
@@ -62,18 +64,13 @@ fn test_compute_portfolio_summary() {
     current_prices.insert("AAPL".to_string(), 100.0);
 
     let total_value = calculate_portfolio_value(&portfolio, &current_prices);
-    
+
     let mut metrics = HashMap::new();
     metrics.insert("sharpe_ratio".to_string(), Some(1.0));
     metrics.insert("sortino_ratio".to_string(), Some(2.0));
     metrics.insert("max_drawdown".to_string(), Some(-5.0));
 
-    let summary = compute_portfolio_summary(
-        &portfolio,
-        total_value,
-        Some(100000.0),
-        &metrics,
-    );
+    let summary = compute_portfolio_summary(&portfolio, total_value, Some(100000.0), &metrics);
 
     assert_eq!(summary.cash_balance, 99000.0);
     assert_eq!(summary.total_position_value, 1000.0);

@@ -1,5 +1,5 @@
-use serde::{Serialize, Deserialize};
 use axum::response::sse::Event;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct StartEvent {
@@ -21,6 +21,12 @@ impl StartEvent {
     }
 }
 
+impl Default for StartEvent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProgressUpdateEvent {
     pub r#type: String,
@@ -32,7 +38,12 @@ pub struct ProgressUpdateEvent {
 }
 
 impl ProgressUpdateEvent {
-    pub fn new(agent: String, ticker: Option<String>, status: String, analysis: Option<String>) -> Self {
+    pub fn new(
+        agent: String,
+        ticker: Option<String>,
+        status: String,
+        analysis: Option<String>,
+    ) -> Self {
         Self {
             r#type: "progress".to_string(),
             agent,

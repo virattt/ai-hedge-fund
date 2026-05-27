@@ -1,34 +1,22 @@
-use axum::{
-    response::sse::{Event, Sse},
-    routing::{post, get},
-    Router,
-    Json,
-    extract::State,
-    http::StatusCode,
-};
-use sqlx::SqlitePool;
-use tokio_stream::Stream;
-use std::convert::Infallible;
-use futures_util::stream::StreamExt;
-use crate::models::schemas::{
-    HedgeFundRequest,
-    BacktestRequest,
-    BacktestDayResult,
-    ErrorResponse,
-};
-use crate::models::events::{
-    StartEvent,
-    ProgressUpdateEvent,
-    CompleteEvent,
-    ErrorEvent,
-};
+use crate::models::events::{CompleteEvent, ErrorEvent, ProgressUpdateEvent, StartEvent};
+use crate::models::schemas::{BacktestDayResult, BacktestRequest, ErrorResponse, HedgeFundRequest};
 use crate::services::api_key_service::ApiKeyService;
-use crate::services::portfolio::create_portfolio;
-use crate::services::graph::run_graph_async;
 use crate::services::backtest_service::BacktestService;
+use crate::services::graph::run_graph_async;
+use crate::services::portfolio::create_portfolio;
+use ai_hedge_fund::utils::analysts::get_analysts_list;
 use ai_hedge_fund::utils::api_key::is_valid_api_key;
 use ai_hedge_fund::utils::llm::{log_resolved_llm_config, resolve_llm_config};
-use ai_hedge_fund::utils::analysts::get_analysts_list;
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::sse::{Event, Sse},
+    routing::{get, post},
+    Json, Router,
+};
+use sqlx::SqlitePool;
+use std::convert::Infallible;
+use tokio_stream::Stream;
 
 pub fn router() -> Router<SqlitePool> {
     Router::new()
@@ -72,8 +60,14 @@ async fn run_hedge_fund_handler(
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Infallible>>(20);
 
     let tickers = req.base.tickers.clone();
-    let start_date = req.start_date.clone().unwrap_or_else(|| "2024-01-01".to_string());
-    let end_date = req.end_date.clone().unwrap_or_else(|| "2024-01-08".to_string());
+    let _start_date = req
+        .start_date
+        .clone()
+        .unwrap_or_else(|| "2024-01-01".to_string());
+    let end_date = req
+        .end_date
+        .clone()
+        .unwrap_or_else(|| "2024-01-08".to_string());
     let llm = resolve_llm_config(
         req.base.model_name.as_deref(),
         false,
@@ -88,10 +82,11 @@ async fn run_hedge_fund_handler(
         req.base.margin_requirement,
         &tickers,
         req.base.portfolio_positions.as_deref(),
-    )).unwrap_or(serde_json::Value::Null);
+    ))
+    .unwrap_or(serde_json::Value::Null);
 
     let graph_nodes = req.base.graph_nodes.clone();
-    let graph_edges = req.base.graph_edges.clone();
+    let _graph_edges = req.base.graph_edges.clone();
 
     tokio::spawn(async move {
         // Send start event
@@ -102,15 +97,29 @@ async fn run_hedge_fund_handler(
         // Send simulated progress events to match UI loader sequence
         let progress_events = vec![
             ("system", "Preparing hedge fund run..."),
-            ("fundamentals", "Analyzing fundamental data and financial statements..."),
-            ("technicals", "Scanning technical indicators, moving averages, and MACD..."),
-            ("sentiment", "Aggregating news sentiment and social media signals..."),
-            ("portfolio_manager", "Rebalancing portfolio and checking risk parameters..."),
+            (
+                "fundamentals",
+                "Analyzing fundamental data and financial statements...",
+            ),
+            (
+                "technicals",
+                "Scanning technical indicators, moving averages, and MACD...",
+            ),
+            (
+                "sentiment",
+                "Aggregating news sentiment and social media signals...",
+            ),
+            (
+                "portfolio_manager",
+                "Rebalancing portfolio and checking risk parameters...",
+            ),
         ];
 
         for (agent, status) in progress_events {
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            if let Ok(ev) = ProgressUpdateEvent::new(agent.to_string(), None, status.to_string(), None).to_sse() {
+            if let Ok(ev) =
+                ProgressUpdateEvent::new(agent.to_string(), None, status.to_string(), None).to_sse()
+            {
                 tx.send(Ok(ev)).await.ok();
             }
         }
@@ -118,14 +127,14 @@ async fn run_hedge_fund_handler(
         // Execute concurrent workflow execution graph run
         match run_graph_async(
             &graph_nodes,
-            &graph_edges,
             portfolio_val,
             &tickers,
-            &start_date,
             &end_date,
             &model_name,
             model_provider.value(),
-        ).await {
+        )
+        .await
+        {
             Ok(result) => {
                 let complete_data = serde_json::json!({
                     "decisions": result.decisions.unwrap_or(serde_json::json!({})),
@@ -136,7 +145,9 @@ async fn run_hedge_fund_handler(
                 }
             }
             Err(e) => {
-                if let Ok(ev) = ErrorEvent::new(format!("Hedge fund execution failed: {}", e)).to_sse() {
+                if let Ok(ev) =
+                    ErrorEvent::new(format!("Hedge fund execution failed: {}", e)).to_sse()
+                {
                     tx.send(Ok(ev)).await.ok();
                 }
             }
@@ -201,13 +212,17 @@ async fn backtest_handler(
                     let msg_type = val.get("type").and_then(|t| t.as_str()).unwrap_or("");
                     if msg_type == "backtest_result" {
                         if let Some(day_data) = val.get("data") {
-                            let day_result: Result<BacktestDayResult, _> = serde_json::from_value(day_data.clone());
+                            let day_result: Result<BacktestDayResult, _> =
+                                serde_json::from_value(day_data.clone());
                             if let Ok(res) = day_result {
                                 let analysis_str = serde_json::to_string(&res).unwrap_or_default();
                                 let ev = ProgressUpdateEvent::new(
                                     "backtest".to_string(),
                                     None,
-                                    format!("Completed {} - Portfolio: ${:.2}", res.date, res.portfolio_value),
+                                    format!(
+                                        "Completed {} - Portfolio: ${:.2}",
+                                        res.date, res.portfolio_value
+                                    ),
                                     Some(analysis_str),
                                 );
                                 if let Ok(ev_sse) = ev.to_sse() {
@@ -227,7 +242,8 @@ async fn backtest_handler(
                     }
                 }
                 Err(e) => {
-                    if let Ok(ev_sse) = ErrorEvent::new(format!("Backtest failed: {}", e)).to_sse() {
+                    if let Ok(ev_sse) = ErrorEvent::new(format!("Backtest failed: {}", e)).to_sse()
+                    {
                         tx_sse.send(Ok(ev_sse)).await.ok();
                     }
                 }
@@ -242,7 +258,8 @@ async fn backtest_handler(
     Ok(Sse::new(stream))
 }
 
-async fn get_agents_handler() -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
+async fn get_agents_handler() -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)>
+{
     let analysts = get_analysts_list();
     Ok(Json(serde_json::json!({ "agents": analysts })))
 }

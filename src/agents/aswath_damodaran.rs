@@ -2,42 +2,52 @@
 //! Sibling to src/agents/aswath_damodaran.py
 //! Analyzes equities using NYU Stern Professor Aswath Damodaran's CAPM and FCFF DCF model.
 
-use anyhow::{Result, Context};
+use crate::data::models::{FinancialMetrics, LineItem};
 use crate::graph::state::AgentState;
 use crate::tools::api::{get_financial_metrics, get_market_cap, search_line_items};
-use crate::data::models::{FinancialMetrics, LineItem};
 use crate::utils::llm::call_llm;
+use anyhow::{Context, Result};
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct AswathDamodaranSignal {
-    pub signal: String,      // "bullish" | "bearish" | "neutral"
-    pub confidence: u32,     // 0-100
+    pub signal: String,  // "bullish" | "bearish" | "neutral"
+    pub confidence: u32, // 0-100
     pub reasoning: String,
 }
 
 pub async fn aswath_damodaran_agent(state: &mut AgentState, agent_id: &str) -> Result<()> {
     println!("Running Aswath Damodaran Agent: {}", agent_id);
 
-    let start_date = state.data.get("start_date")
+    let _start_date = state
+        .data
+        .get("start_date")
         .and_then(|v| v.as_str())
         .context("Missing start_date in aswath_damodaran_agent")?;
-    
-    let end_date = state.data.get("end_date")
+
+    let end_date = state
+        .data
+        .get("end_date")
         .and_then(|v| v.as_str())
         .context("Missing end_date in aswath_damodaran_agent")?;
-    
-    let tickers_json = state.data.get("tickers")
+
+    let tickers_json = state
+        .data
+        .get("tickers")
         .context("Missing tickers in aswath_damodaran_agent")?;
     let tickers: Vec<String> = serde_json::from_value(tickers_json.clone())?;
 
-    let api_key = state.metadata.get("FINANCIAL_DATASETS_API_KEY")
+    let api_key = state
+        .metadata
+        .get("FINANCIAL_DATASETS_API_KEY")
         .and_then(|v| v.as_str());
 
     let mut damodaran_signals = serde_json::Map::new();
 
     for ticker in &tickers {
         // Fetch raw data
-        let metrics = get_financial_metrics(ticker, end_date, "ttm", 5, api_key).await.unwrap_or_default();
+        let metrics = get_financial_metrics(ticker, end_date, "ttm", 5, api_key)
+            .await
+            .unwrap_or_default();
         let line_items = search_line_items(
             ticker,
             vec![
@@ -54,9 +64,14 @@ pub async fn aswath_damodaran_agent(state: &mut AgentState, agent_id: &str) -> R
             "ttm",
             5,
             api_key,
-        ).await.unwrap_or_default();
+        )
+        .await
+        .unwrap_or_default();
 
-        let market_cap = get_market_cap(ticker, end_date, api_key).await.unwrap_or(None).unwrap_or(0.0);
+        let market_cap = get_market_cap(ticker, end_date, api_key)
+            .await
+            .unwrap_or(None)
+            .unwrap_or(0.0);
 
         // Sub-analyses
         let growth = analyze_growth_and_reinvestment(&metrics, &line_items);
@@ -123,10 +138,15 @@ pub async fn aswath_damodaran_agent(state: &mut AgentState, agent_id: &str) -> R
         );
     }
 
-    let analyst_signals = state.data.entry("analyst_signals".to_string())
+    let analyst_signals = state
+        .data
+        .entry("analyst_signals".to_string())
         .or_insert_with(|| serde_json::json!({}));
     if let Some(obj) = analyst_signals.as_object_mut() {
-        obj.insert(agent_id.to_string(), serde_json::Value::Object(damodaran_signals));
+        obj.insert(
+            agent_id.to_string(),
+            serde_json::Value::Object(damodaran_signals),
+        );
     }
 
     Ok(())
@@ -138,13 +158,20 @@ pub struct DamodaranSubResult {
     pub details: String,
 }
 
-pub fn analyze_growth_and_reinvestment(metrics: &[FinancialMetrics], line_items: &[LineItem]) -> DamodaranSubResult {
+pub fn analyze_growth_and_reinvestment(
+    metrics: &[FinancialMetrics],
+    line_items: &[LineItem],
+) -> DamodaranSubResult {
     let max_score = 4;
     let mut score = 0;
     let mut details = Vec::new();
 
     if metrics.len() < 2 {
-        return DamodaranSubResult { score: 0, max_score, details: "Insufficient history".to_string() };
+        return DamodaranSubResult {
+            score: 0,
+            max_score,
+            details: "Insufficient history".to_string(),
+        };
     }
 
     // Revenue CAGR (oldest to latest)
@@ -170,7 +197,11 @@ pub fn analyze_growth_and_reinvestment(metrics: &[FinancialMetrics], line_items:
     }
 
     // FCFF growth (free cash flow trend, oldest to newest)
-    let fcfs: Vec<f64> = line_items.iter().rev().filter_map(|li| li.free_cash_flow).collect();
+    let fcfs: Vec<f64> = line_items
+        .iter()
+        .rev()
+        .filter_map(|li| li.free_cash_flow)
+        .collect();
     if fcfs.len() >= 2 && fcfs[fcfs.len() - 1] > fcfs[0] {
         score += 1;
         details.push("Positive FCFF growth".to_string());
@@ -179,14 +210,19 @@ pub fn analyze_growth_and_reinvestment(metrics: &[FinancialMetrics], line_items:
     }
 
     // Reinvestment efficiency (ROIC vs 10% hurdle)
-    if let Some(roic) = metrics[0].return_on_equity { // In models.rs return_on_equity is used if return_on_invested_capital is missing
+    if let Some(roic) = metrics[0].return_on_equity {
+        // In models.rs return_on_equity is used if return_on_invested_capital is missing
         if roic > 0.10 {
             score += 1;
             details.push(format!("ROIC {:.1}% (> 10%)", roic * 100.0));
         }
     }
 
-    DamodaranSubResult { score, max_score, details: details.join("; ") }
+    DamodaranSubResult {
+        score,
+        max_score,
+        details: details.join("; "),
+    }
 }
 
 pub struct DamodaranRiskResult {
@@ -197,13 +233,22 @@ pub struct DamodaranRiskResult {
     pub cost_of_equity: f64,
 }
 
-pub fn analyze_risk_profile(metrics: &[FinancialMetrics], _line_items: &[LineItem]) -> DamodaranRiskResult {
+pub fn analyze_risk_profile(
+    metrics: &[FinancialMetrics],
+    _line_items: &[LineItem],
+) -> DamodaranRiskResult {
     let max_score = 3;
     let mut score = 0;
     let mut details = Vec::new();
 
     if metrics.is_empty() {
-        return DamodaranRiskResult { score: 0, max_score, details: "No metrics".to_string(), beta: None, cost_of_equity: 0.09 };
+        return DamodaranRiskResult {
+            score: 0,
+            max_score,
+            details: "No metrics".to_string(),
+            beta: None,
+            cost_of_equity: 0.09,
+        };
     }
 
     let latest = &metrics[0];
@@ -234,8 +279,13 @@ pub fn analyze_risk_profile(metrics: &[FinancialMetrics], _line_items: &[LineIte
     }
 
     // Interest coverage (EBIT / Interest Expense)
-    if let (Some(ebit), Some(interest)) = (latest.operating_income, latest.debt_to_equity) { // Proxy if interest is not in metrics
-        let coverage = if interest != 0.0 { ebit / interest.abs() } else { 0.0 };
+    if let (Some(ebit), Some(interest)) = (latest.operating_income, latest.debt_to_equity) {
+        // Proxy if interest is not in metrics
+        let coverage = if interest != 0.0 {
+            ebit / interest.abs()
+        } else {
+            0.0
+        };
         if coverage > 3.0 {
             score += 1;
             details.push(format!("Interest coverage x {:.1}", coverage));
@@ -268,12 +318,23 @@ pub fn analyze_relative_valuation(metrics: &[FinancialMetrics]) -> DamodaranSubR
     let max_score = 1;
 
     if metrics.len() < 5 {
-        return DamodaranSubResult { score: 0, max_score, details: "Insufficient P/E history".to_string() };
+        return DamodaranSubResult {
+            score: 0,
+            max_score,
+            details: "Insufficient P/E history".to_string(),
+        };
     }
 
-    let mut pes: Vec<f64> = metrics.iter().filter_map(|m| m.price_to_earnings_ratio).collect();
+    let mut pes: Vec<f64> = metrics
+        .iter()
+        .filter_map(|m| m.price_to_earnings_ratio)
+        .collect();
     if pes.len() < 5 {
-        return DamodaranSubResult { score: 0, max_score, details: "P/E data sparse".to_string() };
+        return DamodaranSubResult {
+            score: 0,
+            max_score,
+            details: "P/E data sparse".to_string(),
+        };
     }
 
     let ttm_pe = pes[0];
@@ -281,14 +342,24 @@ pub fn analyze_relative_valuation(metrics: &[FinancialMetrics]) -> DamodaranSubR
     let median_pe = pes[pes.len() / 2];
 
     let (score, desc) = if ttm_pe < 0.7 * median_pe {
-        (1, format!("P/E {:.1} vs. median {:.1} (cheap)", ttm_pe, median_pe))
+        (
+            1,
+            format!("P/E {:.1} vs. median {:.1} (cheap)", ttm_pe, median_pe),
+        )
     } else if ttm_pe > 1.3 * median_pe {
-        (-1, format!("P/E {:.1} vs. median {:.1} (expensive)", ttm_pe, median_pe))
+        (
+            -1,
+            format!("P/E {:.1} vs. median {:.1} (expensive)", ttm_pe, median_pe),
+        )
     } else {
         (0, "P/E inline with history".to_string())
     };
 
-    DamodaranSubResult { score, max_score, details: desc }
+    DamodaranSubResult {
+        score,
+        max_score,
+        details: desc,
+    }
 }
 
 pub struct DamodaranValResult {
@@ -303,7 +374,11 @@ pub fn calculate_intrinsic_value_dcf(
     risk_analysis: &DamodaranRiskResult,
 ) -> DamodaranValResult {
     if metrics.len() < 2 || line_items.is_empty() {
-        return DamodaranValResult { intrinsic_value: None, intrinsic_per_share: None, details: vec!["Insufficient data".to_string()] };
+        return DamodaranValResult {
+            intrinsic_value: None,
+            intrinsic_per_share: None,
+            details: vec!["Insufficient data".to_string()],
+        };
     }
 
     let latest_m = &metrics[0];
@@ -311,7 +386,11 @@ pub fn calculate_intrinsic_value_dcf(
     let shares = line_items[0].outstanding_shares.unwrap_or(0) as f64;
 
     if fcff0 <= 0.0 || shares <= 0.0 {
-        return DamodaranValResult { intrinsic_value: None, intrinsic_per_share: None, details: vec!["Missing positive FCFF or share count".to_string()] };
+        return DamodaranValResult {
+            intrinsic_value: None,
+            intrinsic_per_share: None,
+            details: vec!["Missing positive FCFF or share count".to_string()],
+        };
     }
 
     // Growth projection CAGR (oldest to newest)
@@ -339,7 +418,9 @@ pub fn calculate_intrinsic_value_dcf(
     }
 
     // Terminal Value
-    let tv = (fcff0 * (1.0 + terminal_growth)) / (discount - terminal_growth) / (1.0 + discount).powi(years);
+    let tv = (fcff0 * (1.0 + terminal_growth))
+        / (discount - terminal_growth)
+        / (1.0 + discount).powi(years);
     let equity_value = pv_sum + tv;
     let intrinsic_per_share = equity_value / shares;
 
@@ -368,11 +449,5 @@ pub async fn generate_damodaran_output(
         serde_json::to_string_pretty(facts)?
     );
 
-    call_llm(
-        system_prompt,
-        &user_prompt,
-        Some(agent_id),
-        Some(state),
-        3,
-    ).await
+    call_llm(system_prompt, &user_prompt, Some(agent_id), Some(state), 3).await
 }

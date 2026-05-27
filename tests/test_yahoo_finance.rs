@@ -152,7 +152,10 @@ async fn test_nvda_yahoo_metrics_and_growth_derivation() {
     }
 
     assert_eq!(metrics[0].ticker, "NVDA");
-    assert!(metrics.len() >= 1, "NVDA should return at least one metrics row");
+    assert!(
+        !metrics.is_empty(),
+        "NVDA should return at least one metrics row"
+    );
 
     if metrics.len() >= 2 {
         let mut derived = metrics.clone();

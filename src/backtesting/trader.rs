@@ -2,7 +2,7 @@
 //! Sibling to src/backtesting/trader.py
 //! Simulates exchange trade execution for buying, selling, shorting, and covering positions.
 
-use crate::backtesting::portfolio::{Portfolio, PositionDetail, RealizedGains};
+use crate::backtesting::portfolio::Portfolio;
 
 #[derive(Debug, Default)]
 pub struct TradeExecutor;

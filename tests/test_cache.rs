@@ -1,7 +1,7 @@
 // Source: tests/test_cache.rs
 //! Mathematical and logical verification of the thread-safe Cache manager.
 
-use ai_hedge_fund::data::cache::{Cache, get_cache};
+use ai_hedge_fund::data::cache::{get_cache, Cache};
 use ai_hedge_fund::data::models::Price;
 
 #[test]
@@ -34,7 +34,7 @@ fn test_prices_set_and_get() {
         volume: 1000000,
     }];
     cache.set_prices("AAPL", prices.clone());
-    
+
     let retrieved = cache.get_prices("AAPL").unwrap();
     assert_eq!(retrieved.len(), 1);
     assert_eq!(retrieved[0].close, 150.0);
@@ -52,7 +52,7 @@ fn test_prices_deduplication() {
         time: "2024-01-01".to_string(),
         volume: 1000000,
     }];
-    
+
     let p2 = vec![
         Price {
             close: 999.0, // duplicate date, should be ignored
@@ -69,7 +69,7 @@ fn test_prices_deduplication() {
             open: 154.5,
             time: "2024-01-02".to_string(),
             volume: 1000000,
-        }
+        },
     ];
 
     cache.set_prices("AAPL", p1);

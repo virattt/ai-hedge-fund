@@ -1,7 +1,7 @@
 // Source: tests/test_technicals.rs
 //! Verifies mathematical correctness of standard indicators calculated in Rust.
 
-use ai_hedge_fund::agents::technicals::{calculate_sma, calculate_ema, calculate_rsi};
+use ai_hedge_fund::agents::technicals::{calculate_ema, calculate_rsi, calculate_sma};
 
 #[test]
 fn test_sma_calculation() {

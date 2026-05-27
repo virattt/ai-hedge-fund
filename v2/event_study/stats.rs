@@ -1,12 +1,14 @@
-use super::models::{MarketModelFit, BootstrapCI};
+use super::models::{BootstrapCI, MarketModelFit};
 
-pub fn fit_market_model(
-    stock_returns: &[f64],
-    market_returns: &[f64],
-) -> MarketModelFit {
+pub fn fit_market_model(stock_returns: &[f64], market_returns: &[f64]) -> MarketModelFit {
     let n = stock_returns.len();
     if n == 0 {
-        return MarketModelFit { alpha: 0.0, beta: 0.0, r_squared: 0.0, n_obs: 0 };
+        return MarketModelFit {
+            alpha: 0.0,
+            beta: 0.0,
+            r_squared: 0.0,
+            n_obs: 0,
+        };
     }
 
     let sum_x: f64 = market_returns.iter().sum();
@@ -36,7 +38,11 @@ pub fn fit_market_model(
         ss_res += diff * diff;
     }
 
-    let r_squared = if ss_tot > 0.0 { 1.0 - ss_res / ss_tot } else { 0.0 };
+    let r_squared = if ss_tot > 0.0 {
+        1.0 - ss_res / ss_tot
+    } else {
+        0.0
+    };
 
     MarketModelFit {
         alpha,
@@ -68,12 +74,12 @@ pub fn sum_car(daily_ar: &[f64], start: usize, end: usize) -> f64 {
 }
 
 fn erf(x: f64) -> f64 {
-    let a1 =  0.254829592;
+    let a1 = 0.254829592;
     let a2 = -0.284496736;
-    let a3 =  1.421413741;
+    let a3 = 1.421413741;
     let a4 = -1.453152027;
-    let a5 =  1.061405429;
-    let p  =  0.3275911;
+    let a5 = 1.061405429;
+    let p = 0.3275911;
 
     let sign = if x < 0.0 { -1.0 } else { 1.0 };
     let abs_x = x.abs();
@@ -84,7 +90,7 @@ fn erf(x: f64) -> f64 {
     sign * y
 }
 
-fn student_t_p_value(t: f64, df: f64) -> f64 {
+fn student_t_p_value(t: f64, _df: f64) -> f64 {
     let abs_t = t.abs();
     // For large degrees of freedom, Student's t matches Normal CDF
     let z = abs_t;
@@ -182,8 +188,10 @@ pub fn bootstrap_ci(
     let lower_pct = (1.0 - confidence) / 2.0;
     let upper_pct = (1.0 + confidence) / 2.0;
 
-    let lower_idx = ((n_bootstrap as f64 * lower_pct).round() as usize).min(n_bootstrap as usize - 1);
-    let upper_idx = ((n_bootstrap as f64 * upper_pct).round() as usize).min(n_bootstrap as usize - 1);
+    let lower_idx =
+        ((n_bootstrap as f64 * lower_pct).round() as usize).min(n_bootstrap as usize - 1);
+    let upper_idx =
+        ((n_bootstrap as f64 * upper_pct).round() as usize).min(n_bootstrap as usize - 1);
 
     BootstrapCI {
         lower: boot_means[lower_idx],

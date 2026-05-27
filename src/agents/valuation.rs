@@ -2,31 +2,39 @@
 //! Sibling to src/agents/valuation.py
 //! Implements four complementary valuation methodologies: DCF (multi-scenario), Owner Earnings, EV/EBITDA, and Residual Income.
 
-use anyhow::{Result, Context};
+use crate::data::models::FinancialMetrics;
 use crate::graph::state::AgentState;
 use crate::tools::api::{get_financial_metrics, get_market_cap, search_line_items};
-use crate::data::models::{FinancialMetrics, LineItem};
+use anyhow::{Context, Result};
 
 pub async fn valuation_analyst_agent(state: &mut AgentState, agent_id: &str) -> Result<()> {
     println!("Running Valuation Analyst Agent: {}", agent_id);
 
-    let end_date_str = state.data.get("end_date")
+    let end_date_str = state
+        .data
+        .get("end_date")
         .and_then(|v| v.as_str())
         .context("Missing end_date in valuation_analyst_agent")?
         .to_string();
 
-    let tickers_json = state.data.get("tickers")
+    let tickers_json = state
+        .data
+        .get("tickers")
         .context("Missing tickers in valuation_analyst_agent")?;
     let tickers: Vec<String> = serde_json::from_value(tickers_json.clone())?;
 
-    let api_key = state.metadata.get("FINANCIAL_DATASETS_API_KEY")
+    let api_key = state
+        .metadata
+        .get("FINANCIAL_DATASETS_API_KEY")
         .and_then(|v| v.as_str());
 
     let mut valuation_analysis = serde_json::Map::new();
 
     for ticker in &tickers {
         // Fetch financial data
-        let financial_metrics = get_financial_metrics(ticker, &end_date_str, "ttm", 8, api_key).await.unwrap_or_default();
+        let financial_metrics = get_financial_metrics(ticker, &end_date_str, "ttm", 8, api_key)
+            .await
+            .unwrap_or_default();
         if financial_metrics.is_empty() {
             continue;
         }
@@ -52,7 +60,9 @@ pub async fn valuation_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
             "ttm",
             8,
             api_key,
-        ).await.unwrap_or_default();
+        )
+        .await
+        .unwrap_or_default();
 
         if line_items.len() < 2 {
             continue;
@@ -85,7 +95,10 @@ pub async fn valuation_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
         );
 
         // Build FCF history
-        let fcf_history: Vec<f64> = line_items.iter().filter_map(|li| li.free_cash_flow).collect();
+        let fcf_history: Vec<f64> = line_items
+            .iter()
+            .filter_map(|li| li.free_cash_flow)
+            .collect();
 
         // Enhanced DCF with scenarios
         let dcf_results = calculate_dcf_scenarios(
@@ -111,7 +124,10 @@ pub async fn valuation_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
         );
 
         // Fetch current market cap for gap calculation
-        let market_cap = get_market_cap(ticker, &end_date_str, api_key).await.unwrap_or(None).unwrap_or(0.0);
+        let market_cap = get_market_cap(ticker, &end_date_str, api_key)
+            .await
+            .unwrap_or(None)
+            .unwrap_or(0.0);
         if market_cap <= 0.0 {
             continue;
         }
@@ -124,18 +140,24 @@ pub async fn valuation_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
             ("residual_income", rim_val, 0.10),
         ];
 
-        let total_weight: f64 = methods.iter().filter(|&&(_, v, _)| v > 0.0).map(|&(_, _, w)| w).sum();
+        let total_weight: f64 = methods
+            .iter()
+            .filter(|&&(_, v, _)| v > 0.0)
+            .map(|&(_, _, w)| w)
+            .sum();
         if total_weight == 0.0 {
             continue;
         }
 
-        let weighted_gap: f64 = methods.iter()
+        let weighted_gap: f64 = methods
+            .iter()
             .filter(|&&(_, v, _)| v > 0.0)
             .map(|&(_, v, w)| {
                 let gap = (v - market_cap) / market_cap;
                 w * gap
             })
-            .sum::<f64>() / total_weight;
+            .sum::<f64>()
+            / total_weight;
 
         let signal = if weighted_gap > 0.15 {
             "bullish"
@@ -152,10 +174,19 @@ pub async fn valuation_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
         for &(name, value, weight) in &methods {
             if value > 0.0 {
                 let gap = (value - market_cap) / market_cap;
-                let method_signal = if gap > 0.15 { "bullish" } else if gap < -0.15 { "bearish" } else { "neutral" };
+                let method_signal = if gap > 0.15 {
+                    "bullish"
+                } else if gap < -0.15 {
+                    "bearish"
+                } else {
+                    "neutral"
+                };
                 let details_str = format!(
                     "Value: ${:.2}, Market Cap: ${:.2}, Gap: {:.1}%, Weight: {:.0}%",
-                    value, market_cap, gap * 100.0, weight * 100.0
+                    value,
+                    market_cap,
+                    gap * 100.0,
+                    weight * 100.0
                 );
                 method_details.insert(
                     format!("{}_analysis", name),
@@ -188,10 +219,15 @@ pub async fn valuation_analyst_agent(state: &mut AgentState, agent_id: &str) -> 
         );
     }
 
-    let analyst_signals = state.data.entry("analyst_signals".to_string())
+    let analyst_signals = state
+        .data
+        .entry("analyst_signals".to_string())
         .or_insert_with(|| serde_json::json!({}));
     if let Some(obj) = analyst_signals.as_object_mut() {
-        obj.insert(agent_id.to_string(), serde_json::Value::Object(valuation_analysis));
+        obj.insert(
+            agent_id.to_string(),
+            serde_json::Value::Object(valuation_analysis),
+        );
     }
 
     Ok(())
@@ -226,7 +262,8 @@ pub fn calculate_owner_earnings_value(
     }
 
     let terminal_growth = growth_rate.min(0.03_f64);
-    let term_fcf = owner_earnings * (1.0_f64 + growth_rate).powi(num_years) * (1.0_f64 + terminal_growth);
+    let term_fcf =
+        owner_earnings * (1.0_f64 + growth_rate).powi(num_years) * (1.0_f64 + terminal_growth);
     let term_val = term_fcf / (required_return - terminal_growth);
     let pv_term = term_val / (1.0_f64 + required_return).powi(num_years);
 
@@ -249,8 +286,9 @@ pub fn calculate_intrinsic_value(
                 let fcft = fcf * (1.0_f64 + growth_rate).powi(yr);
                 pv += fcft / (1.0_f64 + discount_rate).powi(yr);
             }
-            let term_val = (fcf * (1.0_f64 + growth_rate).powi(num_years) * (1.0_f64 + terminal_growth_rate))
-                / (discount_rate - terminal_growth_rate);
+            let term_val =
+                (fcf * (1.0_f64 + growth_rate).powi(num_years) * (1.0_f64 + terminal_growth_rate))
+                    / (discount_rate - terminal_growth_rate);
             let pv_term = term_val / (1.0_f64 + discount_rate).powi(num_years);
             pv + pv_term
         }
@@ -264,11 +302,18 @@ pub fn calculate_ev_ebitda_value(financial_metrics: &[FinancialMetrics]) -> f64 
         return 0.0;
     }
     let m0 = &financial_metrics[0];
-    let ev = match m0.enterprise_value { Some(v) if v > 0.0 => v, _ => return 0.0 };
-    let ev_ebitda_ratio = match m0.enterprise_value_to_ebitda_ratio { Some(v) if v > 0.0 => v, _ => return 0.0 };
+    let ev = match m0.enterprise_value {
+        Some(v) if v > 0.0 => v,
+        _ => return 0.0,
+    };
+    let ev_ebitda_ratio = match m0.enterprise_value_to_ebitda_ratio {
+        Some(v) if v > 0.0 => v,
+        _ => return 0.0,
+    };
     let ebitda_now = ev / ev_ebitda_ratio;
 
-    let multiples: Vec<f64> = financial_metrics.iter()
+    let multiples: Vec<f64> = financial_metrics
+        .iter()
         .filter_map(|m| m.enterprise_value_to_ebitda_ratio)
         .filter(|&r| r > 0.0)
         .collect();
@@ -278,7 +323,7 @@ pub fn calculate_ev_ebitda_value(financial_metrics: &[FinancialMetrics]) -> f64 
 
     let mut sorted = multiples.clone();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    let med_mult = if sorted.len() % 2 == 0 {
+    let med_mult = if sorted.len().is_multiple_of(2) {
         (sorted[sorted.len() / 2 - 1] + sorted[sorted.len() / 2]) / 2.0
     } else {
         sorted[sorted.len() / 2]
@@ -371,7 +416,11 @@ fn calculate_fcf_volatility(fcf_history: &[f64]) -> f64 {
     let mean = positive.iter().sum::<f64>() / n;
     let variance = positive.iter().map(|&f| (f - mean).powi(2)).sum::<f64>() / n;
     let std = variance.sqrt();
-    if mean > 0.0 { (std / mean).min(1.0) } else { 0.8 }
+    if mean > 0.0 {
+        (std / mean).min(1.0)
+    } else {
+        0.8
+    }
 }
 
 /// Enhanced multi-stage DCF.
@@ -408,12 +457,18 @@ fn calculate_enhanced_dcf_value(
 
     for year in 4_i32..=7_i32 {
         let transition_rate = transition_growth * (8 - year) as f64 / 4.0;
-        let projected = base_fcf * (1.0_f64 + high_growth).powi(3) * (1.0_f64 + transition_rate).powi(year - 3);
+        let projected =
+            base_fcf * (1.0_f64 + high_growth).powi(3) * (1.0_f64 + transition_rate).powi(year - 3);
         pv += projected / (1.0_f64 + wacc).powi(year);
     }
 
-    let final_fcf = base_fcf * (1.0_f64 + high_growth).powi(3) * (1.0_f64 + transition_growth).powi(4);
-    let actual_terminal = if wacc <= terminal_growth { wacc * 0.8 } else { terminal_growth };
+    let final_fcf =
+        base_fcf * (1.0_f64 + high_growth).powi(3) * (1.0_f64 + transition_growth).powi(4);
+    let actual_terminal = if wacc <= terminal_growth {
+        wacc * 0.8
+    } else {
+        terminal_growth
+    };
     let terminal_value = (final_fcf * (1.0_f64 + actual_terminal)) / (wacc - actual_terminal);
     let pv_terminal = terminal_value / (1.0_f64 + wacc).powi(7);
 
@@ -441,9 +496,12 @@ pub fn calculate_dcf_scenarios(
 ) -> DcfResults {
     let base_rev_growth = revenue_growth.unwrap_or(0.05);
 
-    let bear = calculate_enhanced_dcf_value(fcf_history, base_rev_growth * 0.5, wacc * 1.2, market_cap);
-    let base = calculate_enhanced_dcf_value(fcf_history, base_rev_growth * 1.0, wacc * 1.0, market_cap);
-    let bull = calculate_enhanced_dcf_value(fcf_history, base_rev_growth * 1.5, wacc * 0.9, market_cap);
+    let bear =
+        calculate_enhanced_dcf_value(fcf_history, base_rev_growth * 0.5, wacc * 1.2, market_cap);
+    let base =
+        calculate_enhanced_dcf_value(fcf_history, base_rev_growth * 1.0, wacc * 1.0, market_cap);
+    let bull =
+        calculate_enhanced_dcf_value(fcf_history, base_rev_growth * 1.5, wacc * 0.9, market_cap);
 
     let expected = bear * 0.2 + base * 0.6 + bull * 0.2;
 

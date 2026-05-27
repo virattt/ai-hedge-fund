@@ -1,5 +1,5 @@
-use ai_hedge_fund::backtesting::portfolio::{Portfolio, PositionDetail};
 use crate::models::schemas::PortfolioPosition;
+use ai_hedge_fund::backtesting::portfolio::Portfolio;
 
 pub fn create_portfolio(
     initial_cash: f64,

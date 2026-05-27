@@ -51,10 +51,23 @@ pub fn print_trading_output(result: &serde_json::Value) {
         println!("\x1b[1m\x1b[37m==================================================\x1b[0m");
 
         // Print trading decision table
-        let action = decision.get("action").and_then(|v| v.as_str()).unwrap_or("hold").to_uppercase();
-        let qty = decision.get("quantity").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let conf = decision.get("confidence").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let reasoning = decision.get("reasoning").and_then(|v| v.as_str()).unwrap_or("");
+        let action = decision
+            .get("action")
+            .and_then(|v| v.as_str())
+            .unwrap_or("hold")
+            .to_uppercase();
+        let qty = decision
+            .get("quantity")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let conf = decision
+            .get("confidence")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let reasoning = decision
+            .get("reasoning")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
 
         let action_color = match action.as_str() {
             "BUY" | "COVER" => "\x1b[32m",
@@ -62,18 +75,21 @@ pub fn print_trading_output(result: &serde_json::Value) {
             _ => "\x1b[33m",
         };
 
-        println!("\x1b[1m\x1b[37mTRADING DECISION:\x1b[0m [\x1b[36m{}\x1b[0m]", ticker);
+        println!(
+            "\x1b[1m\x1b[37mTRADING DECISION:\x1b[0m [\x1b[36m{}\x1b[0m]",
+            ticker
+        );
         println!("+------------+----------------------------------------------------+");
         println!("| Action     | {}{:<50}\x1b[0m |", action_color, action);
         println!("| Quantity   | {}{:<50.0}\x1b[0m |", action_color, qty);
         println!("| Confidence | \x1b[37m{:<50.1}%\x1b[0m |", conf);
-        
+
         // Wrap reasoning
-        let mut words = reasoning.split_whitespace();
+        let words = reasoning.split_whitespace();
         let mut current_line = String::new();
         let mut first = true;
-        
-        while let Some(word) = words.next() {
+
+        for word in words {
             if current_line.len() + word.len() + 1 > 48 {
                 if first {
                     println!("| Reasoning  | {:<50} |", current_line);
@@ -108,7 +124,8 @@ pub fn print_backtest_results(table_rows: &[BacktestRow]) {
     print!("{}[2J{}[1;1H", 27 as char, 27 as char);
 
     // Find the latest summary row (we search for the summary with the max date)
-    let latest_summary = table_rows.iter()
+    let latest_summary = table_rows
+        .iter()
         .filter(|row| matches!(row, BacktestRow::Summary { .. }))
         .max_by_key(|row| match row {
             BacktestRow::Summary { date, .. } => date.clone(),
@@ -128,22 +145,37 @@ pub fn print_backtest_results(table_rows: &[BacktestRow]) {
         max_drawdown,
         benchmark_return_pct,
         ..
-    }) = latest_summary {
+    }) = latest_summary
+    {
         println!("\n\x1b[1m\x1b[37mPORTFOLIO SUMMARY:\x1b[0m");
         println!("Cash Balance: \x1b[36m${:.2}\x1b[0m", cash_balance);
         if *short_sale_proceeds > 0.0 || *margin_used > 0.0 {
-            println!("Short Sale Proceeds: \x1b[36m${:.2}\x1b[0m", short_sale_proceeds);
+            println!(
+                "Short Sale Proceeds: \x1b[36m${:.2}\x1b[0m",
+                short_sale_proceeds
+            );
             println!("Margin Used: \x1b[36m${:.2}\x1b[0m", margin_used);
             println!("Available Cash: \x1b[36m${:.2}\x1b[0m", available_cash);
         }
-        println!("Net Position Value: \x1b[33m${:.2}\x1b[0m", total_position_value);
+        println!(
+            "Net Position Value: \x1b[33m${:.2}\x1b[0m",
+            total_position_value
+        );
         println!("Total Value: \x1b[37m${:.2}\x1b[0m", total_value);
-        
-        let ret_color = if *return_pct >= 0.0 { "\x1b[32m" } else { "\x1b[31m" };
+
+        let ret_color = if *return_pct >= 0.0 {
+            "\x1b[32m"
+        } else {
+            "\x1b[31m"
+        };
         println!("Portfolio Return: {}{:+0.2}%\x1b[0m", ret_color, return_pct);
 
         if let Some(bench) = benchmark_return_pct {
-            let bench_color = if *bench >= 0.0 { "\x1b[32m" } else { "\x1b[31m" };
+            let bench_color = if *bench >= 0.0 {
+                "\x1b[32m"
+            } else {
+                "\x1b[31m"
+            };
             println!("Benchmark Return: {}{:+0.2}%\x1b[0m", bench_color, bench);
         }
 
@@ -163,8 +195,16 @@ pub fn print_backtest_results(table_rows: &[BacktestRow]) {
     // Print header
     let header_border = "+------------+--------+--------+----------+----------+-------------+--------------+--------------------+";
     println!("{}", header_border);
-    println!("| {:<10} | {:<6} | {:^6} | {:>8} | {:>8} | {:>11} | {:>12} | {:>18} |", 
-        "Date", "Ticker", "Action", "Quantity", "Price", "Long Shares", "Short Shares", "Net Position Value"
+    println!(
+        "| {:<10} | {:<6} | {:^6} | {:>8} | {:>8} | {:>11} | {:>12} | {:>18} |",
+        "Date",
+        "Ticker",
+        "Action",
+        "Quantity",
+        "Price",
+        "Long Shares",
+        "Short Shares",
+        "Net Position Value"
     );
     println!("{}", header_border);
 
@@ -179,14 +219,15 @@ pub fn print_backtest_results(table_rows: &[BacktestRow]) {
             long_shares,
             short_shares,
             position_value,
-        } = row {
+        } = row
+        {
             let action_upper = action.to_uppercase();
             let action_color = match action_upper.as_str() {
                 "BUY" | "COVER" => "\x1b[32m",
                 "SELL" | "SHORT" => "\x1b[31m",
                 _ => "\x1b[37m",
             };
-            
+
             println!("| {:<10} | \x1b[36m{:<6}\x1b[0m | {}{:<6}\x1b[0m | {}{:>8.0}\x1b[0m | \x1b[37m{:>8.2}\x1b[0m | \x1b[32m{:>11.0}\x1b[0m | \x1b[31m{:>12.0}\x1b[0m | \x1b[33m{:>18.2}\x1b[0m |",
                 date,
                 ticker,

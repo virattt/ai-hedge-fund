@@ -2,42 +2,54 @@
 //! Sibling to src/agents/charlie_munger.py
 //! Analyzes stocks using Charlie Munger's mental models and qualitative/quantitative checks.
 
-use anyhow::{Result, Context};
+use crate::data::models::{FinancialMetrics, InsiderTrade, LineItem};
 use crate::graph::state::AgentState;
-use crate::tools::api::{get_financial_metrics, get_market_cap, search_line_items, get_insider_trades, get_company_news};
-use crate::data::models::{FinancialMetrics, LineItem, InsiderTrade, CompanyNews};
+use crate::tools::api::{
+    get_company_news, get_financial_metrics, get_insider_trades, get_market_cap, search_line_items,
+};
 use crate::utils::llm::call_llm;
+use anyhow::{Context, Result};
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct CharlieMungerSignal {
-    pub signal: String,      // "bullish" | "bearish" | "neutral"
-    pub confidence: u32,     // 0-100
+    pub signal: String,  // "bullish" | "bearish" | "neutral"
+    pub confidence: u32, // 0-100
     pub reasoning: String,
 }
 
 pub async fn charlie_munger_agent(state: &mut AgentState, agent_id: &str) -> Result<()> {
     println!("Running Charlie Munger Agent: {}", agent_id);
 
-    let start_date = state.data.get("start_date")
+    let _start_date = state
+        .data
+        .get("start_date")
         .and_then(|v| v.as_str())
         .context("Missing start_date in charlie_munger_agent")?;
-    
-    let end_date = state.data.get("end_date")
+
+    let end_date = state
+        .data
+        .get("end_date")
         .and_then(|v| v.as_str())
         .context("Missing end_date in charlie_munger_agent")?;
-    
-    let tickers_json = state.data.get("tickers")
+
+    let tickers_json = state
+        .data
+        .get("tickers")
         .context("Missing tickers in charlie_munger_agent")?;
     let tickers: Vec<String> = serde_json::from_value(tickers_json.clone())?;
 
-    let api_key = state.metadata.get("FINANCIAL_DATASETS_API_KEY")
+    let api_key = state
+        .metadata
+        .get("FINANCIAL_DATASETS_API_KEY")
         .and_then(|v| v.as_str());
 
     let mut munger_analysis = serde_json::Map::new();
 
     for ticker in &tickers {
         // Fetch historical data
-        let metrics = get_financial_metrics(ticker, end_date, "annual", 10, api_key).await.unwrap_or_default();
+        let metrics = get_financial_metrics(ticker, end_date, "annual", 10, api_key)
+            .await
+            .unwrap_or_default();
         let financial_line_items = search_line_items(
             ticker,
             vec![
@@ -60,11 +72,20 @@ pub async fn charlie_munger_agent(state: &mut AgentState, agent_id: &str) -> Res
             "annual",
             10,
             api_key,
-        ).await.unwrap_or_default();
+        )
+        .await
+        .unwrap_or_default();
 
-        let market_cap = get_market_cap(ticker, end_date, api_key).await.unwrap_or(None).unwrap_or(0.0);
-        let insider_trades = get_insider_trades(ticker, end_date, None, 100, api_key).await.unwrap_or_default();
-        let company_news = get_company_news(ticker, end_date, None, 10, api_key).await.unwrap_or_default();
+        let market_cap = get_market_cap(ticker, end_date, api_key)
+            .await
+            .unwrap_or(None)
+            .unwrap_or(0.0);
+        let insider_trades = get_insider_trades(ticker, end_date, None, 100, api_key)
+            .await
+            .unwrap_or_default();
+        let _company_news = get_company_news(ticker, end_date, None, 10, api_key)
+            .await
+            .unwrap_or_default();
 
         // Sub-analyses
         let moat = analyze_moat_strength(&metrics, &financial_line_items);
@@ -100,7 +121,8 @@ pub async fn charlie_munger_agent(state: &mut AgentState, agent_id: &str) -> Res
             &valuation,
         );
 
-        let output = generate_munger_output(ticker, &facts, state, agent_id, confidence_hint).await?;
+        let output =
+            generate_munger_output(ticker, &facts, state, agent_id, confidence_hint).await?;
 
         munger_analysis.insert(
             ticker.clone(),
@@ -112,10 +134,15 @@ pub async fn charlie_munger_agent(state: &mut AgentState, agent_id: &str) -> Res
         );
     }
 
-    let analyst_signals = state.data.entry("analyst_signals".to_string())
+    let analyst_signals = state
+        .data
+        .entry("analyst_signals".to_string())
         .or_insert_with(|| serde_json::json!({}));
     if let Some(obj) = analyst_signals.as_object_mut() {
-        obj.insert(agent_id.to_string(), serde_json::Value::Object(munger_analysis));
+        obj.insert(
+            agent_id.to_string(),
+            serde_json::Value::Object(munger_analysis),
+        );
     }
 
     Ok(())
@@ -126,27 +153,48 @@ pub struct MungerSubResult {
     pub details: String,
 }
 
-pub fn analyze_moat_strength(_metrics: &[FinancialMetrics], financial_line_items: &[LineItem]) -> MungerSubResult {
+pub fn analyze_moat_strength(
+    _metrics: &[FinancialMetrics],
+    financial_line_items: &[LineItem],
+) -> MungerSubResult {
     let mut score = 0.0;
     let mut details = Vec::new();
 
     if financial_line_items.is_empty() {
-        return MungerSubResult { score: 0.0, details: "Insufficient data to analyze moat strength".to_string() };
+        return MungerSubResult {
+            score: 0.0,
+            details: "Insufficient data to analyze moat strength".to_string(),
+        };
     }
 
     // 1. ROIC
-    let roic_values: Vec<f64> = financial_line_items.iter().filter_map(|item| item.return_on_invested_capital).collect();
+    let roic_values: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.return_on_invested_capital)
+        .collect();
     if !roic_values.is_empty() {
         let high_roic_count = roic_values.iter().filter(|&&r| r > 0.15).count();
         if high_roic_count as f64 >= roic_values.len() as f64 * 0.8 {
             score += 3.0;
-            details.push(format!("Excellent ROIC: >15% in {}/{} periods", high_roic_count, roic_values.len()));
+            details.push(format!(
+                "Excellent ROIC: >15% in {}/{} periods",
+                high_roic_count,
+                roic_values.len()
+            ));
         } else if high_roic_count as f64 >= roic_values.len() as f64 * 0.5 {
             score += 2.0;
-            details.push(format!("Good ROIC: >15% in {}/{} periods", high_roic_count, roic_values.len()));
+            details.push(format!(
+                "Good ROIC: >15% in {}/{} periods",
+                high_roic_count,
+                roic_values.len()
+            ));
         } else if high_roic_count > 0 {
             score += 1.0;
-            details.push(format!("Mixed ROIC: >15% in only {}/{} periods", high_roic_count, roic_values.len()));
+            details.push(format!(
+                "Mixed ROIC: >15% in only {}/{} periods",
+                high_roic_count,
+                roic_values.len()
+            ));
         } else {
             details.push("Poor ROIC: Never exceeds 15% threshold".to_string());
         }
@@ -155,9 +203,16 @@ pub fn analyze_moat_strength(_metrics: &[FinancialMetrics], financial_line_items
     }
 
     // 2. Pricing Power (Gross Margins)
-    let gross_margins: Vec<f64> = financial_line_items.iter().filter_map(|item| item.gross_margin).collect();
+    let gross_margins: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.gross_margin)
+        .collect();
     if gross_margins.len() >= 3 {
-        let margin_trend = gross_margins.iter().zip(gross_margins.iter().skip(1)).filter(|(&new, &old)| new >= old).count();
+        let margin_trend = gross_margins
+            .iter()
+            .zip(gross_margins.iter().skip(1))
+            .filter(|(&new, &old)| new >= old)
+            .count();
         if margin_trend as f64 >= gross_margins.len() as f64 * 0.7 {
             score += 2.0;
             details.push("Strong pricing power: Gross margins consistently improving".to_string());
@@ -165,7 +220,10 @@ pub fn analyze_moat_strength(_metrics: &[FinancialMetrics], financial_line_items
             let avg_margin: f64 = gross_margins.iter().sum::<f64>() / gross_margins.len() as f64;
             if avg_margin > 0.30 {
                 score += 1.0;
-                details.push(format!("Good pricing power: Average gross margin {:.1}%", avg_margin * 100.0));
+                details.push(format!(
+                    "Good pricing power: Average gross margin {:.1}%",
+                    avg_margin * 100.0
+                ));
             } else {
                 details.push("Limited pricing power: Low or declining gross margins".to_string());
             }
@@ -184,35 +242,55 @@ pub fn analyze_moat_strength(_metrics: &[FinancialMetrics], financial_line_items
         }
     }
     if !capex_to_revenue.is_empty() {
-        let avg_capex_ratio: f64 = capex_to_revenue.iter().sum::<f64>() / capex_to_revenue.len() as f64;
+        let avg_capex_ratio: f64 =
+            capex_to_revenue.iter().sum::<f64>() / capex_to_revenue.len() as f64;
         if avg_capex_ratio < 0.05 {
             score += 2.0;
-            details.push(format!("Low capital requirements: Avg capex {:.1}% of revenue", avg_capex_ratio * 100.0));
+            details.push(format!(
+                "Low capital requirements: Avg capex {:.1}% of revenue",
+                avg_capex_ratio * 100.0
+            ));
         } else if avg_capex_ratio < 0.10 {
             score += 1.0;
-            details.push(format!("Moderate capital requirements: Avg capex {:.1}% of revenue", avg_capex_ratio * 100.0));
+            details.push(format!(
+                "Moderate capital requirements: Avg capex {:.1}% of revenue",
+                avg_capex_ratio * 100.0
+            ));
         } else {
-            details.push(format!("High capital requirements: Avg capex {:.1}% of revenue", avg_capex_ratio * 100.0));
+            details.push(format!(
+                "High capital requirements: Avg capex {:.1}% of revenue",
+                avg_capex_ratio * 100.0
+            ));
         }
     } else {
         details.push("No capital expenditure data available".to_string());
     }
 
     // 4. Intangibles
-    let rd_sum: f64 = financial_line_items.iter().filter_map(|item| item.research_and_development).sum();
+    let rd_sum: f64 = financial_line_items
+        .iter()
+        .filter_map(|item| item.research_and_development)
+        .sum();
     if rd_sum > 0.0 {
         score += 1.0;
         details.push("Invests in R&D, building intellectual property".to_string());
     }
 
-    let has_goodwill = financial_line_items.iter().any(|item| item.goodwill_and_intangible_assets.unwrap_or(0.0) > 0.0);
+    let has_goodwill = financial_line_items
+        .iter()
+        .any(|item| item.goodwill_and_intangible_assets.unwrap_or(0.0) > 0.0);
     if has_goodwill {
         score += 1.0;
-        details.push("Significant goodwill/intangible assets, suggesting brand value or IP".to_string());
+        details.push(
+            "Significant goodwill/intangible assets, suggesting brand value or IP".to_string(),
+        );
     }
 
     let final_score = (score * 10.0_f64 / 9.0_f64).min(10.0_f64);
-    MungerSubResult { score: final_score, details: details.join("; ") }
+    MungerSubResult {
+        score: final_score,
+        details: details.join("; "),
+    }
 }
 
 pub struct MungerMgmtResult {
@@ -224,7 +302,10 @@ pub struct MungerMgmtResult {
     pub share_count_trend: String,
 }
 
-pub fn analyze_management_quality(financial_line_items: &[LineItem], insider_trades: &[InsiderTrade]) -> MungerMgmtResult {
+pub fn analyze_management_quality(
+    financial_line_items: &[LineItem],
+    insider_trades: &[InsiderTrade],
+) -> MungerMgmtResult {
     let mut score = 0.0;
     let mut details = Vec::new();
 
@@ -245,8 +326,14 @@ pub fn analyze_management_quality(financial_line_items: &[LineItem], insider_tra
     }
 
     // 1. Capital conversion (FCF / Net Income)
-    let fcf_values: Vec<f64> = financial_line_items.iter().filter_map(|item| item.free_cash_flow).collect();
-    let net_income_values: Vec<f64> = financial_line_items.iter().filter_map(|item| item.net_income).collect();
+    let fcf_values: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.free_cash_flow)
+        .collect();
+    let net_income_values: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.net_income)
+        .collect();
     if !fcf_values.is_empty() && fcf_values.len() == net_income_values.len() {
         let mut ratios = Vec::new();
         for i in 0..fcf_values.len() {
@@ -258,15 +345,27 @@ pub fn analyze_management_quality(financial_line_items: &[LineItem], insider_tra
             let avg_ratio: f64 = ratios.iter().sum::<f64>() / ratios.len() as f64;
             if avg_ratio > 1.1 {
                 score += 3.0;
-                details.push(format!("Excellent cash conversion: FCF/NI ratio of {:.2}", avg_ratio));
+                details.push(format!(
+                    "Excellent cash conversion: FCF/NI ratio of {:.2}",
+                    avg_ratio
+                ));
             } else if avg_ratio > 0.9 {
                 score += 2.0;
-                details.push(format!("Good cash conversion: FCF/NI ratio of {:.2}", avg_ratio));
+                details.push(format!(
+                    "Good cash conversion: FCF/NI ratio of {:.2}",
+                    avg_ratio
+                ));
             } else if avg_ratio > 0.7 {
                 score += 1.0;
-                details.push(format!("Moderate cash conversion: FCF/NI ratio of {:.2}", avg_ratio));
+                details.push(format!(
+                    "Moderate cash conversion: FCF/NI ratio of {:.2}",
+                    avg_ratio
+                ));
             } else {
-                details.push(format!("Poor cash conversion: FCF/NI ratio of only {:.2}", avg_ratio));
+                details.push(format!(
+                    "Poor cash conversion: FCF/NI ratio of only {:.2}",
+                    avg_ratio
+                ));
             }
         }
     }
@@ -278,7 +377,10 @@ pub fn analyze_management_quality(financial_line_items: &[LineItem], insider_tra
         recent_de_ratio = Some(de);
         if de < 0.3 {
             score += 3.0;
-            details.push(format!("Conservative debt management: D/E ratio of {:.2}", de));
+            details.push(format!(
+                "Conservative debt management: D/E ratio of {:.2}",
+                de
+            ));
         } else if de < 0.7 {
             score += 2.0;
             details.push(format!("Prudent debt management: D/E ratio of {:.2}", de));
@@ -295,53 +397,81 @@ pub fn analyze_management_quality(financial_line_items: &[LineItem], insider_tra
         if rev > 0.0 {
             let ratio = cash / rev;
             cash_to_revenue = Some(ratio);
-            if ratio >= 0.1 && ratio <= 0.25 {
+            if (0.1..=0.25).contains(&ratio) {
                 score += 2.0;
-                details.push(format!("Prudent cash management: Cash/Revenue ratio of {:.2}", ratio));
-            } else if ratio >= 0.05 && ratio <= 0.4 {
+                details.push(format!(
+                    "Prudent cash management: Cash/Revenue ratio of {:.2}",
+                    ratio
+                ));
+            } else if (0.05..=0.4).contains(&ratio) {
                 score += 1.0;
-                details.push(format!("Acceptable cash position: Cash/Revenue ratio of {:.2}", ratio));
+                details.push(format!(
+                    "Acceptable cash position: Cash/Revenue ratio of {:.2}",
+                    ratio
+                ));
             } else {
-                details.push(format!("Inefficient or tight cash reserves: Cash/Revenue ratio of {:.2}", ratio));
+                details.push(format!(
+                    "Inefficient or tight cash reserves: Cash/Revenue ratio of {:.2}",
+                    ratio
+                ));
             }
         }
     }
 
     // 4. Insider trades buy ratio
     if !insider_trades.is_empty() {
-        let buys = insider_trades.iter().filter(|t| {
-            if let Some(ref t_type) = t.transaction_type_desc() {
-                t_type.to_lowercase().contains("buy") || t_type.to_lowercase().contains("purchase")
-            } else {
-                false
-            }
-        }).count();
-        let sells = insider_trades.iter().filter(|t| {
-            if let Some(ref t_type) = t.transaction_type_desc() {
-                t_type.to_lowercase().contains("sell") || t_type.to_lowercase().contains("sale")
-            } else {
-                false
-            }
-        }).count();
+        let buys = insider_trades
+            .iter()
+            .filter(|t| {
+                if let Some(ref t_type) = t.transaction_type_desc() {
+                    t_type.to_lowercase().contains("buy")
+                        || t_type.to_lowercase().contains("purchase")
+                } else {
+                    false
+                }
+            })
+            .count();
+        let sells = insider_trades
+            .iter()
+            .filter(|t| {
+                if let Some(ref t_type) = t.transaction_type_desc() {
+                    t_type.to_lowercase().contains("sell") || t_type.to_lowercase().contains("sale")
+                } else {
+                    false
+                }
+            })
+            .count();
         let total = buys + sells;
         if total > 0 {
             let buy_ratio = buys as f64 / total as f64;
             insider_buy_ratio = Some(buy_ratio);
             if buy_ratio > 0.7 {
                 score += 2.0;
-                details.push(format!("Strong insider buying: {}/{} transactions are purchases", buys, total));
+                details.push(format!(
+                    "Strong insider buying: {}/{} transactions are purchases",
+                    buys, total
+                ));
             } else if buy_ratio > 0.4 {
                 score += 1.0;
-                details.push(format!("Balanced insider trading: {}/{} transactions are purchases", buys, total));
+                details.push(format!(
+                    "Balanced insider trading: {}/{} transactions are purchases",
+                    buys, total
+                ));
             } else if buy_ratio < 0.1 && sells > 5 {
                 score -= 1.0;
-                details.push(format!("Concerning insider selling: {}/{} transactions are sales", sells, total));
+                details.push(format!(
+                    "Concerning insider selling: {}/{} transactions are sales",
+                    sells, total
+                ));
             }
         }
     }
 
     // 5. Share count trend
-    let share_counts: Vec<f64> = financial_line_items.iter().filter_map(|item| item.outstanding_shares.map(|s| s as f64)).collect();
+    let share_counts: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.outstanding_shares.map(|s| s as f64))
+        .collect();
     if share_counts.len() >= 3 {
         let latest_s = share_counts[0];
         let oldest_s = share_counts[share_counts.len() - 1];
@@ -383,11 +513,18 @@ pub fn analyze_predictability(financial_line_items: &[LineItem]) -> MungerSubRes
     let mut details = Vec::new();
 
     if financial_line_items.len() < 5 {
-        return MungerSubResult { score: 0.0, details: "Insufficient data to analyze business predictability (need 5+ years)".to_string() };
+        return MungerSubResult {
+            score: 0.0,
+            details: "Insufficient data to analyze business predictability (need 5+ years)"
+                .to_string(),
+        };
     }
 
     // 1. Revenue stability and growth
-    let revenues: Vec<f64> = financial_line_items.iter().filter_map(|item| item.revenue).collect();
+    let revenues: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.revenue)
+        .collect();
     if revenues.len() >= 5 {
         let mut growth_rates = Vec::new();
         for i in 0..revenues.len() - 1 {
@@ -398,69 +535,124 @@ pub fn analyze_predictability(financial_line_items: &[LineItem]) -> MungerSubRes
         }
         if !growth_rates.is_empty() {
             let avg_growth: f64 = growth_rates.iter().sum::<f64>() / growth_rates.len() as f64;
-            let growth_volatility: f64 = growth_rates.iter().map(|&r| (r - avg_growth).abs()).sum::<f64>() / growth_rates.len() as f64;
+            let growth_volatility: f64 = growth_rates
+                .iter()
+                .map(|&r| (r - avg_growth).abs())
+                .sum::<f64>()
+                / growth_rates.len() as f64;
 
             if avg_growth > 0.05 && growth_volatility < 0.1 {
                 score += 3.0;
-                details.push(format!("Highly predictable revenue: {:.1}% avg growth with low volatility", avg_growth * 100.0));
+                details.push(format!(
+                    "Highly predictable revenue: {:.1}% avg growth with low volatility",
+                    avg_growth * 100.0
+                ));
             } else if avg_growth > 0.0 && growth_volatility < 0.2 {
                 score += 2.0;
-                details.push(format!("Moderately predictable revenue: {:.1}% avg growth with some volatility", avg_growth * 100.0));
+                details.push(format!(
+                    "Moderately predictable revenue: {:.1}% avg growth with some volatility",
+                    avg_growth * 100.0
+                ));
             } else if avg_growth > 0.0 {
                 score += 1.0;
-                details.push(format!("Growing but less predictable revenue: {:.1}% avg growth with high volatility", avg_growth * 100.0));
+                details.push(format!(
+                    "Growing but less predictable revenue: {:.1}% avg growth with high volatility",
+                    avg_growth * 100.0
+                ));
             } else {
-                details.push(format!("Declining or highly unpredictable revenue: {:.1}% avg growth", avg_growth * 100.0));
+                details.push(format!(
+                    "Declining or highly unpredictable revenue: {:.1}% avg growth",
+                    avg_growth * 100.0
+                ));
             }
         }
     }
 
     // 2. Operating income stability
-    let op_income: Vec<f64> = financial_line_items.iter().filter_map(|item| item.operating_income).collect();
+    let op_income: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.operating_income)
+        .collect();
     if op_income.len() >= 5 {
         let positive_periods = op_income.iter().filter(|&&inc| inc > 0.0).count();
         if positive_periods == op_income.len() {
             score += 3.0;
-            details.push("Highly predictable operations: Operating income positive in all periods".to_string());
+            details.push(
+                "Highly predictable operations: Operating income positive in all periods"
+                    .to_string(),
+            );
         } else if positive_periods as f64 >= op_income.len() as f64 * 0.8 {
             score += 2.0;
-            details.push(format!("Predictable operations: Operating income positive in {}/{} periods", positive_periods, op_income.len()));
+            details.push(format!(
+                "Predictable operations: Operating income positive in {}/{} periods",
+                positive_periods,
+                op_income.len()
+            ));
         } else if positive_periods as f64 >= op_income.len() as f64 * 0.6 {
             score += 1.0;
-            details.push(format!("Somewhat predictable operations: Operating income positive in {}/{} periods", positive_periods, op_income.len()));
+            details.push(format!(
+                "Somewhat predictable operations: Operating income positive in {}/{} periods",
+                positive_periods,
+                op_income.len()
+            ));
         }
     }
 
     // 3. Margin consistency
-    let op_margins: Vec<f64> = financial_line_items.iter().filter_map(|item| item.operating_margin).collect();
+    let op_margins: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.operating_margin)
+        .collect();
     if op_margins.len() >= 5 {
         let avg_margin: f64 = op_margins.iter().sum::<f64>() / op_margins.len() as f64;
-        let margin_volatility: f64 = op_margins.iter().map(|&m| (m - avg_margin).abs()).sum::<f64>() / op_margins.len() as f64;
+        let margin_volatility: f64 = op_margins
+            .iter()
+            .map(|&m| (m - avg_margin).abs())
+            .sum::<f64>()
+            / op_margins.len() as f64;
 
         if margin_volatility < 0.03 {
             score += 2.0;
-            details.push(format!("Highly predictable margins: {:.1}% avg with minimal volatility", avg_margin * 100.0));
+            details.push(format!(
+                "Highly predictable margins: {:.1}% avg with minimal volatility",
+                avg_margin * 100.0
+            ));
         } else if margin_volatility < 0.07 {
             score += 1.0;
-            details.push(format!("Moderately predictable margins: {:.1}% avg with some volatility", avg_margin * 100.0));
+            details.push(format!(
+                "Moderately predictable margins: {:.1}% avg with some volatility",
+                avg_margin * 100.0
+            ));
         }
     }
 
     // 4. Cash generation reliability
-    let fcf_values: Vec<f64> = financial_line_items.iter().filter_map(|item| item.free_cash_flow).collect();
+    let fcf_values: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.free_cash_flow)
+        .collect();
     if fcf_values.len() >= 5 {
         let positive_fcf_periods = fcf_values.iter().filter(|&&f| f > 0.0).count();
         if positive_fcf_periods == fcf_values.len() {
             score += 2.0;
-            details.push("Highly predictable cash generation: Positive FCF in all periods".to_string());
+            details.push(
+                "Highly predictable cash generation: Positive FCF in all periods".to_string(),
+            );
         } else if positive_fcf_periods as f64 >= fcf_values.len() as f64 * 0.8 {
             score += 1.0;
-            details.push(format!("Predictable cash generation: Positive FCF in {}/{} periods", positive_fcf_periods, fcf_values.len()));
+            details.push(format!(
+                "Predictable cash generation: Positive FCF in {}/{} periods",
+                positive_fcf_periods,
+                fcf_values.len()
+            ));
         }
     }
 
     let final_score = (score * 10.0_f64 / 10.0_f64).min(10.0_f64);
-    MungerSubResult { score: final_score, details: details.join("; ") }
+    MungerSubResult {
+        score: final_score,
+        details: details.join("; "),
+    }
 }
 
 pub struct MungerValuationResult {
@@ -472,7 +664,10 @@ pub struct MungerValuationResult {
     pub margin_of_safety_vs_fair_value: f64,
 }
 
-pub fn calculate_munger_valuation(financial_line_items: &[LineItem], market_cap: f64) -> MungerValuationResult {
+pub fn calculate_munger_valuation(
+    financial_line_items: &[LineItem],
+    market_cap: f64,
+) -> MungerValuationResult {
     if financial_line_items.is_empty() || market_cap <= 0.0 {
         return MungerValuationResult {
             score: 0.0,
@@ -484,7 +679,10 @@ pub fn calculate_munger_valuation(financial_line_items: &[LineItem], market_cap:
         };
     }
 
-    let fcf_values: Vec<f64> = financial_line_items.iter().filter_map(|item| item.free_cash_flow).collect();
+    let fcf_values: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.free_cash_flow)
+        .collect();
     if fcf_values.len() < 3 {
         return MungerValuationResult {
             score: 0.0,
@@ -502,7 +700,10 @@ pub fn calculate_munger_valuation(financial_line_items: &[LineItem], market_cap:
     if normalized_fcf <= 0.0 {
         return MungerValuationResult {
             score: 0.0,
-            details: format!("Negative or zero normalized FCF ({:.1}), cannot value", normalized_fcf),
+            details: format!(
+                "Negative or zero normalized FCF ({:.1}), cannot value",
+                normalized_fcf
+            ),
             fcf_yield: 0.0,
             normalized_fcf,
             reasonable_value: 0.0,
@@ -516,7 +717,10 @@ pub fn calculate_munger_valuation(financial_line_items: &[LineItem], market_cap:
 
     if fcf_yield > 0.08 {
         score += 4.0;
-        details.push(format!("Excellent value: {:.1}% FCF yield", fcf_yield * 100.0));
+        details.push(format!(
+            "Excellent value: {:.1}% FCF yield",
+            fcf_yield * 100.0
+        ));
     } else if fcf_yield > 0.05 {
         score += 3.0;
         details.push(format!("Good value: {:.1}% FCF yield", fcf_yield * 100.0));
@@ -524,7 +728,10 @@ pub fn calculate_munger_valuation(financial_line_items: &[LineItem], market_cap:
         score += 1.0;
         details.push(format!("Fair value: {:.1}% FCF yield", fcf_yield * 100.0));
     } else {
-        details.push(format!("Expensive: Only {:.1}% FCF yield", fcf_yield * 100.0));
+        details.push(format!(
+            "Expensive: Only {:.1}% FCF yield",
+            fcf_yield * 100.0
+        ));
     }
 
     let reasonable_value = normalized_fcf * 15.0;
@@ -532,15 +739,27 @@ pub fn calculate_munger_valuation(financial_line_items: &[LineItem], market_cap:
 
     if margin_of_safety_vs_fair_value > 0.3 {
         score += 3.0;
-        details.push(format!("Large margin of safety: {:.1}% upside to reasonable value", margin_of_safety_vs_fair_value * 100.0));
+        details.push(format!(
+            "Large margin of safety: {:.1}% upside to reasonable value",
+            margin_of_safety_vs_fair_value * 100.0
+        ));
     } else if margin_of_safety_vs_fair_value > 0.1 {
         score += 2.0;
-        details.push(format!("Moderate margin of safety: {:.1}% upside to reasonable value", margin_of_safety_vs_fair_value * 100.0));
+        details.push(format!(
+            "Moderate margin of safety: {:.1}% upside to reasonable value",
+            margin_of_safety_vs_fair_value * 100.0
+        ));
     } else if margin_of_safety_vs_fair_value > -0.1 {
         score += 1.0;
-        details.push(format!("Fair price: Within 10% of reasonable value ({:.1}%)", margin_of_safety_vs_fair_value * 100.0));
+        details.push(format!(
+            "Fair price: Within 10% of reasonable value ({:.1}%)",
+            margin_of_safety_vs_fair_value * 100.0
+        ));
     } else {
-        details.push(format!("Expensive: {:.1}% premium to reasonable value", -margin_of_safety_vs_fair_value * 100.0));
+        details.push(format!(
+            "Expensive: {:.1}% premium to reasonable value",
+            -margin_of_safety_vs_fair_value * 100.0
+        ));
     }
 
     if fcf_values.len() >= 3 {
@@ -581,7 +800,11 @@ pub fn compute_confidence(
     signal: &str,
 ) -> u32 {
     let quality = 0.35 * moat.score + 0.25 * mgmt.score + 0.25 * pred.score;
-    let quality_pct = if quality > 0.0 { quality / 8.5 * 100.0 } else { 0.0 };
+    let quality_pct = if quality > 0.0 {
+        quality / 8.5 * 100.0
+    } else {
+        0.0
+    };
 
     let mos = val.margin_of_safety_vs_fair_value;
     let val_adj = (mos * 100.0 / 3.0).clamp(-10.0, 10.0);
@@ -619,7 +842,10 @@ pub fn make_munger_facts_bundle(
         "predictable": pred.score >= 7.0,
         "owner_aligned": mgmt.score >= 7.0 || mgmt.insider_buy_ratio.unwrap_or(0.0) >= 0.6,
         "low_leverage": mgmt.recent_de_ratio.unwrap_or(99.0) < 0.7,
-        "sensible_cash": mgmt.cash_to_revenue.map(|r| r >= 0.1 && r <= 0.25).unwrap_or(false),
+        "sensible_cash": mgmt
+            .cash_to_revenue
+            .map(|r| (0.1..=0.25).contains(&r))
+            .unwrap_or(false),
         "mos_positive": val.margin_of_safety_vs_fair_value > 0.0,
         "fcf_yield_ok": val.fcf_yield >= 0.05,
         "share_count_friendly": mgmt.share_count_trend == "decreasing",
@@ -670,11 +896,5 @@ pub async fn generate_munger_output(
         confidence_hint
     );
 
-    call_llm(
-        system_prompt,
-        &user_prompt,
-        Some(agent_id),
-        Some(state),
-        3,
-    ).await
+    call_llm(system_prompt, &user_prompt, Some(agent_id), Some(state), 3).await
 }

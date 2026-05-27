@@ -1,32 +1,32 @@
 // Source: src/workflow.rs
 //! Core workflow orchestrator for the AI Hedge Fund trading simulator.
 
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use std::collections::HashMap;
 
-use crate::graph::state::AgentState;
-use crate::agents::fundamentals::fundamentals_analyst_agent;
-use crate::agents::technicals::technical_analyst_agent;
-use crate::agents::warren_buffett::warren_buffett_agent;
-use crate::agents::ben_graham::ben_graham_agent;
-use crate::agents::charlie_munger::charlie_munger_agent;
-use crate::agents::michael_burry::michael_burry_agent;
-use crate::agents::cathie_wood::cathie_wood_agent;
-use crate::agents::bill_ackman::bill_ackman_agent;
 use crate::agents::aswath_damodaran::aswath_damodaran_agent;
+use crate::agents::ben_graham::ben_graham_agent;
+use crate::agents::bill_ackman::bill_ackman_agent;
+use crate::agents::cathie_wood::cathie_wood_agent;
+use crate::agents::charlie_munger::charlie_munger_agent;
+use crate::agents::fundamentals::fundamentals_analyst_agent;
 use crate::agents::growth_agent::growth_analyst_agent;
+use crate::agents::michael_burry::michael_burry_agent;
 use crate::agents::mohnish_pabrai::mohnish_pabrai_agent;
 use crate::agents::nassim_taleb::nassim_taleb_agent;
 use crate::agents::news_sentiment::news_sentiment_agent;
 use crate::agents::peter_lynch::peter_lynch_agent;
 use crate::agents::phil_fisher::phil_fisher_agent;
+use crate::agents::portfolio_manager::portfolio_management_agent;
 use crate::agents::rakesh_jhunjhunwala::rakesh_jhunjhunwala_agent;
+use crate::agents::risk_manager::risk_management_agent;
 use crate::agents::sentiment::sentiment_analyst_agent;
 use crate::agents::stanley_druckenmiller::stanley_druckenmiller_agent;
+use crate::agents::technicals::technical_analyst_agent;
 use crate::agents::valuation::valuation_analyst_agent;
-use crate::agents::risk_manager::risk_management_agent;
-use crate::agents::portfolio_manager::portfolio_management_agent;
+use crate::agents::warren_buffett::warren_buffett_agent;
 use crate::data::provider::{configure_provider, DataProvider};
+use crate::graph::state::AgentState;
 
 /// Result structure returned by running the hedge fund flow.
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
@@ -35,35 +35,42 @@ pub struct HedgeFundResult {
     pub analyst_signals: HashMap<String, serde_json::Value>,
 }
 
+pub struct HedgeFundOptions<'a> {
+    pub show_reasoning: bool,
+    pub selected_analysts: Vec<String>,
+    pub model_name: &'a str,
+    pub model_provider: &'a str,
+    pub data_provider: Option<DataProvider>,
+}
+
+pub struct HedgeFundRunRequest<'a> {
+    pub tickers: Vec<String>,
+    pub end_date: &'a str,
+    pub portfolio: serde_json::Value,
+    pub options: HedgeFundOptions<'a>,
+}
+
 /// Parses the JSON string from the portfolio manager's agent response.
 pub fn parse_hedge_fund_response(response: &str) -> Option<serde_json::Value> {
     serde_json::from_str(response).ok()
 }
 
 /// Runs the AI Hedge Fund agent workflow for a set of tickers over a date range.
-pub async fn run_hedge_fund(
-    tickers: Vec<String>,
-    _start_date: &str,
-    end_date: &str,
-    portfolio: serde_json::Value,
-    show_reasoning: bool,
-    selected_analysts: Vec<String>,
-    model_name: &str,
-    model_provider: &str,
-    data_provider: Option<DataProvider>,
-) -> Result<HedgeFundResult> {
+pub async fn run_hedge_fund(request: HedgeFundRunRequest<'_>) -> Result<HedgeFundResult> {
     println!("Starting parallel hedge fund execution workflow...");
 
-    configure_provider(data_provider);
+    configure_provider(request.options.data_provider);
     let provider = crate::data::provider::active_provider();
     if provider == DataProvider::YahooFinance {
         println!("Using Yahoo Finance as the data provider (free tier).");
     }
-    
+
     // Resolve lookback start (30 days lookback)
-    let end_dt = chrono::NaiveDate::parse_from_str(end_date, "%Y-%m-%d")
+    let end_dt = chrono::NaiveDate::parse_from_str(request.end_date, "%Y-%m-%d")
         .context("Failed to parse end_date in run_hedge_fund")?;
-    let lookback_start = (end_dt - chrono::Duration::days(30)).format("%Y-%m-%d").to_string();
+    let lookback_start = (end_dt - chrono::Duration::days(30))
+        .format("%Y-%m-%d")
+        .to_string();
 
     let api_key = std::env::var("FINANCIAL_DATASETS_API_KEY").ok();
 
@@ -74,23 +81,49 @@ pub async fn run_hedge_fund(
         metadata: HashMap::new(),
     };
 
-    state.data.insert("tickers".to_string(), serde_json::to_value(tickers.clone())?);
-    state.data.insert("start_date".to_string(), serde_json::json!(lookback_start));
-    state.data.insert("end_date".to_string(), serde_json::json!(end_date));
-    state.data.insert("portfolio".to_string(), portfolio);
-    state.data.insert("analyst_signals".to_string(), serde_json::json!({}));
+    state.data.insert(
+        "tickers".to_string(),
+        serde_json::to_value(request.tickers.clone())?,
+    );
+    state
+        .data
+        .insert("start_date".to_string(), serde_json::json!(lookback_start));
+    state
+        .data
+        .insert("end_date".to_string(), serde_json::json!(request.end_date));
+    state
+        .data
+        .insert("portfolio".to_string(), request.portfolio);
+    state
+        .data
+        .insert("analyst_signals".to_string(), serde_json::json!({}));
 
-    state.metadata.insert("show_reasoning".to_string(), serde_json::json!(show_reasoning));
-    state.metadata.insert("model_name".to_string(), serde_json::json!(model_name));
-    state.metadata.insert("model_provider".to_string(), serde_json::json!(model_provider));
-    state.metadata.insert("data_provider".to_string(), serde_json::json!(provider.as_str()));
-    
+    state.metadata.insert(
+        "show_reasoning".to_string(),
+        serde_json::json!(request.options.show_reasoning),
+    );
+    state.metadata.insert(
+        "model_name".to_string(),
+        serde_json::json!(request.options.model_name),
+    );
+    state.metadata.insert(
+        "model_provider".to_string(),
+        serde_json::json!(request.options.model_provider),
+    );
+    state.metadata.insert(
+        "data_provider".to_string(),
+        serde_json::json!(provider.as_str()),
+    );
+
     if let Some(key) = api_key {
-        state.metadata.insert("FINANCIAL_DATASETS_API_KEY".to_string(), serde_json::json!(key));
+        state.metadata.insert(
+            "FINANCIAL_DATASETS_API_KEY".to_string(),
+            serde_json::json!(key),
+        );
     }
 
     // 2. Resolve selected analysts (default to all registered if empty)
-    let mut selected = selected_analysts;
+    let mut selected = request.options.selected_analysts;
     if selected.is_empty() {
         selected = vec![
             "warren_buffett".to_string(),
@@ -122,25 +155,52 @@ pub async fn run_hedge_fund(
         let analyst_clone = analyst.clone();
         tasks.push(tokio::spawn(async move {
             match analyst_clone.as_str() {
-                "warren_buffett" => warren_buffett_agent(&mut state_clone, "warren_buffett_agent").await,
+                "warren_buffett" => {
+                    warren_buffett_agent(&mut state_clone, "warren_buffett_agent").await
+                }
                 "ben_graham" => ben_graham_agent(&mut state_clone, "ben_graham_agent").await,
-                "charlie_munger" => charlie_munger_agent(&mut state_clone, "charlie_munger_agent").await,
-                "michael_burry" => michael_burry_agent(&mut state_clone, "michael_burry_agent").await,
+                "charlie_munger" => {
+                    charlie_munger_agent(&mut state_clone, "charlie_munger_agent").await
+                }
+                "michael_burry" => {
+                    michael_burry_agent(&mut state_clone, "michael_burry_agent").await
+                }
                 "cathie_wood" => cathie_wood_agent(&mut state_clone, "cathie_wood_agent").await,
                 "bill_ackman" => bill_ackman_agent(&mut state_clone, "bill_ackman_agent").await,
-                "aswath_damodaran" => aswath_damodaran_agent(&mut state_clone, "aswath_damodaran_agent").await,
-                "growth_analyst" => growth_analyst_agent(&mut state_clone, "growth_analyst_agent").await,
-                "mohnish_pabrai" => mohnish_pabrai_agent(&mut state_clone, "mohnish_pabrai_agent").await,
+                "aswath_damodaran" => {
+                    aswath_damodaran_agent(&mut state_clone, "aswath_damodaran_agent").await
+                }
+                "growth_analyst" => {
+                    growth_analyst_agent(&mut state_clone, "growth_analyst_agent").await
+                }
+                "mohnish_pabrai" => {
+                    mohnish_pabrai_agent(&mut state_clone, "mohnish_pabrai_agent").await
+                }
                 "nassim_taleb" => nassim_taleb_agent(&mut state_clone, "nassim_taleb_agent").await,
                 "peter_lynch" => peter_lynch_agent(&mut state_clone, "peter_lynch_agent").await,
                 "phil_fisher" => phil_fisher_agent(&mut state_clone, "phil_fisher_agent").await,
-                "rakesh_jhunjhunwala" => rakesh_jhunjhunwala_agent(&mut state_clone, "rakesh_jhunjhunwala_agent").await,
-                "stanley_druckenmiller" => stanley_druckenmiller_agent(&mut state_clone, "stanley_druckenmiller_agent").await,
-                "technical_analyst" => technical_analyst_agent(&mut state_clone, "technical_analyst_agent").await,
-                "fundamentals_analyst" => fundamentals_analyst_agent(&mut state_clone, "fundamentals_analyst_agent").await,
-                "news_sentiment_analyst" => news_sentiment_agent(&mut state_clone, "news_sentiment_agent").await,
-                "sentiment_analyst" => sentiment_analyst_agent(&mut state_clone, "sentiment_analyst_agent").await,
-                "valuation_analyst" => valuation_analyst_agent(&mut state_clone, "valuation_analyst_agent").await,
+                "rakesh_jhunjhunwala" => {
+                    rakesh_jhunjhunwala_agent(&mut state_clone, "rakesh_jhunjhunwala_agent").await
+                }
+                "stanley_druckenmiller" => {
+                    stanley_druckenmiller_agent(&mut state_clone, "stanley_druckenmiller_agent")
+                        .await
+                }
+                "technical_analyst" => {
+                    technical_analyst_agent(&mut state_clone, "technical_analyst_agent").await
+                }
+                "fundamentals_analyst" => {
+                    fundamentals_analyst_agent(&mut state_clone, "fundamentals_analyst_agent").await
+                }
+                "news_sentiment_analyst" => {
+                    news_sentiment_agent(&mut state_clone, "news_sentiment_agent").await
+                }
+                "sentiment_analyst" => {
+                    sentiment_analyst_agent(&mut state_clone, "sentiment_analyst_agent").await
+                }
+                "valuation_analyst" => {
+                    valuation_analyst_agent(&mut state_clone, "valuation_analyst_agent").await
+                }
                 _ => Ok(()),
             }?;
             Ok(state_clone)
@@ -152,9 +212,17 @@ pub async fn run_hedge_fund(
     // 4. Merge all concurrent results back into the main state
     for res in results {
         if let Ok(Ok(completed_state)) = res {
-            if let Some(completed_signals) = completed_state.data.get("analyst_signals").and_then(|v| v.as_object()) {
+            if let Some(completed_signals) = completed_state
+                .data
+                .get("analyst_signals")
+                .and_then(|v| v.as_object())
+            {
                 for (k, v) in completed_signals {
-                    if let Some(main_signals) = state.data.get_mut("analyst_signals").and_then(|v| v.as_object_mut()) {
+                    if let Some(main_signals) = state
+                        .data
+                        .get_mut("analyst_signals")
+                        .and_then(|v| v.as_object_mut())
+                    {
                         main_signals.insert(k.clone(), v.clone());
                     }
                 }
@@ -168,7 +236,9 @@ pub async fn run_hedge_fund(
 
     // 6. Retrieve and return final outputs
     let decisions = state.data.get("decisions").cloned();
-    let analyst_signals = state.data.get("analyst_signals")
+    let analyst_signals = state
+        .data
+        .get("analyst_signals")
         .and_then(|v| serde_json::from_value::<HashMap<String, serde_json::Value>>(v.clone()).ok())
         .unwrap_or_default();
 

@@ -2,31 +2,37 @@
 //! Sibling to src/agents/phil_fisher.py
 //! Analyzes stocks using Phil Fisher's long-term growth and scuttlebutt research principles.
 
-use anyhow::{Result, Context};
+use crate::data::models::{CompanyNews, InsiderTrade, LineItem};
 use crate::graph::state::AgentState;
-use crate::tools::api::{get_market_cap, search_line_items, get_insider_trades, get_company_news};
-use crate::data::models::{FinancialMetrics, LineItem, InsiderTrade, CompanyNews};
+use crate::tools::api::{get_company_news, get_insider_trades, get_market_cap, search_line_items};
 use crate::utils::llm::call_llm;
+use anyhow::{Context, Result};
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct PhilFisherSignal {
-    pub signal: String,      // "bullish" | "bearish" | "neutral"
-    pub confidence: u32,     // 0-100
+    pub signal: String,  // "bullish" | "bearish" | "neutral"
+    pub confidence: u32, // 0-100
     pub reasoning: String,
 }
 
 pub async fn phil_fisher_agent(state: &mut AgentState, agent_id: &str) -> Result<()> {
     println!("Running Phil Fisher Agent: {}", agent_id);
 
-    let end_date = state.data.get("end_date")
+    let end_date = state
+        .data
+        .get("end_date")
         .and_then(|v| v.as_str())
         .context("Missing end_date in phil_fisher_agent")?;
-    
-    let tickers_json = state.data.get("tickers")
+
+    let tickers_json = state
+        .data
+        .get("tickers")
         .context("Missing tickers in phil_fisher_agent")?;
     let tickers: Vec<String> = serde_json::from_value(tickers_json.clone())?;
 
-    let api_key = state.metadata.get("FINANCIAL_DATASETS_API_KEY")
+    let api_key = state
+        .metadata
+        .get("FINANCIAL_DATASETS_API_KEY")
         .and_then(|v| v.as_str());
 
     let mut fisher_analysis = serde_json::Map::new();
@@ -54,11 +60,20 @@ pub async fn phil_fisher_agent(state: &mut AgentState, agent_id: &str) -> Result
             "annual",
             5,
             api_key,
-        ).await.unwrap_or_default();
+        )
+        .await
+        .unwrap_or_default();
 
-        let market_cap = get_market_cap(ticker, end_date, api_key).await.unwrap_or(None).unwrap_or(0.0);
-        let insider_trades = get_insider_trades(ticker, end_date, None, 50, api_key).await.unwrap_or_default();
-        let company_news = get_company_news(ticker, end_date, None, 50, api_key).await.unwrap_or_default();
+        let market_cap = get_market_cap(ticker, end_date, api_key)
+            .await
+            .unwrap_or(None)
+            .unwrap_or(0.0);
+        let insider_trades = get_insider_trades(ticker, end_date, None, 50, api_key)
+            .await
+            .unwrap_or_default();
+        let company_news = get_company_news(ticker, end_date, None, 50, api_key)
+            .await
+            .unwrap_or_default();
 
         // Sub-analyses
         let growth_quality = analyze_fisher_growth_quality(&financial_line_items);
@@ -128,10 +143,15 @@ pub async fn phil_fisher_agent(state: &mut AgentState, agent_id: &str) -> Result
         );
     }
 
-    let analyst_signals = state.data.entry("analyst_signals".to_string())
+    let analyst_signals = state
+        .data
+        .entry("analyst_signals".to_string())
         .or_insert_with(|| serde_json::json!({}));
     if let Some(obj) = analyst_signals.as_object_mut() {
-        obj.insert(agent_id.to_string(), serde_json::Value::Object(fisher_analysis));
+        obj.insert(
+            agent_id.to_string(),
+            serde_json::Value::Object(fisher_analysis),
+        );
     }
 
     Ok(())
@@ -144,13 +164,19 @@ pub struct FisherSubResult {
 
 pub fn analyze_fisher_growth_quality(financial_line_items: &[LineItem]) -> FisherSubResult {
     if financial_line_items.len() < 2 {
-        return FisherSubResult { score: 0.0, details: "Insufficient financial data for growth/quality analysis".to_string() };
+        return FisherSubResult {
+            score: 0.0,
+            details: "Insufficient financial data for growth/quality analysis".to_string(),
+        };
     }
 
     let mut details = Vec::new();
     let mut raw_score = 0;
 
-    let revenues: Vec<f64> = financial_line_items.iter().filter_map(|item| item.revenue).collect();
+    let revenues: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.revenue)
+        .collect();
     if revenues.len() >= 2 {
         let latest = revenues[0];
         let oldest = revenues[revenues.len() - 1];
@@ -159,20 +185,35 @@ pub fn analyze_fisher_growth_quality(financial_line_items: &[LineItem]) -> Fishe
             let rev_growth = (latest / oldest).powf(1.0 / num_years) - 1.0;
             if rev_growth > 0.20 {
                 raw_score += 3;
-                details.push(format!("Very strong annualized revenue growth: {:.1}%", rev_growth * 100.0));
+                details.push(format!(
+                    "Very strong annualized revenue growth: {:.1}%",
+                    rev_growth * 100.0
+                ));
             } else if rev_growth > 0.10 {
                 raw_score += 2;
-                details.push(format!("Moderate annualized revenue growth: {:.1}%", rev_growth * 100.0));
+                details.push(format!(
+                    "Moderate annualized revenue growth: {:.1}%",
+                    rev_growth * 100.0
+                ));
             } else if rev_growth > 0.03 {
                 raw_score += 1;
-                details.push(format!("Slight annualized revenue growth: {:.1}%", rev_growth * 100.0));
+                details.push(format!(
+                    "Slight annualized revenue growth: {:.1}%",
+                    rev_growth * 100.0
+                ));
             } else {
-                details.push(format!("Minimal or negative annualized revenue growth: {:.1}%", rev_growth * 100.0));
+                details.push(format!(
+                    "Minimal or negative annualized revenue growth: {:.1}%",
+                    rev_growth * 100.0
+                ));
             }
         }
     }
 
-    let eps_values: Vec<f64> = financial_line_items.iter().filter_map(|item| item.earnings_per_share).collect();
+    let eps_values: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.earnings_per_share)
+        .collect();
     if eps_values.len() >= 2 {
         let latest = eps_values[0];
         let oldest = eps_values[eps_values.len() - 1];
@@ -181,64 +222,101 @@ pub fn analyze_fisher_growth_quality(financial_line_items: &[LineItem]) -> Fishe
             let eps_growth = (latest / oldest).powf(1.0 / num_years) - 1.0;
             if eps_growth > 0.20 {
                 raw_score += 3;
-                details.push(format!("Very strong annualized EPS growth: {:.1}%", eps_growth * 100.0));
+                details.push(format!(
+                    "Very strong annualized EPS growth: {:.1}%",
+                    eps_growth * 100.0
+                ));
             } else if eps_growth > 0.10 {
                 raw_score += 2;
-                details.push(format!("Moderate annualized EPS growth: {:.1}%", eps_growth * 100.0));
+                details.push(format!(
+                    "Moderate annualized EPS growth: {:.1}%",
+                    eps_growth * 100.0
+                ));
             } else if eps_growth > 0.03 {
                 raw_score += 1;
-                details.push(format!("Slight annualized EPS growth: {:.1}%", eps_growth * 100.0));
+                details.push(format!(
+                    "Slight annualized EPS growth: {:.1}%",
+                    eps_growth * 100.0
+                ));
             } else {
-                details.push(format!("Minimal or negative annualized EPS growth: {:.1}%", eps_growth * 100.0));
+                details.push(format!(
+                    "Minimal or negative annualized EPS growth: {:.1}%",
+                    eps_growth * 100.0
+                ));
             }
         }
     }
 
-    let rnd_values: Vec<f64> = financial_line_items.iter().filter_map(|item| item.research_and_development).collect();
+    let rnd_values: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.research_and_development)
+        .collect();
     if !rnd_values.is_empty() && !revenues.is_empty() {
         let recent_rnd = rnd_values[0];
         let recent_rev = revenues[0];
         if recent_rev > 0.0 {
             let rnd_ratio = recent_rnd / recent_rev;
-            if rnd_ratio >= 0.03 && rnd_ratio <= 0.15 {
+            if (0.03..=0.15).contains(&rnd_ratio) {
                 raw_score += 3;
-                details.push(format!("R&D ratio {:.1}% indicates significant investment in future growth", rnd_ratio * 100.0));
+                details.push(format!(
+                    "R&D ratio {:.1}% indicates significant investment in future growth",
+                    rnd_ratio * 100.0
+                ));
             } else if rnd_ratio > 0.15 {
                 raw_score += 2;
                 details.push(format!("R&D ratio {:.1}% is very high", rnd_ratio * 100.0));
             } else if rnd_ratio > 0.0 {
                 raw_score += 1;
-                details.push(format!("R&D ratio {:.1}% is somewhat low but positive", rnd_ratio * 100.0));
+                details.push(format!(
+                    "R&D ratio {:.1}% is somewhat low but positive",
+                    rnd_ratio * 100.0
+                ));
             }
         }
     }
 
     let final_score = (raw_score as f64 / 9.0 * 10.0).min(10.0);
-    FisherSubResult { score: final_score, details: details.join("; ") }
+    FisherSubResult {
+        score: final_score,
+        details: details.join("; "),
+    }
 }
 
 pub fn analyze_margins_stability(financial_line_items: &[LineItem]) -> FisherSubResult {
     if financial_line_items.len() < 2 {
-        return FisherSubResult { score: 0.0, details: "Insufficient data for margin stability analysis".to_string() };
+        return FisherSubResult {
+            score: 0.0,
+            details: "Insufficient data for margin stability analysis".to_string(),
+        };
     }
 
     let mut details = Vec::new();
     let mut raw_score = 0;
 
-    let op_margins: Vec<f64> = financial_line_items.iter().filter_map(|item| item.operating_margin).collect();
+    let op_margins: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.operating_margin)
+        .collect();
     if len_check(&op_margins) >= 2 {
         let oldest = op_margins[op_margins.len() - 1];
         let newest = op_margins[0];
         if newest >= oldest && oldest > 0.0 {
             raw_score += 2;
-            details.push(format!("Operating margin stable or improving ({:.1}% -> {:.1}%)", oldest * 100.0, newest * 100.0));
+            details.push(format!(
+                "Operating margin stable or improving ({:.1}% -> {:.1}%)",
+                oldest * 100.0,
+                newest * 100.0
+            ));
         } else if newest > 0.0 {
             raw_score += 1;
             details.push("Operating margin positive but slightly declined".to_string());
         }
     }
 
-    let gm_values: Vec<f64> = financial_line_items.iter().filter_map(|item| item.gross_margin).collect();
+    let gm_values: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.gross_margin)
+        .collect();
     if !gm_values.is_empty() {
         let recent = gm_values[0];
         if recent > 0.5 {
@@ -266,23 +344,37 @@ pub fn analyze_margins_stability(financial_line_items: &[LineItem]) -> FisherSub
     }
 
     let final_score = (raw_score as f64 / 6.0 * 10.0).min(10.0);
-    FisherSubResult { score: final_score, details: details.join("; ") }
+    FisherSubResult {
+        score: final_score,
+        details: details.join("; "),
+    }
 }
 
 fn len_check<T>(v: &[T]) -> usize {
     v.len()
 }
 
-pub fn analyze_management_efficiency_leverage(financial_line_items: &[LineItem]) -> FisherSubResult {
+pub fn analyze_management_efficiency_leverage(
+    financial_line_items: &[LineItem],
+) -> FisherSubResult {
     if financial_line_items.is_empty() {
-        return FisherSubResult { score: 0.0, details: "No financial data for management efficiency".to_string() };
+        return FisherSubResult {
+            score: 0.0,
+            details: "No financial data for management efficiency".to_string(),
+        };
     }
 
     let mut details = Vec::new();
     let mut raw_score = 0;
 
-    let ni_values: Vec<f64> = financial_line_items.iter().filter_map(|item| item.net_income).collect();
-    let eq_values: Vec<f64> = financial_line_items.iter().filter_map(|item| item.shareholders_equity).collect();
+    let ni_values: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.net_income)
+        .collect();
+    let eq_values: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.shareholders_equity)
+        .collect();
 
     if !ni_values.is_empty() && ni_values.len() == eq_values.len() {
         let recent_ni = ni_values[0];
@@ -302,7 +394,10 @@ pub fn analyze_management_efficiency_leverage(financial_line_items: &[LineItem])
         }
     }
 
-    let debt_values: Vec<f64> = financial_line_items.iter().filter_map(|item| item.total_debt).collect();
+    let debt_values: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.total_debt)
+        .collect();
     if !debt_values.is_empty() && debt_values.len() == eq_values.len() {
         let recent_debt = debt_values[0];
         let recent_equity = eq_values[0];
@@ -318,30 +413,52 @@ pub fn analyze_management_efficiency_leverage(financial_line_items: &[LineItem])
         }
     }
 
-    let fcf_values: Vec<f64> = financial_line_items.iter().filter_map(|item| item.free_cash_flow).collect();
+    let fcf_values: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.free_cash_flow)
+        .collect();
     if fcf_values.len() >= 2 {
         let positive_count = fcf_values.iter().filter(|&&x| x > 0.0).count();
         let ratio = positive_count as f64 / fcf_values.len() as f64;
         if ratio > 0.8 {
             raw_score += 1;
-            details.push(format!("Majority of periods have positive FCF ({}/{})", positive_count, fcf_values.len()));
+            details.push(format!(
+                "Majority of periods have positive FCF ({}/{})",
+                positive_count,
+                fcf_values.len()
+            ));
         }
     }
 
     let final_score = (raw_score as f64 / 6.0 * 10.0).min(10.0);
-    FisherSubResult { score: final_score, details: details.join("; ") }
+    FisherSubResult {
+        score: final_score,
+        details: details.join("; "),
+    }
 }
 
-pub fn analyze_fisher_valuation(financial_line_items: &[LineItem], market_cap: f64) -> FisherSubResult {
+pub fn analyze_fisher_valuation(
+    financial_line_items: &[LineItem],
+    market_cap: f64,
+) -> FisherSubResult {
     if financial_line_items.is_empty() || market_cap <= 0.0 {
-        return FisherSubResult { score: 0.0, details: "Insufficient data for valuation".to_string() };
+        return FisherSubResult {
+            score: 0.0,
+            details: "Insufficient data for valuation".to_string(),
+        };
     }
 
     let mut details = Vec::new();
     let mut raw_score = 0;
 
-    let net_incomes: Vec<f64> = financial_line_items.iter().filter_map(|item| item.net_income).collect();
-    let fcf_values: Vec<f64> = financial_line_items.iter().filter_map(|item| item.free_cash_flow).collect();
+    let net_incomes: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.net_income)
+        .collect();
+    let fcf_values: Vec<f64> = financial_line_items
+        .iter()
+        .filter_map(|item| item.free_cash_flow)
+        .collect();
 
     if !net_incomes.is_empty() && net_incomes[0] > 0.0 {
         let pe = market_cap / net_incomes[0];
@@ -350,7 +467,10 @@ pub fn analyze_fisher_valuation(financial_line_items: &[LineItem], market_cap: f
             details.push(format!("Reasonably attractive P/E: {:.2}", pe));
         } else if pe < 30.0 {
             raw_score += 1;
-            details.push(format!("Somewhat high but possibly justifiable P/E: {:.2}", pe));
+            details.push(format!(
+                "Somewhat high but possibly justifiable P/E: {:.2}",
+                pe
+            ));
         } else {
             details.push(format!("Very high P/E: {:.2}", pe));
         }
@@ -370,7 +490,10 @@ pub fn analyze_fisher_valuation(financial_line_items: &[LineItem], market_cap: f
     }
 
     let final_score = (raw_score as f64 / 4.0 * 10.0).min(10.0);
-    FisherSubResult { score: final_score, details: details.join("; ") }
+    FisherSubResult {
+        score: final_score,
+        details: details.join("; "),
+    }
 }
 
 pub fn analyze_insider_activity(insider_trades: &[InsiderTrade]) -> FisherSubResult {
@@ -379,7 +502,10 @@ pub fn analyze_insider_activity(insider_trades: &[InsiderTrade]) -> FisherSubRes
 
     if insider_trades.is_empty() {
         details.push("No insider trades data; defaulting to neutral".to_string());
-        return FisherSubResult { score, details: details.join("; ") };
+        return FisherSubResult {
+            score,
+            details: details.join("; "),
+        };
     }
 
     let mut buys = 0;
@@ -398,52 +524,92 @@ pub fn analyze_insider_activity(insider_trades: &[InsiderTrade]) -> FisherSubRes
     let total = buys + sells;
     if total == 0 {
         details.push("No buy/sell transactions found; neutral".to_string());
-        return FisherSubResult { score, details: details.join("; ") };
+        return FisherSubResult {
+            score,
+            details: details.join("; "),
+        };
     }
 
     let buy_ratio = buys as f64 / total as f64;
     if buy_ratio > 0.7 {
         score = 8.0;
-        details.push(format!("Heavy insider buying: {} buys vs. {} sells", buys, sells));
+        details.push(format!(
+            "Heavy insider buying: {} buys vs. {} sells",
+            buys, sells
+        ));
     } else if buy_ratio > 0.4 {
         score = 6.0;
-        details.push(format!("Moderate insider buying: {} buys vs. {} sells", buys, sells));
+        details.push(format!(
+            "Moderate insider buying: {} buys vs. {} sells",
+            buys, sells
+        ));
     } else {
         score = 4.0;
-        details.push(format!("Mostly insider selling: {} buys vs. {} sells", buys, sells));
+        details.push(format!(
+            "Mostly insider selling: {} buys vs. {} sells",
+            buys, sells
+        ));
     }
 
-    FisherSubResult { score, details: details.join("; ") }
+    FisherSubResult {
+        score,
+        details: details.join("; "),
+    }
 }
 
 pub fn analyze_sentiment(news_items: &[CompanyNews]) -> FisherSubResult {
     if news_items.is_empty() {
-        return FisherSubResult { score: 5.0, details: "No news data; defaulting to neutral sentiment".to_string() };
+        return FisherSubResult {
+            score: 5.0,
+            details: "No news data; defaulting to neutral sentiment".to_string(),
+        };
     }
 
-    let negative_keywords = vec!["lawsuit", "fraud", "negative", "downturn", "decline", "investigation", "recall"];
+    let negative_keywords = [
+        "lawsuit",
+        "fraud",
+        "negative",
+        "downturn",
+        "decline",
+        "investigation",
+        "recall",
+    ];
     let mut negative_count = 0;
 
     for news in news_items {
         let title_lower = news.title.to_lowercase();
-        if negative_keywords.iter().any(|word| title_lower.contains(word)) {
+        if negative_keywords
+            .iter()
+            .any(|word| title_lower.contains(word))
+        {
             negative_count += 1;
         }
     }
 
     let mut details = Vec::new();
     let score = if negative_count as f64 > news_items.len() as f64 * 0.3 {
-        details.push(format!("High proportion of negative headlines: {}/{}", negative_count, news_items.len()));
+        details.push(format!(
+            "High proportion of negative headlines: {}/{}",
+            negative_count,
+            news_items.len()
+        ));
         3.0
     } else if negative_count > 0 {
-        details.push(format!("Some negative headlines: {}/{}", negative_count, news_items.len()));
+        details.push(format!(
+            "Some negative headlines: {}/{}",
+            negative_count,
+            news_items.len()
+        ));
         6.0
     } else {
         details.push("Mostly positive/neutral headlines".to_string());
         8.0
     };
 
-    FisherSubResult { score, details: details.join("; ") }
+    FisherSubResult {
+        score,
+        details: details.join("; "),
+    }
 }
 
 pub async fn generate_fisher_output(
@@ -465,11 +631,5 @@ pub async fn generate_fisher_output(
         serde_json::to_string_pretty(facts)?
     );
 
-    call_llm(
-        system_prompt,
-        &user_prompt,
-        Some(agent_id),
-        Some(state),
-        3,
-    ).await
+    call_llm(system_prompt, &user_prompt, Some(agent_id), Some(state), 3).await
 }

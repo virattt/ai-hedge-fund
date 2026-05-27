@@ -48,7 +48,9 @@ fn test_metrics_basic_return_and_drawdown_before_risk_sample() {
 #[test]
 fn test_metrics_zero_volatility_sharpe_zero_after_minimum_sample() {
     let calc = PerformanceMetricsCalculator::new();
-    let values = (0..=20).map(|day| val_point(100.0, day)).collect::<Vec<_>>();
+    let values = (0..=20)
+        .map(|day| val_point(100.0, day))
+        .collect::<Vec<_>>();
     let metrics = calc.compute_metrics(&values);
     assert!(metrics.is_some());
     let m = metrics.unwrap();

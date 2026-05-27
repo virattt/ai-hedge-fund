@@ -2,16 +2,16 @@
 //! Sibling to src/agents/portfolio_manager.py
 //! Makes the final trading decisions, enforcing position sizing limits and capital/margin constraints.
 
-use anyhow::{Result, Context};
-use std::collections::HashMap;
 use crate::graph::state::AgentState;
+use anyhow::{Context, Result};
+use std::collections::HashMap;
 
 /// Struct mirroring the Pydantic `PortfolioDecision` model.
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct PortfolioDecision {
-    pub action: String,      // "buy" | "sell" | "short" | "cover" | "hold"
+    pub action: String, // "buy" | "sell" | "short" | "cover" | "hold"
     pub quantity: u32,
-    pub confidence: u32,     // 0-100
+    pub confidence: u32, // 0-100
     pub reasoning: String,
 }
 
@@ -25,14 +25,20 @@ pub struct PortfolioManagerOutput {
 pub async fn portfolio_management_agent(state: &mut AgentState, agent_id: &str) -> Result<()> {
     println!("Running Portfolio Management Agent: {}", agent_id);
 
-    let tickers_json = state.data.get("tickers")
+    let tickers_json = state
+        .data
+        .get("tickers")
         .context("Missing tickers in state data")?;
     let tickers: Vec<String> = serde_json::from_value(tickers_json.clone())?;
 
-    let portfolio = state.data.get("portfolio")
+    let portfolio = state
+        .data
+        .get("portfolio")
         .context("Missing portfolio in portfolio_manager")?;
-    
-    let analyst_signals = state.data.get("analyst_signals")
+
+    let analyst_signals = state
+        .data
+        .get("analyst_signals")
         .context("Missing analyst_signals in state data")?;
 
     let mut current_prices = HashMap::new();
@@ -71,8 +77,15 @@ pub async fn portfolio_management_agent(state: &mut AgentState, agent_id: &str) 
             for (agent, sigs) in signals_obj {
                 if agent != risk_manager_id {
                     if let Some(t_sig) = sigs.get(ticker) {
-                        let sig = t_sig.get("signal").and_then(|s| s.as_str()).unwrap_or("neutral").to_string();
-                        let conf = t_sig.get("confidence").and_then(|c| c.as_u64()).unwrap_or(50) as u32;
+                        let sig = t_sig
+                            .get("signal")
+                            .and_then(|s| s.as_str())
+                            .unwrap_or("neutral")
+                            .to_string();
+                        let conf = t_sig
+                            .get("confidence")
+                            .and_then(|c| c.as_u64())
+                            .unwrap_or(50) as u32;
                         ticker_signals.insert(agent.clone(), (sig, conf));
                     }
                 }
@@ -95,7 +108,10 @@ pub async fn portfolio_management_agent(state: &mut AgentState, agent_id: &str) 
     state.messages.push(decision_value);
 
     // Save final decision in state data
-    state.data.insert("decisions".to_string(), serde_json::to_value(result.decisions)?);
+    state.data.insert(
+        "decisions".to_string(),
+        serde_json::to_value(result.decisions)?,
+    );
 
     Ok(())
 }
@@ -107,7 +123,10 @@ pub fn compute_allowed_actions(
     portfolio: &serde_json::Value,
 ) -> HashMap<String, HashMap<String, u32>> {
     let mut allowed = HashMap::new();
-    let cash = portfolio.get("cash").and_then(|v| v.as_f64()).unwrap_or(100000.0);
+    let cash = portfolio
+        .get("cash")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(100000.0);
     let positions_map = portfolio.get("positions").and_then(|p| p.as_object());
 
     for ticker in tickers {
@@ -164,17 +183,22 @@ pub fn generate_trading_decision(
     max_shares: HashMap<String, u32>,
     portfolio: &serde_json::Value,
 ) -> Result<PortfolioManagerOutput> {
-    let allowed_actions = compute_allowed_actions(&tickers, &current_prices, &max_shares, portfolio);
+    let allowed_actions =
+        compute_allowed_actions(&tickers, &current_prices, &max_shares, portfolio);
     let mut decisions = HashMap::new();
 
     for ticker in tickers {
-        let allowed = allowed_actions.get(&ticker).context("Missing allowed actions for ticker")?;
-        let ticker_signals = signals_by_ticker.get(&ticker).context("Missing signals for ticker")?;
+        let allowed = allowed_actions
+            .get(&ticker)
+            .context("Missing allowed actions for ticker")?;
+        let ticker_signals = signals_by_ticker
+            .get(&ticker)
+            .context("Missing signals for ticker")?;
 
         // Consensus signal voting
         let mut bull_weight = 0.0;
         let mut bear_weight = 0.0;
-        for (_agent, (sig, conf)) in ticker_signals {
+        for (sig, conf) in ticker_signals.values() {
             let weight = *conf as f64 / 100.0;
             if sig == "bullish" {
                 bull_weight += weight;

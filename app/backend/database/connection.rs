@@ -1,34 +1,36 @@
+use anyhow::{Context, Result};
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 use std::path::Path;
-use anyhow::{Result, Context};
 
 pub async fn get_db_pool() -> Result<SqlitePool> {
     // Determine database path dynamically (check both repository root and backend folder executions)
     let mut db_path = "app/backend/hedge_fund.db".to_string();
-    if !Path::new(&db_path).exists() && (Path::new("hedge_fund.db").exists() || Path::new("../hedge_fund.db").exists()) {
+    if !Path::new(&db_path).exists()
+        && (Path::new("hedge_fund.db").exists() || Path::new("../hedge_fund.db").exists())
+    {
         if Path::new("../hedge_fund.db").exists() {
             db_path = "../hedge_fund.db".to_string();
         } else {
             db_path = "hedge_fund.db".to_string();
         }
     }
-    
+
     let db_url = format!("sqlite://{}", db_path);
-    
+
     // Ensure parent directories exist
     if let Some(parent) = Path::new(&db_path).parent() {
         std::fs::create_dir_all(parent).ok();
     }
-    
+
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
         .connect(&db_url)
         .await
         .context("Failed to connect to SQLite database")?;
-        
+
     // Auto-initialize tables
     init_db(&pool).await?;
-        
+
     Ok(pool)
 }
 
@@ -44,7 +46,7 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
             is_active BOOLEAN DEFAULT 1,
             description TEXT,
             last_used DATETIME
-        )"
+        )",
     )
     .execute(pool)
     .await?;
@@ -63,7 +65,7 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
             data TEXT,
             is_template BOOLEAN DEFAULT 0,
             tags TEXT
-        )"
+        )",
     )
     .execute(pool)
     .await?;
@@ -88,7 +90,7 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
             error_message TEXT,
             run_number INTEGER NOT NULL DEFAULT 1,
             FOREIGN KEY(flow_id) REFERENCES hedge_fund_flows(id)
-        )"
+        )",
     )
     .execute(pool)
     .await?;
@@ -115,7 +117,7 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
             trigger_reason TEXT,
             market_conditions TEXT,
             FOREIGN KEY(flow_run_id) REFERENCES hedge_fund_flow_runs(id)
-        )"
+        )",
     )
     .execute(pool)
     .await?;

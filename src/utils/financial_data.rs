@@ -45,7 +45,10 @@ mod tests {
 
     #[test]
     fn working_capital_requires_both_inputs() {
-        assert_eq!(calculate_working_capital(Some(100.0), Some(40.0)), Some(60.0));
+        assert_eq!(
+            calculate_working_capital(Some(100.0), Some(40.0)),
+            Some(60.0)
+        );
         assert_eq!(calculate_working_capital(Some(100.0), None), None);
         assert_eq!(calculate_working_capital(None, Some(40.0)), None);
     }

@@ -1,30 +1,36 @@
-use axum::{
-    routing::{get, post, put, delete},
-    Router,
-    Json,
-    extract::{Path, State, Query},
-    http::StatusCode,
+use crate::database::models::HedgeFundFlowRun;
+use crate::models::schemas::{
+    ErrorResponse, FlowRunCreateRequest, FlowRunResponse, FlowRunSummaryResponse,
+    FlowRunUpdateRequest,
 };
-use sqlx::SqlitePool;
-use serde::Deserialize;
 use crate::repositories::flow_repository::FlowRepository;
 use crate::repositories::flow_run_repository::FlowRunRepository;
-use crate::models::schemas::{
-    FlowRunCreateRequest,
-    FlowRunUpdateRequest,
-    FlowRunResponse,
-    FlowRunSummaryResponse,
-    ErrorResponse,
+use axum::{
+    extract::{Path, Query, State},
+    http::StatusCode,
+    routing::{get, post},
+    Json, Router,
 };
-use crate::database::models::HedgeFundFlowRun;
+use serde::Deserialize;
+use sqlx::SqlitePool;
 
 pub fn router() -> Router<SqlitePool> {
     Router::new()
-        .route("/", post(create_flow_run).get(get_flow_runs).delete(delete_all_flow_runs))
+        .route(
+            "/",
+            post(create_flow_run)
+                .get(get_flow_runs)
+                .delete(delete_all_flow_runs),
+        )
         .route("/active", get(get_active_flow_run))
         .route("/latest", get(get_latest_flow_run))
         .route("/count", get(get_flow_run_count))
-        .route("/:run_id", get(get_flow_run).put(update_flow_run).delete(delete_flow_run))
+        .route(
+            "/:run_id",
+            get(get_flow_run)
+                .put(update_flow_run)
+                .delete(delete_flow_run),
+        )
 }
 
 fn map_run_to_response(r: HedgeFundFlowRun) -> FlowRunResponse {
@@ -88,7 +94,10 @@ async fn create_flow_run(
     verify_flow_exists(&db, flow_id).await?;
 
     let run_repo = FlowRunRepository::new(&db);
-    match run_repo.create_flow_run(flow_id, req.request_data.as_ref()).await {
+    match run_repo
+        .create_flow_run(flow_id, req.request_data.as_ref())
+        .await
+    {
         Ok(run) => Ok(Json(map_run_to_response(run))),
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -108,8 +117,12 @@ struct GetFlowRunsQuery {
     offset: i32,
 }
 
-fn default_limit() -> i32 { 50 }
-fn default_offset() -> i32 { 0 }
+fn default_limit() -> i32 {
+    50
+}
+fn default_offset() -> i32 {
+    0
+}
 
 async fn get_flow_runs(
     State(db): State<SqlitePool>,
@@ -119,7 +132,10 @@ async fn get_flow_runs(
     verify_flow_exists(&db, flow_id).await?;
 
     let run_repo = FlowRunRepository::new(&db);
-    match run_repo.get_flow_runs_by_flow_id(flow_id, query.limit, query.offset).await {
+    match run_repo
+        .get_flow_runs_by_flow_id(flow_id, query.limit, query.offset)
+        .await
+    {
         Ok(runs) => Ok(Json(runs.into_iter().map(map_run_to_summary).collect())),
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -184,7 +200,10 @@ async fn get_flow_run(
                 return Err((
                     StatusCode::NOT_FOUND,
                     Json(ErrorResponse {
-                        message: format!("Flow run with ID {} does not belong to Flow {}", run_id, flow_id),
+                        message: format!(
+                            "Flow run with ID {} does not belong to Flow {}",
+                            run_id, flow_id
+                        ),
                         error: None,
                     }),
                 ));
@@ -222,35 +241,45 @@ async fn update_flow_run(
                 return Err((
                     StatusCode::NOT_FOUND,
                     Json(ErrorResponse {
-                        message: format!("Flow run with ID {} does not belong to Flow {}", run_id, flow_id),
+                        message: format!(
+                            "Flow run with ID {} does not belong to Flow {}",
+                            run_id, flow_id
+                        ),
                         error: None,
                     }),
                 ));
             }
         }
-        Ok(None) => return Err((
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                message: format!("Flow run not found with ID: {}", run_id),
-                error: None,
-            }),
-        )),
-        Err(e) => return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                message: "Database error validating flow run".to_string(),
-                error: Some(e.to_string()),
-            }),
-        )),
+        Ok(None) => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    message: format!("Flow run not found with ID: {}", run_id),
+                    error: None,
+                }),
+            ))
+        }
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    message: "Database error validating flow run".to_string(),
+                    error: Some(e.to_string()),
+                }),
+            ))
+        }
     }
 
     let status_str = req.status.as_ref().map(|s| s.as_str());
-    match run_repo.update_flow_run(
-        run_id,
-        status_str,
-        req.results.as_ref(),
-        req.error_message.as_deref(),
-    ).await {
+    match run_repo
+        .update_flow_run(
+            run_id,
+            status_str,
+            req.results.as_ref(),
+            req.error_message.as_deref(),
+        )
+        .await
+    {
         Ok(Some(updated)) => Ok(Json(map_run_to_response(updated))),
         Ok(None) => Err((
             StatusCode::NOT_FOUND,
@@ -282,30 +311,39 @@ async fn delete_flow_run(
                 return Err((
                     StatusCode::NOT_FOUND,
                     Json(ErrorResponse {
-                        message: format!("Flow run with ID {} does not belong to Flow {}", run_id, flow_id),
+                        message: format!(
+                            "Flow run with ID {} does not belong to Flow {}",
+                            run_id, flow_id
+                        ),
                         error: None,
                     }),
                 ));
             }
         }
-        Ok(None) => return Err((
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                message: format!("Flow run not found with ID: {}", run_id),
-                error: None,
-            }),
-        )),
-        Err(e) => return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                message: "Database error validating flow run".to_string(),
-                error: Some(e.to_string()),
-            }),
-        )),
+        Ok(None) => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    message: format!("Flow run not found with ID: {}", run_id),
+                    error: None,
+                }),
+            ))
+        }
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    message: "Database error validating flow run".to_string(),
+                    error: Some(e.to_string()),
+                }),
+            ))
+        }
     }
 
     match run_repo.delete_flow_run(run_id).await {
-        Ok(true) => Ok(Json(serde_json::json!({ "message": "Flow run deleted successfully" }))),
+        Ok(true) => Ok(Json(
+            serde_json::json!({ "message": "Flow run deleted successfully" }),
+        )),
         Ok(false) => Err((
             StatusCode::NOT_FOUND,
             Json(ErrorResponse {
@@ -331,7 +369,9 @@ async fn delete_all_flow_runs(
 
     let run_repo = FlowRunRepository::new(&db);
     match run_repo.delete_flow_runs_by_flow_id(flow_id).await {
-        Ok(count) => Ok(Json(serde_json::json!({ "message": format!("Deleted {} flow runs successfully", count) }))),
+        Ok(count) => Ok(Json(
+            serde_json::json!({ "message": format!("Deleted {} flow runs successfully", count) }),
+        )),
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
@@ -350,7 +390,9 @@ async fn get_flow_run_count(
 
     let run_repo = FlowRunRepository::new(&db);
     match run_repo.get_flow_run_count(flow_id).await {
-        Ok(count) => Ok(Json(serde_json::json!({ "flow_id": flow_id, "total_runs": count }))),
+        Ok(count) => Ok(Json(
+            serde_json::json!({ "flow_id": flow_id, "total_runs": count }),
+        )),
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {

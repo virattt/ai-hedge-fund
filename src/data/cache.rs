@@ -2,9 +2,9 @@
 //! Sibling to src/data/cache.py
 //! Provides thread-safe in-memory caching for retrieved prices, metrics, and news.
 
+use crate::data::models::{CompanyNews, FinancialMetrics, InsiderTrade, LineItem, Price};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, OnceLock};
-use crate::data::models::{Price, FinancialMetrics, LineItem, InsiderTrade, CompanyNews};
 
 /// Thread-safe in-memory cache for API results.
 #[derive(Debug, Default)]
@@ -57,7 +57,8 @@ impl Cache {
     pub fn set_financial_metrics(&mut self, ticker: &str, data: Vec<FinancialMetrics>) {
         let existing = self.financial_metrics_cache.get(ticker);
         let merged = self.merge_data(existing, data, |m| m.report_period.clone());
-        self.financial_metrics_cache.insert(ticker.to_string(), merged);
+        self.financial_metrics_cache
+            .insert(ticker.to_string(), merged);
     }
 
     pub fn get_line_items(&self, ticker: &str) -> Option<Vec<LineItem>> {
@@ -94,5 +95,7 @@ impl Cache {
 /// Retrieves the global cache instance.
 pub fn get_cache() -> Arc<Mutex<Cache>> {
     static CACHE: OnceLock<Arc<Mutex<Cache>>> = OnceLock::new();
-    CACHE.get_or_init(|| Arc::new(Mutex::new(Cache::new()))).clone()
+    CACHE
+        .get_or_init(|| Arc::new(Mutex::new(Cache::new())))
+        .clone()
 }

@@ -1,6 +1,6 @@
-use sqlx::SqlitePool;
-use anyhow::{Result, Context};
 use crate::database::models::HedgeFundFlowRun;
+use anyhow::{Context, Result};
+use sqlx::SqlitePool;
 
 pub struct FlowRunRepository<'a> {
     pub db: &'a SqlitePool,
@@ -21,7 +21,7 @@ impl<'a> FlowRunRepository<'a> {
         sqlx::query_as::<_, HedgeFundFlowRun>(
             "INSERT INTO hedge_fund_flow_runs (flow_id, request_data, run_number, status)
              VALUES ($1, $2, $3, 'IDLE')
-             RETURNING *"
+             RETURNING *",
         )
         .bind(flow_id)
         .bind(request_data)
@@ -32,16 +32,19 @@ impl<'a> FlowRunRepository<'a> {
     }
 
     pub async fn get_flow_run_by_id(&self, run_id: i32) -> Result<Option<HedgeFundFlowRun>> {
-        sqlx::query_as::<_, HedgeFundFlowRun>(
-            "SELECT * FROM hedge_fund_flow_runs WHERE id = $1"
-        )
-        .bind(run_id)
-        .fetch_optional(self.db)
-        .await
-        .context("Failed to get flow run by ID")
+        sqlx::query_as::<_, HedgeFundFlowRun>("SELECT * FROM hedge_fund_flow_runs WHERE id = $1")
+            .bind(run_id)
+            .fetch_optional(self.db)
+            .await
+            .context("Failed to get flow run by ID")
     }
 
-    pub async fn get_flow_runs_by_flow_id(&self, flow_id: i32, limit: i32, offset: i32) -> Result<Vec<HedgeFundFlowRun>> {
+    pub async fn get_flow_runs_by_flow_id(
+        &self,
+        flow_id: i32,
+        limit: i32,
+        offset: i32,
+    ) -> Result<Vec<HedgeFundFlowRun>> {
         sqlx::query_as::<_, HedgeFundFlowRun>(
             "SELECT * FROM hedge_fund_flow_runs WHERE flow_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
         )
@@ -55,7 +58,7 @@ impl<'a> FlowRunRepository<'a> {
 
     pub async fn get_active_flow_run(&self, flow_id: i32) -> Result<Option<HedgeFundFlowRun>> {
         sqlx::query_as::<_, HedgeFundFlowRun>(
-            "SELECT * FROM hedge_fund_flow_runs WHERE flow_id = $1 AND status = 'IN_PROGRESS'"
+            "SELECT * FROM hedge_fund_flow_runs WHERE flow_id = $1 AND status = 'IN_PROGRESS'",
         )
         .bind(flow_id)
         .fetch_optional(self.db)
@@ -123,49 +126,43 @@ impl<'a> FlowRunRepository<'a> {
     }
 
     pub async fn delete_flow_run(&self, run_id: i32) -> Result<bool> {
-        let res = sqlx::query(
-            "DELETE FROM hedge_fund_flow_runs WHERE id = $1"
-        )
-        .bind(run_id)
-        .execute(self.db)
-        .await
-        .context("Failed to delete flow run")?;
+        let res = sqlx::query("DELETE FROM hedge_fund_flow_runs WHERE id = $1")
+            .bind(run_id)
+            .execute(self.db)
+            .await
+            .context("Failed to delete flow run")?;
 
         Ok(res.rows_affected() > 0)
     }
 
     pub async fn delete_flow_runs_by_flow_id(&self, flow_id: i32) -> Result<u64> {
-        let res = sqlx::query(
-            "DELETE FROM hedge_fund_flow_runs WHERE flow_id = $1"
-        )
-        .bind(flow_id)
-        .execute(self.db)
-        .await
-        .context("Failed to delete flow runs by flow ID")?;
+        let res = sqlx::query("DELETE FROM hedge_fund_flow_runs WHERE flow_id = $1")
+            .bind(flow_id)
+            .execute(self.db)
+            .await
+            .context("Failed to delete flow runs by flow ID")?;
 
         Ok(res.rows_affected())
     }
 
     pub async fn get_flow_run_count(&self, flow_id: i32) -> Result<i64> {
-        let count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM hedge_fund_flow_runs WHERE flow_id = $1"
-        )
-        .bind(flow_id)
-        .fetch_one(self.db)
-        .await
-        .context("Failed to get flow run count")?;
+        let count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM hedge_fund_flow_runs WHERE flow_id = $1")
+                .bind(flow_id)
+                .fetch_one(self.db)
+                .await
+                .context("Failed to get flow run count")?;
 
         Ok(count.0)
     }
 
     pub async fn get_next_run_number(&self, flow_id: i32) -> Result<i32> {
-        let max_val: (Option<i32>,) = sqlx::query_as(
-            "SELECT MAX(run_number) FROM hedge_fund_flow_runs WHERE flow_id = $1"
-        )
-        .bind(flow_id)
-        .fetch_one(self.db)
-        .await
-        .context("Failed to query max run number")?;
+        let max_val: (Option<i32>,) =
+            sqlx::query_as("SELECT MAX(run_number) FROM hedge_fund_flow_runs WHERE flow_id = $1")
+                .bind(flow_id)
+                .fetch_one(self.db)
+                .await
+                .context("Failed to query max run number")?;
 
         Ok(max_val.0.unwrap_or(0) + 1)
     }

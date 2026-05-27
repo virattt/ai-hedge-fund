@@ -25,9 +25,7 @@ pub async fn run(args: ChatGptArgs) -> Result<()> {
     match args.command {
         ChatGptCommand::Login => {
             let creds = chatgpt_subscription::sign_in().await?;
-            let email = creds
-                .email
-                .unwrap_or_else(|| "unknown".to_string());
+            let email = creds.email.unwrap_or_else(|| "unknown".to_string());
             println!("Signed in to ChatGPT subscription as {email}.");
         }
         ChatGptCommand::Logout => {

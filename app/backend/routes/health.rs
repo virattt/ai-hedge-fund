@@ -1,11 +1,10 @@
 use axum::{
     response::sse::{Event, Sse},
     routing::get,
-    Router,
-    Json,
+    Json, Router,
 };
-use std::time::Duration;
 use futures_util::stream::Stream;
+use std::time::Duration;
 use tokio_stream::StreamExt;
 
 pub fn router() -> Router {

@@ -1,7 +1,7 @@
+use crate::repositories::api_key_repository::ApiKeyRepository;
+use anyhow::Result;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
-use anyhow::Result;
-use crate::repositories::api_key_repository::ApiKeyRepository;
 
 pub struct ApiKeyService<'a> {
     pub db: &'a SqlitePool,

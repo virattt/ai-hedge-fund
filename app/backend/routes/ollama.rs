@@ -1,18 +1,17 @@
+use crate::models::schemas::ErrorResponse;
+use crate::services::ollama_service::OllamaService;
 use axum::{
-    routing::{get, post, delete},
-    Router,
-    Json,
     extract::Path,
     http::StatusCode,
     response::sse::{Event, Sse},
+    routing::{delete, get, post},
+    Json, Router,
 };
+use futures_util::stream::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use crate::services::ollama_service::OllamaService;
-use crate::models::schemas::ErrorResponse;
-use futures_util::stream::Stream;
-use tokio_stream::StreamExt;
 use std::time::Duration;
+use tokio_stream::StreamExt;
 
 pub fn router() -> Router {
     Router::new()
@@ -20,7 +19,10 @@ pub fn router() -> Router {
         .route("/start", post(start_ollama_server))
         .route("/stop", post(stop_ollama_server))
         .route("/models/download", post(download_model))
-        .route("/models/download/progress", post(download_model_with_progress))
+        .route(
+            "/models/download/progress",
+            post(download_model_with_progress),
+        )
         .route("/models/:model_name", delete(delete_model))
         .route("/models/recommended", get(get_recommended_models))
 }
@@ -86,7 +88,7 @@ async fn download_model_with_progress(
     Json(req): Json<ModelRequest>,
 ) -> Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>> {
     let model = req.model_name.clone();
-    
+
     tokio::spawn(async move {
         OllamaService::download_model(&model).await.ok();
     });
@@ -123,12 +125,15 @@ async fn delete_model(
 
 async fn get_recommended_models() -> Json<serde_json::Value> {
     let models = ai_hedge_fund::llm::models::get_ollama_models();
-    let resp: Vec<serde_json::Value> = models.into_iter().map(|m| {
-        json!({
-            "display_name": m.display_name,
-            "model_name": m.model_name,
-            "provider": "Ollama"
+    let resp: Vec<serde_json::Value> = models
+        .into_iter()
+        .map(|m| {
+            json!({
+                "display_name": m.display_name,
+                "model_name": m.model_name,
+                "provider": "Ollama"
+            })
         })
-    }).collect();
+        .collect();
     Json(json!(resp))
 }

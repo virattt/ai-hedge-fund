@@ -1,22 +1,22 @@
-use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
 use ai_hedge_fund::llm::models::ModelProvider;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum FlowRunStatus {
-    IDLE,
-    IN_PROGRESS,
-    COMPLETE,
-    ERROR,
+    Idle,
+    InProgress,
+    Complete,
+    Error,
 }
 
 impl FlowRunStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
-            FlowRunStatus::IDLE => "IDLE",
-            FlowRunStatus::IN_PROGRESS => "IN_PROGRESS",
-            FlowRunStatus::COMPLETE => "COMPLETE",
-            FlowRunStatus::ERROR => "ERROR",
+            FlowRunStatus::Idle => "IDLE",
+            FlowRunStatus::InProgress => "IN_PROGRESS",
+            FlowRunStatus::Complete => "COMPLETE",
+            FlowRunStatus::Error => "ERROR",
         }
     }
 }
@@ -89,14 +89,22 @@ impl BaseHedgeFundRequest {
                 let config_base_key = extract_base_agent_key(&config.agent_id);
                 if config.agent_id == agent_id || config_base_key == base_agent_key {
                     return (
-                        config.model_name.clone().unwrap_or_else(|| self.model_name.clone().unwrap_or_else(|| "gpt-4.1".to_string())),
-                        config.model_provider.clone().unwrap_or_else(|| self.model_provider.clone().unwrap_or(ModelProvider::OpenAI)),
+                        config.model_name.clone().unwrap_or_else(|| {
+                            self.model_name
+                                .clone()
+                                .unwrap_or_else(|| "gpt-4.1".to_string())
+                        }),
+                        config.model_provider.clone().unwrap_or_else(|| {
+                            self.model_provider.clone().unwrap_or(ModelProvider::OpenAI)
+                        }),
                     );
                 }
             }
         }
         (
-            self.model_name.clone().unwrap_or_else(|| "gpt-4.1".to_string()),
+            self.model_name
+                .clone()
+                .unwrap_or_else(|| "gpt-4.1".to_string()),
             self.model_provider.clone().unwrap_or(ModelProvider::OpenAI),
         )
     }

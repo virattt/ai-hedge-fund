@@ -2,10 +2,10 @@
 //! Sibling to src/agents/growth_agent.py
 //! Analyzes stocks using a growth-focused mathematical framework.
 
-use anyhow::{Context, Result};
 use crate::data::models::{FinancialMetrics, InsiderTrade};
 use crate::graph::state::AgentState;
 use crate::tools::api::{get_financial_metrics, get_insider_trades};
+use anyhow::{Context, Result};
 
 pub const MIN_FULL_PERIODS: usize = 4;
 pub const MIN_PARTIAL_PERIODS: usize = 2;
@@ -51,8 +51,9 @@ pub async fn growth_analyst_agent(state: &mut AgentState, agent_id: &str) -> Res
     let mut growth_analysis = serde_json::Map::new();
 
     for ticker in &tickers {
-        let metrics =
-            get_financial_metrics(ticker, end_date, "ttm", 12, api_key).await.unwrap_or_default();
+        let metrics = get_financial_metrics(ticker, end_date, "ttm", 12, api_key)
+            .await
+            .unwrap_or_default();
         let tier = classify_data_tier(metrics.len());
 
         if tier == DataTier::Minimal {
@@ -88,8 +89,9 @@ pub async fn growth_analyst_agent(state: &mut AgentState, agent_id: &str) -> Res
             );
         }
 
-        let insider_trades =
-            get_insider_trades(ticker, end_date, None, 1000, api_key).await.unwrap_or_default();
+        let insider_trades = get_insider_trades(ticker, end_date, None, 1000, api_key)
+            .await
+            .unwrap_or_default();
         let most_recent_metrics = &metrics[0];
         let include_trends = tier == DataTier::Full;
 
@@ -180,7 +182,10 @@ pub async fn growth_analyst_agent(state: &mut AgentState, agent_id: &str) -> Res
         .entry("analyst_signals".to_string())
         .or_insert_with(|| serde_json::json!({}));
     if let Some(obj) = analyst_signals.as_object_mut() {
-        obj.insert(agent_id.to_string(), serde_json::Value::Object(growth_analysis));
+        obj.insert(
+            agent_id.to_string(),
+            serde_json::Value::Object(growth_analysis),
+        );
     }
 
     Ok(())
@@ -243,9 +248,15 @@ pub struct GrowthTrendsResult {
     pub fcf_trend: f64,
 }
 
-pub fn analyze_growth_trends(metrics: &[FinancialMetrics], include_trends: bool) -> GrowthTrendsResult {
+pub fn analyze_growth_trends(
+    metrics: &[FinancialMetrics],
+    include_trends: bool,
+) -> GrowthTrendsResult {
     let rev_growth: Vec<Option<f64>> = metrics.iter().map(|m| m.revenue_growth).collect();
-    let eps_growth: Vec<Option<f64>> = metrics.iter().map(|m| m.earnings_per_share_growth).collect();
+    let eps_growth: Vec<Option<f64>> = metrics
+        .iter()
+        .map(|m| m.earnings_per_share_growth)
+        .collect();
     let fcf_growth: Vec<Option<f64>> = metrics.iter().map(|m| m.free_cash_flow_growth).collect();
 
     let rev_trend = trend_from_newest_first(&rev_growth);
@@ -341,7 +352,10 @@ pub struct MarginTrendsResult {
     pub net_margin_trend: f64,
 }
 
-pub fn analyze_margin_trends(metrics: &[FinancialMetrics], include_trends: bool) -> MarginTrendsResult {
+pub fn analyze_margin_trends(
+    metrics: &[FinancialMetrics],
+    include_trends: bool,
+) -> MarginTrendsResult {
     let gross_margins: Vec<Option<f64>> = metrics.iter().map(|m| m.gross_margin).collect();
     let operating_margins: Vec<Option<f64>> = metrics.iter().map(|m| m.operating_margin).collect();
     let net_margins: Vec<Option<f64>> = metrics.iter().map(|m| m.net_margin).collect();
@@ -539,19 +553,20 @@ mod tests {
     #[test]
     fn trend_from_newest_first_positive_for_accelerating_growth() {
         // newest first: decelerating if read naively, accelerating oldest→newest
-        let series = vec![
-            Some(0.25),
-            Some(0.20),
-            Some(0.15),
-            Some(0.10),
-        ];
+        let series = vec![Some(0.25), Some(0.20), Some(0.15), Some(0.10)];
         let slope = trend_from_newest_first(&series);
-        assert!(slope > 0.0, "expected positive slope for accelerating growth, got {slope}");
+        assert!(
+            slope > 0.0,
+            "expected positive slope for accelerating growth, got {slope}"
+        );
     }
 
     #[test]
     fn partial_tier_caps_confidence() {
-        assert_eq!(confidence_for_tier(DataTier::Partial, 0.9), PARTIAL_CONFIDENCE_CAP);
+        assert_eq!(
+            confidence_for_tier(DataTier::Partial, 0.9),
+            PARTIAL_CONFIDENCE_CAP
+        );
         assert_eq!(confidence_for_tier(DataTier::Minimal, 0.9), 0);
         assert_eq!(confidence_for_tier(DataTier::Full, 0.9), 80);
     }

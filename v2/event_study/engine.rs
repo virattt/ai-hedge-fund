@@ -1,10 +1,10 @@
-use std::collections::HashMap;
-use chrono::{NaiveDate, Duration};
-use super::models::{EventStudyResult, EventCAR, AggregateResult, WindowStats};
-use super::stats::{fit_market_model, compute_abnormal_returns, sum_car, ttest_cars, bootstrap_ci};
 use super::data::client::FDClient;
-use super::data::protocol::DataClient;
 use super::data::models::EarningsRecord;
+use super::data::protocol::DataClient;
+use super::models::{AggregateResult, EventCAR, EventStudyResult, WindowStats};
+use super::stats::{bootstrap_ci, compute_abnormal_returns, fit_market_model, sum_car, ttest_cars};
+use chrono::{Duration, NaiveDate};
+use std::collections::HashMap;
 
 const MARKET_TICKER: &str = "SPY";
 const ESTIMATION_START: i64 = -250;
@@ -24,7 +24,9 @@ pub async fn compute_car(
 ) -> EventStudyResult {
     let today_str = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
-    let spy_prices = fd_client.get_prices(MARKET_TICKER, "2023-01-01", &today_str).await;
+    let spy_prices = fd_client
+        .get_prices(MARKET_TICKER, "2023-01-01", &today_str)
+        .await;
     if spy_prices.is_empty() {
         return EventStudyResult {
             events: Vec::new(),
@@ -86,8 +88,12 @@ async fn compute_ticker_events(
     let mut max_date = NaiveDate::MIN;
     for r in &records {
         if let Some(d) = parse_date(&r.filing_date) {
-            if d < min_date { min_date = d; }
-            if d > max_date { max_date = d; }
+            if d < min_date {
+                min_date = d;
+            }
+            if d > max_date {
+                max_date = d;
+            }
         }
     }
 
@@ -95,10 +101,18 @@ async fn compute_ticker_events(
         return Vec::new();
     }
 
-    let price_start = (min_date - Duration::days(400)).format("%Y-%m-%d").to_string();
+    let price_start = (min_date - Duration::days(400))
+        .format("%Y-%m-%d")
+        .to_string();
     let today = chrono::Utc::now().naive_utc().date();
     let needed_end = max_date + Duration::days(35);
-    let price_end = if needed_end < today { needed_end } else { today }.format("%Y-%m-%d").to_string();
+    let price_end = if needed_end < today {
+        needed_end
+    } else {
+        today
+    }
+    .format("%Y-%m-%d")
+    .to_string();
 
     let stock_prices = fd_client.get_prices(ticker, &price_start, &price_end).await;
     if stock_prices.is_empty() {
@@ -135,8 +149,8 @@ async fn compute_ticker_events(
     let mut stock_returns = Vec::new();
     let mut spy_returns = Vec::new();
     for i in 0..(trading_days.len() - 1) {
-        stock_returns.push((stock_close_arr[i+1] - stock_close_arr[i]) / stock_close_arr[i]);
-        spy_returns.push((spy_close_arr[i+1] - spy_close_arr[i]) / spy_close_arr[i]);
+        stock_returns.push((stock_close_arr[i + 1] - stock_close_arr[i]) / stock_close_arr[i]);
+        spy_returns.push((spy_close_arr[i + 1] - spy_close_arr[i]) / spy_close_arr[i]);
     }
     let return_days = trading_days[1..].to_vec();
 
@@ -200,13 +214,19 @@ fn process_event(
     let mut cars = HashMap::new();
     for &(start, end) in CAR_WINDOWS {
         if end < n_days {
-            cars.insert(format!("car_{}_{}", start, end), Some(sum_car(&daily_ar, start, end)));
+            cars.insert(
+                format!("car_{}_{}", start, end),
+                Some(sum_car(&daily_ar, start, end)),
+            );
         } else {
             cars.insert(format!("car_{}_{}", start, end), None);
         }
     }
 
-    let eps_surprise = record.quarterly.as_ref().and_then(|q| q.eps_surprise.clone());
+    let eps_surprise = record
+        .quarterly
+        .as_ref()
+        .and_then(|q| q.eps_surprise.clone());
 
     Some(EventCAR {
         ticker: record.ticker.clone(),
@@ -222,14 +242,13 @@ fn process_event(
     })
 }
 
-fn aggregate(
-    events: &[EventCAR],
-    n_bootstrap: i32,
-    rng_seed: Option<u64>,
-) -> Vec<AggregateResult> {
+fn aggregate(events: &[EventCAR], n_bootstrap: i32, rng_seed: Option<u64>) -> Vec<AggregateResult> {
     let mut groups: HashMap<String, Vec<EventCAR>> = HashMap::new();
     for e in events {
-        groups.entry(e.source_type.clone()).or_default().push(e.clone());
+        groups
+            .entry(e.source_type.clone())
+            .or_default()
+            .push(e.clone());
     }
 
     let mut results = Vec::new();
@@ -247,14 +266,15 @@ fn aggregate(
         ];
 
         for (window_label, attr) in car_windows {
-            let values: Vec<f64> = group.iter().filter_map(|e| {
-                match attr {
+            let values: Vec<f64> = group
+                .iter()
+                .filter_map(|e| match attr {
                     "car_0_1" => e.car_0_1,
                     "car_0_5" => e.car_0_5,
                     "car_0_20" => e.car_0_20,
                     _ => None,
-                }
-            }).collect();
+                })
+                .collect();
 
             if values.len() < 2 {
                 continue;
@@ -322,7 +342,7 @@ fn filter_retrospective(records: Vec<EarningsRecord>) -> Vec<EarningsRecord> {
 
 fn find_event_idx(
     event_date: &str,
-    return_days: &[String],
+    _return_days: &[String],
     day_to_idx: &HashMap<String, usize>,
 ) -> Option<usize> {
     let date_part = event_date.split('T').next()?;

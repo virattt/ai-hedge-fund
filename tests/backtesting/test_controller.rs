@@ -3,7 +3,7 @@
 //! Porting skeleton for test suite: test_controller.py.
 
 #[test]
+#[ignore = "placeholder; migrate assertions from test_controller.py"]
 fn test_placeholder_controller() {
     // TODO: Port assertions matching the Python test suite in test_controller.py.
-    assert!(true);
 }

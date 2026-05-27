@@ -2,12 +2,15 @@
 //! Sibling to src/backtesting/valuation.py
 //! Performs valuation checks during backtest simulation steps to determine portfolio asset values.
 
-use std::collections::HashMap;
 use crate::backtesting::portfolio::Portfolio;
+use std::collections::HashMap;
 
 /// Compute total portfolio value.
 /// total_value = cash + market value of longs - market value of shorts
-pub fn calculate_portfolio_value(portfolio: &Portfolio, current_prices: &HashMap<String, f64>) -> f64 {
+pub fn calculate_portfolio_value(
+    portfolio: &Portfolio,
+    current_prices: &HashMap<String, f64>,
+) -> f64 {
     let mut total_value = portfolio.cash;
     for (ticker, pos) in &portfolio.positions {
         if let Some(&price) = current_prices.get(ticker) {
@@ -34,7 +37,10 @@ pub struct Exposures {
 }
 
 /// Compute long/short/gross/net exposures and long/short ratio.
-pub fn compute_exposures(portfolio: &Portfolio, current_prices: &HashMap<String, f64>) -> Exposures {
+pub fn compute_exposures(
+    portfolio: &Portfolio,
+    current_prices: &HashMap<String, f64>,
+) -> Exposures {
     let mut long_exposure = 0.0;
     let mut short_exposure = 0.0;
     for (ticker, pos) in &portfolio.positions {

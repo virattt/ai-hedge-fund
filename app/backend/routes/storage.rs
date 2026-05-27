@@ -1,6 +1,6 @@
-use axum::{routing::post, Router, Json, http::StatusCode};
-use serde::Deserialize;
 use crate::models::schemas::ErrorResponse;
+use axum::{http::StatusCode, routing::post, Json, Router};
+use serde::Deserialize;
 
 pub fn router() -> Router {
     Router::new().route("/save-json", post(save_json_file))
@@ -29,13 +29,15 @@ async fn save_json_file(
     let file_path = outputs_dir.join(&req.filename);
     let json_str = match serde_json::to_string_pretty(&req.data) {
         Ok(s) => s,
-        Err(e) => return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                message: "Failed to serialize JSON data".to_string(),
-                error: Some(e.to_string()),
-            }),
-        )),
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    message: "Failed to serialize JSON data".to_string(),
+                    error: Some(e.to_string()),
+                }),
+            ))
+        }
     };
 
     if let Err(e) = std::fs::write(&file_path, json_str) {

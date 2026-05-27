@@ -1,14 +1,14 @@
 pub mod database;
 pub mod models;
 pub mod repositories;
-pub mod services;
 pub mod routes;
+pub mod services;
 
 use anyhow::Result;
-use axum::Router;
-use tower_http::cors::{CorsLayer, Any};
 use axum::http::{HeaderValue, Method};
+use axum::Router;
 use std::net::SocketAddr;
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::database::connection::get_db_pool;
 use crate::routes::api_router;
@@ -32,7 +32,13 @@ async fn main() -> Result<()> {
             "http://localhost:5173".parse::<HeaderValue>().unwrap(),
             "http://127.0.0.1:5173".parse::<HeaderValue>().unwrap(),
         ])
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::PATCH])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::PATCH,
+        ])
         .allow_headers(Any)
         .allow_credentials(true);
 
@@ -50,7 +56,10 @@ async fn main() -> Result<()> {
                 if status.running {
                     println!("✓ Ollama is installed and running at {}", status.server_url);
                     if !status.available_models.is_empty() {
-                        println!("✓ Available Ollama models: {}", status.available_models.join(", "));
+                        println!(
+                            "✓ Available Ollama models: {}",
+                            status.available_models.join(", ")
+                        );
                     } else {
                         println!("ℹ No local Ollama models found. Install one (e.g. llama3) to run offline backtests.");
                     }

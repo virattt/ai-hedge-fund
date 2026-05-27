@@ -1,26 +1,24 @@
+use crate::models::schemas::{
+    ApiKeyBulkUpdateRequest, ApiKeyCreateRequest, ApiKeyResponse, ApiKeySummaryResponse,
+    ApiKeyUpdateRequest, ErrorResponse,
+};
+use crate::repositories::api_key_repository::ApiKeyRepository;
 use axum::{
-    routing::{get, post, put, delete, patch},
-    Router,
-    Json,
     extract::{Path, State},
     http::StatusCode,
+    routing::{get, patch, post},
+    Json, Router,
 };
 use sqlx::SqlitePool;
-use crate::repositories::api_key_repository::ApiKeyRepository;
-use crate::models::schemas::{
-    ApiKeyCreateRequest,
-    ApiKeyUpdateRequest,
-    ApiKeyResponse,
-    ApiKeySummaryResponse,
-    ApiKeyBulkUpdateRequest,
-    ErrorResponse,
-};
 
 pub fn router() -> Router<SqlitePool> {
     Router::new()
         .route("/", post(create_or_update_api_key).get(get_api_keys))
         .route("/bulk", post(bulk_update_api_keys))
-        .route("/:provider", get(get_api_key).put(update_api_key).delete(delete_api_key))
+        .route(
+            "/:provider",
+            get(get_api_key).put(update_api_key).delete(delete_api_key),
+        )
         .route("/:provider/deactivate", patch(deactivate_api_key))
         .route("/:provider/last-used", patch(update_last_used))
 }
@@ -56,7 +54,15 @@ async fn create_or_update_api_key(
     Json(req): Json<ApiKeyCreateRequest>,
 ) -> Result<Json<ApiKeyResponse>, (StatusCode, Json<ErrorResponse>)> {
     let repo = ApiKeyRepository::new(&db);
-    match repo.create_or_update_api_key(&req.provider, &req.key_value, req.description.as_deref(), req.is_active).await {
+    match repo
+        .create_or_update_api_key(
+            &req.provider,
+            &req.key_value,
+            req.description.as_deref(),
+            req.is_active,
+        )
+        .await
+    {
         Ok(key) => Ok(Json(map_key_to_response(key))),
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -114,7 +120,15 @@ async fn update_api_key(
     Json(req): Json<ApiKeyUpdateRequest>,
 ) -> Result<Json<ApiKeyResponse>, (StatusCode, Json<ErrorResponse>)> {
     let repo = ApiKeyRepository::new(&db);
-    match repo.update_api_key(&provider, req.key_value.as_deref(), req.description.as_deref(), req.is_active).await {
+    match repo
+        .update_api_key(
+            &provider,
+            req.key_value.as_deref(),
+            req.description.as_deref(),
+            req.is_active,
+        )
+        .await
+    {
         Ok(Some(key)) => Ok(Json(map_key_to_response(key))),
         Ok(None) => Err((
             StatusCode::NOT_FOUND,
@@ -139,7 +153,9 @@ async fn delete_api_key(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
     let repo = ApiKeyRepository::new(&db);
     match repo.delete_api_key(&provider).await {
-        Ok(true) => Ok(Json(serde_json::json!({ "message": "API key deleted successfully" }))),
+        Ok(true) => Ok(Json(
+            serde_json::json!({ "message": "API key deleted successfully" }),
+        )),
         Ok(false) => Err((
             StatusCode::NOT_FOUND,
             Json(ErrorResponse {
@@ -199,7 +215,9 @@ async fn update_last_used(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
     let repo = ApiKeyRepository::new(&db);
     match repo.update_last_used(&provider).await {
-        Ok(true) => Ok(Json(serde_json::json!({ "message": "Last used timestamp updated" }))),
+        Ok(true) => Ok(Json(
+            serde_json::json!({ "message": "Last used timestamp updated" }),
+        )),
         Ok(false) => Err((
             StatusCode::NOT_FOUND,
             Json(ErrorResponse {
@@ -224,15 +242,25 @@ async fn bulk_update_api_keys(
     let repo = ApiKeyRepository::new(&db);
     let mut updated_keys = Vec::new();
     for key_req in req.api_keys {
-        match repo.create_or_update_api_key(&key_req.provider, &key_req.key_value, key_req.description.as_deref(), key_req.is_active).await {
+        match repo
+            .create_or_update_api_key(
+                &key_req.provider,
+                &key_req.key_value,
+                key_req.description.as_deref(),
+                key_req.is_active,
+            )
+            .await
+        {
             Ok(k) => updated_keys.push(map_key_to_response(k)),
-            Err(e) => return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    message: "Failed to bulk update API keys".to_string(),
-                    error: Some(e.to_string()),
-                }),
-            )),
+            Err(e) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorResponse {
+                        message: "Failed to bulk update API keys".to_string(),
+                        error: Some(e.to_string()),
+                    }),
+                ))
+            }
         }
     }
     Ok(Json(updated_keys))

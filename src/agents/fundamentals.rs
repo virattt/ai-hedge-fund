@@ -2,37 +2,44 @@
 //! Sibling to src/agents/fundamentals.py
 //! Performs quantitative fundamental analysis on financial metrics (profitability, growth, health, valuation).
 
-use anyhow::{Result, Context};
 use crate::graph::state::AgentState;
 use crate::tools::api::get_financial_metrics;
+use anyhow::{Context, Result};
 
 /// Performs fundamental analysis and inserts signals into the AgentState.
 pub async fn fundamentals_analyst_agent(state: &mut AgentState, agent_id: &str) -> Result<()> {
     println!("Running Fundamentals Analyst Agent: {}", agent_id);
 
-    let end_date = state.data.get("end_date")
+    let end_date = state
+        .data
+        .get("end_date")
         .and_then(|v| v.as_str())
         .context("Missing end_date in state data")?;
-    
-    let tickers_json = state.data.get("tickers")
+
+    let tickers_json = state
+        .data
+        .get("tickers")
         .context("Missing tickers in state data")?;
-    
+
     let tickers: Vec<String> = serde_json::from_value(tickers_json.clone())?;
-    
-    let api_key = state.metadata.get("FINANCIAL_DATASETS_API_KEY")
+
+    let api_key = state
+        .metadata
+        .get("FINANCIAL_DATASETS_API_KEY")
         .and_then(|v| v.as_str());
 
     let mut fundamental_analysis = serde_json::Map::new();
 
     for ticker in &tickers {
         // Fetch financial metrics
-        let financial_metrics = match get_financial_metrics(ticker, end_date, "ttm", 10, api_key).await {
-            Ok(m) => m,
-            Err(e) => {
-                println!("Warning: Failed to fetch metrics for {}: {:?}", ticker, e);
-                continue;
-            }
-        };
+        let financial_metrics =
+            match get_financial_metrics(ticker, end_date, "ttm", 10, api_key).await {
+                Ok(m) => m,
+                Err(e) => {
+                    println!("Warning: Failed to fetch metrics for {}: {:?}", ticker, e);
+                    continue;
+                }
+            };
 
         if financial_metrics.is_empty() {
             println!("Warning: No financial metrics found for {}", ticker);
@@ -47,9 +54,15 @@ pub async fn fundamentals_analyst_agent(state: &mut AgentState, agent_id: &str) 
         let operating_margin = metrics.operating_margin.unwrap_or(0.0);
 
         let mut profitability_score = 0;
-        if metrics.return_on_equity.is_some() && roe > 0.15 { profitability_score += 1; }
-        if metrics.net_margin.is_some() && net_margin > 0.20 { profitability_score += 1; }
-        if metrics.operating_margin.is_some() && operating_margin > 0.15 { profitability_score += 1; }
+        if metrics.return_on_equity.is_some() && roe > 0.15 {
+            profitability_score += 1;
+        }
+        if metrics.net_margin.is_some() && net_margin > 0.20 {
+            profitability_score += 1;
+        }
+        if metrics.operating_margin.is_some() && operating_margin > 0.15 {
+            profitability_score += 1;
+        }
 
         let profitability_signal = if profitability_score >= 2 {
             "bullish"
@@ -65,9 +78,15 @@ pub async fn fundamentals_analyst_agent(state: &mut AgentState, agent_id: &str) 
         let bv_growth = metrics.book_value_growth.unwrap_or(0.0);
 
         let mut growth_score = 0;
-        if metrics.revenue_growth.is_some() && rev_growth > 0.10 { growth_score += 1; }
-        if metrics.earnings_growth.is_some() && earn_growth > 0.10 { growth_score += 1; }
-        if metrics.book_value_growth.is_some() && bv_growth > 0.10 { growth_score += 1; }
+        if metrics.revenue_growth.is_some() && rev_growth > 0.10 {
+            growth_score += 1;
+        }
+        if metrics.earnings_growth.is_some() && earn_growth > 0.10 {
+            growth_score += 1;
+        }
+        if metrics.book_value_growth.is_some() && bv_growth > 0.10 {
+            growth_score += 1;
+        }
 
         let growth_signal = if growth_score >= 2 {
             "bullish"
@@ -84,9 +103,18 @@ pub async fn fundamentals_analyst_agent(state: &mut AgentState, agent_id: &str) 
         let eps = metrics.earnings_per_share.unwrap_or(0.0);
 
         let mut health_score = 0;
-        if metrics.current_ratio.is_some() && current_ratio > 1.5 { health_score += 1; }
-        if metrics.debt_to_equity.is_some() && debt_to_equity < 0.5 { health_score += 1; }
-        if metrics.free_cash_flow_per_share.is_some() && metrics.earnings_per_share.is_some() && fcf_ps > eps * 0.8 { health_score += 1; }
+        if metrics.current_ratio.is_some() && current_ratio > 1.5 {
+            health_score += 1;
+        }
+        if metrics.debt_to_equity.is_some() && debt_to_equity < 0.5 {
+            health_score += 1;
+        }
+        if metrics.free_cash_flow_per_share.is_some()
+            && metrics.earnings_per_share.is_some()
+            && fcf_ps > eps * 0.8
+        {
+            health_score += 1;
+        }
 
         let health_signal = if health_score >= 2 {
             "bullish"
@@ -102,9 +130,15 @@ pub async fn fundamentals_analyst_agent(state: &mut AgentState, agent_id: &str) 
         let ps_ratio = metrics.price_to_sales_ratio.unwrap_or(0.0);
 
         let mut price_ratio_score = 0;
-        if metrics.price_to_earnings_ratio.is_some() && pe_ratio > 25.0 { price_ratio_score += 1; }
-        if metrics.price_to_book_ratio.is_some() && pb_ratio > 3.0 { price_ratio_score += 1; }
-        if metrics.price_to_sales_ratio.is_some() && ps_ratio > 5.0 { price_ratio_score += 1; }
+        if metrics.price_to_earnings_ratio.is_some() && pe_ratio > 25.0 {
+            price_ratio_score += 1;
+        }
+        if metrics.price_to_book_ratio.is_some() && pb_ratio > 3.0 {
+            price_ratio_score += 1;
+        }
+        if metrics.price_to_sales_ratio.is_some() && ps_ratio > 5.0 {
+            price_ratio_score += 1;
+        }
 
         let price_ratios_signal = if price_ratio_score >= 2 {
             "bearish"
@@ -115,7 +149,12 @@ pub async fn fundamentals_analyst_agent(state: &mut AgentState, agent_id: &str) 
         };
 
         // Aggregate overall signal
-        let signals = vec![profitability_signal, growth_signal, health_signal, price_ratios_signal];
+        let signals = [
+            profitability_signal,
+            growth_signal,
+            health_signal,
+            price_ratios_signal,
+        ];
         let bullish_count = signals.iter().filter(|&&s| s == "bullish").count();
         let bearish_count = signals.iter().filter(|&&s| s == "bearish").count();
 
@@ -159,11 +198,16 @@ pub async fn fundamentals_analyst_agent(state: &mut AgentState, agent_id: &str) 
     }
 
     // Insert into state.data["analyst_signals"][agent_id]
-    let analyst_signals = state.data.entry("analyst_signals".to_string())
+    let analyst_signals = state
+        .data
+        .entry("analyst_signals".to_string())
         .or_insert_with(|| serde_json::json!({}));
-    
+
     if let Some(obj) = analyst_signals.as_object_mut() {
-        obj.insert(agent_id.to_string(), serde_json::Value::Object(fundamental_analysis));
+        obj.insert(
+            agent_id.to_string(),
+            serde_json::Value::Object(fundamental_analysis),
+        );
     }
 
     Ok(())
