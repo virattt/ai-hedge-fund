@@ -3,7 +3,7 @@
 > [!NOTE]
 > **Upstream Credit:** This project is a complete high-performance, 100% native Rust port of the original Python-based [virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fund) repository. All credit for the brilliant agentic design, collaborative trading workflows, and educational framework goes to the original upstream repository.
 
-The AI Hedge Fund web app is a full-stack system consisting of a high-performance Rust web backend and a modern React/Vite frontend dashboard. It enables you to construct visual agent DAGs, manage API configurations, and stream live multi-agent runs on your local machine.
+The **Open Hedge** web app is a full-stack system consisting of a high-performance Rust web backend and a modern React/Vite frontend dashboard. It enables you to construct visual agent DAGs, manage API configurations, and stream live multi-agent runs on your local machine.
 
 <img width="1721" alt="Screenshot 2025-06-28 at 6 41 03 PM" src="https://github.com/user-attachments/assets/b95ab696-c9f4-416c-9ad1-51feb1f5374b" />
 

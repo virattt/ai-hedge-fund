@@ -1,9 +1,9 @@
-# AI Hedge Fund - Rust Axum Backend Server
+# Open Hedge - Rust Axum Backend Server
 
 > [!NOTE]
 > **Upstream Credit:** This project is a complete high-performance, 100% native Rust port of the original Python-based [virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fund) repository. All credit for the brilliant agentic design, collaborative trading workflows, and educational framework goes to the original upstream repository.
 
-This is the high-performance backend server for the AI Hedge Fund project. Built entirely in native **Rust** using the **Axum** web framework, it manages flow configurations, API keys, and streams daily trading simulations to the visual React dashboard.
+This is the high-performance backend server for the **Open Hedge** project. Built entirely in native **Rust** using the **Axum** web framework, it manages flow configurations, API keys, and streams daily trading simulations to the visual React dashboard.
 
 ## Overview
 

@@ -3,7 +3,7 @@
 > [!NOTE]
 > **Upstream Credit:** This project is a complete high-performance, 100% native Rust port of the original Python-based [virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fund) repository. All credit for the brilliant agentic design, collaborative trading workflows, and educational framework goes to the original upstream repository.
 
-V2 represents a ground-up rebuild of the AI hedge fund's core engines. Instead of relying on famous investor personality-based LLM agents, V2 implements a mathematically disciplined, principled quantitative trading pipeline written entirely in native **Rust**.
+V2 represents a ground-up rebuild of **Open Hedge**'s core engines. Instead of relying on famous investor personality-based LLM agents, V2 implements a mathematically disciplined, principled quantitative trading pipeline written entirely in native **Rust**.
 
 ## Architecture
 

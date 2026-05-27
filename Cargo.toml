@@ -1,8 +1,8 @@
 [package]
-name = "ai-hedge-fund"
+name = "open-hedge"
 version = "0.1.0"
 edition = "2021"
-description = "Parallel Rust skeleton for AI Hedge Fund simulator"
+description = "Parallel Rust skeleton for Open Hedge simulator"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }

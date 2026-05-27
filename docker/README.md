@@ -1,9 +1,9 @@
-# Docker Orchestration for AI Hedge Fund
+# Docker Orchestration for Open Hedge
 
 > [!NOTE]
 > **Upstream Credit:** This project is a complete high-performance, 100% native Rust port of the original Python-based [virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fund) repository. All credit for the brilliant agentic design, collaborative trading workflows, and educational framework goes to the original upstream repository.
 
-This directory provides Docker orchestration configurations for building and executing the native **Rust** parallel orchestrator and backtester inside light-weight containers.
+This directory provides Docker orchestration configurations for building and executing the native **Rust** parallel orchestrator and backtester of **Open Hedge** inside light-weight containers.
 
 ---
 
@@ -40,7 +40,7 @@ cp .env.example .env
 
 You can run commands directly using `docker run` or orchestrate multi-container systems using `docker-compose`.
 
-### Running the AI Hedge Fund (Rust CLI)
+### Running Open Hedge (Rust CLI)
 Execute the parallel orchestrator directly through Docker:
 ```bash
 docker run -it --rm -v $(pwd)/.env:/app/.env ai-hedge-fund ./ai-hedge-fund --ticker AAPL,MSFT,NVDA

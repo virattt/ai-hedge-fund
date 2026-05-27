@@ -1,9 +1,9 @@
-# AI Hedge Fund (100% Native Rust Port)
+# Open Hedge (100% Native Rust Port)
 
 > [!NOTE]
 > **Upstream Credit:** This project is a complete high-performance, 100% native Rust port of the original Python-based [virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fund) repository. All credit for the brilliant agentic design, collaborative trading workflows, and educational framework goes to the original upstream repository.
 
-This is a proof of concept for an AI-powered hedge fund. The goal of this project is to explore the use of AI to make trading decisions. This project is for **educational** purposes only and is not intended for real trading or investment.
+This is a proof of concept for **Open Hedge**, a high-performance agentic trading simulator. The goal of this project is to explore the use of AI to make trading decisions. This project is for **educational** purposes only and is not intended for real trading or investment.
 
 This system employs several high-performance agents working in parallel:
 
@@ -55,7 +55,7 @@ By using this software, you agree to use it solely for learning purposes.
 
 ## How to Install
 
-Before you can run the AI Hedge Fund, you'll need to set up your environment and API keys.
+Before you can run Open Hedge, you'll need to set up your environment and API keys.
 
 ### 1. Clone the Repository
 
@@ -87,16 +87,16 @@ FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 
 ### ⌨️ Command Line Interface
 
-You can run the AI Hedge Fund directly via the terminal. The native Rust orchestrator parses standard arguments and executes the full parallel agent workflow in seconds.
+You can run Open Hedge directly via the terminal. The native Rust orchestrator parses standard arguments and executes the full parallel agent workflow in seconds.
 
 <img width="992" alt="Screenshot 2025-01-06 at 5 50 17 PM" src="https://github.com/user-attachments/assets/e8ca04bf-9989-4a7d-a8b4-34e04666663b" />
 
-#### Run the AI Hedge Fund (Rust CLI Orchestrator)
+#### Run Open Hedge (Rust CLI Orchestrator)
 ```bash
 cargo run --bin ai-hedge-fund -- --ticker AAPL,MSFT,NVDA
 ```
 
-You can also specify a `--ollama` flag to run the AI hedge fund using local LLMs.
+You can also specify a `--ollama` flag to run Open Hedge using local LLMs.
 ```bash
 cargo run --bin ai-hedge-fund -- --ticker AAPL,MSFT,NVDA --ollama
 ```
