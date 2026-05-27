@@ -62,6 +62,15 @@ poetry run uvicorn main:app --reload
 
 This will start the FastAPI server with hot-reloading enabled.
 
+### Running the Rust Backend (Alternative)
+
+For maximum speed, you can also spin up the high-performance native Rust backend:
+
+```bash
+# From the repository root
+cargo run --bin app-backend
+```
+
 The API will be available at:
 - API Endpoint: http://localhost:8000
 - API Documentation: http://localhost:8000/docs

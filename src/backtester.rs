@@ -30,21 +30,38 @@ async fn main() -> Result<()> {
     println!("Starting Backtesting Engine (Rust Port)...");
     
     // Parse inputs using clap
-    let tickers = vec!["AAPL".to_string(), "MSFT".to_string()];
-    let start_date = "2026-01-01".to_string();
-    let end_date = "2026-02-01".to_string();
-    let initial_cash = 100000.0;
+    let cli = ai_hedge_fund::cli::input::parse_cli_inputs();
     
+    // Resolve dates
+    let (start_date, end_date) = ai_hedge_fund::cli::input::resolve_dates(cli.start_date, cli.end_date, Some(1));
+    
+    // Fallback to default tickers if empty
+    let tickers = if cli.tickers.is_empty() {
+        vec!["AAPL".to_string(), "MSFT".to_string()]
+    } else {
+        cli.tickers
+    };
+
+    // Determine model name and provider
+    let model_name = cli.model.unwrap_or_else(|| "gpt-4".to_string());
+    let model_provider = if cli.ollama {
+        "Ollama".to_string()
+    } else {
+        "OpenAI".to_string()
+    };
+
+    let selected_analysts = cli.analysts.unwrap_or_default();
+
     // Create the backtester engine instance
     let mut backtester = BacktestEngine {
         tickers,
         start_date,
         end_date,
-        initial_capital: initial_cash,
-        model_name: "gpt-4".to_string(),
-        model_provider: "OpenAI".to_string(),
-        selected_analysts: vec![],
-        initial_margin_requirement: 0.5,
+        initial_capital: cli.initial_cash,
+        model_name,
+        model_provider,
+        selected_analysts,
+        initial_margin_requirement: cli.margin_requirement,
     };
 
     let _metrics = run_backtest(&mut backtester).await?;

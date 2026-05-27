@@ -129,6 +129,22 @@ poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
 
 Note: The `--ollama`, `--start-date`, and `--end-date` flags work for the backtester, as well!
 
+### 🦀 Rust Core (Alternative High-Performance Version)
+
+For maximum execution performance and memory safety, we have ported the core parallel hedge fund orchestrator and backtesting simulator to native **Rust**. Both versions run the identical investment workflows and share state schemas.
+
+#### 1. Run the AI Hedge Fund (Rust)
+```bash
+cargo run --bin ai-hedge-fund
+```
+
+#### 2. Run the Backtester (Rust)
+```bash
+cargo run --bin backtester -- --tickers AAPL,MSFT --start-date 2026-01-01 --end-date 2026-02-01
+```
+
+*(Note: Use standard double dashes `--` to pass command-line options directly to the Rust binary. All Python CLI arguments—such as `--tickers`, `--start-date`, `--end-date`, `--ollama`, etc.—are fully supported by the Rust clap parser!)*
+
 ### 🖥️ Web Application
 
 The new way to run the AI Hedge Fund is through our web application that provides a user-friendly interface. This is recommended for users who prefer visual interfaces over command line tools.

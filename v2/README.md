@@ -40,6 +40,20 @@ The core data contracts live in `models.py`:
 - `TradeOrder` — a single trade instruction
 - `ExecutionResult` — batch of trades with estimated costs
 
+### 🦀 Rust v2 Targets
+
+The v2 module includes native Rust high-performance simulation and backtesting pipelines:
+
+#### Run the v2 Backtester (Rust)
+```bash
+cargo run --bin v2-backtesting
+```
+
+#### Run the v2 Event Study framework (Rust)
+```bash
+cargo run --bin v2-event-study
+```
+
 ## Contributing
 
 v2 is in early development. If you'd like to contribute, start by reading `signals/base.py` to understand the signal interface, then check open issues tagged `v2`.

@@ -55,9 +55,17 @@ pub struct CLIInputs {
 
 /// Resolves start and end dates based on parameters, falling back to months-back offset if needed.
 pub fn resolve_dates(start_date: Option<String>, end_date: Option<String>, default_months_back: Option<i32>) -> (String, String) {
-    // TODO: Implement date calculations using the `chrono` crate.
-    let resolved_start = start_date.unwrap_or_else(|| "2026-01-01".to_string());
-    let resolved_end = end_date.unwrap_or_else(|| "2026-02-01".to_string());
+    let today = chrono::Local::now().naive_local().date();
+    
+    let resolved_end = end_date.unwrap_or_else(|| today.format("%Y-%m-%d").to_string());
+    let end_dt = chrono::NaiveDate::parse_from_str(&resolved_end, "%Y-%m-%d").unwrap_or(today);
+    
+    let resolved_start = start_date.unwrap_or_else(|| {
+        let months = default_months_back.unwrap_or(1) as i64;
+        let start_dt = end_dt - chrono::Duration::days(months * 30);
+        start_dt.format("%Y-%m-%d").to_string()
+    });
+    
     (resolved_start, resolved_end)
 }
 

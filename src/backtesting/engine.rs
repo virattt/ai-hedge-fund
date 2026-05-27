@@ -9,14 +9,13 @@ use std::collections::HashMap;
 use crate::backtesting::portfolio::Portfolio;
 use crate::backtesting::trader::TradeExecutor;
 use crate::backtesting::metrics::PerformanceMetricsCalculator;
-use crate::backtesting::types::PerformanceMetrics;
-use crate::graph::state::AgentState;
-
+use crate::backtesting::types::{PerformanceMetrics, PortfolioValuePoint};
+use crate::backtesting::benchmarks::BenchmarkCalculator;
+use crate::backtesting::controller::AgentController;
+use crate::backtesting::output::OutputBuilder;
+use crate::utils::display::BacktestRow;
+use crate::agents::portfolio_manager::PortfolioDecision;
 use crate::tools::api::get_prices;
-use crate::agents::fundamentals::fundamentals_analyst_agent;
-use crate::agents::technicals::technical_analyst_agent;
-use crate::agents::risk_manager::risk_management_agent;
-use crate::agents::portfolio_manager::{portfolio_management_agent, PortfolioDecision};
 
 /// Driver engine for executing historical backtests.
 #[derive(Debug)]
@@ -51,12 +50,18 @@ impl BacktestEngine {
         let end_dt = NaiveDate::parse_from_str(&self.end_date, "%Y-%m-%d")
             .context("Failed to parse end_date")?;
 
-        // 2. Instantiate portfolio, executor, and metrics calculator
+        // 2. Instantiate portfolio, executor, and metrics calculator, and output builder, and benchmark calculator
         let mut portfolio = Portfolio::new(self.tickers.clone(), self.initial_capital, self.initial_margin_requirement);
         let executor = TradeExecutor::new();
         let calculator = PerformanceMetricsCalculator::new();
+        let output_builder = OutputBuilder::new(Some(self.initial_capital));
+        let benchmark = BenchmarkCalculator::new();
+        let controller = AgentController::new();
 
-        let mut daily_values = Vec::new();
+        let mut portfolio_values: Vec<PortfolioValuePoint> = Vec::new();
+        let mut table_rows: Vec<BacktestRow> = Vec::new();
+        let mut performance_metrics = PerformanceMetrics::default();
+
         let mut current_dt = start_dt;
 
         println!("Starting daily simulation from {} to {}...", self.start_date, self.end_date);
@@ -102,71 +107,82 @@ impl BacktestEngine {
                 continue;
             }
 
-            // Build AgentState
-            let mut state = AgentState {
-                messages: Vec::new(),
-                data: HashMap::new(),
-                metadata: HashMap::new(),
-            };
+            // Invoke standard agents sequentially via the controller
+            let agent_output = controller.run_agent(
+                self.tickers.clone(),
+                &lookback_start,
+                &current_date_str,
+                &portfolio,
+                &self.model_name,
+                &self.model_provider,
+                self.selected_analysts.clone(),
+            ).await?;
 
-            state.data.insert("tickers".to_string(), serde_json::to_value(self.tickers.clone())?);
-            state.data.insert("start_date".to_string(), serde_json::json!(lookback_start));
-            state.data.insert("end_date".to_string(), serde_json::json!(current_date_str));
-            state.data.insert("portfolio".to_string(), serde_json::to_value(portfolio.clone())?);
-
-            if let Some(key) = &api_key {
-                state.metadata.insert("FINANCIAL_DATASETS_API_KEY".to_string(), serde_json::json!(key));
-            }
-
-            // Invoke standard agents sequentially
-            fundamentals_analyst_agent(&mut state, "fundamentals_analyst_agent").await?;
-            technical_analyst_agent(&mut state, "technical_analyst_agent").await?;
-            risk_management_agent(&mut state, "risk_management_agent").await?;
-            portfolio_management_agent(&mut state, "portfolio_manager").await?;
-
-            // Retrieve decisions
-            let decisions_json = state.data.get("decisions")
+            let decisions_json = agent_output.decisions.as_ref()
                 .context("Missing decisions in agent state")?;
             let decisions: HashMap<String, PortfolioDecision> = serde_json::from_value(decisions_json.clone())?;
 
             // Execute Trades
+            let mut executed_trades = HashMap::new();
             for ticker in &self.tickers {
+                let mut executed_qty = 0;
                 if let Some(dec) = decisions.get(ticker) {
                     if dec.action != "hold" && dec.quantity > 0 {
                         let price = *daily_prices.get(ticker).unwrap();
-                        let executed_qty = executor.execute_trade(ticker, &dec.action, dec.quantity, price, &mut portfolio);
-                        if executed_qty > 0 {
-                            println!(
-                                "Trade: [{}] {} {} shares @ ${:.2}",
-                                current_date_str, dec.action.to_uppercase(), executed_qty, price
-                            );
-                        }
+                        executed_qty = executor.execute_trade(ticker, &dec.action, dec.quantity, price, &mut portfolio);
                     }
                 }
+                executed_trades.insert(ticker.clone(), executed_qty);
             }
 
-            // Calculate Portfolio Value (NVI)
-            let mut total_value = portfolio.cash;
-            for (ticker, pos) in &portfolio.positions {
-                if let Some(&price) = daily_prices.get(ticker) {
-                    total_value += pos.long as f64 * price;
-                    total_value -= pos.short as f64 * price;
+            // Calculate Portfolio Value (NVI) and Exposures
+            let total_value = crate::backtesting::valuation::calculate_portfolio_value(&portfolio, &daily_prices);
+            let exposures = crate::backtesting::valuation::compute_exposures(&portfolio, &daily_prices);
+
+            let point = PortfolioValuePoint {
+                date: current_dt,
+                portfolio_value: total_value,
+                long_exposure: exposures.long_exposure,
+                short_exposure: exposures.short_exposure,
+                gross_exposure: exposures.gross_exposure,
+                net_exposure: exposures.net_exposure,
+                long_short_ratio: exposures.long_short_ratio,
+            };
+            portfolio_values.push(point);
+
+            // Fetch S&P 500 comparison return
+            let benchmark_return = benchmark.get_return_pct("SPY", &self.start_date, &current_date_str).await;
+
+            // Build daily rows and prepend
+            let rows = output_builder.build_day_rows(
+                &current_date_str,
+                &self.tickers,
+                &agent_output,
+                &executed_trades,
+                &daily_prices,
+                &portfolio,
+                &performance_metrics,
+                total_value,
+                benchmark_return,
+            );
+
+            let mut new_table_rows = rows;
+            new_table_rows.extend(table_rows);
+            table_rows = new_table_rows;
+
+            // Print full history
+            output_builder.print_rows(&table_rows);
+
+            // Update performance metrics after printing
+            if portfolio_values.len() > 3 {
+                if let Some(computed) = calculator.compute_metrics(&portfolio_values) {
+                    performance_metrics = computed;
                 }
             }
-
-            daily_values.push(total_value);
-            println!("Daily Value [{}]: ${:.2}", current_date_str, total_value);
 
             current_dt = current_dt.succ_opt().context("Date overflow")?;
         }
 
-        // Calculate performance metrics at the end of the simulation
-        let metrics = calculator.compute_metrics(&daily_values)
-            .unwrap_or(PerformanceMetrics {
-                sharpe_ratio: 0.0,
-                total_return: 0.0,
-            });
-
-        Ok(metrics)
+        Ok(performance_metrics)
     }
 }

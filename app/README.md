@@ -143,6 +143,13 @@ cd app/backend
 poetry run uvicorn main:app --reload
 ```
 
+*Or, to run the high-performance native Rust backend target (Alternative):*
+```bash
+# From the repository root
+cargo run --bin app-backend
+```
+
+
 2. Start the frontend application:
 ```bash
 # In another terminal, from the frontend directory

@@ -2,9 +2,24 @@
 //! Sibling to src/utils/api_key.py
 //! Retrieves and validates financial datasets and model provider API keys from state or system environment.
 
-use anyhow::Result;
+use crate::graph::state::AgentState;
 
-/// Placeholder function matching the Python module signature.
-pub fn todo_placeholder_api_key() {
-    // TODO: Port logic from src/utils/api_key.py
+/// Retrieve an API key from the agent state metadata or the system environment variables.
+pub fn get_api_key_from_state(state: &AgentState, api_key_name: &str) -> Option<String> {
+    // 1. Direct key lookup in state.metadata
+    if let Some(val) = state.metadata.get(api_key_name).and_then(|v| v.as_str()) {
+        return Some(val.to_string());
+    }
+
+    // 2. Lookup within nested request payload (metadata.request.api_keys)
+    if let Some(req) = state.metadata.get("request") {
+        if let Some(api_keys) = req.get("api_keys") {
+            if let Some(key) = api_keys.get(api_key_name).and_then(|v| v.as_str()) {
+                return Some(key.to_string());
+            }
+        }
+    }
+
+    // 3. Fallback to system environment variable
+    std::env::var(api_key_name).ok()
 }

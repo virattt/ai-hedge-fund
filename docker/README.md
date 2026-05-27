@@ -191,6 +191,20 @@ You can also specify a `--ollama` flag to run the backtester using local LLMs.
 run.bat --ticker AAPL,MSFT,NVDA --ollama backtest
 ```
 
+### 🦀 Rust Core (Alternative High-Performance Version)
+
+For maximum execution performance and memory safety without virtual container overhead, we have ported the core parallel hedge fund orchestrator and backtesting simulator to native **Rust**. Both targets run the identical workflows and share identical state models.
+
+#### Run the AI Hedge Fund (Rust)
+```bash
+cargo run --bin ai-hedge-fund
+```
+
+#### Run the Backtester (Rust)
+```bash
+cargo run --bin backtester -- --tickers AAPL,MSFT --start-date 2026-01-01 --end-date 2026-02-01
+```
+
 ## Contributing
 
 1. Fork the repository
