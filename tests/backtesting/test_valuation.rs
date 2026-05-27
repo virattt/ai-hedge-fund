@@ -19,6 +19,7 @@ fn test_calculate_portfolio_value() {
     // cash after trades
     let expected = portfolio.cash + 10.0 * 100.0 - 5.0 * 200.0;
     assert_eq!(value, expected);
+    assert_eq!(value, 100000.0);
 }
 
 #[test]

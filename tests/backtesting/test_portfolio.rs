@@ -53,7 +53,7 @@ fn test_apply_short_open_basic() {
     assert!((pos.short_cost_basis - 30.0).abs() < 1e-5);
     assert!((pos.short_margin_used - 1500.0).abs() < 1e-5);
     assert!((portfolio.margin_used - 1500.0).abs() < 1e-5);
-    assert!((portfolio.cash - 101500.0).abs() < 1e-5);
+    assert!((portfolio.cash - 103000.0).abs() < 1e-5);
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn test_apply_short_open_partial_when_insufficient_margin_cash() {
     let pos = &p.positions["AAPL"];
     assert_eq!(pos.short, 4);
     assert!((pos.short_margin_used - 200.0).abs() < 1e-5);
-    assert!((p.cash - 400.0).abs() < 1e-5);
+    assert!((p.cash - 600.0).abs() < 1e-5);
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn test_apply_short_cover_realized_gain_and_margin_release() {
     assert!((portfolio.realized_gains["AAPL"].short - 400.0).abs() < 1e-5);
     let released = 0.4 * pre_margin_used;
     assert!((pos.short_margin_used - (pre_margin_used - released)).abs() < 1e-5);
-    let expected_cash = pre_cash + released - 1600.0;
+    let expected_cash = pre_cash - 1600.0;
     assert!((portfolio.cash - expected_cash).abs() < 1e-5);
 }
 

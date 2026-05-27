@@ -73,10 +73,21 @@ impl OutputBuilder {
             label: "PORTFOLIO SUMMARY".to_string(),
             total_position_value: total_value - portfolio.cash,
             cash_balance: portfolio.cash,
+            short_sale_proceeds: portfolio.short_sale_proceeds(),
+            margin_used: portfolio.margin_used,
+            available_cash: portfolio.available_cash(),
             total_value,
             return_pct,
-            sharpe_ratio: Some(performance_metrics.sharpe_ratio),
-            sortino_ratio: performance_metrics.sortino_ratio,
+            sharpe_ratio: if performance_metrics.risk_metrics_available {
+                Some(performance_metrics.sharpe_ratio)
+            } else {
+                None
+            },
+            sortino_ratio: if performance_metrics.risk_metrics_available {
+                performance_metrics.sortino_ratio
+            } else {
+                None
+            },
             max_drawdown: performance_metrics.max_drawdown,
             benchmark_return_pct,
         });

@@ -11,6 +11,8 @@ pub struct PerformanceMetricsCalculator {
 }
 
 impl PerformanceMetricsCalculator {
+    const MIN_RISK_RETURN_OBSERVATIONS: usize = 20;
+
     pub fn new() -> Self {
         Self {
             annual_trading_days: 252.0,
@@ -20,7 +22,7 @@ impl PerformanceMetricsCalculator {
 
     /// Computes performance metrics from a daily portfolio value curve.
     pub fn compute_metrics(&self, values: &[PortfolioValuePoint]) -> Option<PerformanceMetrics> {
-        if values.len() < 3 {
+        if values.is_empty() {
             return None;
         }
 
@@ -44,39 +46,42 @@ impl PerformanceMetricsCalculator {
             daily_returns.push(ret);
         }
 
-        let n = daily_returns.len() as f64;
-        if n < 2.0 {
-            return None;
-        }
+        let risk_metrics_available = daily_returns.len() >= Self::MIN_RISK_RETURN_OBSERVATIONS;
+        let (sharpe_ratio, sortino_ratio) = if risk_metrics_available {
+            let n = daily_returns.len() as f64;
+            let daily_rf = self.annual_rf_rate / self.annual_trading_days;
+            
+            // Excess returns
+            let excess: Vec<f64> = daily_returns.iter().map(|&r| r - daily_rf).collect();
+            let mean_excess = excess.iter().sum::<f64>() / n;
+            
+            // Variance and Std Dev (ddof = 1 to match Pandas)
+            let variance = excess.iter().map(|&x| (x - mean_excess).powi(2)).sum::<f64>() / (n - 1.0);
+            let std_dev = variance.sqrt();
 
-        let daily_rf = self.annual_rf_rate / self.annual_trading_days;
-        
-        // Excess returns
-        let excess: Vec<f64> = daily_returns.iter().map(|&r| r - daily_rf).collect();
-        let mean_excess = excess.iter().sum::<f64>() / n;
-        
-        // Variance and Std Dev (ddof = 1 to match Pandas)
-        let variance = excess.iter().map(|&x| (x - mean_excess).powi(2)).sum::<f64>() / (n - 1.0);
-        let std_dev = variance.sqrt();
+            let sharpe_ratio = if std_dev > 1e-12 {
+                (mean_excess / std_dev) * self.annual_trading_days.sqrt()
+            } else {
+                0.0
+            };
 
-        let sharpe_ratio = if std_dev > 1e-12 {
-            (mean_excess / std_dev) * self.annual_trading_days.sqrt()
+            // Downside deviation
+            let downside_sum_sq: f64 = excess.iter()
+                .map(|&x| if x < 0.0 { x.powi(2) } else { 0.0 })
+                .sum();
+            let downside_dev = (downside_sum_sq / n).sqrt();
+
+            let sortino_ratio = if downside_dev > 1e-12 {
+                (mean_excess / downside_dev) * self.annual_trading_days.sqrt()
+            } else if mean_excess > 0.0 {
+                f64::INFINITY
+            } else {
+                0.0
+            };
+
+            (sharpe_ratio, Some(sortino_ratio))
         } else {
-            0.0
-        };
-
-        // Downside deviation
-        let downside_sum_sq: f64 = excess.iter()
-            .map(|&x| if x < 0.0 { x.powi(2) } else { 0.0 })
-            .sum();
-        let downside_dev = (downside_sum_sq / n).sqrt();
-
-        let sortino_ratio = if downside_dev > 1e-12 {
-            (mean_excess / downside_dev) * self.annual_trading_days.sqrt()
-        } else if mean_excess > 0.0 {
-            f64::INFINITY
-        } else {
-            0.0
+            (0.0, None)
         };
 
         // Maximum Drawdown Calculation
@@ -113,8 +118,9 @@ impl PerformanceMetricsCalculator {
 
         Some(PerformanceMetrics {
             sharpe_ratio,
+            risk_metrics_available,
             total_return,
-            sortino_ratio: Some(sortino_ratio),
+            sortino_ratio,
             max_drawdown: Some(max_drawdown_pct),
             max_drawdown_date,
             long_short_ratio,

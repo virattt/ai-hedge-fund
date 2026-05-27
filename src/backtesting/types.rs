@@ -6,6 +6,7 @@
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, Default)]
 pub struct PerformanceMetrics {
     pub sharpe_ratio: f64,
+    pub risk_metrics_available: bool,
     pub total_return: f64,
     pub sortino_ratio: Option<f64>,
     pub max_drawdown: Option<f64>,

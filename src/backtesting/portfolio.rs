@@ -110,11 +110,12 @@ impl Portfolio {
         if quantity == 0 || price <= 0.0 {
             return 0;
         }
+        let existing_short_proceeds = self.short_sale_proceeds();
         let pos = self.positions.entry(ticker.to_string()).or_insert_with(PositionDetail::default);
         let proceeds = price * quantity as f64;
         let margin_ratio = self.margin_requirement;
         let margin_required = proceeds * margin_ratio;
-        let available_cash = (self.cash - self.margin_used).max(0.0);
+        let available_cash = (self.cash - existing_short_proceeds - self.margin_used).max(0.0);
 
         if margin_required <= available_cash {
             let old_short_shares = pos.short;
@@ -129,7 +130,6 @@ impl Portfolio {
             pos.short_margin_used += margin_required;
             self.margin_used += margin_required;
             self.cash += proceeds;
-            self.cash -= margin_required;
             return quantity;
         }
 
@@ -154,7 +154,6 @@ impl Portfolio {
             pos.short_margin_used += actual_margin_required;
             self.margin_used += actual_margin_required;
             self.cash += actual_proceeds;
-            self.cash -= actual_margin_required;
             return max_qty;
         }
         0
@@ -180,7 +179,6 @@ impl Portfolio {
             pos.short -= cover_qty as i64;
             pos.short_margin_used -= margin_to_release;
             self.margin_used = (self.margin_used - margin_to_release).max(0.0);
-            self.cash += margin_to_release;
             self.cash -= cover_cost;
             gains.short += realized_gain;
             if pos.short == 0 {
@@ -190,5 +188,16 @@ impl Portfolio {
             return cover_qty;
         }
         0
+    }
+
+    pub fn short_sale_proceeds(&self) -> f64 {
+        self.positions
+            .values()
+            .map(|pos| pos.short as f64 * pos.short_cost_basis)
+            .sum()
+    }
+
+    pub fn available_cash(&self) -> f64 {
+        (self.cash - self.short_sale_proceeds() - self.margin_used).max(0.0)
     }
 }

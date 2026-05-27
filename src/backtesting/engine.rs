@@ -166,6 +166,12 @@ impl BacktestEngine {
             };
             portfolio_values.push(point);
 
+            // Update performance metrics before rendering this day's summary so
+            // drawdown and return statistics include the latest portfolio value.
+            if let Some(computed) = calculator.compute_metrics(&portfolio_values) {
+                performance_metrics = computed;
+            }
+
             // Fetch S&P 500 comparison return
             let benchmark_return = benchmark.get_return_pct("SPY", &self.start_date, &current_date_str).await;
 
@@ -188,13 +194,6 @@ impl BacktestEngine {
 
             // Print full history
             output_builder.print_rows(&table_rows);
-
-            // Update performance metrics after printing
-            if portfolio_values.len() > 3 {
-                if let Some(computed) = calculator.compute_metrics(&portfolio_values) {
-                    performance_metrics = computed;
-                }
-            }
 
             current_dt = current_dt.succ_opt().context("Date overflow")?;
         }

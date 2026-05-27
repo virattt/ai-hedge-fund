@@ -9,6 +9,9 @@ pub enum BacktestRow {
         label: String,
         total_position_value: f64,
         cash_balance: f64,
+        short_sale_proceeds: f64,
+        margin_used: f64,
+        available_cash: f64,
         total_value: f64,
         return_pct: f64,
         sharpe_ratio: Option<f64>,
@@ -115,6 +118,9 @@ pub fn print_backtest_results(table_rows: &[BacktestRow]) {
     if let Some(BacktestRow::Summary {
         total_position_value,
         cash_balance,
+        short_sale_proceeds,
+        margin_used,
+        available_cash,
         total_value,
         return_pct,
         sharpe_ratio,
@@ -125,7 +131,12 @@ pub fn print_backtest_results(table_rows: &[BacktestRow]) {
     }) = latest_summary {
         println!("\n\x1b[1m\x1b[37mPORTFOLIO SUMMARY:\x1b[0m");
         println!("Cash Balance: \x1b[36m${:.2}\x1b[0m", cash_balance);
-        println!("Total Position Value: \x1b[33m${:.2}\x1b[0m", total_position_value);
+        if *short_sale_proceeds > 0.0 || *margin_used > 0.0 {
+            println!("Short Sale Proceeds: \x1b[36m${:.2}\x1b[0m", short_sale_proceeds);
+            println!("Margin Used: \x1b[36m${:.2}\x1b[0m", margin_used);
+            println!("Available Cash: \x1b[36m${:.2}\x1b[0m", available_cash);
+        }
+        println!("Net Position Value: \x1b[33m${:.2}\x1b[0m", total_position_value);
         println!("Total Value: \x1b[37m${:.2}\x1b[0m", total_value);
         
         let ret_color = if *return_pct >= 0.0 { "\x1b[32m" } else { "\x1b[31m" };
@@ -150,10 +161,10 @@ pub fn print_backtest_results(table_rows: &[BacktestRow]) {
     println!("\n");
 
     // Print header
-    let header_border = "+------------+--------+--------+----------+----------+-------------+--------------+----------------+";
+    let header_border = "+------------+--------+--------+----------+----------+-------------+--------------+--------------------+";
     println!("{}", header_border);
-    println!("| {:<10} | {:<6} | {:^6} | {:>8} | {:>8} | {:>11} | {:>12} | {:>14} |", 
-        "Date", "Ticker", "Action", "Quantity", "Price", "Long Shares", "Short Shares", "Position Value"
+    println!("| {:<10} | {:<6} | {:^6} | {:>8} | {:>8} | {:>11} | {:>12} | {:>18} |", 
+        "Date", "Ticker", "Action", "Quantity", "Price", "Long Shares", "Short Shares", "Net Position Value"
     );
     println!("{}", header_border);
 
@@ -176,7 +187,7 @@ pub fn print_backtest_results(table_rows: &[BacktestRow]) {
                 _ => "\x1b[37m",
             };
             
-            println!("| {:<10} | \x1b[36m{:<6}\x1b[0m | {}{:<6}\x1b[0m | {}{:>8.0}\x1b[0m | \x1b[37m{:>8.2}\x1b[0m | \x1b[32m{:>11.0}\x1b[0m | \x1b[31m{:>12.0}\x1b[0m | \x1b[33m{:>14.2}\x1b[0m |",
+            println!("| {:<10} | \x1b[36m{:<6}\x1b[0m | {}{:<6}\x1b[0m | {}{:>8.0}\x1b[0m | \x1b[37m{:>8.2}\x1b[0m | \x1b[32m{:>11.0}\x1b[0m | \x1b[31m{:>12.0}\x1b[0m | \x1b[33m{:>18.2}\x1b[0m |",
                 date,
                 ticker,
                 action_color,
