@@ -1,59 +1,61 @@
-# v2 — Quantitative Trading Stack
+# V2 — Principled Quantitative Trading Stack (Rust Port)
 
-> **Status: Work in Progress** — This module is under active development and is not yet integrated into the main application.
+> [!NOTE]
+> **Upstream Credit:** This project is a complete high-performance, 100% native Rust port of the original Python-based [virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fund) repository. All credit for the brilliant agentic design, collaborative trading workflows, and educational framework goes to the original upstream repository.
 
-v2 is a ground-up rebuild of the AI hedge fund's core engine, replacing personality-based agents with a principled quantitative pipeline.
+V2 represents a ground-up rebuild of the AI hedge fund's core engines. Instead of relying on famous investor personality-based LLM agents, V2 implements a mathematically disciplined, principled quantitative trading pipeline written entirely in native **Rust**.
 
 ## Architecture
 
+V2 enforces a sequential, modular quantitative process pipeline:
 ```
 Data (FD API) → Signals → Features → Portfolio Construction → Risk Management → Execution
 ```
 
 | Module | Description |
 |--------|-------------|
-| `data/` | Financial Datasets API client and caching layer |
-| `event_study/` | Event study framework — CARs, market model, significance testing |
-| `signals/` | Quantitative signal generation (`BaseSignal` ABC with `[-1, +1]` output) |
-| `features/` | Feature engineering — earnings surprise, KPI momentum, cross-sector lead-lag |
-| `validation/` | Combinatorial Purged Cross-Validation (CPCV), Probability of Backtest Overfitting (PBO) |
-| `backtesting/` | Vectorized backtester with point-in-time constraints and transaction cost modeling |
-| `portfolio/` | Portfolio optimization — mean-variance, Black-Litterman, risk parity, covariance cleaning |
-| `risk/` | Risk management — drawdown controls, position sizing, correlation monitoring, stress testing |
-| `pipeline/` | Execution simulation — market impact (Almgren-Chriss), fill probability, capacity analysis |
+| **[data/](file:///Users/wheregmis/Documents/GitHub/open-hedge/v2/data/)** | Financial Datasets API client, retry layers, and cached filesystem lookups. |
+| **[event_study/](file:///Users/wheregmis/Documents/GitHub/open-hedge/v2/event_study/)** | Event study frameworks analyzing filings dates, Cumulative Abnormal Returns (CARs), market model OLS regressions, Student-t tests, and seedable non-parametric bootstrap intervals. |
+| **[signals/](file:///Users/wheregmis/Documents/GitHub/open-hedge/v2/signals/)** | Quantitative signal generation defining `BaseSignal` traits yielding outputs in the range `[-1, +1]`. |
+| **[features/](file:///Users/wheregmis/Documents/GitHub/open-hedge/v2/features/)** | Feature engineering — earnings surprises, KPI momentum, and cross-sector lead-lag coefficients. |
+| **[validation/](file:///Users/wheregmis/Documents/GitHub/open-hedge/v2/validation/)** | Out-of-sample validator designs including Combinatorial Purged Cross-Validation (CPCV). |
+| **[backtesting/](file:///Users/wheregmis/Documents/GitHub/open-hedge/v2/backtesting/)** | Vectorized and event-driven backtesting engine modeled with transaction cost limits. |
+| **[portfolio/](file:///Users/wheregmis/Documents/GitHub/open-hedge/v2/portfolio/)** | Portfolio optimization routines including Mean-Variance and Black-Litterman optimizations. |
+| **[risk/](file:///Users/wheregmis/Documents/GitHub/open-hedge/v2/risk/)** | Drawdown controls, position sizing ceilings, correlation clustering, and stress testing. |
+| **[pipeline/](file:///Users/wheregmis/Documents/GitHub/open-hedge/v2/pipeline/)** | Execution simulation tracking market impacts (Almgren-Chriss) and capacity bounds. |
 
-## Key Design Decisions
+---
 
-- **Methodology over personality.** Agents are structured around quantitative methods (momentum, fundamental, risk), not famous investor personas.
-- **Costs from day one.** Every backtest includes a transaction cost model. No frictionless fantasies.
-- **Validation built in.** CPCV and PBO are first-class citizens, not afterthoughts. If a signal can't survive combinatorial purged validation, it doesn't ship.
-- **Point-in-time by construction.** The data layer enforces that no future information leaks into historical analysis.
-- **Daily frequency.** Built for daily-bar strategies on US equities using [Financial Datasets](https://financialdatasets.ai) as the sole data provider.
+## Key Design Principles
 
-## Data Models
+1. **Methodology over Personality**: Replaces personality-driven LLM decisions with robust, verifiable statistical algorithms.
+2. **CPCV & Validation**: Built with Combinatorial Purged Cross-Validation as core validator steps to prevent backtest overfitting.
+3. **Point-in-Time Data Enforcement**: The client client prevents future data leakage by strictly partitioning price history around historic publication timestamps.
+4. **Frictional Transaction Costs**: Incorporates transaction cost modeling from day one—no zero-slippage backtests.
 
-The core data contracts live in `models.py`:
+---
 
-- `SignalResult` — output of any quantitative signal (`value` in `[-1, +1]`)
-- `QuantSignals` — all signals for a ticker on a given date
-- `PortfolioTarget` — target portfolio weights from the optimizer
-- `TradeOrder` — a single trade instruction
-- `ExecutionResult` — batch of trades with estimated costs
+## Running V2 Rust Targets
 
-### 🦀 Rust v2 Targets
+V2 includes two highly optimized standalone command-line executables:
 
-The v2 module includes native Rust high-performance simulation and backtesting pipelines:
-
-#### Run the v2 Backtester (Rust)
-```bash
-cargo run --bin v2-backtesting
-```
-
-#### Run the v2 Event Study framework (Rust)
+### 1. Earnings announcement Event Study Tool
+Pull earnings surprise filings, align equity prices against SPY benchmarks, compute daily abnormal returns, calculate OLS market regression fits, and estimate significance intervals:
 ```bash
 cargo run --bin v2-event-study
 ```
 
-## Contributing
+### 2. Standalone Backtesting Runner
+Simulate Pead (Post-Earnings-Announcement Drift) trading strategies under realistic transaction costs:
+```bash
+cargo run --bin v2-backtesting
+```
 
-v2 is in early development. If you'd like to contribute, start by reading `signals/base.py` to understand the signal interface, then check open issues tagged `v2`.
+## Data Models
+
+The core type-safe state models live inside `v2/models.rs`:
+- `SignalResult`: Signal values mapped to the `[-1.0, 1.0]` bounds.
+- `QuantSignals`: Group of metrics for a ticker on a specific trading date.
+- `PortfolioTarget`: Output weight boundaries generated by optimizers.
+- `TradeOrder`: Complete transaction execution instruction.
+- `ExecutionResult`: Final filled orders with estimated frictional costs.

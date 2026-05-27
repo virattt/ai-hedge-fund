@@ -1,102 +1,110 @@
-# AI Hedge Fund - Backend [WIP] 🚧
-This project is currently a work in progress.  To track progress, please get updates [here](https://x.com/virattt).
+# AI Hedge Fund - Rust Axum Backend Server
 
-This is the backend server for the AI Hedge Fund project. It provides a simple REST API to interact with the AI Hedge Fund system, allowing you to run the hedge fund through a web interface.
+> [!NOTE]
+> **Upstream Credit:** This project is a complete high-performance, 100% native Rust port of the original Python-based [virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fund) repository. All credit for the brilliant agentic design, collaborative trading workflows, and educational framework goes to the original upstream repository.
+
+This is the high-performance backend server for the AI Hedge Fund project. Built entirely in native **Rust** using the **Axum** web framework, it manages flow configurations, API keys, and streams daily trading simulations to the visual React dashboard.
 
 ## Overview
 
-This backend project is a FastAPI application that serves as the server-side component of the AI Hedge Fund system. It exposes endpoints for running the hedge fund trading system and backtester.
+The backend server is built as an asynchronous web server providing:
+- **Flow Management APIs**: Complete CRUD routes to create, read, update, delete, and duplicate visual trading workflows (agent graphs).
+- **Live Event Streaming**: Server-Sent Events (SSE) endpoints at `/run` and `/backtest` that stream daily transaction lists, Sharpe ratios, and agent thought-chains using native Tokio channels and async streams.
+- **Embedded Database**: Local SQLite connection managed by SQLx, featuring embedded schema migrations that automatically run on startup.
+- **Provider Integrations**: Robust adapters to communicate with commercial LLM providers and local Ollama servers.
 
-This backend is designed to work with a future frontend application that will allow users to interact with the AI Hedge Fund system through their browser.
+---
 
-## Installation
+## 🛠️ Installation & Setup
 
-### Using Poetry
+### Prerequisites
+- [Rust & Cargo](https://rustup.rs/) (version 1.75+)
 
-1. Clone the repository:
+### 1. Set Up Environment Variables
+Ensure you have a `.env` file created in the project root directory:
 ```bash
-git clone https://github.com/virattt/ai-hedge-fund.git
-cd ai-hedge-fund
-```
-
-2. Install Poetry (if not already installed):
-```bash
-curl -sSL https://install.python-poetry.org | python3 -
-```
-
-3. Install dependencies:
-```bash
-# From the root directory
-poetry install
-```
-
-4. Set up your environment variables:
-```bash
-# Create .env file for your API keys (in the root directory)
+# Create .env from template
 cp .env.example .env
 ```
 
-5. Edit the .env file to add your API keys:
+Open and edit `.env` to include your provider API keys:
 ```bash
-# For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
+# OpenAI key for default models
 OPENAI_API_KEY=your-openai-api-key
 
-# For running LLMs hosted by groq (deepseek, llama3, etc.)
-GROQ_API_KEY=your-groq-api-key
-
-# For getting financial data to power the hedge fund
+# Financial Datasets key to fetch equities pricing and news
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
-## Running the Server
+---
 
-To run the development server:
+## 🚀 Running the Server
 
-```bash
-# Navigate to the backend directory
-cd app/backend
-
-# Start the FastAPI server with uvicorn
-poetry run uvicorn main:app --reload
-```
-
-This will start the FastAPI server with hot-reloading enabled.
-
-### Running the Rust Backend (Alternative)
-
-For maximum speed, you can also spin up the high-performance native Rust backend:
+To start the high-performance Rust backend:
 
 ```bash
 # From the repository root
 cargo run --bin app-backend
 ```
 
-The API will be available at:
-- API Endpoint: http://localhost:8000
-- API Documentation: http://localhost:8000/docs
+*The server will boot and bind to `http://localhost:8000`. On startup, it will run embedded migrations to ensure your local SQLite database (`hedge_fund.db`) has the necessary tables.*
 
-## API Endpoints
+### API Service Configuration
+- **API Base URL**: `http://localhost:8000`
+- **Health Check**: `GET /health`
+- **Ollama Scanner**: `GET /ollama/models` (scans available local models)
 
-- `POST /hedge-fund/run`: Run the AI Hedge Fund with specified parameters
-- `GET /ping`: Simple endpoint to test server connectivity
+---
 
-## Project Structure
+## Core API Endpoints
+
+- **Flow Graphs**:
+  - `GET /flows`: List all visual workflow graphs
+  - `POST /flows`: Create a new agent workflow
+  - `GET /flows/:id`: Fetch a specific flow graph
+  - `PUT /flows/:id`: Update flow layout and configuration
+  - `DELETE /flows/:id`: Delete a flow graph
+- **API Keys**:
+  - `GET /api-keys`: Fetch key validation states
+  - `POST /api-keys`: Register new provider API keys
+- **Simulations & Backtests (SSE Streaming)**:
+  - `GET /hedge-fund/run`: Streams a single daily run
+  - `GET /hedge-fund/backtest`: Streams an interactive backtest run
+
+---
+
+## Rust Backend Architecture
 
 ```
 app/backend/
-├── api/                      # API layer (future expansion)
-├── models/                   # Domain models
-│   ├── __init__.py
-│   └── schemas.py            # Pydantic schema definitions
-├── routes/                   # API routes
-│   ├── __init__.py           # Router registry
-│   ├── hedge_fund.py         # Hedge fund endpoints
-│   └── health.py             # Health check endpoints
-├── services/                 # Business logic
-│   ├── graph.py              # Agent graph functionality
-│   └── portfolio.py          # Portfolio management
-├── __init__.py               # Package initialization
-└── main.py                   # FastAPI application entry point
+├── alembic/                  # Database migration schemas
+│   ├── versions/             # DB schema migration versions
+│   └── env.rs                # Migration coordinator
+├── database/                 # Connection pools and SQLite bindings
+│   ├── connection.rs         # Database pool + auto migrations
+│   └── models.rs             # ORM DB schemas
+├── models/                   # Type-safe API Request/Response schemas
+│   ├── db_models.rs          # SQLx representations
+│   ├── events.rs             # Serializable SSE stream events
+│   └── schemas.rs            # Axum controller models
+├── repositories/             # SQLx CRUD database actions
+│   ├── api_key_repository.rs
+│   ├── flow_repository.rs
+│   └── flow_run_repository.rs
+├── routes/                   # Axum controllers and router registry
+│   ├── api_keys.rs
+│   ├── flow_runs.rs
+│   ├── flows.rs
+│   ├── health.rs
+│   ├── hedge_fund.rs         # Live SSE streaming controller
+│   └── ollama.rs
+├── services/                 # Business logic and agent runners
+│   ├── agent_service.rs      # Dispatches calls to individual analysts
+│   ├── backtest_service.rs   # Co-ordinates multi-day backtests
+│   ├── graph.rs              # Executes React Flow visual workflows
+│   └── portfolio.rs          # Portfolio valuation and metrics helpers
+├── main.rs                   # App entry point and HTTP server listener
+└── mod.rs                    # Module coordinator
 ```
 
 ## Disclaimer
@@ -107,5 +115,3 @@ This project is for **educational and research purposes only**.
 - No warranties or guarantees provided
 - Creator assumes no liability for financial losses
 - Consult a financial advisor for investment decisions
-
-By using this software, you agree to use it solely for learning purposes.

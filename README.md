@@ -1,8 +1,11 @@
-# AI Hedge Fund
+# AI Hedge Fund (100% Native Rust Port)
 
-This is a proof of concept for an AI-powered hedge fund.  The goal of this project is to explore the use of AI to make trading decisions.  This project is for **educational** purposes only and is not intended for real trading or investment.
+> [!NOTE]
+> **Upstream Credit:** This project is a complete high-performance, 100% native Rust port of the original Python-based [virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fund) repository. All credit for the brilliant agentic design, collaborative trading workflows, and educational framework goes to the original upstream repository.
 
-This system employs several agents working together:
+This is a proof of concept for an AI-powered hedge fund. The goal of this project is to explore the use of AI to make trading decisions. This project is for **educational** purposes only and is not intended for real trading or investment.
+
+This system employs several high-performance agents working in parallel:
 
 1. Aswath Damodaran Agent - The Dean of Valuation, focuses on story, numbers, and disciplined valuation
 2. Ben Graham Agent - The godfather of value investing, only buys hidden gems with a margin of safety
@@ -28,8 +31,6 @@ This system employs several agents working together:
 
 Note: the system does not actually make any trades.
 
-[![Twitter Follow](https://img.shields.io/twitter/follow/virattt?style=social)](https://twitter.com/virattt)
-
 ## Disclaimer
 
 This project is for **educational and research purposes only**.
@@ -47,19 +48,20 @@ By using this software, you agree to use it solely for learning purposes.
 - [How to Run](#how-to-run)
   - [⌨️ Command Line Interface](#️-command-line-interface)
   - [🖥️ Web Application](#️-web-application)
+  - [📊 V2 Quantitative Engine](#-v2-quantitative-engine)
+- [Verification & Testing](#verification--testing)
 - [How to Contribute](#how-to-contribute)
-- [Feature Requests](#feature-requests)
 - [License](#license)
 
 ## How to Install
 
-Before you can run the AI Hedge Fund, you'll need to install it and set up your API keys. These steps are common to both the full-stack web application and command line interface.
+Before you can run the AI Hedge Fund, you'll need to set up your environment and API keys.
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/virattt/ai-hedge-fund.git
-cd ai-hedge-fund
+git clone https://github.com/wheregmis/open-hedge.git
+cd open-hedge
 ```
 
 ### 2. Set up API keys
@@ -85,74 +87,74 @@ FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 
 ### ⌨️ Command Line Interface
 
-You can run the AI Hedge Fund directly via terminal. This approach offers more granular control and is useful for automation, scripting, and integration purposes.
+You can run the AI Hedge Fund directly via the terminal. The native Rust orchestrator parses standard arguments and executes the full parallel agent workflow in seconds.
 
 <img width="992" alt="Screenshot 2025-01-06 at 5 50 17 PM" src="https://github.com/user-attachments/assets/e8ca04bf-9989-4a7d-a8b4-34e04666663b" />
 
-#### Quick Start
-
-1. Install Poetry (if not already installed):
+#### Run the AI Hedge Fund (Rust CLI Orchestrator)
 ```bash
-curl -sSL https://install.python-poetry.org | python3 -
-```
-
-2. Install dependencies:
-```bash
-poetry install
-```
-
-#### Run the AI Hedge Fund
-```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA
+cargo run --bin ai-hedge-fund -- --ticker AAPL,MSFT,NVDA
 ```
 
 You can also specify a `--ollama` flag to run the AI hedge fund using local LLMs.
-
 ```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --ollama
+cargo run --bin ai-hedge-fund -- --ticker AAPL,MSFT,NVDA --ollama
 ```
 
-You can optionally specify the start and end dates to make decisions over a specific time period.
-
+You can optionally specify the start and end dates to make decisions over a specific time period:
 ```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
+cargo run --bin ai-hedge-fund -- --ticker AAPL,MSFT,NVDA --start-date 2026-01-01 --end-date 2026-02-01
 ```
 
-#### Run the Backtester
+#### Run the Backtester CLI
 ```bash
-poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
+cargo run --bin backtester -- --ticker AAPL,MSFT,NVDA --start-date 2026-01-01 --end-date 2026-02-01
 ```
 
-**Example Output:**
-<img width="941" alt="Screenshot 2025-01-06 at 5 47 52 PM" src="https://github.com/user-attachments/assets/00e794ea-8628-44e6-9a84-8f8a31ad3b47" />
-
-
-Note: The `--ollama`, `--start-date`, and `--end-date` flags work for the backtester, as well!
-
-### 🦀 Rust Core (Alternative High-Performance Version)
-
-For maximum execution performance and memory safety, we have ported the core parallel hedge fund orchestrator and backtesting simulator to native **Rust**. Both versions run the identical investment workflows and share state schemas.
-
-#### 1. Run the AI Hedge Fund (Rust)
-```bash
-cargo run --bin ai-hedge-fund
-```
-
-#### 2. Run the Backtester (Rust)
-```bash
-cargo run --bin backtester -- --tickers AAPL,MSFT --start-date 2026-01-01 --end-date 2026-02-01
-```
-
-*(Note: Use standard double dashes `--` to pass command-line options directly to the Rust binary. All Python CLI arguments—such as `--tickers`, `--start-date`, `--end-date`, `--ollama`, etc.—are fully supported by the Rust clap parser!)*
+*(Note: Use standard double dashes `--` to pass command-line options directly to the Rust binary. All CLI arguments—such as `--ticker`, `--start-date`, `--end-date`, `--ollama`, etc.—are fully supported by the Rust clap parser!)*
 
 ### 🖥️ Web Application
 
-The new way to run the AI Hedge Fund is through our web application that provides a user-friendly interface. This is recommended for users who prefer visual interfaces over command line tools.
-
-Please see detailed instructions on how to install and run the web application [here](https://github.com/virattt/ai-hedge-fund/tree/main/app).
+The high-performance interactive web dashboard provides a user-friendly interface to manage and backtest your funds.
 
 <img width="1721" alt="Screenshot 2025-06-28 at 6 41 03 PM" src="https://github.com/user-attachments/assets/b95ab696-c9f4-416c-9ad1-51feb1f5374b" />
 
+#### 1. Start the Axum Web Server (Backend API)
+```bash
+cargo run --bin app-backend
+```
+*This starts the Axum 0.7 web server on `http://localhost:8000`. It automatically handles SQLite migrations on first boot and sets up CORS for the frontend.*
+
+#### 2. Start the Vite React Frontend
+```bash
+cd app/frontend
+npm install
+npm run dev
+```
+*This launches the React dashboard at `http://localhost:5173`. You can now visually build agent graphs and stream daily simulation runs in real-time!*
+
+### 📊 V2 Quantitative Engine
+
+The V2 engine represents a principled quantitative trading architecture built from the ground up in native Rust, replacing famous investor personalities with robust statistical estimation pipelines.
+
+#### 1. Run the Earnings announcement Event Study Tool
+Estimate Cumulative Abnormal Returns (CARs), market model OLS regressions, and bootstrap significance statistics:
+```bash
+cargo run --bin v2-event-study
+```
+
+#### 2. Run the V2 backtesting runner
+```bash
+cargo run --bin v2-backtesting
+```
+
+## Verification & Testing
+
+Verify the mathematical precision and memory safety of the entire Rust codebase by executing the native test suite:
+```bash
+cargo test
+```
+*Runs all 42 unit and integration test cases covering cash management, short-covering calculations, stats approximations, technical signals, and caching layers.*
 
 ## How to Contribute
 
@@ -161,12 +163,6 @@ Please see detailed instructions on how to install and run the web application [
 3. Commit your changes
 4. Push to the branch
 5. Create a Pull Request
-
-**Important**: Please keep your pull requests small and focused.  This will make it easier to review and merge.
-
-## Feature Requests
-
-If you have a feature request, please open an [issue](https://github.com/virattt/ai-hedge-fund/issues) and make sure it is tagged with `enhancement`.
 
 ## License
 
