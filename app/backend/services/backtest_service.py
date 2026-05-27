@@ -14,6 +14,7 @@ from src.tools.api import (
 )
 from app.backend.services.graph import run_graph_async, parse_hedge_fund_response
 from app.backend.services.portfolio import create_portfolio
+from src.llm.models import DEFAULT_MODEL_NAME
 
 class BacktestService:
     """
@@ -29,7 +30,7 @@ class BacktestService:
         start_date: str,
         end_date: str,
         initial_capital: float,
-        model_name: str = "gpt-4.1",
+        model_name: str = DEFAULT_MODEL_NAME,
         model_provider: str = "OpenAI",
         request: dict = {},
     ):

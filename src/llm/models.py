@@ -105,6 +105,9 @@ ollama_models_json_path = current_dir / "ollama_models.json"
 # Load available models from JSON
 AVAILABLE_MODELS = load_models_from_json(str(models_json_path))
 
+# Keep fallback defaults aligned with the checked-in model registry.
+DEFAULT_MODEL_NAME = "gpt-5.5"
+
 # Load Ollama models from JSON
 OLLAMA_MODELS = load_models_from_json(str(ollama_models_json_path))
 
