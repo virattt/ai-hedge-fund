@@ -140,6 +140,26 @@ def get_models_list():
 
 
 def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | None:
+    # Normalize model_provider if it's a string or case-mismatched
+    provider_str = model_provider.value if hasattr(model_provider, 'value') else str(model_provider)
+    for p in ModelProvider:
+        if p.value.lower() == provider_str.lower() or p.name.lower() == provider_str.lower():
+            model_provider = p
+            break
+
+    # Coerce provider/model if OpenAI is chosen with a placeholder/empty key and valid OpenRouter key is present
+    if model_provider == ModelProvider.OPENAI:
+        openai_key = (api_keys or {}).get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+        openrouter_key = (api_keys or {}).get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")
+        
+        has_openai = openai_key and not openai_key.strip().lower().startswith("your-")
+        has_openrouter = openrouter_key and not openrouter_key.strip().lower().startswith("your-")
+        
+        if not has_openai and has_openrouter:
+            model_provider = ModelProvider.OPENROUTER
+            if model_name in ["gpt-4", "gpt-5.5", "gpt-4o", "gpt-4.1"]:
+                model_name = "openai/gpt-4o"
+
     if model_provider == ModelProvider.GROQ:
         api_key = (api_keys or {}).get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
         if not api_key:

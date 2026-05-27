@@ -1,6 +1,7 @@
 """Helper functions for LLM"""
 
 import json
+import os
 from pydantic import BaseModel
 from src.llm.models import get_model, get_model_info
 from src.utils.progress import progress
@@ -44,6 +45,20 @@ def call_llm(
         request = state.get("metadata", {}).get("request")
         if request and hasattr(request, 'api_keys'):
             api_keys = request.api_keys
+
+    # Coerce provider/model if OpenAI is chosen with a placeholder/empty key and valid OpenRouter key is present
+    provider_str = model_provider.value if hasattr(model_provider, 'value') else str(model_provider)
+    if provider_str.upper() == "OPENAI":
+        openai_key = (api_keys or {}).get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+        openrouter_key = (api_keys or {}).get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")
+        
+        has_openai = openai_key and not openai_key.strip().lower().startswith("your-")
+        has_openrouter = openrouter_key and not openrouter_key.strip().lower().startswith("your-")
+        
+        if not has_openai and has_openrouter:
+            model_provider = "OpenRouter"
+            if model_name in ["gpt-4", "gpt-5.5", "gpt-4o", "gpt-4.1"]:
+                model_name = "openai/gpt-4o"
 
     model_info = get_model_info(model_name, model_provider)
     llm = get_model(model_name, model_provider, api_keys)
@@ -171,15 +186,37 @@ def get_agent_model_config(state, agent_name):
         # Get agent-specific model configuration
         model_name, model_provider = request.get_agent_model_config(agent_name)
         # Ensure we have valid values
-        if model_name and model_provider:
-            return model_name, model_provider.value if hasattr(model_provider, 'value') else str(model_provider)
-    
-    # Fall back to global configuration (system defaults)
-    model_name = state.get("metadata", {}).get("model_name") or "gpt-4.1"
-    model_provider = state.get("metadata", {}).get("model_provider") or "OPENAI"
+        if not model_name or not model_provider:
+            model_name = "gpt-4.1"
+            model_provider = "OPENAI"
+    else:
+        # Fall back to global configuration (system defaults)
+        model_name = state.get("metadata", {}).get("model_name") or "gpt-4.1"
+        model_provider = state.get("metadata", {}).get("model_provider") or "OPENAI"
     
     # Convert enum to string if necessary
     if hasattr(model_provider, 'value'):
         model_provider = model_provider.value
+    else:
+        model_provider = str(model_provider)
+    
+    # Coerce provider/model if OpenAI is chosen with a placeholder/empty key and valid OpenRouter key is present
+    if model_provider.upper() == "OPENAI":
+        api_keys = None
+        if state:
+            request = state.get("metadata", {}).get("request")
+            if request and hasattr(request, 'api_keys'):
+                api_keys = request.api_keys
+        
+        openai_key = (api_keys or {}).get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+        openrouter_key = (api_keys or {}).get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")
+        
+        has_openai = openai_key and not openai_key.strip().lower().startswith("your-")
+        has_openrouter = openrouter_key and not openrouter_key.strip().lower().startswith("your-")
+        
+        if not has_openai and has_openrouter:
+            model_provider = "OpenRouter"
+            if model_name in ["gpt-4", "gpt-5.5", "gpt-4o", "gpt-4.1"]:
+                model_name = "openai/gpt-4o"
     
     return model_name, model_provider
