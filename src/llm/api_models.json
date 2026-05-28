@@ -20,8 +20,8 @@
     "provider": "Kimi"
   },
   {
-    "display_name": "Claude Opus 4.7",
-    "model_name": "claude-opus-4-7",
+    "display_name": "Claude Opus 4.8",
+    "model_name": "claude-opus-4-8",
     "provider": "Anthropic"
   },
   {
