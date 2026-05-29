@@ -20,7 +20,10 @@ tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
 sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "sqlite", "json", "chrono"] }
 tokio-stream = "0.1"
 futures-util = "0.3"
-yahoo-finance-rs = "0.1.2"
+yfinance = { package = "yfinance-rs", version = "0.7" }
+rust_decimal = "1"
+paft = "0.7"
+paft-domain = "0.7"
 base64 = "0.22"
 sha2 = "0.10"
 rand = "0.8"

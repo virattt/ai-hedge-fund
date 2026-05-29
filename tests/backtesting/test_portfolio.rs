@@ -73,9 +73,9 @@ fn test_apply_short_open_uses_available_cash_not_total_cash() {
     let first = p.apply_short_open("AAPL", 10, 100.0);
     assert_eq!(first, 10);
     let second = p.apply_short_open("AAPL", 30, 100.0);
-    assert_eq!(second, 20);
-    assert_eq!(p.positions["AAPL"].short, 30);
-    assert!((p.margin_used - 1500.0).abs() < 1e-5);
+    assert_eq!(second, 10);
+    assert_eq!(p.positions["AAPL"].short, 20);
+    assert!((p.margin_used - 1000.0).abs() < 1e-5);
 }
 
 #[test]

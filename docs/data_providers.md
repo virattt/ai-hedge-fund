@@ -1,6 +1,6 @@
 # Financial Data Providers
 
-Open Hedge fetches prices, fundamentals, news, and related inputs through a pluggable data layer. You can run the simulator **without** a [Financial Datasets](https://financialdatasets.ai/) API key by using the free **Yahoo Finance** integration ([`yahoo-finance-rs`](https://crates.io/crates/yahoo-finance-rs)).
+Open Hedge fetches prices, fundamentals, news, and related inputs through a pluggable data layer. You can run the simulator **without** a [Financial Datasets](https://financialdatasets.ai/) API key by using the free **Yahoo Finance** integration via the modern, feature-rich [`yfinance-rs`](https://github.com/gramistella/yfinance-rs) library.
 
 For endpoint-level differences, fallbacks, and backtest caveats, see [Yahoo Finance vs. Financial Datasets — Capabilities and Limitations](yahoo_finance_limitations.md).
 
