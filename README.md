@@ -123,7 +123,7 @@ Accepted values: `yahoo-finance`, `financial-datasets` (underscore variants also
 
 ### Premium data (Financial Datasets)
 
-Set a real key from [financialdatasets.ai](https://financialdatasets.ai/) in `.env` to unlock fuller fundamentals, insider trades, and news sentiment. Yahoo Finance covers daily prices and basic fundamentals with **derived fallbacks** for missing metrics; insider activity is empty on the Yahoo path so related agents stay neutral.
+Set a real key from [financialdatasets.ai](https://financialdatasets.ai/) in `.env` to unlock fuller fundamentals, insider trades, and news sentiment. Yahoo Finance covers daily prices, fundamentals, news, and insider transactions (via the modern `yfinance-rs`) with **derived fallbacks** for missing fields.
 
 **Further reading:** [docs/data_providers.md](docs/data_providers.md) (setup and resolution) · [docs/yahoo_finance_limitations.md](docs/yahoo_finance_limitations.md) (feature matrix and backtest caveats).
 
@@ -166,7 +166,7 @@ cargo run --bin ai-hedge-fund -- --ticker AAPL,MSFT,NVDA --start-date 2026-01-01
 
 #### Run the Backtester CLI
 ```bash
-cargo run --bin backtester -- --ticker AAPL,MSFT,NVDA --start-date 2026-01-01 --end-date 2026-02-01
+cargo run --bin backtester -- --tickers AAPL,MSFT,NVDA --start-date 2026-01-01 --end-date 2026-02-01
 ```
 
 *(Note: Use standard double dashes `--` to pass command-line options directly to the Rust binary. The backtester supports `--ticker`, `--start-date`, `--end-date`, `--data-provider`, `--ollama`, and related flags via the shared clap parser.)*

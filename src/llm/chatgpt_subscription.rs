@@ -9,8 +9,6 @@ use rand::RngCore;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-#[cfg(test)]
-use std::net::TcpListener as StdTcpListener;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(test)]
@@ -993,26 +991,23 @@ mod tests {
 
     #[tokio::test]
     async fn refresh_token_success_updates_credentials() {
-        let listener = StdTcpListener::bind("127.0.0.1:0").unwrap();
-        let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let token_url = format!("http://{}/oauth/token", listener.local_addr().unwrap());
         let path = std::env::temp_dir().join(format!(
             "open-hedge-codex-auth-refresh-ok-{}.json",
             std::process::id()
         ));
 
-        {
-            let _guard = env_test_guard();
-            std::env::set_var("OPEN_HEDGE_CODEX_TOKEN_URL", &token_url);
-            std::env::set_var("OPEN_HEDGE_CODEX_AUTH_PATH", &path);
-            set_test_credentials(Some(CodexCredentials {
-                access_token: "old".into(),
-                refresh_token: "refresh".into(),
-                expires_at_ms: 0,
-                account_id: None,
-                email: None,
-            }));
-        }
+        let _guard = env_test_guard();
+        std::env::set_var("OPEN_HEDGE_CODEX_TOKEN_URL", &token_url);
+        std::env::set_var("OPEN_HEDGE_CODEX_AUTH_PATH", &path);
+        set_test_credentials(Some(CodexCredentials {
+            access_token: "old".into(),
+            refresh_token: "refresh".into(),
+            expires_at_ms: 0,
+            account_id: None,
+            email: None,
+        }));
 
         tokio::spawn(async move {
             if let Ok((mut stream, _)) = listener.accept().await {
@@ -1043,34 +1038,31 @@ mod tests {
 
     #[tokio::test]
     async fn fatal_refresh_clears_credentials() {
-        let listener = StdTcpListener::bind("127.0.0.1:0").unwrap();
-        let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let token_url = format!("http://{}/oauth/token", listener.local_addr().unwrap());
         let path = std::env::temp_dir().join(format!(
             "open-hedge-codex-auth-refresh-fatal-{}.json",
             std::process::id()
         ));
 
-        {
-            let _guard = env_test_guard();
-            std::env::set_var("OPEN_HEDGE_CODEX_TOKEN_URL", &token_url);
-            std::env::set_var("OPEN_HEDGE_CODEX_AUTH_PATH", &path);
-            write_credentials_to_file(&CodexCredentials {
-                access_token: "old".into(),
-                refresh_token: "refresh".into(),
-                expires_at_ms: 0,
-                account_id: None,
-                email: None,
-            })
-            .unwrap();
-            set_test_credentials(Some(CodexCredentials {
-                access_token: "old".into(),
-                refresh_token: "refresh".into(),
-                expires_at_ms: 0,
-                account_id: None,
-                email: None,
-            }));
-        }
+        let _guard = env_test_guard();
+        std::env::set_var("OPEN_HEDGE_CODEX_TOKEN_URL", &token_url);
+        std::env::set_var("OPEN_HEDGE_CODEX_AUTH_PATH", &path);
+        write_credentials_to_file(&CodexCredentials {
+            access_token: "old".into(),
+            refresh_token: "refresh".into(),
+            expires_at_ms: 0,
+            account_id: None,
+            email: None,
+        })
+        .unwrap();
+        set_test_credentials(Some(CodexCredentials {
+            access_token: "old".into(),
+            refresh_token: "refresh".into(),
+            expires_at_ms: 0,
+            account_id: None,
+            email: None,
+        }));
 
         tokio::spawn(async move {
             if let Ok((mut stream, _)) = listener.accept().await {

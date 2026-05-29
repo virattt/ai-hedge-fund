@@ -6,7 +6,8 @@ use anyhow::{Context, Result};
 use chrono::{NaiveDate, TimeZone, Utc};
 use std::env;
 use std::time::Duration;
-use yfinance::{Interval, Ticker, YfClient};
+use rust_decimal::prelude::ToPrimitive;
+use yfinance::{HistoryBuilder, Interval, Ticker, YfClient};
 
 use crate::data::cache::get_cache;
 use crate::data::models::{
@@ -151,28 +152,27 @@ pub async fn get_prices_yfinance(
             .context("Invalid end timestamp")?
             .timestamp();
 
-        let client = YfClient::new().context("Failed to create Yahoo Finance client")?;
-        let ticker_obj = Ticker::new(&client, ticker);
-        let history = ticker_obj
-            .history()
+        let client = YfClient::default();
+        let history = HistoryBuilder::new(&client, ticker)
             .interval(Interval::D1)
-            .start(start_ts)
-            .end(end_ts)
+            .between(
+                chrono::DateTime::<Utc>::from_timestamp(start_ts, 0).context("Invalid start timestamp")?,
+                chrono::DateTime::<Utc>::from_timestamp(end_ts, 0).context("Invalid end timestamp")?,
+            )
             .auto_adjust(true)
             .fetch()
             .await
             .with_context(|| format!("Failed to fetch Yahoo Finance history for {}", ticker))?;
 
         let prices: Vec<Price> = history
-            .rows_local_date()
             .into_iter()
-            .map(|(date, row)| Price {
-                open: row.open,
-                close: row.close,
-                high: row.high,
-                low: row.low,
-                volume: row.volume as i64,
-                time: date.format("%Y-%m-%d").to_string(),
+            .map(|row| Price {
+                open: row.open.amount().to_f64().unwrap_or(0.0),
+                close: row.close.amount().to_f64().unwrap_or(0.0),
+                high: row.high.amount().to_f64().unwrap_or(0.0),
+                low: row.low.amount().to_f64().unwrap_or(0.0),
+                volume: row.volume.unwrap_or(0) as i64,
+                time: row.ts.date_naive().format("%Y-%m-%d").to_string(),
             })
             .collect();
 
@@ -481,9 +481,9 @@ pub async fn get_market_cap(
 ) -> Result<Option<f64>> {
     match active_provider() {
         DataProvider::YahooFinance => {
-            let client = YfClient::new().context("Failed to create Yahoo Finance client")?;
+            let client = YfClient::default();
             let info = Ticker::new(&client, ticker).info().await?;
-            Ok(info.market_cap.map(|v| v as f64))
+            Ok(info.market_cap.and_then(|v| v.amount().to_f64()))
         }
         DataProvider::FinancialDatasets => {
             let today = chrono::Local::now().format("%Y-%m-%d").to_string();

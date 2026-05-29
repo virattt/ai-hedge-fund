@@ -1,20 +1,42 @@
 //! Yahoo Finance fallbacks for endpoints unavailable on the free provider.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::NaiveDate;
-use yfinance::{
-    earnings::Earnings,
-    fundamentals::{Fundamentals, FundamentalsKind},
-    holders::InsiderTransaction,
-    news::NewsTab,
-    Ticker, YfClient,
-};
+use yfinance::{Ticker, YfClient};
+use paft::fundamentals::analysis::Earnings;
+use paft::fundamentals::statements::{BalanceSheetRow, CashflowRow, IncomeStatementRow};
+use paft::fundamentals::holders::InsiderTransaction;
+use paft_domain::Period;
+use rust_decimal::prelude::ToPrimitive;
 
 use crate::data::models::{CompanyNews, FinancialMetrics, InsiderTrade, LineItem};
 use crate::utils::financial_data::{
     calculate_gross_margin, calculate_net_margin, calculate_shareholders_equity,
-    calculate_working_capital,
 };
+
+fn period_to_date(period: &Period) -> NaiveDate {
+    match period {
+        Period::Date(d) => *d,
+        Period::Quarter { year, quarter } => {
+            let month = match quarter {
+                1 => 3,
+                2 => 6,
+                3 => 9,
+                _ => 12,
+            };
+            let day = match month {
+                4 | 6 | 9 | 11 => 30,
+                2 => 28,
+                _ => 31,
+            };
+            NaiveDate::from_ymd_opt(*year, month, day).unwrap_or_else(|| chrono::Local::now().date_naive())
+        }
+        Period::Year { year } => NaiveDate::from_ymd_opt(*year, 12, 31).unwrap_or_else(|| chrono::Local::now().date_naive()),
+        Period::Other(s) => NaiveDate::parse_from_str(s.as_ref(), "%Y-%m-%d")
+            .unwrap_or_else(|_| chrono::Local::now().date_naive()),
+        _ => chrono::Local::now().date_naive(),
+    }
+}
 
 /// Fetch basic financial metrics from Yahoo quote summary / key statistics.
 pub async fn get_financial_metrics_fallback(
@@ -23,21 +45,41 @@ pub async fn get_financial_metrics_fallback(
     period: &str,
     limit: u32,
 ) -> Result<Vec<FinancialMetrics>> {
-    let client = YfClient::new().context("Failed to create Yahoo Finance client")?;
+    let client = YfClient::default();
     let ticker_obj = Ticker::new(&client, ticker);
     let info = ticker_obj.info().await?;
 
     let quarterly = period == "quarterly" || period == "ttm";
     let effective_limit = effective_fundamentals_limit(limit, quarterly);
-    let income =
-        fetch_fundamentals(&ticker_obj, FundamentalsKind::IncomeStatement, quarterly).await;
-    let balance = fetch_fundamentals(&ticker_obj, FundamentalsKind::BalanceSheet, quarterly).await;
-    let cashflow = fetch_fundamentals(&ticker_obj, FundamentalsKind::CashFlow, quarterly).await;
+
+    let income: Option<Vec<IncomeStatementRow>> = if quarterly {
+        ticker_obj.quarterly_income_stmt(None).await.ok()
+    } else {
+        ticker_obj.income_stmt(None).await.ok()
+    };
+
+    let balance: Option<Vec<BalanceSheetRow>> = if quarterly {
+        ticker_obj.quarterly_balance_sheet(None).await.ok()
+    } else {
+        ticker_obj.balance_sheet(None).await.ok()
+    };
+
+    let cashflow: Option<Vec<CashflowRow>> = if quarterly {
+        ticker_obj.quarterly_cashflow(None).await.ok()
+    } else {
+        ticker_obj.cashflow(None).await.ok()
+    };
 
     let cutoff = NaiveDate::parse_from_str(end_date, "%Y-%m-%d").ok();
-    let mut dates: Vec<NaiveDate> = income.as_ref().map(|f| f.dates()).unwrap_or_default();
+    let mut dates: Vec<NaiveDate> = income
+        .as_ref()
+        .map(|v| v.iter().map(|r| period_to_date(&r.period)).collect())
+        .unwrap_or_default();
     if dates.is_empty() {
-        dates = balance.as_ref().map(|f| f.dates()).unwrap_or_default();
+        dates = balance
+            .as_ref()
+            .map(|v| v.iter().map(|r| period_to_date(&r.period)).collect())
+            .unwrap_or_default();
     }
     if let Some(cutoff_date) = cutoff {
         dates.retain(|d| *d <= cutoff_date);
@@ -51,53 +93,63 @@ pub async fn get_financial_metrics_fallback(
     }
 
     let earnings = if quarterly {
-        ticker_obj.earnings().await.ok()
+        ticker_obj.earnings(None).await.ok()
     } else {
         None
     };
 
+    let currency_str = info
+        .currency
+        .as_ref()
+        .map(|c| c.code().to_string())
+        .unwrap_or_else(|| "USD".to_string());
+
     let mut metrics: Vec<FinancialMetrics> = dates
         .into_iter()
         .map(|date| {
-            let revenue = metric_value(&income, "TotalRevenue", date);
-            let net_income = metric_value(&income, "NetIncome", date);
-            let gross_profit = metric_value(&income, "GrossProfit", date);
-            let operating_income = metric_value(&income, "OperatingIncome", date);
-            let total_assets = metric_value(&balance, "TotalAssets", date);
-            let total_liabilities =
-                metric_value(&balance, "TotalLiabilitiesNetMinorityInterest", date);
-            let shareholders_equity = metric_value(&balance, "StockholdersEquity", date)
+            let inc_row = income.as_ref().and_then(|v| {
+                v.iter().find(|row| period_to_date(&row.period) == date)
+            });
+            let bal_row = balance.as_ref().and_then(|v| {
+                v.iter().find(|row| period_to_date(&row.period) == date)
+            });
+            let cf_row = cashflow.as_ref().and_then(|v| {
+                v.iter().find(|row| period_to_date(&row.period) == date)
+            });
+
+            let revenue = inc_row.and_then(|r| r.total_revenue.as_ref()).and_then(|m| m.amount().to_f64());
+            let net_income = inc_row.and_then(|r| r.net_income.as_ref()).and_then(|m| m.amount().to_f64());
+            let gross_profit = inc_row.and_then(|r| r.gross_profit.as_ref()).and_then(|m| m.amount().to_f64());
+            let operating_income = inc_row.and_then(|r| r.operating_income.as_ref()).and_then(|m| m.amount().to_f64());
+
+            let total_assets = bal_row.and_then(|r| r.total_assets.as_ref()).and_then(|m| m.amount().to_f64());
+            let total_liabilities = bal_row.and_then(|r| r.total_liabilities.as_ref()).and_then(|m| m.amount().to_f64());
+            let shareholders_equity = bal_row.and_then(|r| r.total_equity.as_ref()).and_then(|m| m.amount().to_f64())
                 .or_else(|| calculate_shareholders_equity(total_assets, total_liabilities));
-            let current_assets = metric_value(&balance, "CurrentAssets", date);
-            let current_liabilities = metric_value(&balance, "CurrentLiabilities", date);
-            let outstanding_shares = metric_value(&balance, "OrdinarySharesNumber", date);
-            let free_cash_flow = metric_value(&cashflow, "FreeCashFlow", date);
-            let eps = metric_value(&income, "BasicEPS", date)
-                .or_else(|| metric_value(&income, "DilutedEPS", date))
-                .or_else(|| safe_ratio(net_income, outstanding_shares));
+            let current_assets = None;
+            let current_liabilities = None;
+            let outstanding_shares = bal_row.and_then(|r| r.shares_outstanding).map(|v| v as f64);
+            let free_cash_flow = cf_row.and_then(|r| r.free_cash_flow.as_ref()).and_then(|m| m.amount().to_f64());
+
+            let eps = inc_row
+                .and_then(|r| r.net_income.as_ref())
+                .and_then(|m| m.amount().to_f64())
+                .and_then(|ni| safe_ratio(Some(ni), outstanding_shares));
 
             FinancialMetrics {
                 ticker: ticker.to_string(),
                 report_period: date.format("%Y-%m-%d").to_string(),
                 period: period.to_string(),
-                currency: info.currency.clone().unwrap_or_else(|| "USD".to_string()),
-                market_cap: info.market_cap.map(|v| v as f64),
+                currency: currency_str.clone(),
+                market_cap: info.market_cap.as_ref().and_then(|m| m.amount().to_f64()),
                 enterprise_value: None,
-                price_to_earnings_ratio: info.trailing_pe,
-                price_to_book_ratio: raw_module_f64(
-                    &info.raw,
-                    "defaultKeyStatistics",
-                    "priceToBook",
-                ),
-                price_to_sales_ratio: raw_module_f64(
-                    &info.raw,
-                    "summaryDetail",
-                    "priceToSalesTrailing12Months",
-                ),
+                price_to_earnings_ratio: info.pe_ttm,
+                price_to_book_ratio: None,
+                price_to_sales_ratio: None,
                 enterprise_value_to_ebitda_ratio: None,
                 enterprise_value_to_revenue_ratio: None,
-                free_cash_flow_yield: safe_ratio(free_cash_flow, info.market_cap.map(|v| v as f64)),
-                peg_ratio: raw_module_f64(&info.raw, "defaultKeyStatistics", "pegRatio"),
+                free_cash_flow_yield: safe_ratio(free_cash_flow, info.market_cap.as_ref().and_then(|m| m.amount().to_f64())),
+                peg_ratio: None,
                 gross_margin: calculate_gross_margin(revenue, gross_profit),
                 operating_margin: safe_ratio(operating_income, revenue),
                 net_margin: calculate_net_margin(revenue, net_income),
@@ -115,10 +167,13 @@ pub async fn get_financial_metrics_fallback(
                 cash_ratio: None,
                 operating_cash_flow_ratio: None,
                 debt_to_equity: safe_ratio(
-                    metric_value(&balance, "TotalDebt", date),
+                    bal_row.and_then(|r| r.long_term_debt.as_ref()).and_then(|m| m.amount().to_f64()),
                     shareholders_equity,
                 ),
-                debt_to_assets: safe_ratio(metric_value(&balance, "TotalDebt", date), total_assets),
+                debt_to_assets: safe_ratio(
+                    bal_row.and_then(|r| r.long_term_debt.as_ref()).and_then(|m| m.amount().to_f64()),
+                    total_assets,
+                ),
                 interest_coverage: None,
                 revenue_growth: None,
                 earnings_growth: None,
@@ -128,15 +183,11 @@ pub async fn get_financial_metrics_fallback(
                 operating_income_growth: None,
                 ebitda_growth: None,
                 payout_ratio: None,
-                earnings_per_share: eps.or(info.trailing_eps),
-                book_value_per_share: raw_module_f64(
-                    &info.raw,
-                    "defaultKeyStatistics",
-                    "bookValue",
-                ),
+                earnings_per_share: eps.or_else(|| info.eps_ttm.as_ref().and_then(|m| m.amount().to_f64())),
+                book_value_per_share: None,
                 free_cash_flow_per_share: None,
                 revenue,
-                beta: info.beta,
+                beta: None,
                 operating_income,
                 free_cash_flow,
                 ev_to_ebit: None,
@@ -161,19 +212,38 @@ pub async fn search_line_items_fallback(
     period: &str,
     limit: u32,
 ) -> Result<Vec<LineItem>> {
-    let client = YfClient::new().context("Failed to create Yahoo Finance client")?;
+    let client = YfClient::default();
     let ticker_obj = Ticker::new(&client, ticker);
     let quarterly = period == "quarterly" || period == "ttm";
 
-    let income =
-        fetch_fundamentals(&ticker_obj, FundamentalsKind::IncomeStatement, quarterly).await;
-    let balance = fetch_fundamentals(&ticker_obj, FundamentalsKind::BalanceSheet, quarterly).await;
-    let cashflow = fetch_fundamentals(&ticker_obj, FundamentalsKind::CashFlow, quarterly).await;
+    let income: Option<Vec<IncomeStatementRow>> = if quarterly {
+        ticker_obj.quarterly_income_stmt(None).await.ok()
+    } else {
+        ticker_obj.income_stmt(None).await.ok()
+    };
+
+    let balance: Option<Vec<BalanceSheetRow>> = if quarterly {
+        ticker_obj.quarterly_balance_sheet(None).await.ok()
+    } else {
+        ticker_obj.balance_sheet(None).await.ok()
+    };
+
+    let cashflow: Option<Vec<CashflowRow>> = if quarterly {
+        ticker_obj.quarterly_cashflow(None).await.ok()
+    } else {
+        ticker_obj.cashflow(None).await.ok()
+    };
 
     let cutoff = NaiveDate::parse_from_str(end_date, "%Y-%m-%d").ok();
-    let mut dates: Vec<NaiveDate> = income.as_ref().map(|f| f.dates()).unwrap_or_default();
+    let mut dates: Vec<NaiveDate> = income
+        .as_ref()
+        .map(|v| v.iter().map(|r| period_to_date(&r.period)).collect())
+        .unwrap_or_default();
     if dates.is_empty() {
-        dates = balance.as_ref().map(|f| f.dates()).unwrap_or_default();
+        dates = balance
+            .as_ref()
+            .map(|v| v.iter().map(|r| period_to_date(&r.period)).collect())
+            .unwrap_or_default();
     }
     if let Some(cutoff_date) = cutoff {
         dates.retain(|d| *d <= cutoff_date);
@@ -190,78 +260,72 @@ pub async fn search_line_items_fallback(
     let items: Vec<LineItem> = dates
         .into_iter()
         .map(|date| {
-            let current_assets = metric_value(&balance, "CurrentAssets", date);
-            let current_liabilities = metric_value(&balance, "CurrentLiabilities", date);
-            let total_assets = metric_value(&balance, "TotalAssets", date);
-            let total_liabilities =
-                metric_value(&balance, "TotalLiabilitiesNetMinorityInterest", date);
-            let revenue = metric_value(&income, "TotalRevenue", date);
-            let gross_profit = metric_value(&income, "GrossProfit", date);
-            let net_income = metric_value(&income, "NetIncome", date);
-            let operating_income = metric_value(&income, "OperatingIncome", date);
-            let ebit = metric_value(&income, "EBIT", date);
-            let ebitda = metric_value(&income, "EBITDA", date);
-            let shareholders_equity = metric_value(&balance, "StockholdersEquity", date)
+            let inc_row = income.as_ref().and_then(|v| {
+                v.iter().find(|row| period_to_date(&row.period) == date)
+            });
+            let bal_row = balance.as_ref().and_then(|v| {
+                v.iter().find(|row| period_to_date(&row.period) == date)
+            });
+            let cf_row = cashflow.as_ref().and_then(|v| {
+                v.iter().find(|row| period_to_date(&row.period) == date)
+            });
+
+            let current_assets = None;
+            let current_liabilities = None;
+            let total_assets = bal_row.and_then(|r| r.total_assets.as_ref()).and_then(|m| m.amount().to_f64());
+            let total_liabilities = bal_row.and_then(|r| r.total_liabilities.as_ref()).and_then(|m| m.amount().to_f64());
+            let revenue = inc_row.and_then(|r| r.total_revenue.as_ref()).and_then(|m| m.amount().to_f64());
+            let gross_profit = inc_row.and_then(|r| r.gross_profit.as_ref()).and_then(|m| m.amount().to_f64());
+            let net_income = inc_row.and_then(|r| r.net_income.as_ref()).and_then(|m| m.amount().to_f64());
+            let operating_income = inc_row.and_then(|r| r.operating_income.as_ref()).and_then(|m| m.amount().to_f64());
+            let ebit = None;
+            let ebitda = None;
+            let shareholders_equity = bal_row.and_then(|r| r.total_equity.as_ref()).and_then(|m| m.amount().to_f64())
                 .or_else(|| calculate_shareholders_equity(total_assets, total_liabilities));
-            let outstanding_shares = metric_value(&balance, "OrdinarySharesNumber", date);
-            let working_capital = metric_value(&balance, "WorkingCapital", date)
-                .or_else(|| calculate_working_capital(current_assets, current_liabilities));
+            let outstanding_shares = bal_row.and_then(|r| r.shares_outstanding).map(|v| v as i64);
+            let working_capital = None;
 
             let mut item = LineItem {
                 ticker: ticker.to_string(),
                 report_period: date.format("%Y-%m-%d").to_string(),
                 period: period.to_string(),
                 currency: "USD".to_string(),
-                capital_expenditure: metric_value(&cashflow, "CapitalExpenditure", date),
-                depreciation_and_amortization: metric_value(
-                    &cashflow,
-                    "DepreciationAndAmortization",
-                    date,
-                ),
+                capital_expenditure: cf_row.and_then(|r| r.capital_expenditures.as_ref()).and_then(|m| m.amount().to_f64()),
+                depreciation_and_amortization: None,
                 net_income,
-                outstanding_shares: outstanding_shares.map(|v| v as i64),
+                outstanding_shares,
                 total_assets,
                 total_liabilities,
                 shareholders_equity,
-                dividends_and_other_cash_distributions: metric_value(
-                    &cashflow,
-                    "CashDividendsPaid",
-                    date,
-                ),
-                issuance_or_purchase_of_equity_shares: metric_value(
-                    &cashflow,
-                    "NetCommonStockIssuance",
-                    date,
-                ),
+                dividends_and_other_cash_distributions: None,
+                issuance_or_purchase_of_equity_shares: None,
                 gross_profit,
                 revenue,
-                free_cash_flow: metric_value(&cashflow, "FreeCashFlow", date),
+                free_cash_flow: cf_row.and_then(|r| r.free_cash_flow.as_ref()).and_then(|m| m.amount().to_f64()),
                 working_capital,
-                earnings_per_share: metric_value(&income, "BasicEPS", date)
-                    .or_else(|| metric_value(&income, "DilutedEPS", date)),
+                earnings_per_share: inc_row
+                    .and_then(|r| r.net_income.as_ref())
+                    .and_then(|m| m.amount().to_f64())
+                    .and_then(|ni| safe_ratio(Some(ni), outstanding_shares.map(|v| v as f64))),
                 current_assets,
                 current_liabilities,
                 operating_margin: safe_ratio(operating_income, revenue),
                 return_on_invested_capital: None,
                 gross_margin: calculate_gross_margin(revenue, gross_profit),
-                total_debt: metric_value(&balance, "TotalDebt", date),
-                cash_and_equivalents: metric_value(&balance, "CashAndCashEquivalents", date),
+                total_debt: bal_row.and_then(|r| r.long_term_debt.as_ref()).and_then(|m| m.amount().to_f64()),
+                cash_and_equivalents: bal_row.and_then(|r| r.cash.as_ref()).and_then(|m| m.amount().to_f64()),
                 operating_income,
                 ebit,
                 ebitda,
                 debt_to_equity: safe_ratio(
-                    metric_value(&balance, "TotalDebt", date),
+                    bal_row.and_then(|r| r.long_term_debt.as_ref()).and_then(|m| m.amount().to_f64()),
                     shareholders_equity,
                 ),
-                goodwill_and_intangible_assets: metric_value(
-                    &balance,
-                    "GoodwillAndOtherIntangibleAssets",
-                    date,
-                ),
-                operating_expense: metric_value(&income, "OperatingExpense", date),
-                research_and_development: metric_value(&income, "ResearchAndDevelopment", date),
-                interest_expense: metric_value(&income, "InterestExpense", date),
-                book_value_per_share: book_value_per_share(shareholders_equity, outstanding_shares),
+                goodwill_and_intangible_assets: None,
+                operating_expense: None,
+                research_and_development: None,
+                interest_expense: None,
+                book_value_per_share: book_value_per_share(shareholders_equity, outstanding_shares.map(|v| v as f64)),
             };
 
             // Only populate fields explicitly requested (others remain as computed above).
@@ -283,15 +347,14 @@ pub async fn get_insider_trades_fallback(
     start_date: Option<&str>,
     limit: u32,
 ) -> Result<Vec<InsiderTrade>> {
-    let client = YfClient::new().context("Failed to create Yahoo Finance client")?;
+    let client = YfClient::default();
     let ticker_obj = Ticker::new(&client, ticker);
-    let holders = ticker_obj.holders().await?;
+    let trades_list = ticker_obj.insider_transactions().await?;
 
     let end_dt = NaiveDate::parse_from_str(end_date, "%Y-%m-%d").ok();
     let start_dt = start_date.and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
 
-    let mut trades: Vec<InsiderTrade> = holders
-        .insider_transactions
+    let mut trades: Vec<InsiderTrade> = trades_list
         .into_iter()
         .filter_map(|tx| map_insider_transaction(ticker, &tx))
         .filter(|trade| insider_trade_in_range(trade, end_dt, start_dt))
@@ -310,14 +373,9 @@ pub async fn get_company_news_fallback(
     start_date: Option<&str>,
     limit: u32,
 ) -> Result<Vec<CompanyNews>> {
-    let client = YfClient::new().context("Failed to create Yahoo Finance client")?;
+    let client = YfClient::default();
     let ticker_obj = Ticker::new(&client, ticker);
-    let articles = ticker_obj
-        .news()
-        .count(limit)
-        .tab(NewsTab::LatestNews)
-        .fetch()
-        .await?;
+    let articles = ticker_obj.news().await?;
 
     let end_dt = NaiveDate::parse_from_str(end_date, "%Y-%m-%d").ok();
     let start_dt = start_date.and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
@@ -325,9 +383,7 @@ pub async fn get_company_news_fallback(
     let news: Vec<CompanyNews> = articles
         .into_iter()
         .filter_map(|article| {
-            let date = article
-                .published_at
-                .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0).map(|dt| dt.date_naive()))?;
+            let date = article.published_at.date_naive();
 
             if let Some(end) = end_dt {
                 if date > end {
@@ -372,12 +428,12 @@ fn supplement_metrics_from_earnings(metrics: &mut [FinancialMetrics], earnings: 
     for (i, metric) in metrics.iter_mut().enumerate() {
         if metric.revenue.is_none() {
             if let Some(q) = earnings.quarterly.get(i) {
-                metric.revenue = q.revenue;
+                metric.revenue = q.revenue.as_ref().and_then(|m| m.amount().to_f64());
             }
         }
         if metric.earnings_per_share.is_none() {
-            if let Some(e) = earnings.eps_quarterly.get(i) {
-                metric.earnings_per_share = e.actual;
+            if let Some(e) = earnings.quarterly_eps.get(i) {
+                metric.earnings_per_share = e.actual.as_ref().and_then(|m| m.amount().to_f64());
             }
         }
     }
@@ -388,21 +444,16 @@ fn book_value_per_share(equity: Option<f64>, shares: Option<f64>) -> Option<f64>
 }
 
 fn map_insider_transaction(ticker: &str, tx: &InsiderTransaction) -> Option<InsiderTrade> {
-    let filing_date = tx.start_date.clone().unwrap_or_else(|| {
-        chrono::Local::now()
-            .date_naive()
-            .format("%Y-%m-%d")
-            .to_string()
-    });
-    let transaction_date = tx.start_date.clone();
-    let shares = signed_transaction_shares(tx.shares, tx.transaction.as_deref())?;
-    let value = tx.value.map(|v| v as f64);
+    let filing_date = tx.transaction_date.format("%Y-%m-%d").to_string();
+    let transaction_date = Some(tx.transaction_date.format("%Y-%m-%d").to_string());
+    let shares = signed_transaction_shares(tx.shares, Some(&tx.transaction_type.to_string()))?;
+    let value = tx.value.as_ref().and_then(|v| v.amount().to_f64());
 
     Some(InsiderTrade {
         ticker: ticker.to_string(),
         issuer: None,
-        name: Some(tx.name.clone()),
-        title: tx.relation.clone(),
+        name: Some(tx.insider.clone()),
+        title: Some(tx.position.to_string()),
         is_board_director: None,
         transaction_date,
         transaction_shares: Some(shares),
@@ -410,7 +461,7 @@ fn map_insider_transaction(ticker: &str, tx: &InsiderTransaction) -> Option<Insi
         transaction_value: value,
         shares_owned_before_transaction: None,
         shares_owned_after_transaction: None,
-        security_title: tx.ownership.clone(),
+        security_title: None,
         filing_date,
     })
 }
@@ -469,25 +520,6 @@ fn parse_insider_date(s: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(day, "%Y-%m-%d").ok()
 }
 
-fn metric_value(fundamentals: &Option<Fundamentals>, metric: &str, date: NaiveDate) -> Option<f64> {
-    fundamentals.as_ref()?.value(metric, date)
-}
-
-async fn fetch_fundamentals(
-    ticker: &Ticker,
-    kind: FundamentalsKind,
-    quarterly: bool,
-) -> Option<Fundamentals> {
-    match kind {
-        FundamentalsKind::IncomeStatement if quarterly => ticker.quarterly_income_stmt().await.ok(),
-        FundamentalsKind::IncomeStatement => ticker.income_stmt().await.ok(),
-        FundamentalsKind::BalanceSheet if quarterly => ticker.quarterly_balance_sheet().await.ok(),
-        FundamentalsKind::BalanceSheet => ticker.balance_sheet().await.ok(),
-        FundamentalsKind::CashFlow if quarterly => ticker.quarterly_cashflow().await.ok(),
-        FundamentalsKind::CashFlow => ticker.cashflow().await.ok(),
-    }
-}
-
 fn safe_ratio(numerator: Option<f64>, denominator: Option<f64>) -> Option<f64> {
     match (numerator, denominator) {
         (Some(n), Some(d)) if d.abs() > f64::EPSILON => Some(n / d),
@@ -541,20 +573,6 @@ pub fn enrich_derived_growth(metrics: &mut [FinancialMetrics]) {
         metrics[i].operating_income_growth =
             compute_growth_rate(metrics[i].operating_income, prior_oi);
     }
-}
-
-fn raw_module_f64(
-    raw: &serde_json::Map<String, serde_json::Value>,
-    module: &str,
-    key: &str,
-) -> Option<f64> {
-    raw.get(module).and_then(|m| m.get(key)).and_then(|v| {
-        if let Some(obj) = v.as_object() {
-            obj.get("raw").and_then(|r| r.as_f64())
-        } else {
-            v.as_f64()
-        }
-    })
 }
 
 fn filter_line_item_fields(item: &mut LineItem, requested: &[String]) {

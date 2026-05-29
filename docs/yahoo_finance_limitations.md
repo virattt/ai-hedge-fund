@@ -1,6 +1,6 @@
 # Yahoo Finance vs. Financial Datasets API — Capabilities and Limitations
 
-This document maps differences between the premium **Financial Datasets API** ([financialdatasets.ai](https://financialdatasets.ai/)) and the free **Yahoo Finance** integration via [`yahoo-finance-rs`](https://crates.io/crates/yahoo-finance-rs) (Rust crate name; imported as `yfinance`). It explains how **Open Hedge** handles gaps using derived metrics, Yahoo modules, and safe defaults.
+This document maps differences between the premium **Financial Datasets API** ([financialdatasets.ai](https://financialdatasets.ai/)) and the free **Yahoo Finance** integration via the modern [`yfinance-rs`](https://github.com/gramistella/yfinance-rs) library (Rust crate name; imported as `yfinance`). It explains how **Open Hedge** handles gaps using derived metrics, Yahoo modules, and safe defaults.
 
 **Related:** [Financial Data Providers](data_providers.md) (defaults, CLI `--data-provider`, environment variables).
 
@@ -8,7 +8,7 @@ This document maps differences between the premium **Financial Datasets API** ([
 
 ## 1. Capability matrix (yfinance-style API vs Open Hedge)
 
-The Python `yfinance` surface is largely mirrored by `yahoo-finance-rs`. The table below lists **gaps for agents/backtests**, not every method the crate exposes.
+The Python `yfinance` surface is largely mirrored by `yfinance-rs`. The table below lists **gaps for agents/backtests**, not every method the crate exposes.
 
 | Limitation | Current workaround | Yahoo endpoint / crate method | Priority |
 | :--- | :--- | :--- | :--- |
@@ -73,7 +73,7 @@ When SEC line items are missing:
 
 ## 5. Crate coverage reference (not all used by Open Hedge)
 
-| yfinance-style API | `yahoo-finance-rs` | Used in Open Hedge |
+| yfinance-style API | `yfinance-rs` | Used in Open Hedge |
 | :--- | :---: | :---: |
 | `history()` | Yes | Yes |
 | `quote()` / `fast_info()` | Yes | Partial (`info`) |
