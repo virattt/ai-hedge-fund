@@ -1,0 +1,21 @@
+# AI Hedge Fund Web Application
+# Usage: docker compose up --build
+services:
+  web-app:
+    build:
+      context: ..
+      dockerfile: app/Dockerfile
+    image: ai-hedge-fund-web
+    container_name: ai-hedge-fund-web
+    volumes:
+      - ../.env:/app/.env
+    ports:
+      - "8000:8000"   # FastAPI backend
+      - "5173:5173"   # Vite frontend
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PYTHONPATH: /app
+      # Frontend uses this to connect to backend inside container
+      VITE_API_URL: http://localhost:8000
+    tty: true
+    stdin_open: true
