@@ -27,6 +27,13 @@ class TestMiniMaxProviderEnum:
 class TestMiniMaxModelConfig:
     """Test MiniMax model configuration in api_models.json."""
 
+    def test_minimax_m3_in_available_models(self):
+        model = find_model_by_name("MiniMax-M3")
+        assert model is not None
+        assert model.display_name == "MiniMax M3"
+        assert model.model_name == "MiniMax-M3"
+        assert model.provider == ModelProvider.MINIMAX
+
     def test_minimax_m27_in_available_models(self):
         model = find_model_by_name("MiniMax-M2.7")
         assert model is not None
@@ -41,29 +48,27 @@ class TestMiniMaxModelConfig:
         assert model.model_name == "MiniMax-M2.7-highspeed"
         assert model.provider == ModelProvider.MINIMAX
 
-    def test_minimax_m27_is_default(self):
-        """M2.7 should appear before M2.5 in the model list."""
+    def test_minimax_m3_is_default(self):
+        """M3 should appear first among MiniMax models."""
         minimax_models = [m for m in AVAILABLE_MODELS if m.provider == ModelProvider.MINIMAX]
-        assert len(minimax_models) >= 2
-        assert minimax_models[0].model_name == "MiniMax-M2.7"
-        assert minimax_models[1].model_name == "MiniMax-M2.7-highspeed"
+        assert len(minimax_models) >= 3
+        assert minimax_models[0].model_name == "MiniMax-M3"
+        assert minimax_models[1].model_name == "MiniMax-M2.7"
+        assert minimax_models[2].model_name == "MiniMax-M2.7-highspeed"
 
-    def test_minimax_m25_in_available_models(self):
-        model = find_model_by_name("MiniMax-M2.5")
-        assert model is not None
-        assert model.display_name == "MiniMax M2.5"
-        assert model.model_name == "MiniMax-M2.5"
-        assert model.provider == ModelProvider.MINIMAX
-
-    def test_minimax_m25_highspeed_in_available_models(self):
-        model = find_model_by_name("MiniMax-M2.5-highspeed")
-        assert model is not None
-        assert model.display_name == "MiniMax M2.5 High Speed"
-        assert model.model_name == "MiniMax-M2.5-highspeed"
-        assert model.provider == ModelProvider.MINIMAX
+    def test_minimax_older_models_removed(self):
+        """Older M2.5/M2.1/M2/M1 models should no longer be present."""
+        for old_model in (
+            "MiniMax-M2.5",
+            "MiniMax-M2.5-highspeed",
+            "MiniMax-M2.1",
+            "MiniMax-M2",
+            "MiniMax-M1",
+        ):
+            assert find_model_by_name(old_model) is None
 
     def test_get_model_info_minimax(self):
-        model_info = get_model_info("MiniMax-M2.7", "MiniMax")
+        model_info = get_model_info("MiniMax-M3", "MiniMax")
         assert model_info is not None
         assert model_info.provider == ModelProvider.MINIMAX
 
@@ -73,43 +78,43 @@ class TestMiniMaxModelProperties:
 
     def test_minimax_has_no_json_mode(self):
         model = LLMModel(
-            display_name="MiniMax M2.5",
-            model_name="MiniMax-M2.5",
+            display_name="MiniMax M3",
+            model_name="MiniMax-M3",
             provider=ModelProvider.MINIMAX,
         )
         assert model.has_json_mode() is False
 
     def test_minimax_is_minimax(self):
         model = LLMModel(
-            display_name="MiniMax M2.5",
-            model_name="MiniMax-M2.5",
+            display_name="MiniMax M3",
+            model_name="MiniMax-M3",
             provider=ModelProvider.MINIMAX,
         )
         assert model.is_minimax() is True
 
     def test_minimax_is_not_deepseek(self):
         model = LLMModel(
-            display_name="MiniMax M2.5",
-            model_name="MiniMax-M2.5",
+            display_name="MiniMax M3",
+            model_name="MiniMax-M3",
             provider=ModelProvider.MINIMAX,
         )
         assert model.is_deepseek() is False
 
     def test_minimax_is_not_ollama(self):
         model = LLMModel(
-            display_name="MiniMax M2.5",
-            model_name="MiniMax-M2.5",
+            display_name="MiniMax M3",
+            model_name="MiniMax-M3",
             provider=ModelProvider.MINIMAX,
         )
         assert model.is_ollama() is False
 
     def test_minimax_to_choice_tuple(self):
         model = LLMModel(
-            display_name="MiniMax M2.5",
-            model_name="MiniMax-M2.5",
+            display_name="MiniMax M3",
+            model_name="MiniMax-M3",
             provider=ModelProvider.MINIMAX,
         )
-        assert model.to_choice_tuple() == ("MiniMax M2.5", "MiniMax-M2.5", "MiniMax")
+        assert model.to_choice_tuple() == ("MiniMax M3", "MiniMax-M3", "MiniMax")
 
 
 class TestMiniMaxGetModel:
@@ -121,13 +126,13 @@ class TestMiniMaxGetModel:
         mock_chat_openai.return_value = mock_instance
 
         result = get_model(
-            "MiniMax-M2.5",
+            "MiniMax-M3",
             ModelProvider.MINIMAX,
             api_keys={"MINIMAX_API_KEY": "test-key"},
         )
 
         mock_chat_openai.assert_called_once_with(
-            model="MiniMax-M2.5",
+            model="MiniMax-M3",
             api_key="test-key",
             base_url="https://api.minimax.io/v1",
         )
@@ -139,10 +144,10 @@ class TestMiniMaxGetModel:
         mock_instance = MagicMock()
         mock_chat_openai.return_value = mock_instance
 
-        result = get_model("MiniMax-M2.5", ModelProvider.MINIMAX)
+        result = get_model("MiniMax-M3", ModelProvider.MINIMAX)
 
         mock_chat_openai.assert_called_once_with(
-            model="MiniMax-M2.5",
+            model="MiniMax-M3",
             api_key="env-test-key",
             base_url="https://api.minimax.io/v1",
         )
@@ -153,7 +158,7 @@ class TestMiniMaxGetModel:
         # Remove MINIMAX_API_KEY from env if present
         os.environ.pop("MINIMAX_API_KEY", None)
         with pytest.raises(ValueError, match="MiniMax API key not found"):
-            get_model("MiniMax-M2.5", ModelProvider.MINIMAX)
+            get_model("MiniMax-M3", ModelProvider.MINIMAX)
 
     @patch("src.llm.models.ChatOpenAI")
     @patch.dict(
@@ -167,10 +172,10 @@ class TestMiniMaxGetModel:
         mock_instance = MagicMock()
         mock_chat_openai.return_value = mock_instance
 
-        result = get_model("MiniMax-M2.5", ModelProvider.MINIMAX)
+        result = get_model("MiniMax-M3", ModelProvider.MINIMAX)
 
         mock_chat_openai.assert_called_once_with(
-            model="MiniMax-M2.5",
+            model="MiniMax-M3",
             api_key="test-key",
             base_url="https://api.minimaxi.com/v1",
         )
@@ -207,24 +212,6 @@ class TestMiniMaxGetModel:
 
         mock_chat_openai.assert_called_once_with(
             model="MiniMax-M2.7-highspeed",
-            api_key="test-key",
-            base_url="https://api.minimax.io/v1",
-        )
-        assert result == mock_instance
-
-    @patch("src.llm.models.ChatOpenAI")
-    def test_get_model_highspeed(self, mock_chat_openai):
-        mock_instance = MagicMock()
-        mock_chat_openai.return_value = mock_instance
-
-        result = get_model(
-            "MiniMax-M2.5-highspeed",
-            ModelProvider.MINIMAX,
-            api_keys={"MINIMAX_API_KEY": "test-key"},
-        )
-
-        mock_chat_openai.assert_called_once_with(
-            model="MiniMax-M2.5-highspeed",
             api_key="test-key",
             base_url="https://api.minimax.io/v1",
         )
