@@ -1,5 +1,10 @@
 [
   {
+    "display_name": "Groq",
+    "model_name": "groq",
+    "provider": "Groq"
+  },
+  {
     "display_name": "Grok 4.3",
     "model_name": "grok-4.3",
     "provider": "xAI"
