@@ -1,5 +1,20 @@
 [
   {
+    "display_name": "Groq Llama 3.3 70B Versatile",
+    "model_name": "llama-3.3-70b-versatile",
+    "provider": "Groq"
+  },
+  {
+    "display_name": "Groq Llama 3.1 8B Instant",
+    "model_name": "llama-3.1-8b-instant",
+    "provider": "Groq"
+  },
+  {
+    "display_name": "Groq Gemma 2 9B It",
+    "model_name": "gemma2-9b-it",
+    "provider": "Groq"
+  },
+  {
     "display_name": "Grok 4.3",
     "model_name": "grok-4.3",
     "provider": "xAI"

@@ -141,6 +141,8 @@ def get_models_list():
 
 def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | None:
     if model_provider == ModelProvider.GROQ:
+        if not model_name or model_name == "groq":
+            model_name = os.getenv("model") or os.getenv("MODEL") or "llama-3.3-70b-versatile"
         api_key = (api_keys or {}).get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
         if not api_key:
             # Print error to console
