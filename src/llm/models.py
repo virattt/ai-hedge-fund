@@ -52,6 +52,11 @@ class LLMModel(BaseModel):
         """Check if the model supports JSON mode"""
         if self.is_deepseek() or self.is_gemini():
             return False
+        # Anthropic reasoning models reject forced tool_choice, which is how
+        # langchain-anthropic implements with_structured_output. Route them
+        # through prompt-based JSON extraction instead.
+        if self.is_anthropic_reasoning():
+            return False
         # Only certain Ollama models support JSON mode
         if self.is_ollama():
             return "llama3" in self.model_name or "neural-chat" in self.model_name
@@ -71,6 +76,10 @@ class LLMModel(BaseModel):
     def is_gemini(self) -> bool:
         """Check if the model is a Gemini model"""
         return self.model_name.startswith("gemini")
+
+    def is_anthropic_reasoning(self) -> bool:
+        """Check if the model is an Anthropic reasoning model (no forced tool use)"""
+        return self.provider == ModelProvider.ANTHROPIC and self.model_name.startswith("claude-fable")
 
     def is_ollama(self) -> bool:
         """Check if the model is an Ollama model"""

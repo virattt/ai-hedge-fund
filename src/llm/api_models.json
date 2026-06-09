@@ -1,5 +1,15 @@
 [
   {
+    "display_name": "Fable 5",
+    "model_name": "claude-fable-5",
+    "provider": "Anthropic"
+  },
+  {
+    "display_name": "Opus 4.8",
+    "model_name": "claude-opus-4-8",
+    "provider": "Anthropic"
+  },
+  {
     "display_name": "Grok 4.3",
     "model_name": "grok-4.3",
     "provider": "xAI"
@@ -18,11 +28,6 @@
     "display_name": "Kimi K2.6",
     "model_name": "kimi-k2.6",
     "provider": "Kimi"
-  },
-  {
-    "display_name": "Claude Opus 4.8",
-    "model_name": "claude-opus-4-8",
-    "provider": "Anthropic"
   },
   {
     "display_name": "Gemini 3.1 Pro",
