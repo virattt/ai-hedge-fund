@@ -198,30 +198,30 @@ export function createHighlightedJson(jsonString: string): string {
           // Colors matching the screenshot
           if (/^"/.test(match)) {
             if (/:$/.test(match)) {
-              return `<span class="text-primary">${match}</span>`;
+              return `<span style="color: #38bdf8">${match}</span>`;
             } else {
-              // String values are orange
-              return `<span style="color: #d18f52">${match}</span>`;
+              // String values - pale ice blue
+              return `<span style="color: #bae6fd">${match}</span>`;
             }
           } else if (/true|false/.test(match)) {
-            // Boolean values are purple
-            return `<span style="color: #c586c0">${match}</span>`;
+            // Boolean values - amber
+            return `<span style="color: #fbbf24">${match}</span>`;
           } else if (/null/.test(match)) {
-            // Null values are purple
-            return `<span style="color: #c586c0">${match}</span>`;
+            // Null values - cool grey
+            return `<span style="color: #94a3b8">${match}</span>`;
           } else {
-            // Numbers are light blue/teal
-            return `<span class="text-blue-500">${match}</span>`;
+            // Numbers - amber
+            return `<span style="color: #fbbf24">${match}</span>`;
           }
         }
       );
-    
+
     // Style brackets and commas
     highlightedJson = highlightedJson
-      // Brackets and braces - light gray
-      .replace(/(\{|\}|\[|\])/g, '<span style="color: #d4d4d4">$1</span>')
+      // Brackets and braces - ice blue
+      .replace(/(\{|\}|\[|\])/g, '<span style="color: #38bdf8; opacity: 0.85">$1</span>')
       // Commas
-      .replace(/,/g, '<span style="color: #d4d4d4">,</span>');
+      .replace(/,/g, '<span style="color: #7dd3fc; opacity: 0.6">,</span>');
     
     return highlightedJson;
   } catch (e) {

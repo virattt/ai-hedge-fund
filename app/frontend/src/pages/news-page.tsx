@@ -6,10 +6,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ModelSelector } from '@/components/ui/llm-selector';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { type LanguageModel, getModels, getDefaultModel } from '@/data/models';
+import { TickerLink } from '@/components/ui/ticker-link';
+import { useSettings } from '@/contexts/settings-context';
 import {
   type AnalyzedArticle,
   type MarketPulseData,
@@ -24,9 +24,9 @@ import {
 
 function SentimentBadge({ sentiment }: { sentiment: string }) {
   const config: Record<string, { label: string; className: string }> = {
-    bullish: { label: 'Bullish', className: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30' },
-    bearish: { label: 'Bearish', className: 'bg-red-500/10 text-red-600 border-red-500/30' },
-    neutral: { label: 'Neutral', className: 'bg-zinc-500/10 text-zinc-500 border-zinc-500/30' },
+    bullish: { label: 'Bullish', className: 'bg-primary/10 text-primary border-primary/30' },
+    bearish: { label: 'Bearish', className: 'bg-destructive/10 text-destructive border-destructive/30' },
+    neutral: { label: 'Neutral', className: 'bg-muted text-muted-foreground border-border' },
   };
   const { label, className } = config[sentiment] ?? config.neutral;
   return <Badge variant="outline" className={className}>{label}</Badge>;
@@ -34,10 +34,10 @@ function SentimentBadge({ sentiment }: { sentiment: string }) {
 
 function ProviderBadge({ provider }: { provider: string }) {
   const config: Record<string, { label: string; className: string }> = {
-    finviz: { label: 'FinViz', className: 'bg-blue-500/10 text-blue-600 border-blue-500/30' },
-    yfinance: { label: 'Yahoo', className: 'bg-purple-500/10 text-purple-600 border-purple-500/30' },
+    finviz: { label: 'FinViz', className: 'bg-primary/10 text-primary border-primary/30' },
+    yfinance: { label: 'Yahoo', className: 'bg-accent text-accent-foreground border-primary/30' },
   };
-  const { label, className } = config[provider] ?? { label: provider, className: 'bg-zinc-500/10 text-zinc-500 border-zinc-500/30' };
+  const { label, className } = config[provider] ?? { label: provider, className: 'bg-muted text-muted-foreground border-border' };
   return <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${className}`}>{label}</Badge>;
 }
 
@@ -119,14 +119,14 @@ function AnalyzedArticleCard({ article }: { article: AnalyzedArticle }) {
           </h2>
         </a>
         <p className="text-muted-foreground leading-relaxed line-clamp-3">{article.summary}</p>
-        <div className="flex items-start gap-2 rounded-md bg-amber-500/5 border border-amber-500/10 px-3 py-2">
-          <Lightbulb size={14} className="text-amber-500 mt-0.5 shrink-0" />
-          <p className="text-sm text-amber-700 dark:text-amber-400">{article.market_insight}</p>
+        <div className="flex items-start gap-2 rounded-md bg-primary/5 border border-primary/20 px-3 py-2">
+          <Lightbulb size={14} className="text-primary mt-0.5 shrink-0" />
+          <p className="text-sm text-accent-foreground">{article.market_insight}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap text-sm">
           <SentimentBadge sentiment={article.sentiment} />
           {article.tickers_mentioned.map((ticker) => (
-            <Badge key={ticker} variant="secondary" className="text-xs font-mono">{ticker}</Badge>
+            <TickerLink key={ticker} ticker={ticker} />
           ))}
           <span className="text-muted-foreground ml-auto text-xs">{date}</span>
         </div>
@@ -165,7 +165,7 @@ function MarketIndexCard({ index }: { index: { symbol: string; name: string; pri
           <span className="text-xs text-muted-foreground">{index.name}</span>
         </div>
         <div className="text-xl font-bold text-foreground">${index.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-        <div className={`text-sm font-semibold ${isPositive ? 'text-emerald-600' : 'text-red-600'}`}>
+        <div className={`text-sm font-semibold ${isPositive ? 'text-primary' : 'text-destructive'}`}>
           {isPositive ? '+' : ''}{index.change.toFixed(2)} ({isPositive ? '+' : ''}{index.change_percent.toFixed(2)}%)
         </div>
       </CardContent>
@@ -208,8 +208,7 @@ function NewsListTab({ items, loading, icon, emptyMessage }: { items: RealtimeNe
 /* -------------------------------------------------------------------------- */
 
 export function NewsPage() {
-  const [models, setModels] = useState<LanguageModel[]>([]);
-  const [selectedModel, setSelectedModel] = useState<LanguageModel | null>(null);
+  const { selectedModel } = useSettings();
 
   // Real-time news state
   const [realtimeNews, setRealtimeNews] = useState<RealtimeNewsItem[]>([]);
@@ -236,19 +235,6 @@ export function NewsPage() {
   const [marketPulse, setMarketPulse] = useState<MarketPulseData | null>(null);
   const [marketPulseLoading, setMarketPulseLoading] = useState(false);
   const [loadedTabs, setLoadedTabs] = useState<Set<string>>(new Set());
-
-  // Load models on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const [fetched, defaultModel] = await Promise.all([getModels(), getDefaultModel()]);
-        setModels(fetched);
-        setSelectedModel(defaultModel);
-      } catch {
-        toast.error('Failed to load models');
-      }
-    })();
-  }, []);
 
   // Auto-load realtime news on mount
   useEffect(() => {
@@ -410,19 +396,13 @@ export function NewsPage() {
     <div className="flex-1 overflow-y-auto">
       <div className="w-full px-6 py-8">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-4">
-          <BookOpen size={22} className="text-primary" />
-          <h1 className="text-2xl font-bold text-foreground">News</h1>
-        </div>
-
-        {/* Shared model selector */}
-        <div className="mb-6">
-          <ModelSelector
-            models={models}
-            value={selectedModel?.model_name ?? ''}
-            onChange={(m) => setSelectedModel(m)}
-            placeholder="Select an LLM model..."
-          />
+        <div className="space-y-2 mb-6">
+          <div className="flex items-center gap-3">
+            <BookOpen size={22} className="text-primary" />
+            <h1 className="text-2xl font-bold text-foreground tracking-wide uppercase">News</h1>
+            <span className="text-[10px] font-data uppercase tracking-widest text-primary/70">// market intel feed</span>
+          </div>
+          <div className="hud-divider" />
         </div>
 
         {/* Tabs */}

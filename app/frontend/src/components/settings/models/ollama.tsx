@@ -64,7 +64,7 @@ export function OllamaSettings() {
 
   const fetchOllamaStatus = async () => {
     try {
-      const response = await fetch('http://localhost:8000/ollama/status');
+      const response = await fetch('http://localhost:8765/ollama/status');
       if (response.ok) {
         const status = await response.json();
         setOllamaStatus(status);
@@ -81,7 +81,7 @@ export function OllamaSettings() {
 
   const fetchRecommendedModels = async () => {
     try {
-      const response = await fetch('http://localhost:8000/ollama/models/recommended');
+      const response = await fetch('http://localhost:8765/ollama/models/recommended');
       if (response.ok) {
         const models = await response.json();
         setRecommendedModels(models);
@@ -97,7 +97,7 @@ export function OllamaSettings() {
     setActionLoading('start-server');
     setError(null);
     try {
-      const response = await fetch('http://localhost:8000/ollama/start', {
+      const response = await fetch('http://localhost:8765/ollama/start', {
         method: 'POST',
       });
       if (response.ok) {
@@ -117,7 +117,7 @@ export function OllamaSettings() {
     setActionLoading('stop-server');
     setError(null);
     try {
-      const response = await fetch('http://localhost:8000/ollama/stop', {
+      const response = await fetch('http://localhost:8765/ollama/stop', {
         method: 'POST',
       });
       if (response.ok) {
@@ -143,7 +143,7 @@ export function OllamaSettings() {
 
     try {
       // Make a POST request to the progress endpoint which returns a streaming response
-      const response = await fetch('http://localhost:8000/ollama/models/download/progress', {
+      const response = await fetch('http://localhost:8765/ollama/models/download/progress', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -203,7 +203,7 @@ export function OllamaSettings() {
                       // Refresh status to show the new model with retry logic
                       const refreshWithRetry = async (attempts = 0) => {
                         try {
-                          const response = await fetch('http://localhost:8000/ollama/status');
+                          const response = await fetch('http://localhost:8765/ollama/status');
                           if (response.ok) {
                             const status = await response.json();
                             setOllamaStatus(status);
@@ -274,7 +274,7 @@ export function OllamaSettings() {
     
     try {
       // Call the backend to cancel the download
-      const response = await fetch(`http://localhost:8000/ollama/models/download/${encodeURIComponent(modelName)}`, {
+      const response = await fetch(`http://localhost:8765/ollama/models/download/${encodeURIComponent(modelName)}`, {
         method: 'DELETE',
       });
       
@@ -323,7 +323,7 @@ export function OllamaSettings() {
     setActionLoading(`delete-${modelName}`);
     setError(null);
     try {
-      const response = await fetch(`http://localhost:8000/ollama/models/${encodeURIComponent(modelName)}`, {
+      const response = await fetch(`http://localhost:8765/ollama/models/${encodeURIComponent(modelName)}`, {
         method: 'DELETE',
       });
       if (response.ok) {
@@ -372,7 +372,7 @@ export function OllamaSettings() {
 
     try {
       // Get all active downloads in one call instead of checking each model individually
-      const response = await fetch('http://localhost:8000/ollama/models/downloads/active');
+      const response = await fetch('http://localhost:8765/ollama/models/downloads/active');
       if (response.ok) {
         const activeDownloads = await response.json();
         
@@ -412,7 +412,7 @@ export function OllamaSettings() {
     const pollProgress = async () => {
       try {
         // Check all active downloads instead of individual model
-        const response = await fetch('http://localhost:8000/ollama/models/downloads/active');
+        const response = await fetch('http://localhost:8765/ollama/models/downloads/active');
         if (response.ok) {
           const activeDownloads = await response.json();
           const progress = activeDownloads[modelName];
@@ -439,7 +439,7 @@ export function OllamaSettings() {
               // Refresh status to show the new model with retry logic
               const refreshWithRetry = async (attempts = 0) => {
                 try {
-                  const response = await fetch('http://localhost:8000/ollama/status');
+                  const response = await fetch('http://localhost:8765/ollama/status');
                   if (response.ok) {
                     const status = await response.json();
                     setOllamaStatus(status);

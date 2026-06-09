@@ -15,8 +15,11 @@ const config: Config = {
   			'sans-serif'
   		],
   		mono: [
-  			'Inter',
-  			'sans-serif'
+  			'geist-mono',
+  			'ui-monospace',
+  			'SFMono-Regular',
+  			'Menlo',
+  			'monospace'
   		]
   	},
   	extend: {

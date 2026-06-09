@@ -63,8 +63,8 @@ poetry run uvicorn main:app --reload
 This will start the FastAPI server with hot-reloading enabled.
 
 The API will be available at:
-- API Endpoint: http://localhost:8000
-- API Documentation: http://localhost:8000/docs
+- API Endpoint: http://localhost:8765
+- API Documentation: http://localhost:8765/docs
 
 ## API Endpoints
 

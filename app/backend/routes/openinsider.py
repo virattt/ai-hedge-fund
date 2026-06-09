@@ -50,7 +50,17 @@ ALLOWED_CUSTOM_KEYS: frozenset[str] = frozenset(
     },
 )
 async def openinsider_screener(
-    preset: Literal["ceo_cfo_conviction", "cluster_buy", "cluster_sell", "significant_increase", "screener", "custom"] = Query(
+    preset: Literal[
+        "ceo_cfo_conviction", "cluster_buy", "cluster_sell", "significant_increase", "screener",
+        "latest_cluster_buys", "latest_penny_stock_buys", "latest_insider_trading",
+        "latest_insider_buys", "latest_insider_buys_25k", "latest_officer_buys_25k",
+        "latest_ceo_cfo_buys_25k", "latest_insider_sales", "latest_insider_sales_100k",
+        "latest_officer_sales_100k", "latest_ceo_cfo_sales_100k",
+        "top_officer_buys_today", "top_officer_buys_week", "top_officer_buys_month",
+        "top_insider_buys_today", "top_insider_buys_week", "top_insider_buys_month",
+        "top_insider_sales_today", "top_insider_sales_week", "top_insider_sales_month",
+        "custom",
+    ] = Query(
         ..., description="Screener preset or 'custom' for manual filter configuration"
     ),
     ticker: str | None = Query(

@@ -29,7 +29,7 @@ import { formatNumber } from '@/utils/format';
 // ---------------------------------------------------------------------------
 
 /** Generate a stable color for a given index. */
-const LINE_COLORS = ['#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed'];
+const LINE_COLORS = ['#38bdf8', '#7dd3fc', '#fb7185', '#fbbf24', '#94a3b8'];
 const lineColor = (index: number): string => LINE_COLORS[index % LINE_COLORS.length];
 
 // ---------------------------------------------------------------------------
@@ -187,9 +187,9 @@ function ChangeLogTable({
               <TableCell
                 className={`text-right text-sm tabular-nums font-medium ${
                   rec.net_change > 0
-                    ? 'text-green-600'
+                    ? 'text-primary'
                     : rec.net_change < 0
-                    ? 'text-red-600'
+                    ? 'text-destructive'
                     : ''
                 }`}
               >
@@ -262,7 +262,7 @@ export function InsiderOwnershipPage() {
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Ownership Changes</h1>
+          <h1 className="text-xl font-semibold tracking-wide uppercase">Ownership Changes</h1>
           <p className="text-sm text-muted-foreground">
             Position history and ownership change log from Form 3/4/5 filings.
           </p>

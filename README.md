@@ -132,9 +132,36 @@ Note: The `--ollama`, `--start-date`, and `--end-date` flags work for the backte
 
 ### 🖥️ Web Application
 
-The new way to run the AI Hedge Fund is through our web application that provides a user-friendly interface. This is recommended for users who prefer visual interfaces over command line tools.
+The web application provides a user-friendly interface for the AI Hedge Fund, including an insider-trading dashboard, 13-F institutional holdings viewer, and more.
 
-Please see detailed instructions on how to install and run the web application [here](https://github.com/virattt/ai-hedge-fund/tree/main/app).
+#### 1. Start the Backend Server
+
+From the project root:
+
+```bash
+poetry run uvicorn app.backend.main:app --reload
+```
+
+The API will be available at [http://localhost:8000](http://localhost:8000). Interactive API docs at [http://localhost:8000/docs](http://localhost:8000/docs).
+
+#### 2. Start the Frontend
+
+In a separate terminal:
+
+```bash
+cd app/frontend
+npm install
+npm run dev
+```
+
+The UI will be available at [http://localhost:5173](http://localhost:5173).
+
+#### Notes
+
+- The backend must be running before the frontend can fetch data.
+- The backend uses SQLite — no external database setup needed.
+- Database migrations run automatically on startup via Alembic.
+- For more details, see the [app README](https://github.com/virattt/ai-hedge-fund/tree/main/app).
 
 <img width="1721" alt="Screenshot 2025-06-28 at 6 41 03 PM" src="https://github.com/user-attachments/assets/b95ab696-c9f4-416c-9ad1-51feb1f5374b" />
 

@@ -8,10 +8,17 @@ from app.backend.database.connection import engine
 from app.backend.database.models import Base
 from app.backend.services.ollama_service import ollama_service
 from app.backend.services.scraping_scheduler import ScrapingScheduler
+from app.backend.services.alert_service._scheduler import get_scheduler as get_alert_scheduler
+from app.backend.services.watchlist_service._scheduler import get_scheduler as get_watchlist_scheduler
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Silence noisy third-party loggers — these libs log expected misses at ERROR level:
+#   - yfinance: 404s for delisted/invalid tickers (Finnhub squeeze data has many)
+#   - edgar.core: per-filing parser warnings on legacy SEC documents
+logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
 app = FastAPI(title="AI Hedge Fund API", description="Backend API for AI Hedge Fund", version="0.1.0")
 
@@ -65,6 +72,28 @@ async def startup_event() -> None:
     except Exception as e:
         logger.error("Failed to start scraping scheduler: %s", e)
 
+    # Start the alert scheduler
+    try:
+        await get_alert_scheduler().start()
+    except Exception as e:
+        logger.error("Failed to start alert scheduler: %s", e)
+
+    # Start the watchlist batch scheduler
+    try:
+        await get_watchlist_scheduler().start()
+    except Exception as e:
+        logger.error("Failed to start watchlist scheduler: %s", e)
+
+    # Sync 13F company list from edgartools in background (non-blocking)
+    async def _bg_sync_companies() -> None:
+        try:
+            from app.backend.services.insider_service._thirteenf_companies import _sync_companies_to_db
+            await asyncio.to_thread(_sync_companies_to_db)
+        except Exception as exc:
+            logger.warning("Background 13F company sync failed: %s", exc)
+
+    asyncio.create_task(_bg_sync_companies())
+
 
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
@@ -73,3 +102,11 @@ async def shutdown_event() -> None:
         await _scraping_scheduler.stop()
     except Exception as e:
         logger.error("Error stopping scraping scheduler: %s", e)
+    try:
+        await get_alert_scheduler().stop()
+    except Exception as e:
+        logger.error("Error stopping alert scheduler: %s", e)
+    try:
+        await get_watchlist_scheduler().stop()
+    except Exception as e:
+        logger.error("Error stopping watchlist scheduler: %s", e)

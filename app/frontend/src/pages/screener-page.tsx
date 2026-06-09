@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TickerLink } from '@/components/ui/ticker-link';
 import { screenerService, type ScreenerFilters, type ScreenerResponse } from '@/services/screener-api';
 
 const VIEWS = ['overview', 'valuation', 'financial', 'technical', 'performance', 'ownership'] as const;
@@ -169,8 +170,8 @@ function formatCellValue(_col: string, value: any): string {
 function cellColor(col: string, value: any): string {
   if (!COLOR_COLUMNS.has(col)) return '';
   const str = String(value);
-  if (str.startsWith('-')) return 'text-red-500';
-  if (str !== '-' && str !== '0' && str !== '0%' && str !== '0.00%') return 'text-green-500';
+  if (str.startsWith('-')) return 'text-destructive';
+  if (str !== '-' && str !== '0' && str !== '0%' && str !== '0.00%') return 'text-primary';
   return '';
 }
 
@@ -339,7 +340,7 @@ export function ScreenerPage() {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold">Screener</h1>
+          <h1 className="text-lg font-semibold tracking-wide uppercase">Screener</h1>
           {results && (
             <span className="text-sm text-muted-foreground">
               {results.total} result{results.total !== 1 ? 's' : ''}
@@ -530,7 +531,11 @@ export function ScreenerPage() {
                   <TableRow key={i}>
                     {results.columns.map(col => (
                       <TableCell key={col} className={`text-xs whitespace-nowrap ${cellColor(col, row[col])}`}>
-                        {formatCellValue(col, row[col])}
+                        {col === 'Ticker' && row[col] ? (
+                          <TickerLink ticker={String(row[col])} />
+                        ) : (
+                          formatCellValue(col, row[col])
+                        )}
                       </TableCell>
                     ))}
                   </TableRow>

@@ -222,14 +222,14 @@ function ActivityBadge({ activity }: { activity: string }) {
   const lower = activity.toLowerCase();
   if (lower === 'purchase') {
     return (
-      <Badge variant="outline" className="text-green-600 border-green-600 whitespace-nowrap">
+      <Badge variant="outline" className="text-primary border-primary whitespace-nowrap">
         Purchase
       </Badge>
     );
   }
   if (lower === 'sale') {
     return (
-      <Badge variant="outline" className="text-red-600 border-red-600 whitespace-nowrap">
+      <Badge variant="outline" className="text-destructive border-destructive whitespace-nowrap">
         Sale
       </Badge>
     );
@@ -254,7 +254,7 @@ function SummaryCards({ data }: { data: InsiderSummaryResponse }) {
           <CardTitle className="text-xs font-medium text-muted-foreground">Net Insider Sentiment</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
-          <div className={`text-2xl font-bold ${sentimentPositive ? 'text-green-600' : 'text-red-600'}`}>
+          <div className={`text-2xl font-bold ${sentimentPositive ? 'text-primary' : 'text-destructive'}`}>
             {sentimentPositive ? '+' : ''}{aggregates.net_sentiment}
           </div>
           <p className="text-xs text-muted-foreground mt-1">
@@ -334,8 +334,8 @@ function ActivityChart({ data }: { data: InsiderSummaryResponse }) {
               formatter={(value: number, name: string) => [value, name === 'purchases' ? 'Purchases' : 'Sales']}
               labelFormatter={(label: string) => `Date: ${label}`}
             />
-            <Bar dataKey="purchases" name="Purchases" fill="#16a34a" radius={[2, 2, 0, 0]} />
-            <Bar dataKey="sales" name="Sales" fill="#dc2626" radius={[2, 2, 0, 0]} />
+            <Bar dataKey="purchases" name="Purchases" fill="#38bdf8" radius={[2, 2, 0, 0]} />
+            <Bar dataKey="sales" name="Sales" fill="#fb7185" radius={[2, 2, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </CardContent>
@@ -557,12 +557,15 @@ export function InsiderPage() {
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Edgar Insider</h1>
+          <h1 className="text-xl font-semibold tracking-wide uppercase">Edgar Insider</h1>
           <p className="text-sm text-muted-foreground">SEC insider trading filings (Form 3/4/5), ownership changes, and grants</p>
         </div>
         <div className="flex items-center gap-1">
           <SubNavLink to="/insider" label="Edgar Insider" />
           <SubNavLink to="/insider/openinsider" label="OpenInsider" />
+          <SubNavLink to="/insider/finnhub" label="Finnhub" />
+          <SubNavLink to="/insider/political" label="Political" />
+          <SubNavLink to="/insider/earnings" label="Earnings" />
         </div>
       </div>
 
@@ -711,7 +714,7 @@ export function InsiderPage() {
                               <TableCell>
                                 <ActivityBadge activity={filing.primary_activity} />
                               </TableCell>
-                              <TableCell className={`text-right text-sm tabular-nums font-medium ${filing.net_change > 0 ? 'text-green-600' : filing.net_change < 0 ? 'text-red-600' : ''}`}>
+                              <TableCell className={`text-right text-sm tabular-nums font-medium ${filing.net_change > 0 ? 'text-primary' : filing.net_change < 0 ? 'text-destructive' : ''}`}>
                                 {filing.net_change > 0 ? '+' : ''}{formatNumber(filing.net_change)}
                               </TableCell>
                               <TableCell className="text-right text-sm tabular-nums">

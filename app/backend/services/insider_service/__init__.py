@@ -24,16 +24,26 @@ from collections import OrderedDict
 from datetime import date
 
 from app.backend.models.insider_schemas import (  # noqa: F401
+    AggregateHoldingsResponse,
     CompareHoldingsResponse,
     GrantsResponse,
     HoldingHistoryResponse,
     OwnershipChangesResponse,
+    ThirteenFCompaniesResponse,
     ThirteenFListResponse,
 )
 from app.backend.services.insider_service._thirteenf import (  # noqa: F401
+    _fetch_thirteenf_filings,
+)
+from app.backend.services.insider_service._thirteenf_companies import (  # noqa: F401
+    _fetch_thirteenf_companies,
+    _read_companies_from_db,
+    _sync_companies_to_db,
+)
+from app.backend.services.insider_service._thirteenf_detail import (  # noqa: F401
+    _fetch_aggregate_holdings,
     _fetch_compare_holdings,
     _fetch_holding_history,
-    _fetch_thirteenf_filings,
 )
 from app.backend.services.insider_service._detail import _fetch_detail, _parse_trade_rows, get_insider_detail  # noqa: F401
 from app.backend.services.insider_service._grants import _fetch_grants  # noqa: F401
@@ -137,6 +147,9 @@ async def get_thirteenf_filings(
     year: int | None,
     quarter: int | None,
     company_name: str | None = None,
+    cik_list: list[int] | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
 ) -> ThirteenFListResponse:
     """Async entry point for paginated 13F-HR filing listing. Checks LRU+TTL cache first.
 
@@ -153,16 +166,19 @@ async def get_thirteenf_filings(
         quarter: Optional filing quarter filter (1–4); forwarded when not None.
         company_name: Optional company name for fuzzy search. Empty or
             whitespace-only values are normalized to None.
+        date_from: Optional start date filter (ISO: YYYY-MM-DD).
+        date_to: Optional end date filter (ISO: YYYY-MM-DD).
 
     Returns:
         ThirteenFListResponse with filings, total count, has_more, and skipped_count.
     """
     company_name = company_name.strip() or None if company_name else None
-    cache_key = f"thirteenf:filings:{date.today().isoformat()}:{year}:{quarter}:{company_name}:{limit}:{offset}"
+    cik_key = ",".join(str(c) for c in sorted(cik_list)) if cik_list else None
+    cache_key = f"thirteenf:filings:{date.today().isoformat()}:{year}:{quarter}:{company_name}:{cik_key}:{date_from}:{date_to}:{limit}:{offset}"
     cached = _cache_get(cache_key)
     if isinstance(cached, ThirteenFListResponse):
         return cached
-    result = await asyncio.to_thread(_fetch_thirteenf_filings, limit, offset, year, quarter, company_name)
+    result = await asyncio.to_thread(_fetch_thirteenf_filings, limit, offset, year, quarter, company_name, cik_list, date_from, date_to)
     _cache_put(cache_key, result)
     return result
 
@@ -214,5 +230,35 @@ async def get_holding_history(accession_no: str, periods: int) -> HoldingHistory
     if isinstance(cached, HoldingHistoryResponse):
         return cached
     result = await asyncio.to_thread(_fetch_holding_history, accession_no, periods)
+    _cache_put(cache_key, result)
+    return result
+
+
+async def get_thirteenf_companies() -> ThirteenFCompaniesResponse:
+    """Async entry point for company names. Reads from DB (fast), falls back to edgartools if empty."""
+    cache_key = f"thirteenf:companies:{date.today().isoformat()}"
+    cached = _cache_get(cache_key)
+    if isinstance(cached, ThirteenFCompaniesResponse):
+        return cached
+    # Fast path: read from SQLite
+    result = _read_companies_from_db()
+    if result.total > 0:
+        _cache_put(cache_key, result)
+        return result
+    # Cold start: DB is empty, sync from edgartools then return
+    await asyncio.to_thread(_sync_companies_to_db)
+    result = _read_companies_from_db()
+    _cache_put(cache_key, result)
+    return result
+
+
+async def get_aggregate_holdings(cik_list: list[int]) -> AggregateHoldingsResponse:
+    """Async entry point for aggregated holdings across multiple companies. Checks LRU+TTL cache first."""
+    cik_key = ",".join(str(c) for c in sorted(cik_list))
+    cache_key = f"thirteenf:aggregate:{cik_key}"
+    cached = _cache_get(cache_key)
+    if isinstance(cached, AggregateHoldingsResponse):
+        return cached
+    result = await asyncio.to_thread(_fetch_aggregate_holdings, cik_list)
     _cache_put(cache_key, result)
     return result

@@ -36,7 +36,7 @@ function TransactionTypeBadge({ txType }: { txType: string }) {
   }
   if (lower === 'exercise') {
     return (
-      <Badge variant="outline" className="text-green-600 border-green-600 whitespace-nowrap">
+      <Badge variant="outline" className="text-primary border-primary whitespace-nowrap">
         Exercise
       </Badge>
     );
@@ -62,14 +62,14 @@ function TransactionTypeBadge({ txType }: { txType: string }) {
 function AcquiredDisposedBadge({ value }: { value: string }) {
   if (value.toUpperCase() === 'A') {
     return (
-      <Badge variant="outline" className="text-green-600 border-green-600 whitespace-nowrap">
+      <Badge variant="outline" className="text-primary border-primary whitespace-nowrap">
         A
       </Badge>
     );
   }
   if (value.toUpperCase() === 'D') {
     return (
-      <Badge variant="outline" className="text-red-600 border-red-600 whitespace-nowrap">
+      <Badge variant="outline" className="text-destructive border-destructive whitespace-nowrap">
         D
       </Badge>
     );
@@ -212,7 +212,7 @@ export function InsiderGrantsPage() {
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Grants &amp; Exercises</h1>
+          <h1 className="text-xl font-semibold tracking-wide uppercase">Grants &amp; Exercises</h1>
           <p className="text-sm text-muted-foreground">
             Derivative trades, option grants and exercises from SEC filings.
           </p>

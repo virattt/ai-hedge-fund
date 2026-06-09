@@ -226,7 +226,7 @@ REM Start backend
 echo %INFO% Launching backend server...
 REM Run from project root to ensure proper Python imports
 cd ..
-start /b poetry run uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
+start /b poetry run uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8765
 cd app
 
 timeout /t 3 /nobreak >nul
@@ -256,8 +256,8 @@ start http://localhost:5173
 echo.
 echo %SUCCESS% AI Hedge Fund web application is now running
 echo %INFO% Frontend: http://localhost:5173
-echo %INFO% Backend:  http://localhost:8000
-echo %INFO% Docs:     http://localhost:8000/docs
+echo %INFO% Backend:  http://localhost:8765
+echo %INFO% Docs:     http://localhost:8765/docs
 echo %INFO% Database: SQLite (hedge_fund.db in project root)
 echo.
 echo %INFO% Press any key to stop both services...

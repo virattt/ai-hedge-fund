@@ -1,12 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, RefreshCw } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Loader2, List, BarChart3, RefreshCw } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TickerLink } from '@/components/ui/ticker-link';
 import {
   insiderService,
   type OpenInsiderRecord,
@@ -16,33 +24,67 @@ import { SubNavLink } from '@/components/insider/insider-sub-nav';
 import { formatNumber, formatPrice, formatValue } from '@/utils/format';
 
 // ---------------------------------------------------------------------------
-// Constants
+// Category definitions
 // ---------------------------------------------------------------------------
 
-const PRESETS: Record<string, { label: string; description: string }> = {
-  ceo_cfo_conviction: {
-    label: 'CEO/CFO Conviction',
-    description: 'Buys & sells ≥ $100K by CEOs and CFOs in the last 30 days.',
+interface PresetItem {
+  label: string;
+}
+
+interface Category {
+  label: string;
+  items: Record<string, PresetItem>;
+}
+
+const CATEGORIES: Record<string, Category> = {
+  latest: {
+    label: 'Latest',
+    items: {
+      latest_cluster_buys: { label: 'Cluster Buys' },
+      latest_penny_stock_buys: { label: 'Penny Stock Buys' },
+      latest_insider_trading: { label: 'All Insider Trading' },
+      latest_insider_buys: { label: 'Insider Purchases' },
+      latest_insider_buys_25k: { label: 'Insider Purchases $25K+' },
+      latest_officer_buys_25k: { label: 'Officer Purchases $25K+' },
+      latest_ceo_cfo_buys_25k: { label: 'CEO/CFO Purchases $25K+' },
+      latest_insider_sales: { label: 'Insider Sales' },
+      latest_insider_sales_100k: { label: 'Insider Sales $100K+' },
+      latest_officer_sales_100k: { label: 'Officer Sales $100K+' },
+      latest_ceo_cfo_sales_100k: { label: 'CEO/CFO Sales $100K+' },
+    },
   },
-  cluster_buy: {
-    label: 'Cluster Buy',
-    description: 'Tickers with ≥ 3 insiders buying ≥ $25K each in the last 90 days.',
-  },
-  cluster_sell: {
-    label: 'Cluster Sell',
-    description: 'Tickers with ≥ 3 insiders selling ≥ $25K each in the last 90 days.',
-  },
-  significant_increase: {
-    label: 'Significant Increase',
-    description: 'Insiders increasing holdings by ≥ 20% in the last 90 days.',
-  },
-  screener: {
-    label: 'Screener',
-    description: 'All insider trades (buys & sells) in the last 30 days.',
+  top: {
+    label: 'Top',
+    items: {
+      top_officer_buys_today: { label: 'Officer Purchases Today' },
+      top_officer_buys_week: { label: 'Officer Purchases This Week' },
+      top_officer_buys_month: { label: 'Officer Purchases This Month' },
+      top_insider_buys_today: { label: 'Insider Purchases Today' },
+      top_insider_buys_week: { label: 'Insider Purchases This Week' },
+      top_insider_buys_month: { label: 'Insider Purchases This Month' },
+      top_insider_sales_today: { label: 'Insider Sales Today' },
+      top_insider_sales_week: { label: 'Insider Sales This Week' },
+      top_insider_sales_month: { label: 'Insider Sales This Month' },
+    },
   },
 };
 
-type PresetKey = keyof typeof PRESETS;
+/** Resolve a preset key to its human-readable label. */
+function getPresetLabel(key: string): string {
+  if (key === 'screener') return 'Screener';
+  for (const cat of Object.values(CATEGORIES)) {
+    if (key in cat.items) return cat.items[key].label;
+  }
+  return key;
+}
+
+/** Find which category a preset key belongs to. */
+function getCategoryForPreset(key: string): string | null {
+  for (const [catKey, cat] of Object.entries(CATEGORIES)) {
+    if (key in cat.items) return catKey;
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Trade type badge (color-coded green=purchase, red=sale)
@@ -55,14 +97,14 @@ function TradeTypeBadge({ tradeType }: { tradeType: string }) {
 
   if (isPurchase) {
     return (
-      <Badge variant="outline" className="text-green-600 border-green-600 whitespace-nowrap">
+      <Badge variant="outline" className="text-primary border-primary whitespace-nowrap">
         {tradeType}
       </Badge>
     );
   }
   if (isSale) {
     return (
-      <Badge variant="outline" className="text-red-600 border-red-600 whitespace-nowrap">
+      <Badge variant="outline" className="text-destructive border-destructive whitespace-nowrap">
         {tradeType}
       </Badge>
     );
@@ -132,6 +174,192 @@ function SortableHead({ label, sortKey, activeKey, dir, onSort, className = '' }
   );
 }
 
+// ---------------------------------------------------------------------------
+// Ticker aggregation
+// ---------------------------------------------------------------------------
+
+interface AggregatedTicker {
+  ticker: string;
+  company_name: string;
+  total_trades: number;
+  buy_count: number;
+  sell_count: number;
+  total_buy_value: number;
+  total_sell_value: number;
+  net_value: number;
+  unique_insiders: number;
+  trades: OpenInsiderRecord[];
+}
+
+function isBuy(tradeType: string): boolean {
+  const lower = tradeType.toLowerCase();
+  return lower.includes('purchase') || lower.startsWith('p');
+}
+
+function aggregateByTicker(records: OpenInsiderRecord[]): AggregatedTicker[] {
+  const map = new Map<string, { trades: OpenInsiderRecord[]; insiders: Set<string> }>();
+  for (const rec of records) {
+    if (!rec.ticker) continue;
+    let entry = map.get(rec.ticker);
+    if (!entry) {
+      entry = { trades: [], insiders: new Set() };
+      map.set(rec.ticker, entry);
+    }
+    entry.trades.push(rec);
+    if (rec.insider_name) entry.insiders.add(rec.insider_name);
+  }
+
+  const result: AggregatedTicker[] = [];
+  for (const [ticker, { trades, insiders }] of map) {
+    let buyCount = 0, sellCount = 0, totalBuyValue = 0, totalSellValue = 0;
+    for (const t of trades) {
+      if (isBuy(t.trade_type)) {
+        buyCount++;
+        totalBuyValue += t.value ?? 0;
+      } else {
+        sellCount++;
+        totalSellValue += t.value ?? 0;
+      }
+    }
+    result.push({
+      ticker,
+      company_name: trades[0].company_name,
+      total_trades: trades.length,
+      buy_count: buyCount,
+      sell_count: sellCount,
+      total_buy_value: totalBuyValue,
+      total_sell_value: totalSellValue,
+      net_value: totalBuyValue - totalSellValue,
+      unique_insiders: insiders.size,
+      trades,
+    });
+  }
+  return result.sort((a, b) => b.total_trades - a.total_trades);
+}
+
+type AggSortKey = keyof Omit<AggregatedTicker, 'trades' | 'company_name'> | 'company_name';
+
+function compareAgg(a: AggregatedTicker, b: AggregatedTicker, key: AggSortKey, dir: SortDir): number {
+  const av = a[key as keyof AggregatedTicker];
+  const bv = b[key as keyof AggregatedTicker];
+  if (av == null && bv == null) return 0;
+  if (av == null) return 1;
+  if (bv == null) return -1;
+  const cmp = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv));
+  return dir === 'asc' ? cmp : -cmp;
+}
+
+function AggregatedTickerTable({ records }: { records: OpenInsiderRecord[] }) {
+  const [sortKey, setSortKey] = useState<AggSortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
+
+  const aggregated = useMemo(() => aggregateByTicker(records), [records]);
+
+  const sorted = useMemo(() => {
+    if (!sortKey) return aggregated;
+    return [...aggregated].sort((a, b) => compareAgg(a, b, sortKey, sortDir));
+  }, [aggregated, sortKey, sortDir]);
+
+  const handleSort = (key: AggSortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('desc');
+    }
+  };
+
+  if (records.length === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground text-sm">
+        No records found for this screener.
+      </div>
+    );
+  }
+
+  const AggHead = ({ label, sk, className = '' }: { label: string; sk: AggSortKey; className?: string }) => {
+    const active = sortKey === sk;
+    return (
+      <TableHead className={`cursor-pointer select-none hover:bg-muted/50 ${className}`} onClick={() => handleSort(sk)}>
+        <span className="inline-flex items-center gap-1">
+          {label}
+          {active ? (dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+        </span>
+      </TableHead>
+    );
+  };
+  const dir = sortDir;
+
+  return (
+    <div className="rounded-md border overflow-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[30px]" />
+            <AggHead label="Ticker" sk="ticker" className="w-[70px]" />
+            <AggHead label="Company" sk="company_name" />
+            <AggHead label="Trades" sk="total_trades" className="text-right" />
+            <AggHead label="Buys" sk="buy_count" className="text-right" />
+            <AggHead label="Sells" sk="sell_count" className="text-right" />
+            <AggHead label="Buy Value" sk="total_buy_value" className="text-right" />
+            <AggHead label="Sell Value" sk="total_sell_value" className="text-right" />
+            <AggHead label="Net Value" sk="net_value" className="text-right" />
+            <AggHead label="Insiders" sk="unique_insiders" className="text-right" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sorted.map((row) => {
+            const isExpanded = expandedTicker === row.ticker;
+            return (
+              <React.Fragment key={row.ticker}>
+                <TableRow
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => setExpandedTicker(isExpanded ? null : row.ticker)}
+                >
+                  <TableCell className="w-[30px] px-2">
+                    {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </TableCell>
+                  <TableCell><TickerLink ticker={row.ticker} /></TableCell>
+                  <TableCell className="text-xs max-w-[180px] truncate">{row.company_name}</TableCell>
+                  <TableCell className="text-right text-xs tabular-nums font-medium">{row.total_trades}</TableCell>
+                  <TableCell className="text-right text-xs tabular-nums text-primary">{row.buy_count}</TableCell>
+                  <TableCell className="text-right text-xs tabular-nums text-destructive">{row.sell_count}</TableCell>
+                  <TableCell className="text-right text-xs tabular-nums text-primary">{formatValue(row.total_buy_value)}</TableCell>
+                  <TableCell className="text-right text-xs tabular-nums text-destructive">{formatValue(row.total_sell_value)}</TableCell>
+                  <TableCell className={`text-right text-xs tabular-nums font-medium ${row.net_value >= 0 ? 'text-primary' : 'text-destructive'}`}>
+                    {row.net_value >= 0 ? '+' : ''}{formatValue(row.net_value)}
+                  </TableCell>
+                  <TableCell className="text-right text-xs tabular-nums">{row.unique_insiders}</TableCell>
+                </TableRow>
+                {isExpanded && row.trades.map((t, i) => (
+                  <TableRow key={`${row.ticker}-detail-${i}`} className="bg-muted/30">
+                    <TableCell />
+                    <TableCell className="text-xs text-muted-foreground">{t.filing_date}</TableCell>
+                    <TableCell className="text-xs">{t.insider_name} <span className="text-muted-foreground">({t.title})</span></TableCell>
+                    <TableCell />
+                    <TableCell colSpan={2} className="text-xs">
+                      <TradeTypeBadge tradeType={t.trade_type} />
+                    </TableCell>
+                    <TableCell className="text-right text-xs tabular-nums">{formatPrice(t.price)}</TableCell>
+                    <TableCell className="text-right text-xs tabular-nums">{formatNumber(t.qty)}</TableCell>
+                    <TableCell className="text-right text-xs tabular-nums">{formatValue(t.value)}</TableCell>
+                    <TableCell className="text-right text-xs tabular-nums">{t.delta_own ?? '—'}</TableCell>
+                  </TableRow>
+                ))}
+              </React.Fragment>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Flat trades table
+// ---------------------------------------------------------------------------
+
 function OpenInsiderTable({ records }: { records: OpenInsiderRecord[] }) {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -184,7 +412,7 @@ function OpenInsiderTable({ records }: { records: OpenInsiderRecord[] }) {
             <TableRow key={`${rec.ticker}-${rec.filing_date}-${i}`}>
               <TableCell className="text-xs whitespace-nowrap">{rec.filing_date}</TableCell>
               <TableCell className="text-xs whitespace-nowrap">{rec.trade_date}</TableCell>
-              <TableCell className="font-mono text-xs font-semibold">{rec.ticker}</TableCell>
+              <TableCell><TickerLink ticker={rec.ticker} /></TableCell>
               <TableCell className="text-xs max-w-[160px] truncate">{rec.company_name}</TableCell>
               <TableCell className="text-xs font-medium max-w-[140px] truncate">
                 {rec.insider_name}
@@ -354,18 +582,66 @@ function CustomFilterForm({ filters, onChange, onSearch, loading }: CustomFilter
 }
 
 // ---------------------------------------------------------------------------
+// Category dropdown button
+// ---------------------------------------------------------------------------
+
+interface CategoryDropdownProps {
+  categoryKey: string;
+  category: Category;
+  activePreset: string | null;
+  onSelect: (presetKey: string) => void;
+}
+
+function CategoryDropdown({ categoryKey, category, activePreset, onSelect }: CategoryDropdownProps) {
+  const activeCat = activePreset ? getCategoryForPreset(activePreset) : null;
+  const isActive = activeCat === categoryKey;
+  const activeLabel = isActive && activePreset ? getPresetLabel(activePreset) : null;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant={isActive ? 'default' : 'outline'}
+          size="sm"
+          className="gap-1"
+        >
+          {category.label}
+          {activeLabel && (
+            <span className="text-xs opacity-80 ml-0.5">: {activeLabel}</span>
+          )}
+          <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-64">
+        <DropdownMenuLabel>{category.label}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {Object.entries(category.items).map(([key, item]) => (
+          <DropdownMenuItem
+            key={key}
+            className={activePreset === key ? 'bg-accent font-medium' : ''}
+            onClick={() => onSelect(key)}
+          >
+            {item.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // InsiderOpeninsiderPage
 // ---------------------------------------------------------------------------
 
 export function InsiderOpeninsiderPage() {
-  const [activeTab, setActiveTab] = useState<string>('ceo_cfo_conviction');
+  const [activePreset, setActivePreset] = useState<string | null>('latest_ceo_cfo_buys_25k');
+  const [isCustomMode, setIsCustomMode] = useState(false);
   const [records, setRecords] = useState<OpenInsiderRecord[]>([]);
   const [response, setResponse] = useState<OpenInsiderResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [customFilters, setCustomFilters] = useState<CustomFilters>(DEFAULT_CUSTOM);
-
-  const isPresetTab = activeTab in PRESETS;
+  const [viewMode, setViewMode] = useState<'flat' | 'aggregated'>('flat');
 
   const fetchData = async (preset: string, customParams?: Record<string, string>) => {
     setLoading(true);
@@ -383,13 +659,26 @@ export function InsiderOpeninsiderPage() {
     }
   };
 
-  // Auto-fetch when switching to a preset tab
+  // Auto-fetch when switching to a preset
   useEffect(() => {
-    if (isPresetTab) {
-      fetchData(activeTab);
+    if (activePreset && !isCustomMode) {
+      fetchData(activePreset);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activePreset]);
+
+  const handlePresetSelect = (key: string) => {
+    setIsCustomMode(false);
+    setActivePreset(key);
+  };
+
+  const handleCustomMode = () => {
+    setIsCustomMode(true);
+    setActivePreset(null);
+    setRecords([]);
+    setResponse(null);
+    setError(null);
+  };
 
   const handleCustomSearch = () => {
     const params: Record<string, string> = {};
@@ -404,8 +693,8 @@ export function InsiderOpeninsiderPage() {
   };
 
   const handleRetry = () => {
-    if (isPresetTab) {
-      fetchData(activeTab);
+    if (activePreset && !isCustomMode) {
+      fetchData(activePreset);
     } else {
       handleCustomSearch();
     }
@@ -416,7 +705,7 @@ export function InsiderOpeninsiderPage() {
       {/* Header with sub-nav */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-semibold">OpenInsider Screener</h1>
+          <h1 className="text-xl font-semibold tracking-wide uppercase">OpenInsider Screener</h1>
           <p className="text-sm text-muted-foreground">
             Curated insider trading data sourced from openinsider.com.
           </p>
@@ -424,37 +713,55 @@ export function InsiderOpeninsiderPage() {
         <div className="flex items-center gap-1">
           <SubNavLink to="/insider" label="Edgar Insider" />
           <SubNavLink to="/insider/openinsider" label="OpenInsider" />
+          <SubNavLink to="/insider/finnhub" label="Finnhub" />
+          <SubNavLink to="/insider/political" label="Political" />
+          <SubNavLink to="/insider/earnings" label="Earnings" />
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          {Object.entries(PRESETS).map(([key, { label }]) => (
-            <TabsTrigger key={key} value={key}>
-              {label}
-            </TabsTrigger>
-          ))}
-          <TabsTrigger value="custom">Custom</TabsTrigger>
-        </TabsList>
-
-        {/* Preset tab content */}
-        {(Object.keys(PRESETS) as PresetKey[]).map((key) => (
-          <TabsContent key={key} value={key} className="space-y-4 mt-4">
-            <p className="text-sm text-muted-foreground">{PRESETS[key].description}</p>
-          </TabsContent>
-        ))}
-
-        {/* Custom tab content */}
-        <TabsContent value="custom" className="space-y-4 mt-4">
-          <CustomFilterForm
-            filters={customFilters}
-            onChange={setCustomFilters}
-            onSearch={handleCustomSearch}
-            loading={loading}
+      {/* Category dropdowns + Custom button */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {Object.entries(CATEGORIES).map(([catKey, cat]) => (
+          <CategoryDropdown
+            key={catKey}
+            categoryKey={catKey}
+            category={cat}
+            activePreset={isCustomMode ? null : activePreset}
+            onSelect={handlePresetSelect}
           />
-        </TabsContent>
-      </Tabs>
+        ))}
+        <Button
+          variant={!isCustomMode && activePreset === 'screener' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => handlePresetSelect('screener')}
+        >
+          Screener
+        </Button>
+        <Button
+          variant={isCustomMode ? 'default' : 'outline'}
+          size="sm"
+          onClick={handleCustomMode}
+        >
+          Custom
+        </Button>
+      </div>
+
+      {/* Active selection label */}
+      {activePreset && !isCustomMode && (
+        <p className="text-sm text-muted-foreground">
+          Showing: <span className="font-medium text-foreground">{getPresetLabel(activePreset)}</span>
+        </p>
+      )}
+
+      {/* Custom filter form */}
+      {isCustomMode && (
+        <CustomFilterForm
+          filters={customFilters}
+          onChange={setCustomFilters}
+          onSearch={handleCustomSearch}
+          loading={loading}
+        />
+      )}
 
       {/* Cached indicator */}
       {response?.cached && (
@@ -488,24 +795,48 @@ export function InsiderOpeninsiderPage() {
       {/* Results */}
       {!loading && !error && response && (
         <>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <span className="text-xs text-muted-foreground">
               {response.total} record{response.total !== 1 ? 's' : ''} found
             </span>
+            <div className="flex items-center gap-1 ml-auto">
+              <Button
+                variant={viewMode === 'flat' ? 'default' : 'outline'}
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={() => setViewMode('flat')}
+              >
+                <List className="h-3 w-3" />
+                Trades
+              </Button>
+              <Button
+                variant={viewMode === 'aggregated' ? 'default' : 'outline'}
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={() => setViewMode('aggregated')}
+              >
+                <BarChart3 className="h-3 w-3" />
+                By Ticker
+              </Button>
+            </div>
           </div>
-          <OpenInsiderTable records={records} />
+          {viewMode === 'flat' ? (
+            <OpenInsiderTable records={records} />
+          ) : (
+            <AggregatedTickerTable records={records} />
+          )}
         </>
       )}
 
-      {/* Empty state for preset tabs before first load */}
-      {!loading && !error && !response && isPresetTab && (
+      {/* Empty state for preset before first load */}
+      {!loading && !error && !response && !isCustomMode && activePreset && (
         <div className="text-center py-20 text-muted-foreground text-sm">
           Loading screener data...
         </div>
       )}
 
-      {/* Empty state for custom tab */}
-      {!loading && !error && !response && !isPresetTab && (
+      {/* Empty state for custom mode */}
+      {!loading && !error && !response && isCustomMode && (
         <div className="text-center py-20 text-muted-foreground text-sm">
           Set your filters above and click Search to run the custom screener.
         </div>

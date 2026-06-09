@@ -24,7 +24,7 @@ import { formatNumber } from '@/utils/format';
 // Chart helpers
 // ---------------------------------------------------------------------------
 
-const LINE_COLORS = ['#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed'];
+const LINE_COLORS = ['#38bdf8', '#7dd3fc', '#fb7185', '#fbbf24', '#94a3b8'];
 const lineColor = (index: number): string => LINE_COLORS[index % LINE_COLORS.length];
 
 function buildChartData(
@@ -125,7 +125,7 @@ function ChangeLogTable({ records, insiderFilter }: { records: OwnershipChangeRe
               <TableCell className="text-xs text-muted-foreground max-w-[140px] truncate">{rec.position}</TableCell>
               <TableCell className="text-right text-xs tabular-nums">{formatNumber(rec.shares_before)}</TableCell>
               <TableCell className="text-right text-xs tabular-nums">{formatNumber(rec.shares_after)}</TableCell>
-              <TableCell className={`text-right text-sm tabular-nums font-medium ${rec.net_change > 0 ? 'text-green-600' : rec.net_change < 0 ? 'text-red-600' : ''}`}>
+              <TableCell className={`text-right text-sm tabular-nums font-medium ${rec.net_change > 0 ? 'text-primary' : rec.net_change < 0 ? 'text-destructive' : ''}`}>
                 {rec.net_change > 0 ? '+' : ''}{formatNumber(rec.net_change)}
               </TableCell>
               <TableCell className="text-xs font-mono">{rec.form_type}</TableCell>

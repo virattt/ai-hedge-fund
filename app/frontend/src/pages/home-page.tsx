@@ -30,13 +30,17 @@ export function HomePage() {
       <div className="max-w-3xl w-full space-y-10">
         {/* Hero */}
         <div className="text-center space-y-4">
-          <h1 className="text-4xl font-bold tracking-tight text-foreground">
+          <p className="text-xs font-data uppercase tracking-[0.4em] text-primary/70">
+            // tactical analysis interface
+          </p>
+          <h1 className="text-5xl font-bold tracking-tight text-foreground uppercase">
             AI Hedge Fund
           </h1>
+          <div className="hud-divider mx-auto max-w-md" />
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             An AI-powered hedge fund proof of concept. Multiple AI analyst agents analyze stocks in parallel, feed signals to a risk manager, then a portfolio manager makes final trading decisions.
           </p>
-          <Button asChild size="lg" className="mt-4">
+          <Button asChild size="lg" className="mt-4 hud-glow-hover uppercase tracking-wider">
             <Link to="/editor">Open Editor &rarr;</Link>
           </Button>
         </div>
@@ -44,10 +48,10 @@ export function HomePage() {
         {/* Feature cards */}
         <div className="grid gap-4 sm:grid-cols-3">
           {features.map(({ icon: Icon, title, description }) => (
-            <Card key={title}>
+            <Card key={title} className="hud-corner-bracket">
               <CardHeader>
-                <Icon className="h-8 w-8 text-muted-foreground mb-2" />
-                <CardTitle className="text-base">{title}</CardTitle>
+                <Icon className="h-8 w-8 text-primary mb-2" />
+                <CardTitle className="text-base uppercase tracking-wide">{title}</CardTitle>
                 <CardDescription>{description}</CardDescription>
               </CardHeader>
             </Card>

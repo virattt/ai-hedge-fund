@@ -16,7 +16,7 @@ import time
 from collections import OrderedDict
 from urllib.parse import urlencode
 
-import httpx
+import urllib.request
 from bs4 import BeautifulSoup
 
 from app.backend.models.openinsider_schemas import OpenInsiderRecord, OpenInsiderResponse
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 _BASE_URL: str = "http://openinsider.com/screener"
 
 _CACHE_TTL_SECONDS: float = 3600.0  # 1 hour
-_CACHE_MAX_SIZE: int = 20
+_CACHE_MAX_SIZE: int = 50
 
 _USER_AGENT: str = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -75,6 +75,39 @@ _BASE_PARAMS: dict[str, str] = {
 # ---------------------------------------------------------------------------
 # Preset configurations (overrides on top of _BASE_PARAMS)
 # ---------------------------------------------------------------------------
+
+# Direct "Latest" URLs return the freshest data without the screener form lag.
+# Used as the primary URL for named presets; the screener form is fallback only.
+_PRESET_DIRECT_URLS: dict[str, str] = {
+    # Original presets
+    "ceo_cfo_conviction": "http://openinsider.com/latest-ceo-cfo-purchases-25k",
+    "cluster_buy": "http://openinsider.com/latest-cluster-buys",
+    "cluster_sell": "http://openinsider.com/latest-ceo-cfo-sales-100k",
+    "significant_increase": "http://openinsider.com/latest-insider-purchases-25k",
+    "screener": "http://openinsider.com/latest-insider-trading",
+    # Latest category
+    "latest_cluster_buys": "http://openinsider.com/latest-cluster-buys",
+    "latest_penny_stock_buys": "http://openinsider.com/latest-penny-stock-buys",
+    "latest_insider_trading": "http://openinsider.com/latest-insider-trading",
+    "latest_insider_buys": "http://openinsider.com/latest-insider-buys",
+    "latest_insider_buys_25k": "http://openinsider.com/latest-insider-purchases-25k",
+    "latest_officer_buys_25k": "http://openinsider.com/latest-officer-purchases-25k",
+    "latest_ceo_cfo_buys_25k": "http://openinsider.com/latest-ceo-cfo-purchases-25k",
+    "latest_insider_sales": "http://openinsider.com/latest-insider-sales",
+    "latest_insider_sales_100k": "http://openinsider.com/latest-insider-sales-100k",
+    "latest_officer_sales_100k": "http://openinsider.com/latest-officer-sales-100k",
+    "latest_ceo_cfo_sales_100k": "http://openinsider.com/latest-ceo-cfo-sales-100k",
+    # Top category
+    "top_officer_buys_today": "http://openinsider.com/top-officer-purchases-today",
+    "top_officer_buys_week": "http://openinsider.com/top-officer-purchases-this-week",
+    "top_officer_buys_month": "http://openinsider.com/top-officer-purchases-this-month",
+    "top_insider_buys_today": "http://openinsider.com/top-insider-purchases-today",
+    "top_insider_buys_week": "http://openinsider.com/top-insider-purchases-this-week",
+    "top_insider_buys_month": "http://openinsider.com/top-insider-purchases-this-month",
+    "top_insider_sales_today": "http://openinsider.com/top-insider-sales-today",
+    "top_insider_sales_week": "http://openinsider.com/top-insider-sales-this-week",
+    "top_insider_sales_month": "http://openinsider.com/top-insider-sales-this-month",
+}
 
 PRESET_CONFIGS: dict[str, dict[str, str]] = {
     # CEO/CFO Conviction: buys + sells > $100k, last 30 days
@@ -199,16 +232,12 @@ class OpenInsiderFetchError(Exception):
 
 
 def build_screener_url(preset: str, custom_params: dict[str, str] | None) -> str:
-    """Construct the full openinsider.com screener URL with all form fields.
-
-    Starts from _BASE_PARAMS (all fields with empty defaults), then applies
-    preset overrides or translated custom params on top.
-    """
+    """Construct the openinsider.com URL. Uses direct "Latest" URLs for named presets."""
+    direct = _PRESET_DIRECT_URLS.get(preset)
+    if direct:
+        return direct
     params = dict(_BASE_PARAMS)
-    if preset in PRESET_CONFIGS:
-        params.update(PRESET_CONFIGS[preset])
-    else:
-        params.update(_translate_custom_params(custom_params or {}))
+    params.update(_translate_custom_params(custom_params or {}))
     return f"{_BASE_URL}?{urlencode(params)}"
 
 
@@ -334,30 +363,31 @@ def parse_openinsider_table(html_content: str) -> list[OpenInsiderRecord]:
 def _fetch_openinsider_data(preset: str, custom_params: dict[str, str] | None) -> OpenInsiderResponse:
     """Synchronous worker: build URL, fetch HTML, parse table, return response.
 
-    Retries once after a 1-second sleep on failure. Both attempts failing raises
-    OpenInsiderFetchError. Cloudflare challenge detection runs before parsing
-    and raises OpenInsiderFetchError immediately if triggered.
-
-    Args:
-        preset: Screener preset name or "custom".
-        custom_params: Custom URL parameters for "custom" preset mode.
-
-    Returns:
-        OpenInsiderResponse with cached=False.
-
-    Raises:
-        OpenInsiderFetchError: After both fetch attempts fail, or on Cloudflare block.
+    Uses urllib.request with a ProxyHandler({}) to bypass proxy env vars
+    while keeping system DNS resolution. Retries once on failure.
     """
     url = build_screener_url(preset, custom_params)
-    headers = {"User-Agent": _USER_AGENT}
     last_exc: Exception | None = None
+
+    # Build an opener that ignores proxy env vars but uses normal DNS
+    proxy_handler = urllib.request.ProxyHandler({})
+    opener = urllib.request.build_opener(proxy_handler)
 
     for attempt in range(2):
         try:
-            response = httpx.get(url, headers=headers, timeout=15.0)
-            response.raise_for_status()
-            html = response.text
-            resp_headers = dict(response.headers)
+            req = urllib.request.Request(url, headers={
+                "User-Agent": _USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "identity",
+            })
+            with opener.open(req, timeout=60) as resp:
+                raw = resp.read()
+                try:
+                    html = raw.decode("utf-8")
+                except UnicodeDecodeError:
+                    html = raw.decode("latin-1")
+            resp_headers = {k.lower(): v for k, v in resp.headers.items()}
             if _detect_cloudflare_challenge(html, resp_headers):
                 raise OpenInsiderFetchError(
                     "Cloudflare challenge detected -- openinsider.com may be blocking automated requests"
