@@ -82,13 +82,8 @@ def _first_not_none(*values: Any) -> Any:
     return None
 
 
-def _normalize_yfinance_ratio(value: Any) -> float | None:
-    numeric = _safe_float(value)
-    if numeric is None:
-        return None
-    if abs(numeric) > 10:
-        return numeric / 100
-    return numeric
+def _abs_value(value: float | None) -> float | None:
+    return abs(value) if value is not None else None
 
 
 def _date_str(value: Any) -> str:
@@ -120,6 +115,13 @@ def _get_fast_info_value(fast_info: Any, key: str) -> Any:
     if isinstance(fast_info, dict):
         return fast_info.get(key)
     return getattr(fast_info, key, None)
+
+
+def _is_current_date(value: str) -> bool:
+    parsed = _to_datetime(value)
+    if parsed is None:
+        return False
+    return parsed.date() >= datetime.datetime.now().date()
 
 
 class YFinanceProvider(FinancialDataProvider):
@@ -177,7 +179,7 @@ class YFinanceProvider(FinancialDataProvider):
         return prices
 
     def _statement_frames(self, ticker_obj: Any, period: str) -> dict[str, pd.DataFrame]:
-        use_quarterly = period.lower() in {"quarter", "quarterly"}
+        use_quarterly = period.lower() in {"quarter", "quarterly", "ttm"}
         frame_attrs = {
             "income": "quarterly_financials" if use_quarterly else "financials",
             "balance": "quarterly_balance_sheet" if use_quarterly else "balance_sheet",
@@ -207,20 +209,52 @@ class YFinanceProvider(FinancialDataProvider):
         periods.sort(key=lambda value: pd.Timestamp(value), reverse=True)
         return periods[:limit]
 
-    def _statement_value(self, frames: dict[str, pd.DataFrame], period: Any, line_item: str) -> float | None:
+    def _statement_value_from_frame(self, frame: pd.DataFrame, period: Any, line_item: str) -> float | None:
+        if frame.empty or period not in frame.columns:
+            return None
         aliases = LINE_ITEM_ALIASES.get(line_item, [line_item])
-        for frame in frames.values():
-            if frame.empty or period not in frame.columns:
-                continue
-            for alias in aliases:
-                if alias in frame.index:
-                    return _safe_float(frame.loc[alias, period])
+        for alias in aliases:
+            if alias in frame.index:
+                return _safe_float(frame.loc[alias, period])
         return None
+
+    def _statement_value(self, frames: dict[str, pd.DataFrame], period: Any, line_item: str) -> float | None:
+        for frame in frames.values():
+            value = self._statement_value_from_frame(frame, period, line_item)
+            if value is not None:
+                return value
+        return None
+
+    def _ttm_statement_value(self, frames: dict[str, pd.DataFrame], periods: list[Any], line_item: str) -> float | None:
+        if len(periods) < 4:
+            return None
+
+        latest_period = periods[0]
+        balance_value = self._statement_value_from_frame(frames["balance"], latest_period, line_item)
+        if balance_value is not None:
+            return balance_value
+
+        values = []
+        for frame_name in ("income", "cashflow"):
+            frame_values = [self._statement_value_from_frame(frames[frame_name], period, line_item) for period in periods]
+            if any(value is not None for value in frame_values):
+                values.extend(value for value in frame_values if value is not None)
+                break
+
+        if not values:
+            return None
+        return sum(values)
+
+    def _line_item_value(self, frames: dict[str, pd.DataFrame], report_period: Any, trailing_periods: list[Any], line_item: str, is_ttm: bool) -> float | None:
+        if is_ttm:
+            return self._ttm_statement_value(frames, trailing_periods, line_item)
+        return self._statement_value(frames, report_period, line_item)
 
     def _line_item_records(self, ticker: str, end_date: str, period: str, limit: int, requested_items: list[str] | None = None) -> list[dict[str, Any]]:
         ticker_obj = self._ticker(ticker)
         frames = self._statement_frames(ticker_obj, period)
-        periods = self._statement_periods(frames, end_date, limit)
+        is_ttm = period.lower() == "ttm"
+        periods = self._statement_periods(frames, end_date, limit + (3 if is_ttm else 0))
         info = self._info(ticker_obj)
 
         if not periods:
@@ -228,7 +262,11 @@ class YFinanceProvider(FinancialDataProvider):
 
         requested = requested_items or list(LINE_ITEM_ALIASES.keys())
         records = []
-        for report_period in periods:
+        for index, report_period in enumerate(periods[:limit]):
+            trailing_periods = periods[index : index + 4] if is_ttm else [report_period]
+            if is_ttm and len(trailing_periods) < 4:
+                continue
+
             row = {
                 "ticker": ticker.upper(),
                 "report_period": _date_str(report_period),
@@ -236,13 +274,22 @@ class YFinanceProvider(FinancialDataProvider):
                 "currency": info.get("currency") or info.get("financialCurrency") or "USD",
             }
             for item in requested:
-                value = self._statement_value(frames, report_period, item)
+                value = self._line_item_value(frames, report_period, trailing_periods, item, is_ttm)
                 if value is None and item == "gross_margin":
-                    value = _ratio(self._statement_value(frames, report_period, "gross_profit"), self._statement_value(frames, report_period, "revenue"))
+                    value = _ratio(
+                        self._line_item_value(frames, report_period, trailing_periods, "gross_profit", is_ttm),
+                        self._line_item_value(frames, report_period, trailing_periods, "revenue", is_ttm),
+                    )
                 elif value is None and item == "operating_margin":
-                    value = _ratio(self._statement_value(frames, report_period, "operating_income"), self._statement_value(frames, report_period, "revenue"))
+                    value = _ratio(
+                        self._line_item_value(frames, report_period, trailing_periods, "operating_income", is_ttm),
+                        self._line_item_value(frames, report_period, trailing_periods, "revenue", is_ttm),
+                    )
                 elif value is None and item == "book_value_per_share":
-                    value = _ratio(self._statement_value(frames, report_period, "shareholders_equity"), self._statement_value(frames, report_period, "outstanding_shares"))
+                    value = _ratio(
+                        self._line_item_value(frames, report_period, trailing_periods, "shareholders_equity", is_ttm),
+                        self._line_item_value(frames, report_period, trailing_periods, "outstanding_shares", is_ttm),
+                    )
                 row[item] = value
             records.append(row)
         return records
@@ -262,6 +309,44 @@ class YFinanceProvider(FinancialDataProvider):
             return _safe_float(_get_fast_info_value(ticker_obj.fast_info, "market_cap"))
         except Exception:
             return None
+
+    def _historical_close(self, ticker_obj: Any, end_date: str) -> float | None:
+        end = _to_datetime(end_date)
+        if end is None:
+            return None
+
+        try:
+            start = end - datetime.timedelta(days=10)
+            history = ticker_obj.history(start=start.strftime("%Y-%m-%d"), end=(end + datetime.timedelta(days=1)).strftime("%Y-%m-%d"), auto_adjust=False)
+        except RuntimeError:
+            raise
+        except Exception:
+            return None
+
+        if history is None or history.empty:
+            return None
+
+        history = history.sort_index()
+        history.index = pd.to_datetime(history.index).tz_localize(None)
+        history = history[history.index <= pd.Timestamp(end.date())]
+        if history.empty:
+            return None
+        return _safe_float(history.iloc[-1].get("Close"))
+
+    def _historical_market_cap(self, ticker_obj: Any, record: dict[str, Any]) -> float | None:
+        shares = record.get("outstanding_shares")
+        if shares is None:
+            return None
+
+        close = self._historical_close(ticker_obj, record["report_period"])
+        if close is None:
+            return None
+        return close * shares
+
+    def _enterprise_value(self, market_cap: float | None, debt: float | None, cash: float | None) -> float | None:
+        if market_cap is None:
+            return None
+        return market_cap + (debt or 0) - (cash or 0)
 
     def get_financial_metrics(
         self,
@@ -285,11 +370,10 @@ class YFinanceProvider(FinancialDataProvider):
             return []
 
         market_cap = self._market_cap_from_ticker(ticker_obj, info)
-        enterprise_value = _safe_float(info.get("enterpriseValue"))
         metrics = []
 
         if not records:
-            records = [{"ticker": ticker.upper(), "report_period": end_date, "period": period, "currency": info.get("currency") or "USD"}]
+            return []
 
         for index, record in enumerate(records[:limit]):
             previous = records[index + 1] if index + 1 < len(records) else {}
@@ -309,26 +393,28 @@ class YFinanceProvider(FinancialDataProvider):
             ebit = record.get("ebit")
             ebitda = record.get("ebitda")
             interest_expense = record.get("interest_expense")
+            record_market_cap = market_cap if _is_current_date(record["report_period"]) else self._historical_market_cap(ticker_obj, record)
+            record_enterprise_value = self._enterprise_value(record_market_cap, debt, cash)
 
             metric = FinancialMetrics(
                 ticker=ticker.upper(),
                 report_period=record["report_period"],
                 period=period,
                 currency=record.get("currency") or info.get("currency") or "USD",
-                market_cap=market_cap,
-                enterprise_value=enterprise_value,
-                price_to_earnings_ratio=_safe_float(info.get("trailingPE")),
-                price_to_book_ratio=_safe_float(info.get("priceToBook")),
-                price_to_sales_ratio=_safe_float(info.get("priceToSalesTrailing12Months")),
-                enterprise_value_to_ebitda_ratio=_first_not_none(_safe_float(info.get("enterpriseToEbitda")), _ratio(enterprise_value, ebitda)),
-                enterprise_value_to_revenue_ratio=_first_not_none(_safe_float(info.get("enterpriseToRevenue")), _ratio(enterprise_value, revenue)),
-                free_cash_flow_yield=_ratio(free_cash_flow, market_cap),
-                peg_ratio=_safe_float(info.get("pegRatio")),
-                gross_margin=_first_not_none(_ratio(gross_profit, revenue), _normalize_yfinance_ratio(info.get("grossMargins"))),
-                operating_margin=_first_not_none(_ratio(operating_income, revenue), _normalize_yfinance_ratio(info.get("operatingMargins"))),
-                net_margin=_first_not_none(_ratio(net_income, revenue), _normalize_yfinance_ratio(info.get("profitMargins"))),
-                return_on_equity=_first_not_none(_ratio(net_income, equity), _normalize_yfinance_ratio(info.get("returnOnEquity"))),
-                return_on_assets=_first_not_none(_ratio(net_income, total_assets), _normalize_yfinance_ratio(info.get("returnOnAssets"))),
+                market_cap=record_market_cap,
+                enterprise_value=record_enterprise_value,
+                price_to_earnings_ratio=_ratio(record_market_cap, net_income),
+                price_to_book_ratio=_ratio(record_market_cap, equity),
+                price_to_sales_ratio=_ratio(record_market_cap, revenue),
+                enterprise_value_to_ebitda_ratio=_ratio(record_enterprise_value, ebitda),
+                enterprise_value_to_revenue_ratio=_ratio(record_enterprise_value, revenue),
+                free_cash_flow_yield=_ratio(free_cash_flow, record_market_cap),
+                peg_ratio=None,
+                gross_margin=_ratio(gross_profit, revenue),
+                operating_margin=_ratio(operating_income, revenue),
+                net_margin=_ratio(net_income, revenue),
+                return_on_equity=_ratio(net_income, equity),
+                return_on_assets=_ratio(net_income, total_assets),
                 return_on_invested_capital=_ratio(operating_income, (debt or 0) + (equity or 0) - (cash or 0)),
                 asset_turnover=_ratio(revenue, total_assets),
                 inventory_turnover=None,
@@ -336,23 +422,23 @@ class YFinanceProvider(FinancialDataProvider):
                 days_sales_outstanding=None,
                 operating_cycle=None,
                 working_capital_turnover=_ratio(revenue, (current_assets or 0) - (current_liabilities or 0)),
-                current_ratio=_first_not_none(_ratio(current_assets, current_liabilities), _safe_float(info.get("currentRatio"))),
-                quick_ratio=_safe_float(info.get("quickRatio")),
+                current_ratio=_ratio(current_assets, current_liabilities),
+                quick_ratio=None,
                 cash_ratio=_ratio(cash, current_liabilities),
                 operating_cash_flow_ratio=_ratio(record.get("operating_cash_flow"), current_liabilities),
-                debt_to_equity=_first_not_none(_ratio(debt, equity), _normalize_yfinance_ratio(info.get("debtToEquity"))),
+                debt_to_equity=_ratio(debt, equity),
                 debt_to_assets=_ratio(debt, total_assets),
                 interest_coverage=_ratio(ebit, abs(interest_expense)) if interest_expense else None,
-                revenue_growth=_first_not_none(_growth(revenue, previous.get("revenue")), _normalize_yfinance_ratio(info.get("revenueGrowth"))),
-                earnings_growth=_first_not_none(_growth(net_income, previous.get("net_income")), _normalize_yfinance_ratio(info.get("earningsGrowth"))),
+                revenue_growth=_growth(revenue, previous.get("revenue")),
+                earnings_growth=_growth(net_income, previous.get("net_income")),
                 book_value_growth=_growth(equity, previous.get("shareholders_equity")),
                 earnings_per_share_growth=_growth(record.get("earnings_per_share"), previous.get("earnings_per_share")),
                 free_cash_flow_growth=_growth(free_cash_flow, previous.get("free_cash_flow")),
                 operating_income_growth=_growth(operating_income, previous.get("operating_income")),
                 ebitda_growth=_growth(ebitda, previous.get("ebitda")),
-                payout_ratio=_normalize_yfinance_ratio(info.get("payoutRatio")),
-                earnings_per_share=_first_not_none(record.get("earnings_per_share"), _safe_float(info.get("trailingEps"))),
-                book_value_per_share=_first_not_none(record.get("book_value_per_share"), _ratio(equity, shares), _safe_float(info.get("bookValue"))),
+                payout_ratio=_ratio(_abs_value(record.get("dividends_and_other_cash_distributions")), net_income),
+                earnings_per_share=record.get("earnings_per_share"),
+                book_value_per_share=_first_not_none(record.get("book_value_per_share"), _ratio(equity, shares)),
                 free_cash_flow_per_share=_ratio(free_cash_flow, shares),
             )
             metrics.append(metric)
@@ -410,7 +496,7 @@ class YFinanceProvider(FinancialDataProvider):
         trades: list[InsiderTrade] = []
         start = _to_datetime(start_date)
         end = _to_datetime(end_date)
-        for _, row in trades_df.head(limit).iterrows():
+        for _, row in trades_df.iterrows():
             raw_date = row.get("Start Date") or row.get("Date") or row.get("Filing Date") or end_date
             trade_date = _to_datetime(_date_str(raw_date))
             if start and trade_date and trade_date.date() < start.date():
@@ -440,6 +526,8 @@ class YFinanceProvider(FinancialDataProvider):
                     filing_date=filing_date,
                 )
             )
+            if len(trades) >= limit:
+                break
 
         if not trades:
             return []
@@ -511,7 +599,15 @@ class YFinanceProvider(FinancialDataProvider):
     def get_market_cap(self, ticker: str, end_date: str, api_key: str | None = None) -> float | None:
         try:
             ticker_obj = self._ticker(ticker)
-            return self._market_cap_from_ticker(ticker_obj, self._info(ticker_obj))
+            if _is_current_date(end_date):
+                return self._market_cap_from_ticker(ticker_obj, self._info(ticker_obj))
+
+            records = self._line_item_records(ticker, end_date, "ttm", 1, requested_items=["outstanding_shares"])
+            if not records:
+                records = self._line_item_records(ticker, end_date, "annual", 1, requested_items=["outstanding_shares"])
+            if not records:
+                return None
+            return self._historical_market_cap(ticker_obj, records[0])
         except RuntimeError:
             raise
         except Exception:
