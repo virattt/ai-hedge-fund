@@ -44,7 +44,11 @@ OPENAI_API_KEY=your-openai-api-key
 # For running LLMs hosted by groq (deepseek, llama3, etc.)
 GROQ_API_KEY=your-groq-api-key
 
-# For getting financial data to power the hedge fund
+# For getting financial data to power the hedge fund.
+# yfinance is the default data provider and does not require an API key.
+FINANCIAL_DATA_PROVIDER=yfinance
+
+# Optional: use this only if FINANCIAL_DATA_PROVIDER=financialdatasets.
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
