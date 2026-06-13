@@ -9,6 +9,7 @@ import { useFlowContext } from '@/contexts/flow-context';
 import { useNodeContext } from '@/contexts/node-context';
 import { getModels, LanguageModel } from '@/data/models';
 import { useNodeState } from '@/hooks/use-node-state';
+import { useI18n } from '@/i18n/use-i18n';
 import { cn } from '@/lib/utils';
 import { type AgentNode } from '../types';
 import { getStatusColor } from '../utils';
@@ -23,20 +24,21 @@ export function AgentNode({
 }: NodeProps<AgentNode>) {
   const { currentFlowId } = useFlowContext();
   const { getAgentNodeDataForFlow, setAgentModel, getAgentModel } = useNodeContext();
-  
+
   // Get agent node data for the current flow
   const agentNodeData = getAgentNodeDataForFlow(currentFlowId?.toString() || null);
-  const nodeData = agentNodeData[id] || { 
-    status: 'IDLE', 
-    ticker: null, 
-    message: '', 
+  const nodeData = agentNodeData[id] || {
+    status: 'IDLE',
+    ticker: null,
+    message: '',
     messages: [],
     lastUpdated: 0
   };
   const status = nodeData.status;
   const isInProgress = status === 'IN_PROGRESS';
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  
+  const { t, translateDisplayName, translateStatus } = useI18n();
+
   // Use persistent state hooks
   const [availableModels, setAvailableModels] = useNodeState<LanguageModel[]>(id, 'availableModels', []);
   const [selectedModel, setSelectedModel] = useNodeState<LanguageModel | null>(id, 'selectedModel', null);
@@ -52,7 +54,7 @@ export function AgentNode({
         // Keep empty array as fallback
       }
     };
-    
+
     loadModels();
   }, [setAvailableModels]);
 
@@ -80,7 +82,7 @@ export function AgentNode({
       isConnectable={isConnectable}
       icon={<Bot className="h-5 w-5" />}
       iconColor={getStatusColor(status)}
-      name={data.name || "Agent"}
+      name={data.name ? translateDisplayName(data.name) : t('node.agent')}
       description={data.description}
       status={status}
     >
@@ -88,16 +90,16 @@ export function AgentNode({
         <div className="border-t border-border p-3">
           <div className="flex flex-col gap-2">
             <div className="text-subtitle text-primary flex items-center gap-1">
-              Status
+              {t('node.status')}
             </div>
 
             <div className={cn(
               "text-foreground text-xs rounded p-2 border border-status",
               isInProgress ? "gradient-animation" : getStatusColor(status)
             )}>
-              <span className="capitalize">{status.toLowerCase().replace(/_/g, ' ')}</span>
+              <span className="capitalize">{translateStatus(status)}</span>
             </div>
-            
+
             {nodeData.message && (
               <div className="text-foreground text-subtitle">
                 {nodeData.message !== "Done" && nodeData.message}
@@ -107,25 +109,25 @@ export function AgentNode({
             <Accordion type="single" collapsible>
               <AccordionItem value="advanced" className="border-none">
                 <AccordionTrigger className="!text-subtitle text-primary">
-                  Advanced
+                  {t('node.advanced')}
                 </AccordionTrigger>
                 <AccordionContent className="pt-2">
                   <div className="flex flex-col gap-2">
                     <div className="text-subtitle text-primary flex items-center gap-1">
-                      Model
+                      {t('node.model')}
                     </div>
                     <ModelSelector
                       models={availableModels}
                       value={selectedModel?.model_name || ""}
                       onChange={handleModelChange}
-                      placeholder="Auto"
+                      placeholder={t('node.auto')}
                     />
                     {selectedModel && (
                       <button
                         onClick={handleUseGlobalModel}
                         className="text-subtitle text-primary hover:text-foreground transition-colors text-left"
                       >
-                        Reset to Auto
+                        {t('node.resetToAuto')}
                       </button>
                     )}
                   </div>
@@ -137,7 +139,7 @@ export function AgentNode({
         <AgentOutputDialog
           isOpen={isDialogOpen}
           onOpenChange={setIsDialogOpen}
-          name={data.name || "Agent"}
+          name={data.name ? translateDisplayName(data.name) : t('node.agent')}
           nodeId={id}
           flowId={currentFlowId?.toString() || null}
         />

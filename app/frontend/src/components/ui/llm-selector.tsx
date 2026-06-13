@@ -17,6 +17,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { type LanguageModel } from "@/data/models"
+import { useI18n } from "@/i18n/use-i18n"
 import { cn } from "@/lib/utils"
 
 interface ModelSelectorProps {
@@ -26,13 +27,15 @@ interface ModelSelectorProps {
   placeholder?: string;
 }
 
-export function ModelSelector({ 
-  models, 
-  value, 
-  onChange, 
-  placeholder = "Select a model..." 
+export function ModelSelector({
+  models,
+  value,
+  onChange,
+  placeholder
 }: ModelSelectorProps) {
   const [open, setOpen] = React.useState(false)
+  const { t } = useI18n()
+  const placeholderText = placeholder || t('modelSelector.placeholder')
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -46,16 +49,16 @@ export function ModelSelector({
           <span className="text-subtitle">
             {value
               ? models.find((model) => model.model_name === value)?.display_name
-              : placeholder}
+              : placeholderText}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-full min-w-[350px] p-0 bg-node border border-border shadow-lg">
         <Command className="bg-node">
-          <CommandInput placeholder="Search model..." className="h-9 bg-node" />
+          <CommandInput placeholder={t('modelSelector.search')} className="h-9 bg-node" />
           <CommandList className="bg-node">
-            <CommandEmpty>No model found.</CommandEmpty>
+            <CommandEmpty>{t('modelSelector.noneFound')}</CommandEmpty>
             <CommandGroup>
               {models.map((model) => (
                 <CommandItem
@@ -94,4 +97,4 @@ export function ModelSelector({
       </PopoverContent>
     </Popover>
   )
-} 
+}

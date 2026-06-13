@@ -7,6 +7,7 @@ import {
   setNodeInternalState
 } from '@/hooks/use-node-state';
 import { useToastManager } from '@/hooks/use-toast-manager';
+import { useI18n } from '@/i18n/use-i18n';
 import { flowService } from '@/services/flow-service';
 import { TabService } from '@/services/tab-service';
 import { Flow } from '@/types/flow';
@@ -19,12 +20,12 @@ export interface UseFlowManagementTabsReturn {
   isLoading: boolean;
   openGroups: string[];
   createDialogOpen: boolean;
-  
+
   // Computed values
   filteredFlows: Flow[];
   recentFlows: Flow[];
   templateFlows: Flow[];
-  
+
   // Actions
   setSearchQuery: (query: string) => void;
   setOpenGroups: (groups: string[]) => void;
@@ -36,7 +37,7 @@ export interface UseFlowManagementTabsReturn {
   handleOpenFlowInTab: (flow: Flow) => Promise<void>;
   handleDeleteFlow: (flow: Flow) => Promise<void>;
   handleRefresh: () => Promise<void>;
-  
+
   // Internal functions (for testing/advanced use)
   loadFlows: () => Promise<void>;
   createDefaultFlow: () => Promise<void>;
@@ -48,7 +49,8 @@ export function useFlowManagementTabs(): UseFlowManagementTabsReturn {
   const { exportNodeContextData } = useNodeContext();
   const { openTab, isTabOpen, closeTab } = useTabsContext();
   const { success, error } = useToastManager();
-  
+  const { t } = useI18n();
+
   // State for flows
   const [flows, setFlows] = useState<Flow[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -61,11 +63,11 @@ export function useFlowManagementTabs(): UseFlowManagementTabsReturn {
     try {
       // Get current nodes from React Flow
       const currentNodes = reactFlowInstance.getNodes();
-      
+
       // Get node context data (runtime data: agent status, messages, output data)
       const flowId = currentFlowId?.toString() || null;
       const nodeContextData = exportNodeContextData(flowId);
-      
+
       // Enhance nodes with internal states
       const nodesWithStates = currentNodes.map((node: any) => {
         const internalState = getNodeInternalState(node.id);
@@ -81,11 +83,11 @@ export function useFlowManagementTabs(): UseFlowManagementTabsReturn {
 
       // Temporarily replace nodes in React Flow with enhanced nodes
       reactFlowInstance.setNodes(nodesWithStates);
-      
+
       try {
         // Use the context's save function which handles currentFlowId properly
         const savedFlow = await saveCurrentFlow();
-        
+
         if (savedFlow) {
           // After basic save, update with node context data
           const updatedFlow = await flowService.updateFlow(savedFlow.id, {
@@ -95,10 +97,10 @@ export function useFlowManagementTabs(): UseFlowManagementTabsReturn {
               nodeContextData, // Add runtime data from node context
             }
           });
-          
+
           return updatedFlow;
         }
-        
+
         return savedFlow;
       } finally {
         // Restore original nodes (without internal_state in React Flow)
@@ -117,10 +119,10 @@ export function useFlowManagementTabs(): UseFlowManagementTabsReturn {
       const nodes = reactFlowInstance?.getNodes() || [];
       const edges = reactFlowInstance?.getEdges() || [];
       const viewport = reactFlowInstance?.getViewport() || { x: 0, y: 0, zoom: 1 };
-      
+
       const defaultFlow = await flowService.createDefaultFlow(nodes, edges, viewport);
       setFlows([defaultFlow]);
-      
+
       // Open the default flow in a tab
       const tabData = TabService.createFlowTab(defaultFlow);
       openTab(tabData);
@@ -135,11 +137,11 @@ export function useFlowManagementTabs(): UseFlowManagementTabsReturn {
     try {
       const flowsData = await flowService.getFlows();
       setFlows(flowsData);
-      
+
       // Don't automatically create or open tabs on startup
       // Let users explicitly open tabs by clicking on flows
       // Tabs will be restored from localStorage if they exist
-      
+
     } catch (error) {
       console.error('Error loading flows:', error);
     } finally {
@@ -183,10 +185,10 @@ export function useFlowManagementTabs(): UseFlowManagementTabsReturn {
     // Open the new flow in a tab
     const tabData = TabService.createFlowTab(newFlow);
     openTab(tabData);
-    
+
     // Remember it
     localStorage.setItem('lastSelectedFlowId', newFlow.id.toString());
-    
+
     // Refresh the flows list to show the new flow
     await loadFlows();
   }, [openTab, loadFlows]);
@@ -199,33 +201,33 @@ export function useFlowManagementTabs(): UseFlowManagementTabsReturn {
         localStorage.setItem('lastSelectedFlowId', savedFlow.id.toString());
         // Refresh the flows list
         await loadFlows();
-        success(`"${savedFlow.name}" saved!`, 'flow-save');
+        success(t('flows.savedToast', { name: savedFlow.name }), 'flow-save');
       } else {
-        error('Failed to save flow', 'flow-save-error');
+        error(t('flows.saveFailed'), 'flow-save-error');
       }
     } catch (err) {
       console.error('Failed to save flow:', err);
-      error('Failed to save flow', 'flow-save-error');
+      error(t('flows.saveFailed'), 'flow-save-error');
     }
-  }, [saveCurrentFlowWithStates, loadFlows, success, error]);
+  }, [saveCurrentFlowWithStates, loadFlows, success, error, t]);
 
   const handleOpenFlowInTab = useCallback(async (flow: Flow) => {
-    try {      
+    try {
       // Always fetch the full flow data including nodes, edges, and viewport
       // This ensures we have the latest data from the backend
       const fullFlow = await flowService.getFlow(flow.id);
-      
+
       // Create tab data with configuration restoration only
       const createTabWithConfigRestore = (flowData: Flow) => {
         const tabData = TabService.createFlowTab(flowData);
-        
+
         // Enhance the tab content to restore only configuration data when the tab is activated
         return {
           ...tabData,
           onActivate: () => {
             // NOTE: We intentionally do NOT restore nodeContextData here
             // Runtime execution data (messages, analysis, agent status) should start fresh
-            
+
             // Restore internal states for each node (use-node-state data - configuration only)
             if (flowData.nodes) {
               flowData.nodes.forEach((node: any) => {
@@ -237,13 +239,13 @@ export function useFlowManagementTabs(): UseFlowManagementTabsReturn {
           }
         };
       };
-      
+
       // Check if tab is already open
       if (isTabOpen(flow.id.toString(), 'flow')) {
         // Tab exists - update it with fresh data and focus it
         const tabId = `flow-${flow.id}`;
         const enhancedTabData = createTabWithConfigRestore(fullFlow);
-        
+
         // Update the existing tab with fresh data
         openTab({
           id: tabId,
@@ -253,7 +255,7 @@ export function useFlowManagementTabs(): UseFlowManagementTabsReturn {
           flow: enhancedTabData.flow,
           metadata: enhancedTabData.metadata,
         });
-        
+
         // Trigger the enhanced restoration
         if (enhancedTabData.onActivate) {
           enhancedTabData.onActivate();
@@ -262,13 +264,13 @@ export function useFlowManagementTabs(): UseFlowManagementTabsReturn {
         // Create new tab with fresh data
         const enhancedTabData = createTabWithConfigRestore(fullFlow);
         openTab(enhancedTabData);
-        
+
         // Trigger the enhanced restoration for new tab
         if (enhancedTabData.onActivate) {
           enhancedTabData.onActivate();
         }
       }
-      
+
       // Remember the selected flow
       localStorage.setItem('lastSelectedFlowId', fullFlow.id.toString());
     } catch (err) {
@@ -284,20 +286,20 @@ export function useFlowManagementTabs(): UseFlowManagementTabsReturn {
   const handleDeleteFlow = useCallback(async (flow: Flow) => {
     try {
       await flowService.deleteFlow(flow.id);
-      
+
       // Close the tab if it's open
       const tabId = `flow-${flow.id}`;
       closeTab(tabId);
-      
+
       // Clear node states for the deleted flow
       clearFlowNodeStates(flow.id.toString());
-      
+
       // Remove from localStorage if it was the last selected
       const lastSelectedFlowId = localStorage.getItem('lastSelectedFlowId');
       if (lastSelectedFlowId === flow.id.toString()) {
         localStorage.removeItem('lastSelectedFlowId');
       }
-      
+
       // Refresh the flows list
       await loadFlows();
     } catch (error) {
@@ -312,12 +314,12 @@ export function useFlowManagementTabs(): UseFlowManagementTabsReturn {
     isLoading,
     openGroups,
     createDialogOpen,
-    
+
     // Computed values
     filteredFlows,
     recentFlows,
     templateFlows,
-    
+
     // Actions
     setSearchQuery,
     setOpenGroups,
@@ -329,9 +331,9 @@ export function useFlowManagementTabs(): UseFlowManagementTabsReturn {
     handleOpenFlowInTab,
     handleDeleteFlow,
     handleRefresh,
-    
+
     // Internal functions
     loadFlows,
     createDefaultFlow,
   };
-} 
+}

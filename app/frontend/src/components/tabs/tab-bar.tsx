@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { useTabsContext } from '@/contexts/tabs-context';
+import { useI18n } from '@/i18n/use-i18n';
 import { cn } from '@/lib/utils';
 import { FileText, Layout, Settings, X } from 'lucide-react';
 import { ReactNode, useState } from 'react';
@@ -22,6 +23,7 @@ const getTabIcon = (type: string): ReactNode => {
 
 export function TabBar({ className }: TabBarProps) {
   const { tabs, activeTabId, setActiveTab, closeTab, reorderTabs } = useTabsContext();
+  const { t } = useI18n();
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
@@ -38,7 +40,7 @@ export function TabBar({ className }: TabBarProps) {
   const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    
+
     if (draggedIndex !== null && draggedIndex !== index) {
       setDragOverIndex(index);
     }
@@ -50,11 +52,11 @@ export function TabBar({ className }: TabBarProps) {
 
   const handleDrop = (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault();
-    
+
     if (draggedIndex !== null && draggedIndex !== dropIndex) {
       reorderTabs(draggedIndex, dropIndex);
     }
-    
+
     setDraggedIndex(null);
     setDragOverIndex(null);
   };
@@ -70,7 +72,9 @@ export function TabBar({ className }: TabBarProps) {
       className
     )}>
       <div className="flex items-center min-w-0">
-        {tabs.map((tab, index) => (
+        {tabs.map((tab, index) => {
+          const tabTitle = tab.type === 'settings' ? t('settings.title') : tab.title;
+          return (
           <div
             key={tab.id}
             draggable
@@ -82,8 +86,8 @@ export function TabBar({ className }: TabBarProps) {
             className={cn(
               "group relative flex items-center gap-2 px-4 py-2.5 cursor-pointer transition-all duration-150 min-w-0 max-w-52 select-none last:border-r-0",
               // Active tab styling - VSCode style
-              activeTabId === tab.id 
-                ? "bg-panel before:absolute before:bottom-0 before:left-0 before:right-0 before:h-0.5 before:content-['']" 
+              activeTabId === tab.id
+                ? "bg-panel before:absolute before:bottom-0 before:left-0 before:right-0 before:h-0.5 before:content-['']"
                 : "bg-panel hover:bg-[var(--tab-hover-background)]",
               // Drag states
               draggedIndex === index && "opacity-60 scale-[0.98]",
@@ -109,7 +113,7 @@ export function TabBar({ className }: TabBarProps) {
           >
             {/* Active tab accent bar */}
             {activeTabId === tab.id && (
-              <div 
+              <div
                 className="absolute bottom-0 left-0 right-0 h-0.5"
                 style={{ backgroundColor: 'var(--tab-accent)' }}
               />
@@ -130,7 +134,7 @@ export function TabBar({ className }: TabBarProps) {
             <span className={cn(
               "text-[13px] font-normal truncate min-w-0 transition-colors duration-150"
             )}>
-              {tab.title}
+              {tabTitle}
             </span>
 
             {/* Close Button */}
@@ -155,7 +159,7 @@ export function TabBar({ className }: TabBarProps) {
                 closeTab(tab.id);
               }}
               onMouseDown={(e) => e.stopPropagation()} // Prevent drag when clicking close button
-              title="Close tab"
+              title={t('tabs.close')}
             >
               <X size={11} className="transition-transform duration-150 hover:scale-110" />
             </Button>
@@ -164,8 +168,9 @@ export function TabBar({ className }: TabBarProps) {
             {/* You can add this when you implement unsaved changes tracking */}
             {/* <div className="absolute top-1/2 left-1 w-1.5 h-1.5 rounded-full transform -translate-y-1/2" style={{ backgroundColor: 'var(--tab-active-text)' }} /> */}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
-} 
+}

@@ -27,6 +27,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { extractBaseAgentKey } from '@/data/node-mappings';
+import { useI18n } from '@/i18n/use-i18n';
 import { createAgentDisplayNames } from '@/utils/text-utils';
 import { ArrowDown, ArrowUp, Minus } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -47,6 +48,8 @@ export function InvestmentReportDialog({
   outputNodeData,
   connectedAgentIds,
 }: InvestmentReportDialogProps) {
+  const { t, translateAction, translateSignal } = useI18n();
+
   // Check if this is a backtest result and return early if it is
   // Backtest results should be displayed in the backtest output tab, not in the investment report dialog
   if (outputNodeData?.decisions?.backtest?.type === 'backtest_complete') {
@@ -77,7 +80,7 @@ export function InvestmentReportDialog({
 
     return (
       <Badge variant={variant as any}>
-        {signal}
+        {translateSignal(signal)}
       </Badge>
     );
   };
@@ -111,28 +114,28 @@ export function InvestmentReportDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">Investment Report</DialogTitle>
+          <DialogTitle className="text-xl font-bold">{t('dialog.investmentReport')}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-8 my-4">
           {/* Summary Section */}
           <section>
-            <h2 className="text-lg font-semibold mb-4">Summary</h2>
+            <h2 className="text-lg font-semibold mb-4">{t('bottom.summary')}</h2>
             <Card>
               <CardHeader className="pb-2">
                 <CardDescription>
-                  Recommended trading actions based on analyst signals
+                  {t('dialog.reportSummaryDescription')}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Ticker</TableHead>
-                      <TableHead>Price</TableHead>
-                      <TableHead>Action</TableHead>
-                      <TableHead>Quantity</TableHead>
-                      <TableHead>Confidence</TableHead>
+                      <TableHead>{t('table.ticker')}</TableHead>
+                      <TableHead>{t('table.price')}</TableHead>
+                      <TableHead>{t('table.action')}</TableHead>
+                      <TableHead>{t('table.quantity')}</TableHead>
+                      <TableHead>{t('table.confidence')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -146,7 +149,7 @@ export function InvestmentReportDialog({
                           <TableCell>
                             <div className="flex items-center gap-2">
                               {getActionIcon(decision.action as ActionType)}
-                              <span className="capitalize">{decision.action}</span>
+                              <span className="capitalize">{translateAction(decision.action)}</span>
                             </div>
                           </TableCell>
                           <TableCell>{decision.quantity}</TableCell>
@@ -161,7 +164,7 @@ export function InvestmentReportDialog({
           </section>
           {/* Analyst Signals Section */}
           <section>
-            <h2 className="text-lg font-semibold mb-4">Analyst Signals</h2>
+            <h2 className="text-lg font-semibold mb-4">{t('dialog.analystSignals')}</h2>
             <Accordion type="multiple" className="w-full">
               {tickers.map(ticker => (
                 <AccordionItem key={ticker} value={ticker}>
@@ -171,7 +174,7 @@ export function InvestmentReportDialog({
                       <div className="flex items-center gap-1">
                         {getActionIcon(outputNodeData.decisions[ticker].action as ActionType)}
                         <span className="text-sm font-normal text-muted-foreground">
-                          {outputNodeData.decisions[ticker].action} {outputNodeData.decisions[ticker].quantity} shares
+                          {translateAction(outputNodeData.decisions[ticker].action)} {outputNodeData.decisions[ticker].quantity} {t('dialog.shares')}
                         </span>
                       </div>
                     </div>

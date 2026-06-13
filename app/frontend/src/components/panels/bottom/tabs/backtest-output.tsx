@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useI18n } from '@/i18n/use-i18n';
 import { cn } from '@/lib/utils';
 import { MoreHorizontal } from 'lucide-react';
 import { getActionColor } from './output-tab-utils';
@@ -7,24 +8,21 @@ import { getActionColor } from './output-tab-utils';
 // Component for displaying backtest progress
 function BacktestProgress({ agentData }: { agentData: Record<string, any> }) {
   const backtestAgent = agentData['backtest'];
-  
+  const { t } = useI18n();
+
   if (!backtestAgent) return null;
-  
-  // Get the latest backtest result from the backtest results array
-  const backtestResults = backtestAgent.backtestResults || [];
-  const latestBacktestResult = backtestResults.length > 0 ? backtestResults[backtestResults.length - 1] : null;
-  
+
   return (
     <Card className="bg-transparent mb-4">
       <CardHeader>
-        <CardTitle className="text-lg">Backtest Progress</CardTitle>
+        <CardTitle className="text-lg">{t('bottom.backtestProgress')}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
           {/* Current Status */}
           <div className="flex items-center gap-2">
             <MoreHorizontal className="h-4 w-4 text-yellow-500" />
-            <span className="font-medium">Backtest Runner</span>
+            <span className="font-medium">{t('bottom.backtestRunner')}</span>
             <span className="text-yellow-500 flex-1">{backtestAgent.message || backtestAgent.status}</span>
           </div>
         </div>
@@ -36,24 +34,25 @@ function BacktestProgress({ agentData }: { agentData: Record<string, any> }) {
 // Component for displaying backtest trading table (similar to CLI)
 function BacktestTradingTable({ agentData }: { agentData: Record<string, any> }) {
   const backtestAgent = agentData['backtest'];
+  const { t, translateAction } = useI18n();
 
   // console.log("backtestAgent", backtestAgent);
-  
+
   if (!backtestAgent || !backtestAgent.backtestResults) {
     return null;
   }
-    
+
   // Get the backtest results directly from the agent data
   const backtestResults = backtestAgent.backtestResults || [];
-  
+
   if (backtestResults.length === 0) {
     return null;
   }
-  
+
   // Build table rows similar to CLI format
   const tableRows: any[] = [];
-  
-  backtestResults.forEach((backtestResult: any) => {    
+
+  backtestResults.forEach((backtestResult: any) => {
     // Add ticker rows for this period
     if (backtestResult.ticker_details) {
       backtestResult.ticker_details.forEach((ticker: any) => {
@@ -74,7 +73,7 @@ function BacktestTradingTable({ agentData }: { agentData: Record<string, any> })
         });
       });
     }
-    
+
     // Add portfolio summary row for this period
     tableRows.push({
       type: 'summary',
@@ -86,33 +85,33 @@ function BacktestTradingTable({ agentData }: { agentData: Record<string, any> })
       performance_metrics: backtestResult.performance_metrics,
     });
   });
-    
+
   // Sort by date descending (newest first) and show only the last 50 rows to avoid performance issues
   const recentRows = tableRows
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 50);
-  
-  
+
+
   return (
     <Card className="bg-transparent mb-4">
       <CardHeader>
-        <CardTitle className="text-lg">Activity</CardTitle>
+        <CardTitle className="text-lg">{t('bottom.activity')}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="max-h-96 overflow-y-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Ticker</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Quantity</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead>Shares</TableHead>
-                <TableHead>Position Value</TableHead>
-                <TableHead>Bullish</TableHead>
-                <TableHead>Bearish</TableHead>
-                <TableHead>Neutral</TableHead>
+                <TableHead>{t('table.date')}</TableHead>
+                <TableHead>{t('table.ticker')}</TableHead>
+                <TableHead>{t('table.action')}</TableHead>
+                <TableHead>{t('table.quantity')}</TableHead>
+                <TableHead>{t('table.price')}</TableHead>
+                <TableHead>{t('table.shares')}</TableHead>
+                <TableHead>{t('table.positionValue')}</TableHead>
+                <TableHead>{t('table.bullish')}</TableHead>
+                <TableHead>{t('table.bearish')}</TableHead>
+                <TableHead>{t('table.neutral')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -124,7 +123,7 @@ function BacktestTradingTable({ agentData }: { agentData: Record<string, any> })
                       <TableCell className="font-medium text-cyan-500">{row.ticker}</TableCell>
                       <TableCell>
                         <span className={cn("font-medium", getActionColor(row.action || ''))}>
-                          {row.action?.toUpperCase() || 'HOLD'}
+                          {translateAction(row.action || 'hold')}
                         </span>
                       </TableCell>
                       <TableCell className={cn("font-medium", getActionColor(row.action || ''))}>
@@ -152,43 +151,45 @@ function BacktestTradingTable({ agentData }: { agentData: Record<string, any> })
 
 // Component for displaying backtest results
 function BacktestResults({ outputData }: { outputData: any }) {
+  const { t } = useI18n();
+
   if (!outputData) {
     return null;
   }
 
   console.log("outputData", outputData);
-  
+
   if (!outputData.performance_metrics) {
     return (
       <Card className="bg-transparent mb-4">
         <CardHeader>
-          <CardTitle className="text-lg">Backtest Results</CardTitle>
+          <CardTitle className="text-lg">{t('bottom.backtestResults')}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8 text-muted-foreground">
-            Backtest completed. Performance metrics will appear here.
+            {t('bottom.backtestCompleteNoMetrics')}
           </div>
         </CardContent>
       </Card>
     );
   }
-  
+
   const { performance_metrics, final_portfolio, total_days } = outputData;
-  
+
   return (
     <Card className="bg-transparent mb-4">
       <CardHeader>
-        <CardTitle className="text-lg">Backtest Results</CardTitle>
+        <CardTitle className="text-lg">{t('bottom.backtestResults')}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           {/* Performance Metrics */}
           <div className="space-y-2">
-            <h4 className="font-medium">Performance Metrics</h4>
+            <h4 className="font-medium">{t('bottom.performanceMetrics')}</h4>
             <div className="space-y-1 text-sm">
               {performance_metrics.sharpe_ratio !== null && performance_metrics.sharpe_ratio !== undefined && (
                 <div className="flex justify-between">
-                  <span>Sharpe Ratio:</span>
+                  <span>{t('table.sharpeRatio')}:</span>
                   <span className={cn("font-medium", performance_metrics.sharpe_ratio > 1 ? "text-green-500" : "text-red-500")}>
                     {performance_metrics.sharpe_ratio.toFixed(2)}
                   </span>
@@ -196,7 +197,7 @@ function BacktestResults({ outputData }: { outputData: any }) {
               )}
               {performance_metrics.sortino_ratio !== null && performance_metrics.sortino_ratio !== undefined && (
                 <div className="flex justify-between">
-                  <span>Sortino Ratio:</span>
+                  <span>{t('table.sortinoRatio')}:</span>
                   <span className={cn("font-medium", performance_metrics.sortino_ratio > 1 ? "text-green-500" : "text-red-500")}>
                     {performance_metrics.sortino_ratio.toFixed(2)}
                   </span>
@@ -204,7 +205,7 @@ function BacktestResults({ outputData }: { outputData: any }) {
               )}
               {performance_metrics.max_drawdown !== null && performance_metrics.max_drawdown !== undefined && (
                 <div className="flex justify-between">
-                  <span>Max Drawdown:</span>
+                  <span>{t('table.maxDrawdown')}:</span>
                   <span className="font-medium text-red-500">
                     {Math.abs(performance_metrics.max_drawdown).toFixed(2)}%
                   </span>
@@ -212,45 +213,45 @@ function BacktestResults({ outputData }: { outputData: any }) {
               )}
             </div>
           </div>
-          
+
           {/* Portfolio Summary */}
           <div className="space-y-2">
-            <h4 className="font-medium">Portfolio Summary</h4>
+            <h4 className="font-medium">{t('bottom.portfolioSummary')}</h4>
             <div className="space-y-1 text-sm">
               <div className="flex justify-between">
-                <span>Total Days:</span>
+                <span>{t('table.totalDays')}:</span>
                 <span className="font-medium">{total_days}</span>
               </div>
               <div className="flex justify-between">
-                <span>Final Cash:</span>
+                <span>{t('table.finalCash')}:</span>
                 <span className="font-medium">${final_portfolio.cash.toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
-                <span>Margin Used:</span>
+                <span>{t('table.marginUsed')}:</span>
                 <span className="font-medium">${final_portfolio.margin_used.toLocaleString()}</span>
               </div>
             </div>
           </div>
-          
+
           {/* Exposure Metrics */}
           <div className="space-y-2">
-            <h4 className="font-medium">Exposure Metrics</h4>
+            <h4 className="font-medium">{t('bottom.exposureMetrics')}</h4>
             <div className="space-y-1 text-sm">
               {performance_metrics.gross_exposure !== null && performance_metrics.gross_exposure !== undefined && (
                 <div className="flex justify-between">
-                  <span>Gross Exposure:</span>
+                  <span>{t('table.grossExposure')}:</span>
                   <span className="font-medium">${performance_metrics.gross_exposure.toLocaleString()}</span>
                 </div>
               )}
               {performance_metrics.net_exposure !== null && performance_metrics.net_exposure !== undefined && (
                 <div className="flex justify-between">
-                  <span>Net Exposure:</span>
+                  <span>{t('table.netExposure')}:</span>
                   <span className="font-medium">${performance_metrics.net_exposure.toLocaleString()}</span>
                 </div>
               )}
               {performance_metrics.long_short_ratio !== null && performance_metrics.long_short_ratio !== undefined && (
                 <div className="flex justify-between">
-                  <span>Long/Short Ratio:</span>
+                  <span>{t('table.longShortRatio')}:</span>
                   <span className="font-medium">
                     {performance_metrics.long_short_ratio === Infinity || performance_metrics.long_short_ratio === null ? '∞' : performance_metrics.long_short_ratio.toFixed(2)}
                   </span>
@@ -259,19 +260,19 @@ function BacktestResults({ outputData }: { outputData: any }) {
             </div>
           </div>
         </div>
-        
+
         {/* Final Positions */}
         {final_portfolio.positions && (
           <div>
-            <h4 className="font-medium mb-2">Final Positions</h4>
+            <h4 className="font-medium mb-2">{t('bottom.finalPositions')}</h4>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Ticker</TableHead>
-                  <TableHead>Long Shares</TableHead>
-                  <TableHead>Short Shares</TableHead>
-                  <TableHead>Long Cost Basis</TableHead>
-                  <TableHead>Short Cost Basis</TableHead>
+                  <TableHead>{t('table.ticker')}</TableHead>
+                  <TableHead>{t('table.longShares')}</TableHead>
+                  <TableHead>{t('table.shortShares')}</TableHead>
+                  <TableHead>{t('table.longCostBasis')}</TableHead>
+                  <TableHead>{t('table.shortCostBasis')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -300,35 +301,36 @@ function BacktestResults({ outputData }: { outputData: any }) {
 // Component for displaying real-time backtest performance
 function BacktestPerformanceMetrics({ agentData }: { agentData: Record<string, any> }) {
   const backtestAgent = agentData['backtest'];
-  
+  const { t } = useI18n();
+
   if (!backtestAgent || !backtestAgent.backtestResults) return null;
-  
+
   // Get the backtest results directly from the agent data
   const backtestResults = backtestAgent.backtestResults || [];
-  
+
   if (backtestResults.length === 0) return null;
-  
+
   const firstPeriod = backtestResults[0];
   const latestPeriod = backtestResults[backtestResults.length - 1];
-  
+
   // Calculate performance metrics
   const initialValue = firstPeriod.portfolio_value;
   const currentValue = latestPeriod.portfolio_value;
   const totalReturn = ((currentValue - initialValue) / initialValue) * 100;
-  
+
   // Calculate win rate (periods with positive returns)
   const periodReturns = backtestResults.slice(1).map((period: any, idx: number) => {
     const prevPeriod = backtestResults[idx];
     return ((period.portfolio_value - prevPeriod.portfolio_value) / prevPeriod.portfolio_value) * 100;
   });
-  
+
   const winningPeriods = periodReturns.filter((ret: number) => ret > 0).length;
   const winRate = periodReturns.length > 0 ? (winningPeriods / periodReturns.length) * 100 : 0;
-  
+
   // Calculate max drawdown
   let maxDrawdown = 0;
   let peak = initialValue;
-  
+
   backtestResults.forEach((period: any) => {
     if (period.portfolio_value > peak) {
       peak = period.portfolio_value;
@@ -338,52 +340,52 @@ function BacktestPerformanceMetrics({ agentData }: { agentData: Record<string, a
       maxDrawdown = drawdown;
     }
   });
-  
+
   return (
     <Card className="bg-transparent mb-4">
       <CardHeader>
-        <CardTitle className="text-lg">Performance</CardTitle>
+        <CardTitle className="text-lg">{t('bottom.performance')}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center">
-            <div className="text-xs text-muted-foreground">Total Return</div>
+            <div className="text-xs text-muted-foreground">{t('table.totalReturn')}</div>
             <div className={cn("font-sm", totalReturn >= 0 ? "text-green-500" : "text-red-500")}>
               {totalReturn >= 0 ? '+' : ''}{totalReturn.toFixed(2)}%
             </div>
           </div>
           <div className="text-center">
-            <div className="text-xs text-muted-foreground">Win Rate</div>
+            <div className="text-xs text-muted-foreground">{t('table.winRate')}</div>
             <div className="font-sm">{winRate.toFixed(1)}%</div>
           </div>
           <div className="text-center">
-            <div className="text-xs text-muted-foreground">Max Drawdown</div>
+            <div className="text-xs text-muted-foreground">{t('table.maxDrawdown')}</div>
             <div className="font-sm text-red-500">{Math.abs(maxDrawdown).toFixed(2)}%</div>
           </div>
           <div className="text-center">
-            <div className="text-xs text-muted-foreground">Periods Traded</div>
+            <div className="text-xs text-muted-foreground">{t('table.periodsTraded')}</div>
             <div className="font-sm">{backtestResults.length}</div>
           </div>
         </div>
-        
+
         {/* Additional metrics */}
         <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center">
-            <div className="text-xs text-muted-foreground">Current Value</div>
+            <div className="text-xs text-muted-foreground">{t('table.currentValue')}</div>
             <div className="font-sm">${currentValue?.toLocaleString()}</div>
           </div>
           <div className="text-center">
-            <div className="text-xs text-muted-foreground">Initial Value</div>
+            <div className="text-xs text-muted-foreground">{t('table.initialValue')}</div>
             <div className="font-sm">${initialValue?.toLocaleString()}</div>
           </div>
           <div className="text-center">
-            <div className="text-xs text-muted-foreground">P&L</div>
+            <div className="text-xs text-muted-foreground">{t('table.pnl')}</div>
             <div className={cn("font-sm", totalReturn >= 0 ? "text-green-500" : "text-red-500")}>
               ${(currentValue - initialValue).toLocaleString()}
             </div>
           </div>
           <div className="text-center">
-            <div className="text-xs text-muted-foreground">Long/Short Ratio</div>
+            <div className="text-xs text-muted-foreground">{t('table.longShortRatio')}</div>
             <div className="font-sm">
               {latestPeriod.long_short_ratio === Infinity || latestPeriod.long_short_ratio === null ? '∞' : latestPeriod.long_short_ratio?.toFixed(2)}
             </div>
@@ -395,12 +397,12 @@ function BacktestPerformanceMetrics({ agentData }: { agentData: Record<string, a
 }
 
 // Main component for backtest output
-export function BacktestOutput({ 
-  agentData, 
-  outputData 
-}: { 
-  agentData: Record<string, any>; 
-  outputData: any; 
+export function BacktestOutput({
+  agentData,
+  outputData
+}: {
+  agentData: Record<string, any>;
+  outputData: any;
 }) {
   return (
     <>
@@ -413,4 +415,4 @@ export function BacktestOutput({
 
     </>
   );
-} 
+}

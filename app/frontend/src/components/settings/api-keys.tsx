@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { useI18n } from '@/i18n/use-i18n';
 import { apiKeysService } from '@/services/api-keys-api';
 import { Eye, EyeOff, Key, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -80,6 +81,7 @@ export function ApiKeysSettings() {
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useI18n();
 
   // Load API keys from backend on component mount
   useEffect(() => {
@@ -91,7 +93,7 @@ export function ApiKeysSettings() {
       setLoading(true);
       setError(null);
       const apiKeysSummary = await apiKeysService.getAllApiKeys();
-      
+
       // Load actual key values for existing keys
       const keysData: Record<string, string> = {};
       for (const summary of apiKeysSummary) {
@@ -102,11 +104,11 @@ export function ApiKeysSettings() {
           console.warn(`Failed to load key for ${summary.provider}:`, err);
         }
       }
-      
+
       setApiKeys(keysData);
     } catch (err) {
       console.error('Failed to load API keys:', err);
-      setError('Failed to load API keys. Please try again.');
+      setError(t('apiKeys.loadError'));
     } finally {
       setLoading(false);
     }
@@ -138,7 +140,7 @@ export function ApiKeysSettings() {
       }
     } catch (err) {
       console.error(`Failed to save API key ${key}:`, err);
-      setError(`Failed to save ${key}. Please try again.`);
+      setError(t('apiKeys.saveError', { key }));
     }
   };
 
@@ -159,7 +161,7 @@ export function ApiKeysSettings() {
       });
     } catch (err) {
       console.error(`Failed to delete API key ${key}:`, err);
-      setError(`Failed to delete ${key}. Please try again.`);
+      setError(t('apiKeys.deleteError', { key }));
     }
   };
 
@@ -224,15 +226,15 @@ export function ApiKeysSettings() {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-semibold text-primary mb-2">API Keys</h2>
+          <h2 className="text-xl font-semibold text-primary mb-2">{t('apiKeys.loadingTitle')}</h2>
           <p className="text-sm text-muted-foreground">
-            Loading API keys...
+            {t('apiKeys.loading')}
           </p>
         </div>
         <Card className="bg-panel border-gray-700 dark:border-gray-700">
           <CardContent className="p-6">
             <div className="text-sm text-muted-foreground">
-              Please wait while we load your API keys...
+              {t('apiKeys.loadingWait')}
             </div>
           </CardContent>
         </Card>
@@ -243,10 +245,9 @@ export function ApiKeysSettings() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-primary mb-2">API Keys</h2>
+        <h2 className="text-xl font-semibold text-primary mb-2">{t('settings.apiKeys')}</h2>
         <p className="text-sm text-muted-foreground">
-          Configure API endpoints and authentication credentials for financial data and language models.
-          Changes are automatically saved.
+          {t('apiKeys.description')}
         </p>
       </div>
 
@@ -257,7 +258,7 @@ export function ApiKeysSettings() {
             <div className="flex items-start gap-3">
               <Key className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
               <div className="space-y-1">
-                <h4 className="text-sm font-medium text-red-500">Error</h4>
+                <h4 className="text-sm font-medium text-red-500">{t('apiKeys.errorTitle')}</h4>
                 <p className="text-xs text-muted-foreground">{error}</p>
                 <Button
                   variant="ghost"
@@ -268,7 +269,7 @@ export function ApiKeysSettings() {
                   }}
                   className="text-xs mt-2 p-0 h-auto text-red-500 hover:text-red-400"
                 >
-                  Try again
+                  {t('apiKeys.tryAgain')}
                 </Button>
               </div>
             </div>
@@ -278,16 +279,16 @@ export function ApiKeysSettings() {
 
       {/* Financial Data API Keys */}
       {renderApiKeySection(
-        'Financial Data',
-        'API keys for accessing financial market data and datasets.',
+        t('apiKeys.financialData'),
+        t('apiKeys.financialDataDescription'),
         FINANCIAL_API_KEYS,
         <Key className="h-4 w-4" />
       )}
 
       {/* LLM API Keys */}
       {renderApiKeySection(
-        'Language Models',
-        'API keys for accessing various large language model providers.',
+        t('apiKeys.languageModels'),
+        t('apiKeys.languageModelsDescription'),
         LLM_API_KEYS,
         <Key className="h-4 w-4" />
       )}
@@ -298,10 +299,9 @@ export function ApiKeysSettings() {
           <div className="flex items-start gap-3">
             <Key className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" />
             <div className="space-y-1">
-              <h4 className="text-sm font-medium text-amber-500">Security Note</h4>
+              <h4 className="text-sm font-medium text-amber-500">{t('apiKeys.securityNoteTitle')}</h4>
               <p className="text-xs text-muted-foreground">
-                API keys are stored securely on your local system and changes are automatically saved. 
-                Keep your API keys secure and don't share them with others.
+                {t('apiKeys.securityNote')}
               </p>
             </div>
           </div>
@@ -309,4 +309,4 @@ export function ApiKeysSettings() {
       </Card>
     </div>
   );
-} 
+}

@@ -1,3 +1,4 @@
+import { useI18n } from '@/i18n/use-i18n';
 import { cn } from '@/lib/utils';
 import { getStatusColor } from '../utils';
 
@@ -17,35 +18,36 @@ export function OutputNodeStatus({
   isProcessing,
   isAnyAgentRunning,
   isOutputAvailable,
-  isConnected,
   onViewOutput,
-  processingText = "In Progress",
-  completingText = "Completing",
-  availableText = "View Output",
-  idleText = "Idle"
+  processingText,
+  completingText,
+  availableText,
+  idleText
 }: OutputNodeStatusProps) {
+  const { t } = useI18n();
+
   // Determine the current state and appropriate styling
   const isLocallyProcessing = isProcessing; // Connected agents are running
   const isGloballyProcessing = !isProcessing && isAnyAgentRunning; // Other agents running
   const hasGradientAnimation = isLocallyProcessing || isGloballyProcessing;
   const isClickable = isOutputAvailable && !isLocallyProcessing && !isGloballyProcessing;
-  
+
   // Determine display text based on current state
   let displayText: string;
   if (isLocallyProcessing) {
-    displayText = processingText; // "In Progress"
+    displayText = processingText ?? t('status.inProgress');
   } else if (isGloballyProcessing) {
-    displayText = completingText; // "Completing"
+    displayText = completingText ?? t('node.completing');
   } else if (isOutputAvailable) {
-    displayText = availableText; // "View Output"
+    displayText = availableText ?? t('node.viewOutput');
   } else {
-    displayText = idleText; // "Idle"
+    displayText = idleText ?? t('status.idle');
   }
 
   const status = hasGradientAnimation ? 'IN_PROGRESS' : 'IDLE';
 
   return (
-    <div 
+    <div
       className={cn(
         "text-foreground text-xs rounded p-2 border border-status transition-colors",
         hasGradientAnimation ? "gradient-animation" : getStatusColor(status),
@@ -63,4 +65,4 @@ export function OutputNodeStatus({
       )}
     </div>
   );
-} 
+}

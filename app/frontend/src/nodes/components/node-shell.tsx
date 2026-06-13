@@ -1,4 +1,5 @@
 import { Card, CardHeader } from '@/components/ui/card';
+import { useI18n } from '@/i18n/use-i18n';
 import { cn } from '@/lib/utils';
 import { Handle, Position } from '@xyflow/react';
 import { ReactNode } from 'react';
@@ -33,6 +34,8 @@ export function NodeShell({
   width = 'w-64',
 }: NodeShellProps) {
   const isInProgress = status === 'IN_PROGRESS';
+  const { t } = useI18n();
+
   return (
     <div
       className={cn(
@@ -66,7 +69,7 @@ export function NodeShell({
               {icon}
             </div>
             <div className="text-title font-semibold text-primary">
-              {name || "Custom Component"}
+              {name || t('node.customComponent')}
             </div>
           </CardHeader>
           {description && (
@@ -87,4 +90,4 @@ export function NodeShell({
       )}
     </div>
   );
-} 
+}

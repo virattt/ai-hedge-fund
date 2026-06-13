@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useToastManager } from '@/hooks/use-toast-manager';
+import { useI18n } from '@/i18n/use-i18n';
 import { flowService } from '@/services/flow-service';
 import { Flow } from '@/types/flow';
 import { useEffect, useState } from 'react';
@@ -24,6 +25,7 @@ export function FlowCreateDialog({ isOpen, onClose, onFlowCreated }: FlowCreateD
   const [description, setDescription] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { success, error } = useToastManager();
+  const { t } = useI18n();
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -35,7 +37,7 @@ export function FlowCreateDialog({ isOpen, onClose, onFlowCreated }: FlowCreateD
 
   const handleCreate = async () => {
     if (!name.trim()) {
-      error('Flow name is required');
+      error(t('flows.nameRequired'));
       return;
     }
 
@@ -48,13 +50,13 @@ export function FlowCreateDialog({ isOpen, onClose, onFlowCreated }: FlowCreateD
         edges: [],
         viewport: { x: 0, y: 0, zoom: 1 },
       });
-      
-      success(`"${newFlow.name}" created!`);
+
+      success(t('flows.createdToast', { name: newFlow.name }));
       onFlowCreated(newFlow);
       onClose();
     } catch (err) {
       console.error('Failed to create flow:', err);
-      error('Failed to create flow');
+      error(t('flows.createFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -80,55 +82,55 @@ export function FlowCreateDialog({ isOpen, onClose, onFlowCreated }: FlowCreateD
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Create New Flow</DialogTitle>
+          <DialogTitle>{t('flows.createDialogTitle')}</DialogTitle>
           <DialogDescription>
-            Create a new flow with a custom name and description.
+            {t('flows.createDialogDescription')}
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <label htmlFor="create-name" className="text-sm font-medium">
-              Name
+              {t('flows.name')}
             </label>
             <Input
               id="create-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Enter flow name"
+              placeholder={t('flows.namePlaceholder')}
               className="col-span-3"
               autoFocus
             />
           </div>
-          
+
           <div className="grid gap-2">
             <label htmlFor="create-description" className="text-sm font-medium">
-              Description
+              {t('flows.description')}
             </label>
             <Input
               id="create-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Enter flow description (optional)"
+              placeholder={t('flows.descriptionPlaceholder')}
               className="col-span-3"
             />
           </div>
         </div>
-        
+
         <DialogFooter>
           <Button variant="outline" onClick={handleCancel}>
-            Cancel
+            {t('flows.cancel')}
           </Button>
-          <Button 
-            onClick={handleCreate} 
+          <Button
+            onClick={handleCreate}
             disabled={isLoading || !name.trim()}
           >
-            {isLoading ? 'Creating...' : 'Create Flow'}
+            {isLoading ? t('flows.creating') : t('flows.createFlow')}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
-} 
+}

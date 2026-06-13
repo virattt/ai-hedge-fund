@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useFlowConnectionState } from '@/hooks/use-flow-connection';
+import { useI18n } from '@/i18n/use-i18n';
 import { cn } from '@/lib/utils';
 import { flowService } from '@/services/flow-service';
 import { Flow } from '@/types/flow';
@@ -24,6 +25,7 @@ interface FlowItemProps {
 }
 
 export default function FlowItem({ flow, onLoadFlow, onDeleteFlow, onRefresh, isActive = false }: FlowItemProps) {
+  const { locale, t } = useI18n();
   const [contextMenu, setContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number } }>({
     isOpen: false,
     position: { x: 0, y: 0 }
@@ -32,7 +34,7 @@ export default function FlowItem({ flow, onLoadFlow, onDeleteFlow, onRefresh, is
 
   // Check if this flow has an active connection
   const connectionState = useFlowConnectionState(flow.id.toString());
-  const hasActiveConnection = connectionState && 
+  const hasActiveConnection = connectionState &&
     (connectionState.state === 'connecting' || connectionState.state === 'connected');
 
   const handleLoadFlow = async () => {
@@ -42,7 +44,7 @@ export default function FlowItem({ flow, onLoadFlow, onDeleteFlow, onRefresh, is
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     setContextMenu({
       isOpen: true,
       position: { x: e.clientX, y: e.clientY }
@@ -51,7 +53,7 @@ export default function FlowItem({ flow, onLoadFlow, onDeleteFlow, onRefresh, is
 
   const handleMenuClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    
+
     // Get the button's position for the menu
     const rect = e.currentTarget.getBoundingClientRect();
     setContextMenu({
@@ -78,7 +80,7 @@ export default function FlowItem({ flow, onLoadFlow, onDeleteFlow, onRefresh, is
   };
 
   const handleDeleteFlow = async () => {
-    if (window.confirm(`Are you sure you want to delete "${flow.name}"?`)) {
+    if (window.confirm(t('flows.deleteConfirm', { name: flow.name }))) {
       try {
         await onDeleteFlow(flow);
       } catch (error) {
@@ -88,7 +90,7 @@ export default function FlowItem({ flow, onLoadFlow, onDeleteFlow, onRefresh, is
   };
 
   const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleString('en-US', {
+    return new Date(dateString).toLocaleString(locale === 'zh-CN' ? 'zh-CN' : 'en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -104,11 +106,11 @@ export default function FlowItem({ flow, onLoadFlow, onDeleteFlow, onRefresh, is
 
   return (
     <>
-      <div 
+      <div
         className={cn(
           "group flex items-center justify-between px-4 py-3 transition-colors cursor-pointer",
-          isActive 
-            ? "border-l-2 border-blue-500" 
+          isActive
+            ? "border-l-2 border-blue-500"
             : "hover-bg"
         )}
         onClick={handleLoadFlow}
@@ -128,8 +130,8 @@ export default function FlowItem({ flow, onLoadFlow, onDeleteFlow, onRefresh, is
               <span
                 className={cn(
                   "text-subtitle font-medium text-left truncate",
-                  isActive 
-                    ? "text-blue-500" 
+                  isActive
+                    ? "text-blue-500"
                     : "text-primary"
                 )}
                 title={flow.name}
@@ -137,21 +139,21 @@ export default function FlowItem({ flow, onLoadFlow, onDeleteFlow, onRefresh, is
                 {flow.name}
               </span>
             </div>
-            
+
             {/* Active connection indicator - right aligned */}
             {hasActiveConnection && (
               <div className="flex items-center gap-1 flex-shrink-0">
                 <Zap className="h-3 w-3 text-yellow-500 animate-pulse" />
-                <span className="text-xs text-yellow-500 font-medium">Running</span>
+                <span className="text-xs text-yellow-500 font-medium">{t('flows.running')}</span>
               </div>
             )}
           </div>
-          
+
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Calendar size={10} />
             <span>{formatDateTime(flow.created_at)}</span>
           </div>
-          
+
           {filteredTags.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1">
               {filteredTags.slice(0, 2).map(tag => (
@@ -167,14 +169,14 @@ export default function FlowItem({ flow, onLoadFlow, onDeleteFlow, onRefresh, is
             </div>
           )}
         </div>
-        
+
         <div className="flex items-center">
           <Button
             variant="ghost"
             size="icon"
             onClick={handleMenuClick}
             className="h-6 w-6 text-muted-foreground hover-item opacity-0 group-hover:opacity-100 transition-opacity rounded"
-            title="More options"
+            title={t('flows.moreOptions')}
           >
             <MoreHorizontal size={14} />
           </Button>
@@ -198,4 +200,4 @@ export default function FlowItem({ flow, onLoadFlow, onDeleteFlow, onRefresh, is
       />
     </>
   );
-} 
+}

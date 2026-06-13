@@ -1,5 +1,6 @@
 import { useLayoutContext } from '@/contexts/layout-context';
 import { useResizable } from '@/hooks/use-resizable';
+import { useI18n } from '@/i18n/use-i18n';
 import { cn } from '@/lib/utils';
 import { FileText, X } from 'lucide-react';
 import { ReactNode, useEffect } from 'react';
@@ -22,7 +23,8 @@ export function BottomPanel({
   onHeightChange,
 }: BottomPanelProps) {
   const { currentBottomTab, setBottomPanelTab } = useLayoutContext();
-  
+  const { t } = useI18n();
+
   // Use our custom hooks for vertical resizing
   const { height, isDragging, elementRef, startResize } = useResizable({
     defaultHeight: 300,
@@ -30,7 +32,7 @@ export function BottomPanel({
     maxHeight: window.innerHeight,
     side: 'bottom',
   });
-  
+
   // Notify parent component of height changes
   useEffect(() => {
     onHeightChange?.(height);
@@ -41,19 +43,19 @@ export function BottomPanel({
   }
 
   return (
-    <div 
+    <div
       ref={elementRef}
       className={cn(
         "bg-panel flex flex-col relative border-t",
         isDragging ? "select-none" : ""
       )}
-      style={{ 
+      style={{
         height: `${height}px`,
       }}
     >
       {/* Resize handle - on the top for bottom panel */}
       {!isDragging && (
-        <div 
+        <div
           className="absolute top-0 left-0 right-0 h-1 cursor-ns-resize transition-all duration-150 z-10 hover-bg"
           onMouseDown={startResize}
         />
@@ -64,21 +66,21 @@ export function BottomPanel({
         <Tabs value={currentBottomTab} onValueChange={setBottomPanelTab} className="flex-1">
           <div className="flex items-center justify-between">
             <TabsList className="bg-transparent border-none p-0 h-auto">
-              <TabsTrigger 
+              <TabsTrigger
                 value="output"
                 className="flex items-center gap-2 px-3 py-1.5 text-sm data-[state=active]:active-item text-muted-foreground"
               >
                 <FileText size={14} />
-                Output
+                {t('bottom.output')}
               </TabsTrigger>
             </TabsList>
-            
+
             <Button
               variant="ghost"
               size="icon"
               onClick={onToggleCollapse}
               className="h-6 w-6 text-primary hover-bg"
-              aria-label="Close panel"
+              aria-label={t('bottom.closePanel')}
             >
               <X size={14} />
             </Button>
@@ -96,4 +98,4 @@ export function BottomPanel({
       </div>
     </div>
   );
-} 
+}

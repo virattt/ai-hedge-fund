@@ -3,6 +3,7 @@ import { Cloud, Server } from 'lucide-react';
 import { useState } from 'react';
 import { CloudModels } from './models/cloud';
 import { OllamaSettings } from './models/ollama';
+import { useI18n } from '@/i18n/use-i18n';
 
 interface ModelsProps {
   className?: string;
@@ -18,20 +19,21 @@ interface ModelSection {
 
 export function Models({ className }: ModelsProps) {
   const [selectedSection, setSelectedSection] = useState('cloud');
+  const { t } = useI18n();
 
   const modelSections: ModelSection[] = [
     {
       id: 'cloud',
-      label: 'Cloud',
+      label: t('models.cloud'),
       icon: Cloud,
-      description: 'API-based models from cloud providers',
+      description: t('models.cloudDescription'),
       component: CloudModels,
     },
     {
       id: 'local',
-      label: 'Ollama',
+      label: t('models.local'),
       icon: Server,
-      description: 'Ollama models running locally on your machine',
+      description: t('models.localDescription'),
       component: OllamaSettings,
     },
   ];
@@ -39,7 +41,7 @@ export function Models({ className }: ModelsProps) {
   const renderContent = () => {
     const section = modelSections.find(s => s.id === selectedSection);
     if (!section) return null;
-    
+
     const Component = section.component;
     return <Component />;
   };
@@ -47,9 +49,9 @@ export function Models({ className }: ModelsProps) {
   return (
     <div className={cn("space-y-6", className)}>
       <div>
-        <h2 className="text-xl font-semibold text-primary mb-2">Models</h2>
+        <h2 className="text-xl font-semibold text-primary mb-2">{t('models.title')}</h2>
         <p className="text-sm text-muted-foreground">
-          Manage your AI models from local and cloud providers.
+          {t('models.description')}
         </p>
       </div>
 
@@ -59,7 +61,7 @@ export function Models({ className }: ModelsProps) {
           const Icon = section.icon;
           const isSelected = selectedSection === section.id;
           const isDisabled = false; // Enable all tabs now that cloud models is functional
-          
+
           return (
             <button
               key={section.id}
@@ -67,8 +69,8 @@ export function Models({ className }: ModelsProps) {
               disabled={isDisabled}
               className={cn(
                 "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md transition-colors",
-                isSelected 
-                  ? "active-bg text-blue-500 shadow-sm" 
+                isSelected
+                  ? "active-bg text-blue-500 shadow-sm"
                   : isDisabled
                   ? "text-muted-foreground cursor-not-allowed"
                   : "text-primary hover:text-primary hover-bg"
@@ -78,7 +80,7 @@ export function Models({ className }: ModelsProps) {
               {section.label}
               {isDisabled && (
                 <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
-                  Soon
+                  {t('models.soon')}
                 </span>
               )}
             </button>
@@ -92,4 +94,4 @@ export function Models({ className }: ModelsProps) {
       </div>
     </div>
   );
-} 
+}
