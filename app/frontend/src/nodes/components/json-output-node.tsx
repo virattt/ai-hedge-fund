@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useFlowContext } from '@/contexts/flow-context';
 import { useNodeContext } from '@/contexts/node-context';
 import { useOutputNodeConnection } from '@/hooks/use-output-node-connection';
+import { useI18n } from '@/i18n/use-i18n';
 import { api } from '@/services/api';
 import { type JsonOutputNode } from '../types';
 import { JsonOutputDialog } from './json-output-dialog';
@@ -18,17 +19,18 @@ export function JsonOutputNode({
   selected,
   id,
   isConnectable,
-}: NodeProps<JsonOutputNode>) {  
+}: NodeProps<JsonOutputNode>) {
   const { currentFlowId } = useFlowContext();
   const { getOutputNodeDataForFlow } = useNodeContext();
-  
+
   // Get output node data for the current flow
   const flowId = currentFlowId?.toString() || null;
   const outputNodeData = getOutputNodeDataForFlow(flowId);
-  
+
   const [showOutput, setShowOutput] = useState(false);
   const [saveToFile, setSaveToFile] = useState(false);
-  
+  const { t, translateDisplayName } = useI18n();
+
   // Use the custom hook for connection logic
   const { isProcessing, isAnyAgentRunning, isOutputAvailable, isConnected, connectedAgentIds } = useOutputNodeConnection(id);
   const status = isProcessing || isAnyAgentRunning ? 'IN_PROGRESS' : 'IDLE';
@@ -55,7 +57,7 @@ export function JsonOutputNode({
 
       // Save file via API
       await api.saveJsonFile(filename, data);
-      
+
       console.log(`JSON output saved to outputs/${filename}`);
     } catch (error) {
       console.error('Failed to save JSON output:', error);
@@ -73,7 +75,7 @@ export function JsonOutputNode({
         selected={selected}
         isConnectable={isConnectable}
         icon={<FileJson className="h-5 w-5" />}
-        name={data.name || "JSON Output"}
+        name={data.name ? translateDisplayName(data.name) : t('node.jsonOutput')}
         description={data.description}
         hasRightHandle={false}
         status={status}
@@ -82,9 +84,9 @@ export function JsonOutputNode({
           <div className="border-t border-border p-3">
             <div className="flex flex-col gap-2">
               <div className="text-subtitle text-muted-foreground flex items-center gap-1">
-                Results
+                {t('node.results')}
               </div>
-              
+
               <OutputNodeStatus
                 isProcessing={isProcessing}
                 isAnyAgentRunning={isAnyAgentRunning}
@@ -92,7 +94,7 @@ export function JsonOutputNode({
                 isConnected={isConnected}
                 onViewOutput={handleViewOutput}
               />
-              
+
               <div className="flex items-center space-x-2 mt-2">
                 <Checkbox
                   id="save-to-file"
@@ -103,7 +105,7 @@ export function JsonOutputNode({
                   htmlFor="save-to-file"
                   className="text-subtitle text-muted-foreground cursor-pointer"
                 >
-                  Save to File
+                  {t('node.saveToFile')}
                 </label>
               </div>
             </div>
@@ -111,12 +113,12 @@ export function JsonOutputNode({
         </CardContent>
       </NodeShell>
 
-      <JsonOutputDialog 
-        isOpen={showOutput} 
-        onOpenChange={setShowOutput} 
-        outputNodeData={outputNodeData} 
+      <JsonOutputDialog
+        isOpen={showOutput}
+        onOpenChange={setShowOutput}
+        outputNodeData={outputNodeData}
         connectedAgentIds={connectedAgentIds}
       />
     </>
   );
-} 
+}

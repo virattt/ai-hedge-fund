@@ -6,6 +6,7 @@ import { CardContent } from '@/components/ui/card';
 import { useFlowContext } from '@/contexts/flow-context';
 import { useNodeContext } from '@/contexts/node-context';
 import { useOutputNodeConnection } from '@/hooks/use-output-node-connection';
+import { useI18n } from '@/i18n/use-i18n';
 import { type InvestmentReportNode } from '../types';
 import { InvestmentReportDialog } from './investment-report-dialog';
 import { NodeShell } from './node-shell';
@@ -16,16 +17,17 @@ export function InvestmentReportNode({
   selected,
   id,
   isConnectable,
-}: NodeProps<InvestmentReportNode>) {  
+}: NodeProps<InvestmentReportNode>) {
   const { currentFlowId } = useFlowContext();
   const { getOutputNodeDataForFlow } = useNodeContext();
-  
+
   // Get output node data for the current flow
   const flowId = currentFlowId?.toString() || null;
   const outputNodeData = getOutputNodeDataForFlow(flowId);
-  
+
   const [showOutput, setShowOutput] = useState(false);
-  
+  const { t, translateDisplayName } = useI18n();
+
   // Use the custom hook for connection logic
   const { isProcessing, isAnyAgentRunning, isOutputAvailable, isConnected, connectedAgentIds } = useOutputNodeConnection(id);
   const status = isProcessing || isAnyAgentRunning ? 'IN_PROGRESS' : 'IDLE';
@@ -41,7 +43,7 @@ export function InvestmentReportNode({
         selected={selected}
         isConnectable={isConnectable}
         icon={<FileText className="h-5 w-5" />}
-        name={data.name || "Investment Report"}
+        name={data.name ? translateDisplayName(data.name) : t('node.investmentReport')}
         description={data.description}
         hasRightHandle={false}
         status={status}
@@ -50,9 +52,9 @@ export function InvestmentReportNode({
           <div className="border-t border-border p-3">
             <div className="flex flex-col gap-2">
               <div className="text-subtitle text-muted-foreground flex items-center gap-1">
-                Results
+                {t('node.results')}
               </div>
-              
+
               <OutputNodeStatus
                 isProcessing={isProcessing}
                 isAnyAgentRunning={isAnyAgentRunning}
@@ -64,10 +66,10 @@ export function InvestmentReportNode({
           </div>
         </CardContent>
       </NodeShell>
-      <InvestmentReportDialog 
-        isOpen={showOutput} 
-        onOpenChange={setShowOutput} 
-        outputNodeData={outputNodeData} 
+      <InvestmentReportDialog
+        isOpen={showOutput}
+        onOpenChange={setShowOutput}
+        outputNodeData={outputNodeData}
         connectedAgentIds={connectedAgentIds}
       />
     </>

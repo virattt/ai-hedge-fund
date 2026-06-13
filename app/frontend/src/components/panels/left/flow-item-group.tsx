@@ -4,6 +4,7 @@ import { Flow } from '@/types/flow';
 import FlowItem from './flow-item';
 
 interface FlowItemGroupProps {
+  id: string;
   title: string;
   flows: Flow[];
   onLoadFlow: (flow: Flow) => Promise<void>;
@@ -12,11 +13,9 @@ interface FlowItemGroupProps {
   currentFlowId?: number | null;
 }
 
-export function FlowItemGroup({ title, flows, onLoadFlow, onDeleteFlow, onRefresh, currentFlowId }: FlowItemGroupProps) {
-  const groupId = title.toLowerCase().replace(/\s+/g, '-');
-
+export function FlowItemGroup({ id, title, flows, onLoadFlow, onDeleteFlow, onRefresh, currentFlowId }: FlowItemGroupProps) {
   return (
-    <AccordionItem value={groupId} className="border">
+    <AccordionItem value={id} className="border">
       <AccordionTrigger className="px-4 py-2 text-primary hover-bg hover:no-underline">
         <div className="flex items-center justify-between w-full">
           <span className="text-xs font-medium">{title}</span>
@@ -43,4 +42,4 @@ export function FlowItemGroup({ title, flows, onLoadFlow, onDeleteFlow, onRefres
       </AccordionContent>
     </AccordionItem>
   );
-} 
+}

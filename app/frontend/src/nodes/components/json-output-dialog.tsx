@@ -10,6 +10,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { useI18n } from '@/i18n/use-i18n';
 
 interface JsonOutputDialogProps {
   isOpen: boolean;
@@ -18,26 +19,27 @@ interface JsonOutputDialogProps {
   connectedAgentIds: Set<string>;
 }
 
-export function JsonOutputDialog({ 
-  isOpen, 
-  onOpenChange, 
+export function JsonOutputDialog({
+  isOpen,
+  onOpenChange,
   outputNodeData,
   connectedAgentIds
 }: JsonOutputDialogProps) {
   const [copySuccess, setCopySuccess] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const { t } = useI18n();
 
   if (!outputNodeData) return null;
 
   // Convert React Flow node IDs to backend agent keys for filtering
   const connectedBackendAgentKeys = Array.from(connectedAgentIds).map(nodeId => `${nodeId}_agent`);
-  
+
   // Filter the outputNodeData to only include connected agents
   const filteredOutputData = {
     ...outputNodeData,
     analyst_signals: Object.fromEntries(
       Object.entries(outputNodeData.analyst_signals || {})
-        .filter(([agentId]) => 
+        .filter(([agentId]) =>
           agentId === 'risk_management_agent' || connectedBackendAgentKeys.includes(agentId)
         )
     )
@@ -67,7 +69,7 @@ export function JsonOutputDialog({
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      
+
       setDownloadSuccess(true);
       setTimeout(() => setDownloadSuccess(false), 2000);
     } catch (err) {
@@ -80,7 +82,7 @@ export function JsonOutputDialog({
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold flex items-center justify-between">
-            JSON Output
+            {t('dialog.jsonOutput')}
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -89,7 +91,7 @@ export function JsonOutputDialog({
                 className="flex items-center gap-1.5"
               >
                 <Copy className="h-4 w-4" />
-                <span className="font-medium">{copySuccess ? 'Copied!' : 'Copy'}</span>
+                <span className="font-medium">{copySuccess ? t('dialog.copied') : t('dialog.copy')}</span>
               </Button>
               <Button
                 variant="outline"
@@ -98,12 +100,12 @@ export function JsonOutputDialog({
                 className="flex items-center gap-1.5"
               >
                 <Download className="h-4 w-4" />
-                <span className="font-medium">{downloadSuccess ? 'Downloaded!' : 'Download'}</span>
+                <span className="font-medium">{downloadSuccess ? t('dialog.downloaded') : t('dialog.download')}</span>
               </Button>
             </div>
           </DialogTitle>
         </DialogHeader>
-        
+
         <div className="flex-1 min-h-0 my-4 overflow-auto rounded-md border border-border bg-muted/30">
           <SyntaxHighlighter
             language="json"
@@ -126,4 +128,4 @@ export function JsonOutputDialog({
       </DialogContent>
     </Dialog>
   );
-} 
+}

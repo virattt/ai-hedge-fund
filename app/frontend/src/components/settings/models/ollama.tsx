@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useI18n } from '@/i18n/use-i18n';
 import { cn } from '@/lib/utils';
 import { AlertTriangle, Brain, CheckCircle, Download, Play, RefreshCw, Server, Square, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -51,6 +52,7 @@ export function OllamaSettings() {
     modelName: '',
     displayName: ''
   });
+  const { t } = useI18n();
   const [cancellingDownloads, setCancellingDownloads] = useState<Set<string>>(new Set());
   const [cancelConfirmation, setCancelConfirmation] = useState<{
     isOpen: boolean;
@@ -75,7 +77,7 @@ export function OllamaSettings() {
       }
     } catch (error) {
       console.error('Failed to fetch Ollama status:', error);
-      setError('Failed to connect to backend service');
+      setError(t('ollama.backendConnectionError'));
     }
   };
 
@@ -138,7 +140,7 @@ export function OllamaSettings() {
     setActiveDownloads(prev => new Set(prev).add(modelName));
     setDownloadProgress(prev => ({
       ...prev,
-      [modelName]: { status: 'starting', percentage: 0, message: 'Initializing download...' }
+      [modelName]: { status: 'starting', percentage: 0, message: t('ollama.initializingDownload') }
     }));
 
     try {
@@ -168,9 +170,13 @@ export function OllamaSettings() {
 
       if (reader) {
         try {
-          while (true) {
+          let isReading = true;
+          while (isReading) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+              isReading = false;
+              break;
+            }
 
             const chunk = decoder.decode(value, { stream: true });
             const lines = chunk.split('\n');
@@ -181,7 +187,7 @@ export function OllamaSettings() {
                   const jsonData = line.slice(6).trim();
                   if (jsonData) {
                     const data = JSON.parse(jsonData);
-                    
+
                     setDownloadProgress(prev => ({
                       ...prev,
                       [modelName]: data
@@ -208,7 +214,7 @@ export function OllamaSettings() {
                             const status = await response.json();
                             setOllamaStatus(status);
                             setError(null);
-                            
+
                             // Check if the model is now in the available models list
                             if (attempts < 5 && status && !status.available_models.includes(modelName)) {
                               // Wait a bit longer and try again
@@ -271,13 +277,13 @@ export function OllamaSettings() {
   const performCancelDownload = async (modelName: string) => {
     setError(null);
     setCancellingDownloads(prev => new Set(prev).add(modelName));
-    
+
     try {
       // Call the backend to cancel the download
       const response = await fetch(`http://localhost:8000/ollama/models/download/${encodeURIComponent(modelName)}`, {
         method: 'DELETE',
       });
-      
+
       if (response.ok) {
         console.log(`Successfully cancelled download for ${modelName}`);
       } else {
@@ -289,7 +295,7 @@ export function OllamaSettings() {
       console.error('Failed to cancel download:', error);
       // Don't show error to user since the UI cleanup will still happen
     }
-    
+
     // Always clean up the UI state regardless of backend response
     setActiveDownloads(prev => {
       const newSet = new Set(prev);
@@ -306,7 +312,7 @@ export function OllamaSettings() {
       newSet.delete(modelName);
       return newSet;
     });
-    
+
     console.log(`Cancelled download tracking for ${modelName}`);
   };
 
@@ -375,11 +381,11 @@ export function OllamaSettings() {
       const response = await fetch('http://localhost:8000/ollama/models/downloads/active');
       if (response.ok) {
         const activeDownloads = await response.json();
-        
+
         // Update state with any active downloads found (only downloading/starting status)
         Object.entries(activeDownloads).forEach(([modelName, progress]) => {
           const progressData = progress as DownloadProgress;
-          
+
           // Only add truly active downloads to avoid showing completed ones on refresh
           if (progressData.status === 'downloading' || progressData.status === 'starting') {
             setActiveDownloads(prev => new Set(prev).add(modelName));
@@ -387,7 +393,7 @@ export function OllamaSettings() {
               ...prev,
               [modelName]: progressData
             }));
-            
+
             // Start monitoring this download
             reconnectToDownload(modelName);
           }
@@ -407,7 +413,7 @@ export function OllamaSettings() {
     }
 
     console.log(`Monitoring existing download for ${modelName}`);
-    
+
     // Poll for progress updates instead of starting a new stream
     const pollProgress = async () => {
       try {
@@ -416,7 +422,7 @@ export function OllamaSettings() {
         if (response.ok) {
           const activeDownloads = await response.json();
           const progress = activeDownloads[modelName];
-          
+
           if (progress) {
             setDownloadProgress(prev => ({
               ...prev,
@@ -444,7 +450,7 @@ export function OllamaSettings() {
                     const status = await response.json();
                     setOllamaStatus(status);
                     setError(null);
-                    
+
                     // Check if the model is now in the available models list
                     if (attempts < 5 && status && !status.available_models.includes(modelName)) {
                       // Wait a bit longer and try again
@@ -482,7 +488,7 @@ export function OllamaSettings() {
               }, 3000);
               return false; // Stop polling
             }
-            
+
             return true; // Continue polling
           } else {
             // Model not in active downloads, remove from tracking
@@ -558,10 +564,10 @@ export function OllamaSettings() {
   };
 
   const getStatusText = () => {
-    if (!ollamaStatus) return "Checking...";
-    if (!ollamaStatus.installed) return "Not Installed";
-    if (!ollamaStatus.running) return "Not Running";
-    return "Running";
+    if (!ollamaStatus) return t('ollama.checking');
+    if (!ollamaStatus.installed) return t('ollama.notInstalled');
+    if (!ollamaStatus.running) return t('ollama.notRunning');
+    return t('ollama.running');
   };
 
   const getStatusColor = (): "secondary" | "destructive" | "outline" | "warning" | "success" | null | undefined => {
@@ -578,7 +584,7 @@ export function OllamaSettings() {
 
   // Create a unified list of all models (downloaded first, then available for download)
   const allModels: ModelWithStatus[] = [];
-  
+
   // Add downloaded models first (sorted alphabetically)
   if (ollamaStatus?.available_models) {
     const sortedDownloaded = [...ollamaStatus.available_models].sort();
@@ -593,12 +599,12 @@ export function OllamaSettings() {
       });
     });
   }
-  
+
   // Add non-downloaded recommended models (sorted alphabetically by display name)
   // Exclude models that are already downloaded OR currently being downloaded
   const nonDownloadedModels = recommendedModels
-    .filter(model => 
-      !ollamaStatus?.available_models?.includes(model.model_name) && 
+    .filter(model =>
+      !ollamaStatus?.available_models?.includes(model.model_name) &&
       !activeDownloads.has(model.model_name)
     )
     .sort((a, b) => a.display_name.localeCompare(b.display_name))
@@ -606,16 +612,16 @@ export function OllamaSettings() {
       ...model,
       isDownloaded: false
     }));
-  
+
   allModels.push(...nonDownloadedModels);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-primary mb-2">Ollama</h3>
+          <h3 className="text-lg font-semibold text-primary mb-2">{t('ollama.title')}</h3>
           <p className="text-sm text-muted-foreground dark:text-muted-foreground">
-            Manage local AI models with Ollama for enhanced privacy and performance.
+            {t('ollama.description')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -639,7 +645,7 @@ export function OllamaSettings() {
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5" />
             <div>
-              <h4 className="font-medium text-red-300">Error</h4>
+              <h4 className="font-medium text-red-300">{t('ollama.errorTitle')}</h4>
               <p className="text-sm text-red-400 mt-1">{error}</p>
             </div>
           </div>
@@ -651,18 +657,18 @@ export function OllamaSettings() {
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-muted-foreground mt-0.5" />
             <div>
-              <h4 className="font-medium text-muted-foreground">Ollama Not Installed</h4>
+              <h4 className="font-medium text-muted-foreground">{t('ollama.installTitle')}</h4>
               <p className="text-sm text-muted-foreground mt-1">
-                Install Ollama to use local AI models. Visit{' '}
-                <a 
-                  href="https://ollama.com" 
-                  target="_blank" 
+                {t('ollama.installDescriptionBefore')}{' '}
+                <a
+                  href="https://ollama.com"
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="underline hover:no-underline text-muted-foreground"
                 >
                   ollama.com
                 </a>{' '}
-                to download and install.
+                {t('ollama.installDescriptionAfter')}
               </p>
             </div>
           </div>
@@ -672,9 +678,9 @@ export function OllamaSettings() {
       {ollamaStatus?.installed && !ollamaStatus.running && (
         <div className="flex items-center justify-between bg-muted rounded-lg p-4">
           <div>
-            <h4 className="font-medium text-primary">Ollama Server</h4>
+            <h4 className="font-medium text-primary">{t('ollama.server')}</h4>
             <p className="text-sm text-primary">
-              Ollama is installed but not currently running.
+              {t('ollama.serverNotRunning')}
             </p>
           </div>
           <Button
@@ -683,7 +689,7 @@ export function OllamaSettings() {
             className="flex items-center gap-2 text-primary hover:bg-primary/20 hover:text-primary bg-primary/10 border-primary/30 hover:border-primary/50"
           >
             <Play className="h-4 w-4" />
-            {actionLoading === 'start-server' ? 'Starting...' : 'Start Server'}
+            {actionLoading === 'start-server' ? t('ollama.starting') : t('ollama.startServer')}
           </Button>
         </div>
       )}
@@ -694,10 +700,10 @@ export function OllamaSettings() {
             <CheckCircle className="h-5 w-5 text-primary" />
             <div>
               <span className="font-medium text-primary">
-                Ollama Server Running
+                {t('ollama.serverRunning')}
               </span>
               <p className="text-sm text-muted-foreground">
-                Server available at {ollamaStatus.server_url}
+                {t('ollama.serverAvailableAt', { url: ollamaStatus.server_url })}
               </p>
             </div>
           </div>
@@ -707,7 +713,7 @@ export function OllamaSettings() {
             className="flex items-center gap-2 text-red-400 hover:bg-red-500/20 hover:text-red-300 bg-red-500/10 border-red-500/30 hover:border-red-500/50"
           >
             <Square className="h-4 w-4" />
-            {actionLoading === 'stop-server' ? 'Stopping...' : 'Disconnect'}
+            {actionLoading === 'stop-server' ? t('ollama.stopping') : t('ollama.disconnect')}
           </Button>
         </div>
       )}
@@ -715,12 +721,12 @@ export function OllamaSettings() {
       {ollamaStatus?.running && (
         <div className="space-y-2">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-medium text-primary">Available Models</h3>
+            <h3 className="font-medium text-primary">{t('models.availableModels')}</h3>
             <span className="text-xs text-muted-foreground">
-              {ollamaStatus.available_models.length} downloaded
+              {t('models.downloadedCount', { count: ollamaStatus.available_models.length })}
             </span>
           </div>
-          
+
           {/* Show active downloads */}
           {Object.entries(downloadProgress).map(([modelName, progress]) => (
             <div key={`download-${modelName}`} className="bg-muted rounded-md px-3 py-3">
@@ -736,10 +742,10 @@ export function OllamaSettings() {
                     progress.status === 'error' && "bg-red-600/30 text-red-500 border-red-600/40",
                     progress.status === 'cancelled' && "bg-muted text-muted-foreground"
                   )}>
-                    {progress.status === 'downloading' && 'Downloading'}
-                    {progress.status === 'completed' && 'Completed'}
-                    {progress.status === 'error' && 'Failed'}
-                    {progress.status === 'cancelled' && 'Cancelled'}
+                    {progress.status === 'downloading' && t('ollama.downloading')}
+                    {progress.status === 'completed' && t('ollama.completed')}
+                    {progress.status === 'error' && t('ollama.failed')}
+                    {progress.status === 'cancelled' && t('ollama.cancelled')}
                     {!['downloading', 'completed', 'error', 'cancelled'].includes(progress.status) && progress.status}
                   </Badge>
                 </div>
@@ -757,7 +763,7 @@ export function OllamaSettings() {
                   )}
                 </Button>
               </div>
-              
+
               {/* Progress bar */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -765,7 +771,7 @@ export function OllamaSettings() {
                   <span>{progress.percentage ? `${progress.percentage.toFixed(1)}%` : '...'}</span>
                 </div>
                 <div className="w-full bg-muted rounded-full h-2">
-                  <div 
+                  <div
                     className="bg-blue-500 h-2 rounded-full transition-all duration-300"
                     style={{ width: `${progress.percentage || 0}%` }}
                   />
@@ -781,12 +787,12 @@ export function OllamaSettings() {
               </div>
             </div>
           ))}
-          
+
           {allModels.length > 0 ? (
             <div className="space-y-1">
               {allModels.map((model) => (
-                <div 
-                  key={model.model_name} 
+                <div
+                  key={model.model_name}
                   className="group flex items-center justify-between bg-muted hover-bg rounded-md px-3 py-2.5 transition-colors"
                 >
                   <div className="flex-1 min-w-0">
@@ -799,7 +805,7 @@ export function OllamaSettings() {
                       )}
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center gap-2">
                     {model.isDownloaded && (
                       <>
@@ -828,7 +834,7 @@ export function OllamaSettings() {
                           className="flex items-center gap-2 h-7 text-primary hover:bg-primary/20 hover:text-primary bg-primary/10 border-primary/30 hover:border-primary/50"
                         >
                           <Download className="h-3 w-3" />
-                          Download
+                          {t('ollama.download')}
                         </Button>
                       </>
                     )}
@@ -839,12 +845,12 @@ export function OllamaSettings() {
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               <Brain className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">No models available</p>
+              <p className="text-sm">{t('models.noneAvailable')}</p>
             </div>
           )}
         </div>
       )}
-      
+
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteConfirmation.isOpen} onOpenChange={(open) => {
         if (!open) cancelDeleteModel();
@@ -853,16 +859,16 @@ export function OllamaSettings() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-red-400" />
-              Delete Model
+              {t('ollama.deleteModel')}
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete <strong>{deleteConfirmation.displayName}</strong>?
+              {t('ollama.deleteQuestion', { name: deleteConfirmation.displayName })}
               <br />
               <span className="text-sm text-muted-foreground mt-1 block">
-                Model: {deleteConfirmation.modelName}
+                {t('ollama.modelLabel', { name: deleteConfirmation.modelName })}
               </span>
               <br />
-              This action cannot be undone. You will need to download the model again to use it.
+              {t('ollama.deleteWarning')}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex gap-2">
@@ -871,7 +877,7 @@ export function OllamaSettings() {
               onClick={cancelDeleteModel}
               disabled={actionLoading === `delete-${deleteConfirmation.modelName}`}
             >
-              Cancel
+              {t('ollama.cancel')}
             </Button>
             <Button
               variant="destructive"
@@ -880,12 +886,12 @@ export function OllamaSettings() {
               className="flex items-center gap-2"
             >
               <Trash2 className="h-4 w-4" />
-              {actionLoading === `delete-${deleteConfirmation.modelName}` ? 'Deleting...' : 'Delete Model'}
+              {actionLoading === `delete-${deleteConfirmation.modelName}` ? t('ollama.deleting') : t('ollama.deleteModel')}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      
+
       {/* Cancel Download Confirmation Dialog */}
       <Dialog open={cancelConfirmation.isOpen} onOpenChange={(open) => {
         if (!open) cancelCancelDownload();
@@ -894,16 +900,16 @@ export function OllamaSettings() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-yellow-500" />
-              Cancel Download
+              {t('ollama.cancelDownload')}
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to cancel the download of <strong>{cancelConfirmation.displayName}</strong>?
+              {t('ollama.cancelDownloadQuestion', { name: cancelConfirmation.displayName })}
               <br />
               <span className="text-sm text-muted-foreground mt-1 block">
-                Model: {cancelConfirmation.modelName}
+                {t('ollama.modelLabel', { name: cancelConfirmation.modelName })}
               </span>
               <br />
-              Any progress will be lost and you'll need to start the download again.
+              {t('ollama.cancelDownloadWarning')}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex gap-2">
@@ -912,7 +918,7 @@ export function OllamaSettings() {
               onClick={cancelCancelDownload}
               disabled={cancellingDownloads.has(cancelConfirmation.modelName)}
             >
-              Continue Download
+              {t('ollama.continueDownload')}
             </Button>
             <Button
               variant="destructive"
@@ -921,7 +927,7 @@ export function OllamaSettings() {
               className="flex items-center gap-2"
             >
               <X className="h-4 w-4" />
-              {cancellingDownloads.has(cancelConfirmation.modelName) ? 'Cancelling...' : 'Cancel Download'}
+              {cancellingDownloads.has(cancelConfirmation.modelName) ? t('ollama.cancelling') : t('ollama.cancelDownload')}
             </Button>
           </DialogFooter>
         </DialogContent>

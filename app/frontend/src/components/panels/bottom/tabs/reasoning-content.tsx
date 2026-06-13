@@ -1,3 +1,4 @@
+import { useI18n } from '@/i18n/use-i18n';
 import { Copy } from 'lucide-react';
 import { useState } from 'react';
 import { isJsonString } from './output-tab-utils';
@@ -5,12 +6,13 @@ import { isJsonString } from './output-tab-utils';
 // Component to render reasoning content with JSON formatting and copy button
 export function ReasoningContent({ content }: { content: any }) {
   const [copySuccess, setCopySuccess] = useState(false);
-  
+  const { t } = useI18n();
+
   if (!content) return null;
-  
+
   const contentString = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
   const isJson = isJsonString(contentString);
-  
+
   const copyToClipboard = () => {
     navigator.clipboard.writeText(contentString)
       .then(() => {
@@ -21,18 +23,18 @@ export function ReasoningContent({ content }: { content: any }) {
         console.error('Failed to copy text: ', err);
       });
   };
-  
+
   return (
     <div className="group relative">
-      <button 
+      <button
         onClick={copyToClipboard}
         className="absolute top-1 right-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1 text-xs p-1 rounded hover:bg-accent bg-background text-muted-foreground border border-border"
-        title="Copy to clipboard"
+        title={t('dialog.copyToClipboard')}
       >
         <Copy className="h-3 w-3" />
-        <span className="text-xs">{copySuccess ? 'Copied!' : 'Copy'}</span>
+        <span className="text-xs">{copySuccess ? t('dialog.copied') : t('dialog.copy')}</span>
       </button>
-      
+
       {isJson ? (
         <div className="text-xs">
           <pre className="whitespace-pre-wrap bg-muted p-2 rounded text-xs leading-relaxed max-h-[150px] overflow-auto">
@@ -48,4 +50,4 @@ export function ReasoningContent({ content }: { content: any }) {
       )}
     </div>
   );
-} 
+}

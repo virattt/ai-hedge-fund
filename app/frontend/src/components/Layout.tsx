@@ -12,21 +12,21 @@ import { cn } from '@/lib/utils';
 import { SidebarStorageService } from '@/services/sidebar-storage';
 import { TabService } from '@/services/tab-service';
 import { ReactFlowProvider } from '@xyflow/react';
-import { ReactNode, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TopBar } from './layout/top-bar';
 
 // Create a LayoutContent component to access the FlowContext, TabsContext, and LayoutContext
-function LayoutContent({ children }: { children: ReactNode }) {
+function LayoutContent() {
   const { reactFlowInstance } = useFlowContext();
   const { openTab } = useTabsContext();
   const { isBottomCollapsed, expandBottomPanel, collapseBottomPanel, toggleBottomPanel } = useLayoutContext();
-  
+
   // Initialize sidebar states from storage service
-  const [isLeftCollapsed, setIsLeftCollapsed] = useState(() => 
+  const [isLeftCollapsed, setIsLeftCollapsed] = useState(() =>
     SidebarStorageService.loadLeftSidebarState(false)
   );
-  
-  const [isRightCollapsed, setIsRightCollapsed] = useState(() => 
+
+  const [isRightCollapsed, setIsRightCollapsed] = useState(() =>
     SidebarStorageService.loadRightSidebarState(false)
   );
 
@@ -65,38 +65,18 @@ function LayoutContent({ children }: { children: ReactNode }) {
   const getSidebarBasedStyle = () => {
     let left = 0;
     let right = 0;
-    
+
     if (!isLeftCollapsed) {
       left = leftSidebarWidth;
     }
-    
+
     if (!isRightCollapsed) {
       right = rightSidebarWidth;
     }
-    
+
     return {
       left: `${left}px`,
       right: `${right}px`,
-    };
-  };
-
-  // Calculate main content positioning accounting for tab bar height
-  const getMainContentStyle = () => {
-    const tabBarHeight = 40; // Approximate tab bar height
-    let top = tabBarHeight;
-    let bottom = 0;
-    
-    if (!isBottomCollapsed) {
-      bottom = bottomPanelHeight;
-    }
-    
-    return {
-      top: `${top}px`,
-      bottom: `${bottom}px`,
-      left: '0',
-      right: '0',
-      width: 'auto',
-      height: 'auto',
     };
   };
 
@@ -114,7 +94,7 @@ function LayoutContent({ children }: { children: ReactNode }) {
       />
 
       {/* Tab Bar - positioned absolutely like bottom panel */}
-      <div 
+      <div
         className="absolute top-0 z-10 transition-all duration-200"
         style={getSidebarBasedStyle()}
       >
@@ -122,8 +102,8 @@ function LayoutContent({ children }: { children: ReactNode }) {
       </div>
 
       {/* Main content area */}
-      <main 
-        className="absolute inset-0 overflow-hidden" 
+      <main
+        className="absolute inset-0 overflow-hidden"
         style={{
           left: !isLeftCollapsed ? `${leftSidebarWidth}px` : '0px',
           right: !isRightCollapsed ? `${rightSidebarWidth}px` : '0px',
@@ -161,7 +141,7 @@ function LayoutContent({ children }: { children: ReactNode }) {
       </div>
 
       {/* Bottom panel */}
-      <div 
+      <div
         className={cn(
           "absolute bottom-0 z-20 transition-transform",
           isBottomCollapsed && "transform translate-y-full opacity-0"
@@ -180,18 +160,14 @@ function LayoutContent({ children }: { children: ReactNode }) {
   );
 }
 
-interface LayoutProps {
-  children: ReactNode;
-}
-
-export function Layout({ children }: LayoutProps) {
+export function Layout() {
   return (
     <SidebarProvider defaultOpen={true}>
       <ReactFlowProvider>
         <FlowProvider>
           <TabsProvider>
             <LayoutProvider>
-              <LayoutContent>{children}</LayoutContent>
+              <LayoutContent />
             </LayoutProvider>
           </TabsProvider>
         </FlowProvider>

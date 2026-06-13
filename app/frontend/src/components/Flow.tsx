@@ -22,6 +22,7 @@ import { useEnhancedFlowActions } from '@/hooks/use-enhanced-flow-actions';
 import { useFlowHistory } from '@/hooks/use-flow-history';
 import { useFlowKeyboardShortcuts, useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useToastManager } from '@/hooks/use-toast-manager';
+import { useI18n } from '@/i18n/use-i18n';
 import { AppNode } from '@/nodes/types';
 import { edgeTypes } from '../edges';
 import { nodeTypes } from '../nodes';
@@ -32,53 +33,54 @@ type FlowProps = {
 };
 
 export function Flow({ className = '' }: FlowProps) {
-  const { theme, resolvedTheme } = useTheme();
-  
+  const { resolvedTheme } = useTheme();
+
   // Use the resolved theme for ReactFlow ColorMode
   const colorMode: ColorMode = resolvedTheme === 'light' ? 'light' : 'dark';
-  
-  const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>([]);
+
+  const [nodes, , onNodesChange] = useNodesState<AppNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const proOptions = { hideAttribution: true };
-  
+
   // Get flow context for flow ID
   const { currentFlowId } = useFlowContext();
-  
+
   // Get enhanced flow actions for complete state persistence
   const { saveCurrentFlowWithCompleteState } = useEnhancedFlowActions();
-  
+
   // Get toast manager
   const { success, error } = useToastManager();
+  const { t } = useI18n();
 
   // Initialize flow history (each flow maintains its own separate history)
-  const { takeSnapshot, undo, redo, canUndo, canRedo, clearHistory } = useFlowHistory({ flowId: currentFlowId });
+  const { takeSnapshot, undo, redo } = useFlowHistory({ flowId: currentFlowId });
 
   // Create debounced auto-save function
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedFlowIdRef = useRef<number | null>(null);
-  
+
   const autoSave = useCallback(async (flowIdToSave?: number | null) => {
     // Use the provided flowId or fall back to current flow ID
     const targetFlowId = flowIdToSave !== undefined ? flowIdToSave : currentFlowId;
-    
+
     // Clear any existing timeout
     if (autoSaveTimeoutRef.current) {
       clearTimeout(autoSaveTimeoutRef.current);
     }
-    
+
     // Set new timeout for debounced save
     autoSaveTimeoutRef.current = setTimeout(async () => {
       // Double-check that we're still saving to the correct flow
       if (!targetFlowId) {
         return;
       }
-      
+
       // If the current flow has changed since this auto-save was scheduled, skip it
       if (targetFlowId !== currentFlowId) {
         return;
       }
-      
+
       try {
         await saveCurrentFlowWithCompleteState();
         lastSavedFlowIdRef.current = targetFlowId;
@@ -92,7 +94,7 @@ export function Flow({ className = '' }: FlowProps) {
   const handleNodesChange = useCallback((changes: NodeChange<AppNode>[]) => {
     // Apply the changes first
     onNodesChange(changes);
-    
+
     // Check if any of the changes should trigger auto-save
     const shouldAutoSave = changes.some(change => {
       switch (change.type) {
@@ -123,7 +125,7 @@ export function Flow({ className = '' }: FlowProps) {
   const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
     // Apply the changes first
     onEdgesChange(changes);
-    
+
     // Check if any of the changes should trigger auto-save
     const shouldAutoSave = changes.some(change => {
       switch (change.type) {
@@ -169,7 +171,7 @@ export function Flow({ className = '' }: FlowProps) {
   // Take snapshot when nodes or edges change (debounced)
   useEffect(() => {
     if (!isInitialized) return;
-    
+
     const timeoutId = setTimeout(() => {
       takeSnapshot();
     }, 500); // Debounce snapshots by 500ms
@@ -180,7 +182,7 @@ export function Flow({ className = '' }: FlowProps) {
   // // Auto-save when nodes or edges change (debounced with longer delay)
   // useEffect(() => {
   //   if (!isInitialized) return;
-    
+
   //   const timeoutId = setTimeout(async () => {
   //     try {
   //       await saveCurrentFlowWithCompleteState();
@@ -199,12 +201,12 @@ export function Flow({ className = '' }: FlowProps) {
     try {
       const savedFlow = await saveCurrentFlowWithCompleteState();
       if (savedFlow) {
-        success(`"${savedFlow.name}" saved!`, 'flow-save');
+        success(t('flows.savedToast', { name: savedFlow.name }), 'flow-save');
       } else {
-        error('Failed to save flow', 'flow-save-error');
+        error(t('flows.saveFailed'), 'flow-save-error');
       }
     } catch (err) {
-      error('Failed to save flow', 'flow-save-error');
+      error(t('flows.saveFailed'), 'flow-save-error');
     }
   });
 
@@ -228,7 +230,7 @@ export function Flow({ className = '' }: FlowProps) {
       },
     ],
   });
-  
+
   // Initialize the flow when it first renders
   const onInit = useCallback(() => {
     if (!isInitialized) {
@@ -248,24 +250,24 @@ export function Flow({ className = '' }: FlowProps) {
         },
       };
       setEdges((eds) => addEdge(newEdge, eds));
-      
+
       // Auto-save new connections immediately (structural change)
       if (currentFlowId) {
         // IMPORTANT: Capture the current flow ID at the time of the change
         const flowIdAtTimeOfChange = currentFlowId;
-        
+
         // Clear any pending debounced saves and save immediately
         if (autoSaveTimeoutRef.current) {
           clearTimeout(autoSaveTimeoutRef.current);
         }
-        
+
         // Use setTimeout to ensure the edge is added to state first
         setTimeout(async () => {
           // Double-check that we're still saving to the correct flow
           if (flowIdAtTimeOfChange !== currentFlowId) {
             return;
           }
-          
+
           try {
             await saveCurrentFlowWithCompleteState();
           } catch (error) {
@@ -281,7 +283,7 @@ export function Flow({ className = '' }: FlowProps) {
   const backgroundStyle = {
     backgroundColor: 'hsl(var(--background))'
   };
-  
+
   const gridColor = resolvedTheme === 'light' ? 'hsl(var(--foreground))' : 'hsl(var(--muted-foreground))';
 
   return (
@@ -299,7 +301,7 @@ export function Flow({ className = '' }: FlowProps) {
           colorMode={colorMode}
           proOptions={proOptions}
         >
-          <Background 
+          <Background
             variant={BackgroundVariant.Dots}
             gap={13}
             color={gridColor}
@@ -310,4 +312,4 @@ export function Flow({ className = '' }: FlowProps) {
       </TooltipProvider>
     </div>
   );
-} 
+}

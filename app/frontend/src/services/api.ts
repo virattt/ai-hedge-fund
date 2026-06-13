@@ -85,7 +85,7 @@ export const api = {
    * @returns A function to abort the SSE connection
    */
   runHedgeFund: (
-    params: HedgeFundRequest, 
+    params: HedgeFundRequest,
     nodeContext: ReturnType<typeof useNodeContext>,
     flowId: string | null = null
   ): (() => void) => {
@@ -118,48 +118,50 @@ export const api = {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-            
+
       // Process the response as a stream of SSE events
       const reader = response.body?.getReader();
       if (!reader) {
         throw new Error('Failed to get response reader');
       }
-      
+
       const decoder = new TextDecoder();
       let buffer = '';
-      
+
       // Function to process the stream
       const processStream = async () => {
         try {
-          while (true) {
+          let isReading = true;
+          while (isReading) {
             const { done, value } = await reader.read();
-            
+
             if (done) {
+              isReading = false;
               break;
             }
-            
+
             // Decode the chunk and add to buffer
             const chunk = decoder.decode(value, { stream: true });
             buffer += chunk;
-            
+
             // Process any complete events in the buffer (separated by double newlines)
             const events = buffer.split('\n\n');
             buffer = events.pop() || ''; // Keep last partial event in buffer
-            
+
             for (const eventText of events) {
               if (!eventText.trim()) continue;
-                            
+
               try {
                 // Parse the event type and data from the SSE format
                 const eventTypeMatch = eventText.match(/^event: (.+)$/m);
                 const dataMatch = eventText.match(/^data: (.+)$/m);
-                
+
                 if (eventTypeMatch && dataMatch) {
                   const eventType = eventTypeMatch[1];
                   const eventData = JSON.parse(dataMatch[1]);
-                  
+
                   console.log(`Parsed ${eventType} event:`, eventData);
-                  
+
                   // Process based on event type
                   switch (eventType) {
                     case 'start':
@@ -175,12 +177,12 @@ export const api = {
                         }
                         // Map the backend agent name to the unique node ID
                         const baseAgentKey = eventData.agent.replace('_agent', '');
-                        
+
                         // Find the unique node ID that corresponds to this base agent key
-                        const uniqueNodeId = getAgentIds().find(id => 
+                        const uniqueNodeId = getAgentIds().find(id =>
                           extractBaseAgentKey(id) === baseAgentKey
                         ) || baseAgentKey;
-                                                
+
                         // Use the enhanced API to update both status and additional data
                         nodeContext.updateAgentNode(flowId, uniqueNodeId, {
                           status: nodeStatus,
@@ -223,9 +225,9 @@ export const api = {
                       }
                       break;
                     case 'error':
-                      // Mark all agents as error when there's an error  
+                      // Mark all agents as error when there's an error
                       nodeContext.updateAgentNodes(flowId, getAgentIds(), 'ERROR');
-                      
+
                       // Update flow connection state to error
                       if (flowId) {
                         flowConnectionManager.setConnection(flowId, {
@@ -244,7 +246,7 @@ export const api = {
               }
             }
           }
-          
+
           // After the stream has finished, check if we are still in a connected state.
           // This can happen if the backend closes the connection without sending a 'complete' event.
           if (flowId) {
@@ -261,7 +263,7 @@ export const api = {
             console.error('Error reading SSE stream:', error);
             // Mark all agents as error when there's a connection error
             nodeContext.updateAgentNodes(flowId, getAgentIds(), 'ERROR');
-            
+
             // Update flow connection state to error
             if (flowId) {
               flowConnectionManager.setConnection(flowId, {
@@ -273,7 +275,7 @@ export const api = {
           }
         }
       };
-      
+
       // Start processing the stream
       processStream();
     })
@@ -282,7 +284,7 @@ export const api = {
         console.error('SSE connection error:', error);
         // Mark all agents as error when there's a connection error
         nodeContext.updateAgentNodes(flowId, getAgentIds(), 'ERROR');
-        
+
         // Update flow connection state to error
         if (flowId) {
           flowConnectionManager.setConnection(flowId, {
@@ -306,4 +308,4 @@ export const api = {
       }
     };
   },
-}; 
+};

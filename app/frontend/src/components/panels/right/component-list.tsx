@@ -1,5 +1,6 @@
 import { Accordion } from '@/components/ui/accordion';
 import { ComponentGroup } from '@/data/sidebar-components';
+import { useI18n } from '@/i18n/use-i18n';
 import { SearchBox } from '../search-box';
 import { ComponentItemGroup } from './component-item-group';
 
@@ -24,28 +25,30 @@ export function ComponentList({
   onSearchChange,
   onAccordionChange,
 }: ComponentListProps) {
+  const { t } = useI18n();
+
   return (
     <div className="flex-grow overflow-auto text-primary scrollbar-thin scrollbar-thumb-ramp-grey-700">
-      <SearchBox 
-        value={searchQuery} 
+      <SearchBox
+        value={searchQuery}
         onChange={onSearchChange}
-        placeholder="Search components..."
+        placeholder={t('components.searchPlaceholder')}
       />
-      
+
       {isLoading ? (
         <div className="flex items-center justify-center py-8">
-          <div className="text-muted-foreground text-sm">Loading components...</div>
+          <div className="text-muted-foreground text-sm">{t('components.loading')}</div>
         </div>
       ) : (
-        <Accordion 
-          type="multiple" 
-          className="w-full" 
-          value={openGroups} 
+        <Accordion
+          type="multiple"
+          className="w-full"
+          value={openGroups}
           onValueChange={onAccordionChange}
         >
           {filteredGroups.map(group => (
             <ComponentItemGroup
-              key={group.name} 
+              key={group.name}
               group={group}
               activeItem={activeItem}
             />
@@ -57,14 +60,14 @@ export function ComponentList({
         <div className="text-center py-8 text-muted-foreground text-sm">
           {componentGroups.length === 0 ? (
             <div className="space-y-2">
-              <div>No components available</div>
-              <div className="text-xs">Components will appear here when loaded</div>
+              <div>{t('components.noneAvailable')}</div>
+              <div className="text-xs">{t('components.loadedHere')}</div>
             </div>
           ) : (
-            'No components match your search'
+            t('components.noneMatch')
           )}
         </div>
       )}
     </div>
   );
-} 
+}

@@ -10,6 +10,7 @@ import { useNodeContext } from '@/contexts/node-context';
 import { getDefaultModel, getModels, LanguageModel } from '@/data/models';
 import { useNodeState } from '@/hooks/use-node-state';
 import { useOutputNodeConnection } from '@/hooks/use-output-node-connection';
+import { useI18n } from '@/i18n/use-i18n';
 import { cn } from '@/lib/utils';
 import { type PortfolioManagerNode } from '../types';
 import { getStatusColor } from '../utils';
@@ -37,6 +38,7 @@ export function PortfolioManagerNode({
   const status = nodeData.status;
   const isInProgress = status === 'IN_PROGRESS';
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const { t, translateDisplayName, translateStatus } = useI18n();
 
   // Use persistent state hooks
   const [availableModels, setAvailableModels] = useNodeState<LanguageModel[]>(
@@ -59,7 +61,7 @@ export function PortfolioManagerNode({
           getDefaultModel()
         ]);
         setAvailableModels(models);
-        
+
         // Set default model if no model is currently selected
         if (!selectedModel && defaultModel) {
           setSelectedModel(defaultModel);
@@ -85,7 +87,7 @@ export function PortfolioManagerNode({
   const handleModelChange = (model: LanguageModel | null) => {
     setSelectedModel(model);
   };
-  
+
   const outputNodeData = getOutputNodeDataForFlow(currentFlowId?.toString() || null);
 
   // Get connected agent IDs
@@ -99,7 +101,7 @@ export function PortfolioManagerNode({
         isConnectable={isConnectable}
         icon={<Brain className="h-5 w-5" />}
         iconColor={getStatusColor(status)}
-        name={data.name || 'Portfolio Manager'}
+        name={data.name ? translateDisplayName(data.name) : translateDisplayName('Portfolio Manager')}
         description={data.description}
         hasRightHandle={false}
         status={status}
@@ -109,7 +111,7 @@ export function PortfolioManagerNode({
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <div className="text-subtitle text-primary flex items-center gap-1">
-                  Status
+                  {t('node.status')}
                 </div>
 
                 <div
@@ -119,7 +121,7 @@ export function PortfolioManagerNode({
                   )}
                 >
                   <span className="capitalize">
-                    {status.toLowerCase().replace(/_/g, ' ')}
+                    {translateStatus(status)}
                   </span>
                 </div>
               </div>
@@ -129,19 +131,19 @@ export function PortfolioManagerNode({
                     size="sm"
                     onClick={() => setIsDialogOpen(true)}
                   >
-                    View Investment Report
+                    {t('node.viewInvestmentReport')}
                   </Button>
                 )}
               </div>
               <div className="flex flex-col gap-2">
                 <div className="text-subtitle text-primary flex items-center gap-1">
-                  Model
+                  {t('node.model')}
                 </div>
                 <ModelSelector
                   models={availableModels}
                   value={selectedModel?.model_name || ''}
                   onChange={handleModelChange}
-                  placeholder="Auto"
+                  placeholder={t('node.auto')}
                 />
               </div>
             </div>

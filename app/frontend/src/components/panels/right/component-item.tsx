@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/i18n/use-i18n";
 import { cn } from "@/lib/utils";
 import { LucideIcon, Plus } from "lucide-react";
 import { useState } from "react";
@@ -11,22 +12,23 @@ interface ComponentItemProps {
   isActive?: boolean;
 }
 
-export default function ComponentItem({ 
-  icon: Icon, 
-  label, 
-  onClick, 
-  className, 
-  isActive = false 
+export default function ComponentItem({
+  icon: Icon,
+  label,
+  onClick,
+  className,
+  isActive = false
 }: ComponentItemProps) {
   const [isHovered, setIsHovered] = useState(false);
-  
+  const { t } = useI18n();
+
   const handlePlusClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent triggering the parent onClick
     if (onClick) onClick();
   };
-  
+
   return (
-    <div 
+    <div
       className={cn(
         "group flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer text-subtitle transition-colors duration-150",
         isActive ? "bg-ramp-grey-700 text-primary" : "text-primary",
@@ -48,7 +50,7 @@ export default function ComponentItem({
         <Icon size={16} className={isActive ? "text-primary" : "text-muted-foreground"} />
       </div>
       <span className="truncate">{label}</span>
-      
+
       {/* Add button using shadcn Button */}
       <div className="ml-auto opacity-0 group-hover:opacity-100">
         <Button
@@ -56,11 +58,11 @@ export default function ComponentItem({
           size="icon"
           className="h-5 w-5 hover-bg hover:text-primary text-muted-foreground flex items-center justify-center"
           onClick={handlePlusClick}
-          aria-label="Add"
+          aria-label={t('components.add')}
         >
           <Plus size={14} />
         </Button>
       </div>
     </div>
   );
-} 
+}

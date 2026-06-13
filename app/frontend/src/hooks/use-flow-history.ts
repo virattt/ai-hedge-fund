@@ -46,7 +46,8 @@ export function useFlowHistory({ maxHistorySize = 50, flowId }: UseFlowHistoryOp
   const createSnapshot = useCallback((): FlowSnapshot => {
     // Strip UI-only properties from nodes (like selection state)
     const cleanNodes = getNodes().map(node => {
-      const { selected, ...cleanNode } = node;
+      const cleanNode = { ...node };
+      delete cleanNode.selected;
       return cleanNode;
     });
 
@@ -65,7 +66,7 @@ export function useFlowHistory({ maxHistorySize = 50, flowId }: UseFlowHistoryOp
     const nodes2Str = JSON.stringify(snapshot2.nodes);
     const edges1Str = JSON.stringify(snapshot1.edges);
     const edges2Str = JSON.stringify(snapshot2.edges);
-    
+
     return nodes1Str !== nodes2Str || edges1Str !== edges2Str;
   }, []);
 
@@ -79,7 +80,7 @@ export function useFlowHistory({ maxHistorySize = 50, flowId }: UseFlowHistoryOp
     const snapshot = createSnapshot();
     const currentHistory = getCurrentFlowHistory();
     const currentIndex = getCurrentHistoryIndex();
-    
+
     // Don't add duplicate snapshots (when only UI-only properties changed)
     if (currentHistory.length > 0) {
       const lastSnapshot = currentHistory[currentIndex];
@@ -89,18 +90,18 @@ export function useFlowHistory({ maxHistorySize = 50, flowId }: UseFlowHistoryOp
     }
 
     const newHistory = [...currentHistory];
-    
+
     // If we're not at the end of history, remove future snapshots
     if (currentIndex < newHistory.length - 1) {
       newHistory.splice(currentIndex + 1);
     }
-    
+
     // Add new snapshot
     newHistory.push(snapshot);
-    
+
     // Update the flow's history
     const flowKey = getFlowKey(flowId ?? null);
-    
+
     // Limit history size
     if (newHistory.length > maxHistorySize) {
       newHistory.shift();
@@ -108,7 +109,7 @@ export function useFlowHistory({ maxHistorySize = 50, flowId }: UseFlowHistoryOp
     } else {
       setCurrentHistoryIndex(currentIndex + 1);
     }
-    
+
     histories.current[flowKey] = newHistory;
   }, [createSnapshot, getCurrentFlowHistory, getCurrentHistoryIndex, maxHistorySize, snapshotsAreDifferent, getFlowKey, flowId, setCurrentHistoryIndex]);
 
@@ -127,7 +128,7 @@ export function useFlowHistory({ maxHistorySize = 50, flowId }: UseFlowHistoryOp
   const undo = useCallback(() => {
     const currentIndex = getCurrentHistoryIndex();
     const currentHistory = getCurrentFlowHistory();
-    
+
     if (currentIndex > 0) {
       const prevSnapshot = currentHistory[currentIndex - 1];
       restoreSnapshot(prevSnapshot);
@@ -139,7 +140,7 @@ export function useFlowHistory({ maxHistorySize = 50, flowId }: UseFlowHistoryOp
   const redo = useCallback(() => {
     const currentIndex = getCurrentHistoryIndex();
     const currentHistory = getCurrentFlowHistory();
-    
+
     if (currentIndex < currentHistory.length - 1) {
       const nextSnapshot = currentHistory[currentIndex + 1];
       restoreSnapshot(nextSnapshot);
@@ -149,7 +150,7 @@ export function useFlowHistory({ maxHistorySize = 50, flowId }: UseFlowHistoryOp
 
   // Check if undo is available
   const canUndo = getCurrentHistoryIndex() > 0;
-  
+
   // Check if redo is available
   const canRedo = getCurrentHistoryIndex() < getCurrentFlowHistory().length - 1;
 
@@ -168,4 +169,4 @@ export function useFlowHistory({ maxHistorySize = 50, flowId }: UseFlowHistoryOp
     canRedo,
     clearHistory,
   };
-} 
+}

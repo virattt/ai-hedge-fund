@@ -4,6 +4,7 @@ import { Key, Palette } from 'lucide-react';
 import { useState } from 'react';
 import { ApiKeysSettings, Models } from './';
 import { ThemeSettings } from './appearance';
+import { useI18n } from '@/i18n/use-i18n';
 
 interface SettingsProps {
   className?: string;
@@ -18,25 +19,26 @@ interface SettingsNavItem {
 
 export function Settings({ className }: SettingsProps) {
   const [selectedSection, setSelectedSection] = useState('api');
+  const { t } = useI18n();
 
   const navigationItems: SettingsNavItem[] = [
     {
       id: 'api',
-      label: 'API Keys',
+      label: t('settings.apiKeys'),
       icon: Key,
-      description: 'API endpoints and authentication',
+      description: t('settings.apiDescription'),
     },
     {
       id: 'models',
-      label: 'Models',
+      label: t('settings.models'),
       icon: CubeIcon,
-      description: 'Local and cloud AI models',
+      description: t('settings.modelsDescription'),
     },
     {
       id: 'theme',
-      label: 'Theme',
+      label: t('settings.theme'),
       icon: Palette,
-      description: 'Theme and display preferences',
+      description: t('settings.themeDescription'),
     },
   ];
 
@@ -59,7 +61,7 @@ export function Settings({ className }: SettingsProps) {
         {/* Left Navigation Pane */}
         <div className="w-60 bg-panel flex-shrink-0">
           <div className="p-4 border-b">
-            <h1 className="text-lg font-semibold text-primary">Settings</h1>
+            <h1 className="text-lg font-semibold text-primary">{t('settings.title')}</h1>
           </div>
           <nav className="p-2">
             {navigationItems.map((item) => {
@@ -71,8 +73,8 @@ export function Settings({ className }: SettingsProps) {
                   onClick={() => setSelectedSection(item.id)}
                   className={cn(
                     "w-full flex items-center gap-3 px-3 py-2 text-left rounded-md text-sm transition-colors",
-                    isSelected 
-                      ? "active-bg text-blue-500" 
+                    isSelected
+                      ? "active-bg text-blue-500"
                       : "text-primary hover-item"
                   )}
                 >
@@ -93,4 +95,4 @@ export function Settings({ className }: SettingsProps) {
       </div>
     </div>
   );
-} 
+}

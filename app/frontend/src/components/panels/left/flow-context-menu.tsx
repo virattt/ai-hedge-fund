@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { useI18n } from '@/i18n/use-i18n';
 import { cn } from '@/lib/utils';
 import { Copy, Edit, Trash2 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
@@ -12,15 +13,16 @@ interface FlowContextMenuProps {
   onDelete: () => void;
 }
 
-export function FlowContextMenu({ 
-  isOpen, 
-  position, 
-  onClose, 
-  onEdit, 
-  onDuplicate, 
-  onDelete 
+export function FlowContextMenu({
+  isOpen,
+  position,
+  onClose,
+  onEdit,
+  onDuplicate,
+  onDelete
 }: FlowContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -73,9 +75,9 @@ export function FlowContextMenu({
           onClick={() => handleAction(onEdit)}
         >
           <Edit size={14} className="mr-2" />
-          Edit
+          {t('flows.contextEdit')}
         </Button>
-        
+
         <Button
           variant="ghost"
           size="sm"
@@ -83,9 +85,9 @@ export function FlowContextMenu({
           onClick={() => handleAction(onDuplicate)}
         >
           <Copy size={14} className="mr-2" />
-          Duplicate
+          {t('flows.contextDuplicate')}
         </Button>
-        
+
         <Button
           variant="ghost"
           size="sm"
@@ -93,9 +95,9 @@ export function FlowContextMenu({
           onClick={() => handleAction(onDelete)}
         >
           <Trash2 size={14} className="mr-2" />
-          Delete
+          {t('flows.contextDelete')}
         </Button>
       </div>
     </div>
   );
-} 
+}

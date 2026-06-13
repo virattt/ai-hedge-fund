@@ -24,6 +24,7 @@ import { useNodeContext } from '@/contexts/node-context';
 import { useFlowConnection } from '@/hooks/use-flow-connection';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useNodeState } from '@/hooks/use-node-state';
+import { useI18n } from '@/i18n/use-i18n';
 import { cn, formatKeyboardShortcut } from '@/lib/utils';
 import { type PortfolioStartNode } from '../types';
 import { NodeShell } from './node-shell';
@@ -49,7 +50,7 @@ export function PortfolioStartNode({
   const today = new Date();
   const threeMonthsAgo = new Date(today);
   threeMonthsAgo.setMonth(today.getMonth() - 3);
-  
+
   // Use persistent state hooks
   const [positions, setPositions] = useNodeState<PortfolioPosition[]>(id, 'positions', [
     { ticker: '', quantity: '', tradePrice: '' },
@@ -59,13 +60,14 @@ export function PortfolioStartNode({
   const [startDate, setStartDate] = useNodeState(id, 'startDate', threeMonthsAgo.toISOString().split('T')[0]);
   const [endDate, setEndDate] = useNodeState(id, 'endDate', today.toISOString().split('T')[0]);
   const [open, setOpen] = useState(false);
-  
+  const { t, translateDisplayName } = useI18n();
+
   const { currentFlowId } = useFlowContext();
   const nodeContext = useNodeContext();
   const { getAllAgentModels } = nodeContext;
   const { getNodes, getEdges } = useReactFlow();
   const { expandBottomPanel, setBottomPanelTab } = useLayoutContext();
-  
+
   // Use the new flow connection hook
   const flowId = currentFlowId?.toString() || null;
   const {
@@ -78,10 +80,10 @@ export function PortfolioStartNode({
     stopFlow,
     recoverFlowState
   } = useFlowConnection(flowId);
-  
+
   // Check if the portfolio analyzer can be run
   const canRunPortfolioAnalyzer = canRun && positions.length > 0 && positions.every(pos => pos.ticker.trim() !== '');
-  
+
   // Add keyboard shortcut for Cmd+Enter / Ctrl+Enter to run portfolio analyzer
   useKeyboardShortcuts({
     shortcuts: [
@@ -98,14 +100,14 @@ export function PortfolioStartNode({
       },
     ],
   });
-  
+
   // Recover flow state when component mounts or flow changes
   useEffect(() => {
     if (flowId) {
       recoverFlowState();
     }
   }, [flowId, recoverFlowState]);
-  
+
   const handlePositionChange = (index: number, field: keyof PortfolioPosition, value: string) => {
     const newPositions = [...positions];
     newPositions[index][field] = value;
@@ -143,41 +145,41 @@ export function PortfolioStartNode({
       expandBottomPanel();
       setBottomPanelTab('output');
     }
-    
+
     // Get the current flow's nodes and edges
     const allNodes = getNodes();
     const allEdges = getEdges();
-    
+
     // Find all nodes that are reachable from the portfolio-analyzer-node
     const reachableNodes = new Set<string>();
     const visited = new Set<string>();
-    
+
     // DFS to find all reachable nodes
     const dfs = (nodeId: string) => {
       if (visited.has(nodeId)) return;
       visited.add(nodeId);
-      
+
       // If this is not the portfolio-analyzer-node itself, add it to reachable nodes
       if (nodeId !== id) {
         reachableNodes.add(nodeId);
       }
-      
+
       // Find all outgoing edges from this node
       const outgoingEdges = allEdges.filter(edge => edge.source === nodeId);
       for (const edge of outgoingEdges) {
         dfs(edge.target);
       }
     };
-    
+
     // Start DFS from the portfolio-analyzer-node
     dfs(id);
-    
+
     // Filter nodes to only include reachable ones
     const agentNodes = allNodes.filter(node => reachableNodes.has(node.id));
-    
+
     // Filter edges to only include connections between reachable nodes (plus the portfolio-analyzer-node)
     const reachableNodeIds = new Set([id, ...reachableNodes]);
-    const validEdges = allEdges.filter(edge => 
+    const validEdges = allEdges.filter(edge =>
       reachableNodeIds.has(edge.source) && reachableNodeIds.has(edge.target)
     );
 
@@ -194,7 +196,7 @@ export function PortfolioStartNode({
         });
       }
     }
-    
+
     // Convert positions to the expected format for backend use
     const portfolioPositions = positions
       .filter(pos => pos.ticker.trim() !== '' && pos.quantity.trim() !== '' && pos.tradePrice.trim() !== '')
@@ -203,10 +205,10 @@ export function PortfolioStartNode({
         quantity: parseFloat(pos.quantity) || 0,
         trade_price: parseFloat(pos.tradePrice) || 0
       }));
-    
+
     // For now, extract tickers for current API compatibility
     const tickerList = positions.map(pos => pos.ticker.trim()).filter(ticker => ticker !== '');
-    
+
     // Check if we're in backtest mode
     if (runMode === 'backtest') {
       // Use the flow connection hook to run the backtest with selected dates
@@ -265,7 +267,7 @@ export function PortfolioStartNode({
         selected={selected}
         isConnectable={isConnectable}
         icon={<PieChart className="h-5 w-5" />}
-        name={data.name || "Portfolio Analyzer"}
+        name={data.name ? translateDisplayName(data.name) : t('node.portfolioAnalyzer')}
         description={data.description}
         hasLeftHandle={false}
         width="w-80"
@@ -275,7 +277,7 @@ export function PortfolioStartNode({
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <div className="text-subtitle text-primary flex items-center gap-1">
-                  Available Cash
+                  {t('node.availableCash')}
                 </div>
                 <div className="relative flex-1">
                   <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground pointer-events-none">
@@ -296,10 +298,10 @@ export function PortfolioStartNode({
                 <div className="text-subtitle text-primary flex items-center gap-1">
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
-                      <span>Positions</span>
+                      <span>{t('node.positions')}</span>
                     </TooltipTrigger>
                     <TooltipContent side="right">
-                      Add your portfolio positions with ticker, quantity, and trade price
+                      {t('node.positionsTooltip')}
                     </TooltipContent>
                   </Tooltip>
                 </div>
@@ -308,14 +310,14 @@ export function PortfolioStartNode({
                     return (
                     <div key={index} className="flex gap-2 items-center">
                       <Input
-                        placeholder="Ticker"
+                        placeholder={t('node.ticker')}
                         value={position.ticker}
                         onChange={(e) => handlePositionChange(index, 'ticker', e.target.value)}
                         className="flex-1"
                       />
                       <Input
                         type="number"
-                        placeholder="Quantity"
+                        placeholder={t('node.quantity')}
                         value={position.quantity}
                         onChange={(e) => handlePositionChange(index, 'quantity', e.target.value)}
                         className="w-20"
@@ -327,7 +329,7 @@ export function PortfolioStartNode({
                         </div>
                         <Input
                           type="number"
-                          placeholder="Price"
+                          placeholder={t('node.price')}
                           value={position.tradePrice}
                           onChange={(e) => handlePositionChange(index, 'tradePrice', e.target.value)}
                           className="pl-8"
@@ -355,13 +357,13 @@ export function PortfolioStartNode({
                     variant="secondary"
                   >
                     <Plus className="h-4 w-4 mr-2" />
-                    Add Position
+                    {t('node.addPosition')}
                   </Button>
                 </div>
               </div>
               <div className="flex flex-col gap-2">
                 <div className="text-subtitle text-primary flex items-center gap-1">
-                  Run
+                  {t('node.run')}
                 </div>
                 <div className="flex gap-2">
                   <Popover open={open} onOpenChange={setOpen}>
@@ -373,7 +375,7 @@ export function PortfolioStartNode({
                         className="flex-1 justify-between h-10 px-3 py-2 bg-node border border-border hover:bg-accent"
                       >
                         <span className="text-subtitle">
-                          {runModes.find((mode) => mode.value === runMode)?.label || 'Single Analysis'}
+                          {runMode === 'backtest' ? t('node.backtest') : t('node.singleAnalysis')}
                         </span>
                         <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
@@ -381,7 +383,7 @@ export function PortfolioStartNode({
                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 bg-node border border-border shadow-lg">
                       <Command className="bg-node">
                         <CommandList className="bg-node">
-                          <CommandEmpty>No run mode found.</CommandEmpty>
+                          <CommandEmpty>{t('node.noRunModeFound')}</CommandEmpty>
                           <CommandGroup>
                             {runModes.map((mode) => (
                               <CommandItem
@@ -396,7 +398,7 @@ export function PortfolioStartNode({
                                   setOpen(false);
                                 }}
                               >
-                                {mode.label}
+                                {mode.value === 'backtest' ? t('node.backtest') : t('node.singleRun')}
                               </CommandItem>
                             ))}
                           </CommandGroup>
@@ -404,11 +406,11 @@ export function PortfolioStartNode({
                       </Command>
                     </PopoverContent>
                   </Popover>
-                  <Button 
-                    size="icon" 
+                  <Button
+                    size="icon"
                     variant="secondary"
                     className="flex-shrink-0 transition-all duration-200 hover:bg-primary hover:text-primary-foreground active:scale-95"
-                    title={showAsProcessing ? "Stop" : `Run (${formatKeyboardShortcut('↵')})`}
+                    title={showAsProcessing ? t('node.stop') : t('node.runShortcut', { shortcut: formatKeyboardShortcut('↵') })}
                     onClick={showAsProcessing ? handleStop : handlePlay}
                     disabled={!canRunPortfolioAnalyzer && !showAsProcessing}
                   >
@@ -424,7 +426,7 @@ export function PortfolioStartNode({
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-2">
                     <div className="text-subtitle text-primary flex items-center gap-1">
-                      Start Date
+                      {t('node.startDate')}
                     </div>
                     <Input
                       type="date"
@@ -434,7 +436,7 @@ export function PortfolioStartNode({
                   </div>
                   <div className="flex flex-col gap-2">
                     <div className="text-subtitle text-primary flex items-center gap-1">
-                      End Date
+                      {t('node.endDate')}
                     </div>
                     <Input
                       type="date"

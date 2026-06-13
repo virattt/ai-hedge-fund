@@ -6,6 +6,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useNodeContext } from '@/contexts/node-context';
+import { useI18n } from '@/i18n/use-i18n';
 import { formatTimeFromTimestamp } from '@/utils/date-utils';
 import { formatContent } from '@/utils/text-utils';
 import { AlignJustify, Copy, Loader2 } from 'lucide-react';
@@ -21,28 +22,29 @@ interface AgentOutputDialogProps {
   flowId: string | null;
 }
 
-export function AgentOutputDialog({ 
-  isOpen, 
-  onOpenChange, 
-  name, 
+export function AgentOutputDialog({
+  isOpen,
+  onOpenChange,
+  name,
   nodeId,
   flowId
 }: AgentOutputDialogProps) {
   const { getAgentNodeDataForFlow } = useNodeContext();
-  
+  const { t } = useI18n();
+
   // Use the passed flowId instead of getting it from flow context
   const agentNodeData = getAgentNodeDataForFlow(flowId);
-  const nodeData = agentNodeData[nodeId] || { 
-    status: 'IDLE', 
-    ticker: null, 
-    message: '', 
+  const nodeData = agentNodeData[nodeId] || {
+    status: 'IDLE',
+    ticker: null,
+    message: '',
     messages: [],
     lastUpdated: 0
   };
 
   const messages = nodeData.messages || [];
   const nodeStatus = nodeData.status;
-  
+
   const [copySuccess, setCopySuccess] = useState(false);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const initialFocusRef = useRef<HTMLDivElement>(null);
@@ -55,12 +57,12 @@ export function AgentOutputDialog({
       if (msg.analysis && Object.keys(msg.analysis).length > 0) {
         // Filter out null values before adding to our accumulated decisions
         const validDecisions = Object.entries(msg.analysis)
-          .filter(([_, value]) => value !== null && value !== undefined)
+          .filter(([, value]) => value !== null && value !== undefined)
           .reduce((obj, [key, value]) => {
             obj[key] = value;
             return obj;
           }, {} as Record<string, string>);
-        
+
         if (Object.keys(validDecisions).length > 0) {
           // Combine with accumulated decisions, newer messages overwrite older ones for the same ticker
           return { ...acc, ...validDecisions };
@@ -101,8 +103,8 @@ export function AgentOutputDialog({
   };
 
   return (
-    <Dialog 
-      open={isOpen} 
+    <Dialog
+      open={isOpen}
       onOpenChange={onOpenChange}
       defaultOpen={false}
       modal={true}
@@ -110,24 +112,24 @@ export function AgentOutputDialog({
       <DialogTrigger asChild>
         <div className="border-t border-border p-3 flex justify-end items-center cursor-pointer hover:bg-accent/50" onClick={() => onOpenChange(true)}>
           <div className="flex items-center gap-1">
-            <div className="text-subtitle text-muted-foreground">Output</div>
+            <div className="text-subtitle text-muted-foreground">{t('dialog.output')}</div>
             <AlignJustify className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
         </div>
       </DialogTrigger>
-      <DialogContent 
-        className="sm:max-w-[900px]" 
-        autoFocus={false} 
+      <DialogContent
+        className="sm:max-w-[900px]"
+        autoFocus={false}
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>
           <DialogTitle>{name}</DialogTitle>
         </DialogHeader>
-        
+
         <div className="grid grid-cols-2 gap-6 pt-4" ref={initialFocusRef} tabIndex={-1}>
           {/* Activity Log Section */}
           <div>
-            <h3 className="font-medium mb-3 text-primary">Log</h3>
+            <h3 className="font-medium mb-3 text-primary">{t('dialog.log')}</h3>
             <div className="h-[400px] overflow-y-auto border border-border rounded-lg p-3">
               {messages.length > 0 ? (
                 <div className="p-3 space-y-3">
@@ -147,22 +149,22 @@ export function AgentOutputDialog({
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
-                  No activity available
+                  {t('dialog.noActivity')}
                 </div>
               )}
             </div>
           </div>
-          
+
           {/* Analysis Section */}
           <div>
             <div className="flex justify-between items-center mb-3">
-              <h3 className="font-medium text-primary">Analysis</h3>
+              <h3 className="font-medium text-primary">{t('dialog.analysis')}</h3>
               <div className="flex items-center gap-2">
                 {/* Ticker selector */}
                 {tickersWithDecisions.length > 0 && (
                   <div className="flex items-center gap-1">
-                    <span className="text-xs text-muted-foreground font-medium">Ticker:</span>
-                    <select 
+                    <span className="text-xs text-muted-foreground font-medium">{t('dialog.ticker')}</span>
+                    <select
                       className="text-xs p-1 rounded bg-background border border-border cursor-pointer"
                       value={selectedTicker || ''}
                       onChange={(e) => setSelectedTicker(e.target.value)}
@@ -183,15 +185,15 @@ export function AgentOutputDialog({
                 <div className="p-3 rounded-lg text-sm leading-relaxed">
                   {selectedTicker && (
                     <div className="mb-3 flex justify-between items-center">
-                      <div className=" text-muted-foreground font-medium">Summary for {selectedTicker}</div>
+                      <div className=" text-muted-foreground font-medium">{t('dialog.summaryFor', { ticker: selectedTicker })}</div>
                       {selectedDecision && (
-                        <button 
+                        <button
                           onClick={copyToClipboard}
                           className="flex items-center gap-1.5 text-xs p-1.5 rounded hover:bg-accent transition-colors text-muted-foreground"
-                          title="Copy to clipboard"
+                          title={t('dialog.copyToClipboard')}
                         >
                           <Copy className="h-3.5 w-3.5 " />
-                          <span className="font-medium">{copySuccess ? 'Copied!' : 'Copy'}</span>
+                          <span className="font-medium">{copySuccess ? t('dialog.copied') : t('dialog.copy')}</span>
                         </button>
                       )}
                     </div>
@@ -199,7 +201,7 @@ export function AgentOutputDialog({
                   {selectedDecision ? (
                     (() => {
                       const { isJson, formattedContent } = formatContent(selectedDecision);
-                      
+
                       if (isJson) {
                         // Use react-syntax-highlighter for better JSON rendering
                         return (
@@ -236,30 +238,30 @@ export function AgentOutputDialog({
                   ) : nodeStatus === 'IN_PROGRESS' ? (
                     <div className="flex items-center justify-center h-full text-muted-foreground">
                       <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                      Analysis in progress...
+                      {t('dialog.analysisInProgress')}
                     </div>
                   ) : (
                     <div className="flex items-center justify-center h-full text-muted-foreground">
-                      No analysis available for {selectedTicker}
+                      {t('dialog.noAnalysisFor', { ticker: selectedTicker || '' })}
                     </div>
                   )}
                 </div>
               ) : nodeStatus === 'IN_PROGRESS' ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
                   <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                  Analysis in progress...
+                  {t('dialog.analysisInProgress')}
                 </div>
               ) : nodeStatus === 'COMPLETE' ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
-                  Analysis completed with no results
+                  {t('dialog.analysisCompleteNoResults')}
                 </div>
               ) : nodeStatus === 'ERROR' ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
-                  Analysis failed
+                  {t('dialog.analysisFailed')}
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
-                  No analysis available
+                  {t('dialog.noAnalysis')}
                 </div>
               )}
             </div>
@@ -268,4 +270,4 @@ export function AgentOutputDialog({
       </DialogContent>
     </Dialog>
   );
-} 
+}
