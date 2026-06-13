@@ -74,13 +74,17 @@ Open and edit the `.env` file to add your API keys:
 # For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
 OPENAI_API_KEY=your-openai-api-key
 
-# For getting financial data to power the hedge fund
+# For getting financial data to power the hedge fund.
+# yfinance is the default data provider and does not require an API key.
+FINANCIAL_DATA_PROVIDER=yfinance
+
+# Optional: use this only if FINANCIAL_DATA_PROVIDER=financialdatasets.
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
 **Important**: You must set at least one LLM API key (e.g. `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY`) for the hedge fund to work. 
 
-**Financial Data**: Data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key. For any other ticker, you will need to set the `FINANCIAL_DATASETS_API_KEY` in the .env file.
+**Financial Data**: The default provider is `yfinance`, powered by Yahoo Finance data, and does not require an API key. If you want to use Financial Datasets instead, set `FINANCIAL_DATA_PROVIDER=financialdatasets` and configure `FINANCIAL_DATASETS_API_KEY` in the `.env` file.
 
 ## How to Run
 
