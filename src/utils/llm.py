@@ -106,9 +106,19 @@ def create_default_response(model_class: type[BaseModel]) -> BaseModel:
     return model_class(**default_values)
 
 
-def extract_json_from_response(content: str) -> dict | None:
+def extract_json_from_response(content) -> dict | None:
     """Extracts JSON from a response, handling markdown-wrapped and raw JSON formats."""
     try:
+        # Reasoning models (e.g. Anthropic extended thinking) return content as a
+        # list of blocks (thinking + text). Concatenate the text blocks.
+        if isinstance(content, list):
+            parts = []
+            for block in content:
+                if isinstance(block, str):
+                    parts.append(block)
+                elif isinstance(block, dict) and block.get("type") == "text":
+                    parts.append(block.get("text", ""))
+            content = "\n".join(parts)
         # 1. Try markdown code block with ```json
         json_start = content.find("```json")
         if json_start != -1:

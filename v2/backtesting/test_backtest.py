@@ -223,8 +223,8 @@ class TestBacktestEngine:
         engine = BacktestEngine()
         result = engine.run_signals([signal], fd)
 
-        assert result.trades[0].eps_surprise == "BEAT"
-        assert result.trades[0].source_type == "8-K"
+        assert result.trades[0].metadata["eps_surprise"] == "BEAT"
+        assert result.trades[0].metadata["source_type"] == "8-K"
 
 
 # ---------------------------------------------------------------------------
