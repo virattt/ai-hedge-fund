@@ -6,6 +6,9 @@ import asyncio
 from app.backend.routes import api_router
 from app.backend.database.connection import engine
 from app.backend.database.models import Base
+# Register observing-pool tables on the shared Base so create_all discovers them
+# (PRD v4 §8.1 model-discovery). Import is for its registration side-effect.
+import src.storage.models  # noqa: F401
 from app.backend.services.ollama_service import ollama_service
 
 # Configure logging

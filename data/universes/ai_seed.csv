@@ -1,0 +1,26 @@
+ticker,name,exchange,sector,industry,platforms
+NVDA,NVIDIA Corporation,NASDAQ,Technology,Semiconductors,ai
+TSLA,Tesla Inc,NASDAQ,Consumer Cyclical,Auto Manufacturers,ai;robotics;energy_storage
+PLTR,Palantir Technologies,NASDAQ,Technology,Software - Infrastructure,ai
+MSFT,Microsoft Corporation,NASDAQ,Technology,Software - Infrastructure,ai
+GOOGL,Alphabet Inc,NASDAQ,Communication Services,Internet Content,ai
+AMZN,Amazon.com Inc,NASDAQ,Consumer Cyclical,Internet Retail,ai
+META,Meta Platforms Inc,NASDAQ,Communication Services,Internet Content,ai
+AMD,Advanced Micro Devices,NASDAQ,Technology,Semiconductors,ai
+AVGO,Broadcom Inc,NASDAQ,Technology,Semiconductors,ai
+TSM,Taiwan Semiconductor,NYSE,Technology,Semiconductors,ai
+SMCI,Super Micro Computer,NASDAQ,Technology,Computer Hardware,ai
+ARM,Arm Holdings,NASDAQ,Technology,Semiconductors,ai
+MRVL,Marvell Technology,NASDAQ,Technology,Semiconductors,ai
+MU,Micron Technology,NASDAQ,Technology,Semiconductors,ai
+SNOW,Snowflake Inc,NYSE,Technology,Software - Application,ai
+CRWD,CrowdStrike Holdings,NASDAQ,Technology,Software - Infrastructure,ai
+NOW,ServiceNow Inc,NYSE,Technology,Software - Application,ai
+PATH,UiPath Inc,NYSE,Technology,Software - Infrastructure,ai;robotics
+AI,C3.ai Inc,NYSE,Technology,Software - Application,ai
+DELL,Dell Technologies,NYSE,Technology,Computer Hardware,ai
+ANET,Arista Networks,NYSE,Technology,Computer Hardware,ai
+VRT,Vertiv Holdings,NYSE,Industrials,Electrical Equipment,ai;energy_storage
+CRM,Salesforce Inc,NYSE,Technology,Software - Application,ai
+IBM,International Business Machines,NYSE,Technology,Information Technology Services,ai
+ORCL,Oracle Corporation,NYSE,Technology,Software - Infrastructure,ai
