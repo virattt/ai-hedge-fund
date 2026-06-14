@@ -85,7 +85,7 @@ class BacktestEngine:
         # Fill each signal into a Trade (or skip if prices unavailable)
         trades: list[Trade] = []
         for signal in signals:
-            trade = self._fill_signal(signal, fd_client)
+            trade = self._execute_trade(signal, fd_client)
             if trade is not None:
                 trades.append(trade)
 
@@ -107,7 +107,7 @@ class BacktestEngine:
     # Signal -> Trade conversion
     # ------------------------------------------------------------------
 
-    def _fill_signal(
+    def _execute_trade(
         self,
         signal: TradeSignal,
         fd_client: FDClient,
@@ -177,7 +177,14 @@ class BacktestEngine:
     # ------------------------------------------------------------------
 
     def _build_equity_curve(self, trades: list[Trade]) -> list[float]:
-        """Portfolio value over time — starting capital + cumulative P&L."""
+        """Track portfolio value after each trade settles.
+
+        Starts at initial capital (e.g. $100,000) and adds each trade's
+        dollar P&L in chronological order. The result is a list like:
+        [100000, 100500, 99800, 100200, ...] — one entry per trade plus
+        the starting value. This is what you'd plot to visualize the
+        strategy's performance and see drawdowns.
+        """
         equity = self._capital
         curve = [equity]
         for t in trades:
@@ -194,29 +201,43 @@ class BacktestEngine:
         trades: list[Trade],
         equity_curve: list[float],
     ) -> PerformanceMetrics:
-        """Compute Sharpe, drawdown, win rate, and other stats."""
+        """Compute the three numbers that tell you if a strategy works.
+
+        1. Total/annualized return — did it make money?
+        2. Sharpe ratio — is the return worth the risk? (return per unit
+           of volatility, annualized). Above 1.0 is decent, above 2.0
+           is strong. Our PEAD strategy hit 0.33 — not tradable yet.
+        3. Max drawdown — how bad did it get at the worst point?
+           (largest peak-to-trough drop in the equity curve)
+
+        Also computes win rate and trade counts for context.
+        """
         returns = [t.return_pct for t in trades]
         n = len(returns)
 
-        # Total return
+        # Total return: how much the portfolio gained or lost overall
         final_equity = equity_curve[-1]
         total_return_pct = (final_equity - self._capital) / self._capital
 
-        # Annualized return
+        # Annualized return: what the total return would be per year
+        # if the strategy ran at the same rate continuously
         first_entry = _parse_date(trades[0].entry_date)
         last_exit = _parse_date(trades[-1].exit_date)
         calendar_days = (last_exit - first_entry).days
         years = max(calendar_days / 365.25, 0.01)
         annualized = (1 + total_return_pct) ** (1 / years) - 1
 
-        # Sharpe ratio (annualized from per-trade returns)
+        # Sharpe ratio: average return divided by volatility, scaled to
+        # annual terms. Higher = better risk-adjusted performance.
         arr = np.array(returns)
         avg = float(arr.mean())
         std = float(arr.std(ddof=1)) if n > 1 else 1.0
         trades_per_year = n / years if years > 0 else n
         sharpe = (avg / std) * np.sqrt(trades_per_year) if std > 0 else 0.0
 
-        # Max drawdown from equity curve
+        # Max drawdown: walk through the equity curve tracking the peak.
+        # Whenever the value drops below the peak, measure how far it fell.
+        # The largest such drop is the max drawdown.
         peak = equity_curve[0]
         max_dd = 0.0
         for val in equity_curve:
@@ -226,7 +247,7 @@ class BacktestEngine:
             if dd > max_dd:
                 max_dd = dd
 
-        # Win rate
+        # Win rate: fraction of trades that made money
         wins = sum(1 for r in returns if r > 0)
 
         return PerformanceMetrics(

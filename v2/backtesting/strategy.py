@@ -80,29 +80,46 @@ class PEADStrategy(Strategy):
                 ticker, limit=self._earnings_limit,
             )
 
-            # Deduplicate: one signal per (ticker, report_period).
-            # Prefer 8-K (earliest announcement) over 10-Q/10-K.
+            # The API can return multiple filings for the same quarter —
+            # e.g. an 8-K (press release) and a 10-Q (SEC quarterly filing)
+            # both covering Q1 2026. We only want ONE trade per quarter,
+            # so we keep the best filing per (ticker, report_period).
+            #
+            # "Best" = 8-K first (it's the actual earnings announcement),
+            # then 10-Q, 10-K, 20-F as fallbacks.
             best: dict[str, tuple[int, object]] = {}
             source_priority = {"8-K": 0, "10-Q": 1, "10-K": 2, "20-F": 3}
+
             for record in records:
+                # Skip records missing essential data
                 if not record.filing_date or not record.quarterly:
                     continue
                 surprise = record.quarterly.eps_surprise
                 if surprise not in ("BEAT", "MISS"):
                     continue
 
-                # 45-day filter: skip retrospective rows where the filing
-                # date is too far after the report period end date
+                # 45-day filter: the earnings extractor sometimes parses
+                # prior-quarter comparison data from a current 8-K, creating
+                # a row that looks like a Q4 event but was actually filed
+                # with a Q1 press release (100+ days later). These would
+                # anchor our trade on the wrong date.
                 filing = datetime.strptime(record.filing_date[:10], "%Y-%m-%d").date()
                 report = datetime.strptime(record.report_period[:10], "%Y-%m-%d").date()
                 if (filing - report).days >= 45:
                     continue
 
+                # Keep the highest-priority filing per quarter.
+                # e.g. if we see both an 8-K (priority 0) and a 10-Q
+                # (priority 1) for AAPL:2026-03-28, the 8-K wins.
                 key = f"{ticker}:{record.report_period}"
                 priority = source_priority.get(record.source_type, 99)
                 if key not in best or priority < best[key][0]:
                     best[key] = (priority, record)
 
+            # This is the core of the PEAD strategy:
+            # BEAT → long, MISS → short, enter on filing date, hold N days.
+            # Everything above is data cleaning. Everything after this
+            # (price lookup, position sizing, P&L) is the engine's job.
             for _, record in best.values():
                 surprise = record.quarterly.eps_surprise
                 signals.append(TradeSignal(
