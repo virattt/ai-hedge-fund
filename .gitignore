@@ -76,3 +76,4 @@ alembic/versions/__pycache__/
 .mypy_cache/
 .pytest_cache/
 uv.lock
+.claude/
