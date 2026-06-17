@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { API_ROUTES } from '@/services/api-routes';
 import { Cloud, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -30,7 +31,7 @@ export function CloudModels({ className }: CloudModelsProps) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://localhost:8000/language-models/providers');
+      const response = await fetch(API_ROUTES.languageModelProviders);
       if (response.ok) {
         const data = await response.json();
         setProviders(data.providers);

@@ -25,4 +25,14 @@ data/
 
 # OS specific
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Frontend build artifacts (rebuilt in Docker)
+app/frontend/node_modules
+app/frontend/dist
+
+# SQLite dev database
+app/backend/hedge_fund.db
+
+# Docker
+docker/
