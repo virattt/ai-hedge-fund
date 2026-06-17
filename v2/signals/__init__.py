@@ -1,11 +1,21 @@
-"""Quantitative signal registry.
+"""Alpha models — view-forming components of the quant stack.
 
-Concrete signals register here as they are implemented.
-See v2/signals/base.py for the BaseSignal ABC.
+See v2/signals/base.py for the AlphaModel / QuantModel interface.
+Concrete models register here as they are implemented.
 """
 
 from __future__ import annotations
 
-from v2.signals.base import BaseSignal
+from v2.signals.base import AlphaModel, QuantModel
+from v2.signals.pead import PEADModel
 
-SIGNAL_REGISTRY: dict[str, type[BaseSignal]] = {}
+ALPHA_MODEL_REGISTRY: dict[str, type[AlphaModel]] = {
+    "pead": PEADModel,
+}
+
+__all__ = [
+    "AlphaModel",
+    "QuantModel",
+    "PEADModel",
+    "ALPHA_MODEL_REGISTRY",
+]

@@ -11,14 +11,19 @@ from pydantic import BaseModel, Field
 # Quantitative Signal Models
 # ---------------------------------------------------------------------------
 
-class SignalResult(BaseModel):
-    """Output of a single quantitative signal."""
+class Signal(BaseModel):
+    """A view from an alpha model — conviction on a ticker at a point in time.
 
-    signal_name: str = Field(description="e.g. 'momentum', 'earnings_surprise'")
-    value: float = Field(description="Signal strength from -1.0 (bearish) to +1.0 (bullish)")
-    z_score: float | None = None
-    percentile: float | None = None  # 0-100
-    components: dict[str, float] = Field(default_factory=dict)
+    This is the output of any AlphaModel (quant or LLM agent). The
+    generator is the AlphaModel; the thing it generates is a Signal.
+    """
+
+    model_name: str = Field(description="which alpha model produced it, e.g. 'pead', 'buffett'")
+    ticker: str
+    date: str = Field(description="as-of date the view was formed (YYYY-MM-DD)")
+    value: float = Field(description="conviction from -1.0 (bearish) to +1.0 (bullish)")
+    reasoning: str | None = None  # human-readable rationale — central for LLM agents
+    components: dict[str, float] = Field(default_factory=dict)  # quant decomposition
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -27,7 +32,7 @@ class QuantSignals(BaseModel):
 
     ticker: str
     date: str
-    signals: dict[str, SignalResult] = Field(default_factory=dict)
+    signals: dict[str, Signal] = Field(default_factory=dict)
     composite_score: float | None = None
 
 

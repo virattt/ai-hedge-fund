@@ -1,4 +1,19 @@
-"""Base class for all v2 quantitative signals."""
+"""Alpha models — the components that form views on what to hold.
+
+An *alpha model* (Rishi Narang's term, *Inside the Black Box*) is anything
+that produces a forecast / view on an asset. It's the "edge" component of a
+quant fund. In v2, both quant signals (PEAD, regime) and LLM investor agents
+(Buffett, Druckenmiller) are alpha models — they all implement this interface
+and produce a `Signal` (a conviction in [-1, +1] + reasoning).
+
+    AlphaModel (ABC)
+      ├─ QuantModel   — pure Python math (this file)
+      └─ LLMAgent     — LLM reasons over features (added in Week 5)
+
+The alpha model only forms a *view*. It does NOT decide position mechanics
+(timing, sizing, holding period) — that's the job of portfolio construction
+and execution. This separation (views vs positions) is deliberate.
+"""
 
 from __future__ import annotations
 
@@ -7,32 +22,41 @@ from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
 
-from v2.models import SignalResult
+from v2.data.client import FDClient
+from v2.models import Signal
 
 
-class BaseSignal(ABC):
-    """Abstract base for Layer 1 quantitative signals.
-
-    Each signal fetches data from FD, computes a score in [-1, +1],
-    and returns a SignalResult. No LLM calls — pure Python math.
-    """
+class AlphaModel(ABC):
+    """Abstract base for all alpha models. Forms a view, returns a Signal."""
 
     @property
     @abstractmethod
     def name(self) -> str:
-        """Signal identifier (e.g. 'value', 'momentum')."""
+        """Model identifier (e.g. 'pead', 'buffett')."""
         ...
 
     @abstractmethod
-    def compute(
+    def predict(
         self,
         ticker: str,
-        end_date: str,
-        *,
-        api_key: str | None = None,
-    ) -> SignalResult:
-        """Compute the signal for a single ticker as-of *end_date*."""
+        date: str,
+        fd_client: FDClient,
+    ) -> Signal:
+        """Form a point-in-time view on *ticker* as of *date*.
+
+        MUST be point-in-time: only use data with date <= *date* (no
+        lookahead). Return a Signal with conviction in [-1, +1] — use
+        0.0 to express "no view" (abstain).
+        """
         ...
+
+
+class QuantModel(AlphaModel):
+    """Base for pure-math alpha models (no LLM).
+
+    Houses shared numeric helpers. Subclass this for quant signals like
+    PEAD or regime detection.
+    """
 
     # ------------------------------------------------------------------
     # Shared helpers
