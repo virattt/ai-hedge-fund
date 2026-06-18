@@ -58,5 +58,8 @@ include = '\.pyi?$'
 profile = "black"
 force_alphabetical_sort_within_sections = true
 
+[tool.bandit]
+skips = ["B404"]
+
 [tool.poetry.scripts]
 backtester = "src.backtesting.cli:main"

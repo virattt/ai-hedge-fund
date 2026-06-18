@@ -3,6 +3,7 @@ import os
 import sys
 import platform
 import subprocess
+import shutil
 import time
 import re
 import json
@@ -194,15 +195,7 @@ class OllamaService:
     
     def _is_ollama_installed(self) -> bool:
         """Check if Ollama is installed on the system."""
-        system = platform.system().lower()
-        command = ["which", "ollama"] if system in ["darwin", "linux"] else ["where", "ollama"]
-        shell = system == "windows"
-        
-        try:
-            result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=shell)
-            return result.returncode == 0
-        except Exception:
-            return False
+        return shutil.which("ollama") is not None
     
     async def _check_server_running(self) -> bool:
         """Check if the Ollama server is running using the ollama client."""
@@ -248,8 +241,7 @@ class OllamaService:
         
         try:
             command = ["ollama", "serve"]
-            shell = system == "windows"
-            subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=shell)
+            subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
             
             return self._wait_for_server_start()
             
