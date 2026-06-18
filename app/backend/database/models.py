@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, JSON, ForeignKey, UniqueConstraint
 from sqlalchemy.sql import func
 from .connection import Base
 
@@ -29,6 +29,7 @@ class HedgeFundFlow(Base):
 class HedgeFundFlowRun(Base):
     """Table to track individual execution runs of a hedge fund flow"""
     __tablename__ = "hedge_fund_flow_runs"
+    __table_args__ = (UniqueConstraint("flow_id", "run_number", name="uq_flow_run_number"),)
     
     id = Column(Integer, primary_key=True, index=True)
     flow_id = Column(Integer, ForeignKey("hedge_fund_flows.id"), nullable=False, index=True)
