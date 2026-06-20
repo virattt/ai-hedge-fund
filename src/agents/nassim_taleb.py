@@ -45,7 +45,7 @@ def nassim_taleb_agent(state: AgentState, agent_id: str = "nassim_taleb_agent"):
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching price data")
         prices = get_prices(ticker, start_date, end_date, api_key=api_key)
-        prices_df = prices_to_df(prices) if prices else pd.DataFrame()
+        prices_df = prices_to_df(prices)
 
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
         metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=10, api_key=api_key)
