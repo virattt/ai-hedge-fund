@@ -2,6 +2,11 @@
 REM AI Hedge Fund Web Application Setup and Runner (Windows)
 REM This script makes it easy for non-technical users to run the full web application
 
+REM Allow custom backend port via environment variable, default to 8000
+if "%BACKEND_PORT%"=="" set BACKEND_PORT=8000
+REM Allow custom frontend port via environment variable, default to 5173
+if "%FRONTEND_PORT%"=="" set FRONTEND_PORT=5173
+
 REM Colors for output
 set "INFO=[INFO]"
 set "SUCCESS=[SUCCESS]"
@@ -223,10 +228,10 @@ echo %INFO% Press Ctrl+C to stop all services
 echo.
 
 REM Start backend
-echo %INFO% Launching backend server...
+echo %INFO% Launching backend server on port %BACKEND_PORT%...
 REM Run from project root to ensure proper Python imports
 cd ..
-start /b poetry run uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
+start /b poetry run uvicorn app.backend.main:app --reload --host 127.0.0.1 --port %BACKEND_PORT%
 cd app
 
 timeout /t 3 /nobreak >nul
@@ -242,22 +247,22 @@ if exist "..\hedge_fund.db" (
 )
 
 REM Start frontend
-echo %INFO% Launching frontend development server...
+echo %INFO% Launching frontend development server on port %FRONTEND_PORT%...
 cd frontend
-start /b npm run dev
+start /b VITE_API_URL=http://localhost:%BACKEND_PORT% npm run dev -- --port %FRONTEND_PORT%
 cd ..
 
 timeout /t 5 /nobreak >nul
 
 echo %INFO% Opening browser...
 timeout /t 2 /nobreak >nul
-start http://localhost:5173
+start http://localhost:%FRONTEND_PORT%
 
 echo.
 echo %SUCCESS% AI Hedge Fund web application is now running
-echo %INFO% Frontend: http://localhost:5173
-echo %INFO% Backend:  http://localhost:8000
-echo %INFO% Docs:     http://localhost:8000/docs
+echo %INFO% Frontend: http://localhost:%FRONTEND_PORT%
+echo %INFO% Backend:  http://localhost:%BACKEND_PORT%
+echo %INFO% Docs:     http://localhost:%BACKEND_PORT%/docs
 echo %INFO% Database: SQLite (hedge_fund.db in project root)
 echo.
 echo %INFO% Press any key to stop both services...
