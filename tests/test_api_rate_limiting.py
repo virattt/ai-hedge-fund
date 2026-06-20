@@ -2,7 +2,7 @@ import os
 import pytest
 from unittest.mock import Mock, patch, call
 
-from src.tools.api import _make_api_request, get_prices
+from src.tools.api import _make_api_request, get_prices, get_company_news, get_insider_trades
 
 class TestRateLimiting:
     """Test suite for API rate limiting functionality."""
@@ -245,5 +245,69 @@ class TestRateLimiting:
         mock_sleep.assert_has_calls(expected_calls)
 
 
+    @patch('src.tools.api._cache')
+    @patch('src.tools.api._make_api_request')
+    def test_company_news_stops_on_non_advancing_cursor(self, mock_make_api_request, mock_cache):
+        """Avoid infinite pagination loops when the API repeats the same oldest news date."""
+        mock_cache.get_company_news.return_value = None
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "news": [
+                {
+                    "ticker": "TSLA",
+                    "title": "Headline",
+                    "author": "Reporter",
+                    "source": "Newswire",
+                    "date": "2025-07-14T12:00:00Z",
+                    "url": "https://example.com/news"
+                }
+            ]
+        }
+        mock_make_api_request.return_value = mock_response
+
+        result = get_company_news("TSLA", end_date="2025-07-14", start_date="2025-07-01", limit=1, api_key="test-key")
+
+        assert len(result) == 1
+        assert mock_make_api_request.call_count == 1
+        mock_cache.set_company_news.assert_called_once()
+
+    @patch('src.tools.api._cache')
+    @patch('src.tools.api._make_api_request')
+    def test_insider_trades_stops_on_non_advancing_cursor(self, mock_make_api_request, mock_cache):
+        """Avoid infinite pagination loops when the API repeats the same oldest filing date."""
+        mock_cache.get_insider_trades.return_value = None
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "insider_trades": [
+                {
+                    "ticker": "TSLA",
+                    "issuer": "Tesla Inc",
+                    "name": "Jane Doe",
+                    "title": "Director",
+                    "is_board_director": True,
+                    "transaction_date": "2025-07-14",
+                    "transaction_shares": 10.0,
+                    "transaction_price_per_share": 250.0,
+                    "transaction_value": 2500.0,
+                    "shares_owned_before_transaction": 1000.0,
+                    "shares_owned_after_transaction": 1010.0,
+                    "security_title": "Common Stock",
+                    "filing_date": "2025-07-14T09:00:00Z"
+                }
+            ]
+        }
+        mock_make_api_request.return_value = mock_response
+
+        result = get_insider_trades("TSLA", end_date="2025-07-14", start_date="2025-07-01", limit=1, api_key="test-key")
+
+        assert len(result) == 1
+        assert mock_make_api_request.call_count == 1
+        mock_cache.set_insider_trades.assert_called_once()
+
+
 if __name__ == "__main__":
-    pytest.main([__file__]) 
+    pytest.main([__file__])
