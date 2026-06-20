@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Sequence, Dict
+import uuid
 
 import pandas as pd
 from dateutil.relativedelta import relativedelta
+
+from src.data.database import write_trade as db_write_trade, write_portfolio_snapshot as db_write_snapshot
 
 from .controller import AgentController
 from .trader import TradeExecutor
@@ -63,6 +66,7 @@ class BacktestEngine:
         self._agent_controller = AgentController()
         self._perf = PerformanceMetricsCalculator()
         self._results = OutputBuilder(initial_capital=self._initial_capital)
+        self._run_id = str(uuid.uuid4())
 
         # Benchmark calculator
         self._benchmark = BenchmarkCalculator()
@@ -148,8 +152,35 @@ class BacktestEngine:
                 qty = d.get("quantity", 0)
                 executed_qty = self._executor.execute_trade(ticker, action, qty, current_prices[ticker], self._portfolio)
                 executed_trades[ticker] = executed_qty
+                if action != "hold" and executed_qty and executed_qty != 0:
+                    price = current_prices[ticker]
+                    cash_impact = -abs(executed_qty) * price if action in ("buy", "cover") else abs(executed_qty) * price
+                    db_write_trade(
+                        self._run_id,
+                        current_date_str,
+                        ticker,
+                        action,
+                        abs(int(executed_qty)),
+                        float(price),
+                        float(cash_impact),
+                    )
 
             total_value = calculate_portfolio_value(self._portfolio, current_prices)
+            try:
+                snap = self._portfolio.get_snapshot()
+                portfolio_dict = {
+                    "cash": float(snap["cash"]),
+                    "positions": {
+                        t: {
+                            "long": int(pos["long"]),
+                            "short": int(pos["short"]),
+                        }
+                        for t, pos in snap["positions"].items()
+                    },
+                }
+                db_write_snapshot(self._run_id, current_date_str, portfolio_dict, current_prices)
+            except Exception:
+                pass  # Non-fatal: DB write failure should not break the backtest
             exposures = compute_exposures(self._portfolio, current_prices)
 
             point: PortfolioValuePoint = {

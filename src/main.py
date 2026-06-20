@@ -17,6 +17,7 @@ from src.cli.input import (
 )
 
 import argparse
+import uuid
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import json
@@ -69,6 +70,7 @@ def run_hedge_fund(
                     )
                 ],
                 "data": {
+                    "run_id": str(uuid.uuid4()),
                     "tickers": tickers,
                     "portfolio": portfolio,
                     "start_date": start_date,
