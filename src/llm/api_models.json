@@ -33,5 +33,10 @@
     "display_name": "Gemini 3.1 Pro",
     "model_name": "gemini-3.1-pro-preview",
     "provider": "Google"
+  },
+  {
+    "display_name": "GLM 5.2 (OpenRouter)",
+    "model_name": "z-ai/glm-5.2",
+    "provider": "OpenRouter"
   }
 ]
