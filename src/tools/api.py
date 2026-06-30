@@ -60,11 +60,70 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
         return response
 
 
+def _extract_scalar(val, default: float = 0.0) -> float:
+    """Extract a scalar float from yfinance row values (handles Series, tuple, scalar)."""
+    if val is None:
+        return default
+    import pandas as pd
+    if isinstance(val, pd.Series):
+        return float(val.iloc[0]) if len(val) > 0 else default
+    if isinstance(val, tuple):
+        return float(val[0])
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def _yfinance_fallback(ticker: str, start_date: str, end_date: str) -> list[Price]:
+    """Fallback price fetch via yfinance when primary API has no data."""
+    try:
+        import yfinance as yf
+        data = yf.download(ticker, start=start_date, end=end_date, progress=False, auto_adjust=True)
+        if data.empty:
+            return []
+
+        # Flatten MultiIndex columns (yfinance returns ('Close', 'TICKER') for single tickers)
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
+
+        # Yahoo Finance returns LSE-listed (.L) prices in GBp (pence) — convert to GBP
+        pence_to_pounds = ticker.upper().endswith(".L")
+
+        prices = []
+        for idx, row in data.iterrows():
+            ts = idx
+            open_val = _extract_scalar(row.get("Open"))
+            high_val = _extract_scalar(row.get("High"))
+            low_val = _extract_scalar(row.get("Low"))
+            close_val = _extract_scalar(row.get("Close"))
+            volume_val = int(_extract_scalar(row.get("Volume")))
+
+            if pence_to_pounds:
+                open_val /= 100.0
+                high_val /= 100.0
+                low_val /= 100.0
+                close_val /= 100.0
+
+            prices.append(Price(
+                time=ts.strftime("%Y-%m-%dT00:00:00Z"),
+                open=open_val,
+                high=high_val,
+                low=low_val,
+                close=close_val,
+                volume=volume_val,
+            ))
+        return prices
+    except Exception as e:
+        logger.warning("yfinance fallback failed for %s: %s", ticker, e)
+        return []
+
+
 def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> list[Price]:
-    """Fetch price data from cache or API."""
+    """Fetch price data from cache or API, with yfinance fallback."""
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date}_{end_date}"
-    
+
     # Check cache first - simple exact match
     if cached_data := _cache.get_prices(cache_key):
         return [Price(**price) for price in cached_data]
@@ -72,21 +131,24 @@ def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None)
     # If not in cache, fetch from API
     headers = {}
     financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
+    if financial_api_key and not financial_api_key.startswith("your-"):
         headers["X-API-KEY"] = financial_api_key
 
     url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
     response = _make_api_request(url, headers)
-    if response.status_code != 200:
-        return []
+    prices = []
+    if response.status_code == 200:
+        try:
+            price_response = PriceResponse(**response.json())
+            prices = price_response.prices or []
+        except Exception as e:
+            logger.warning("Failed to parse price response for %s: %s", ticker, e)
 
-    # Parse response with Pydantic model
-    try:
-        price_response = PriceResponse(**response.json())
-        prices = price_response.prices
-    except Exception as e:
-        logger.warning("Failed to parse price response for %s: %s", ticker, e)
-        return []
+    # Fallback to yfinance if primary source returned insufficient data
+    if len(prices) < 5:
+        yf_prices = _yfinance_fallback(ticker, start_date, end_date)
+        if len(yf_prices) > len(prices):
+            prices = yf_prices
 
     if not prices:
         return []
@@ -114,7 +176,7 @@ def get_financial_metrics(
     # If not in cache, fetch from API
     headers = {}
     financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
+    if financial_api_key and not financial_api_key.startswith("your-"):
         headers["X-API-KEY"] = financial_api_key
 
     url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
@@ -150,7 +212,7 @@ def search_line_items(
     # If not in cache or insufficient data, fetch from API
     headers = {}
     financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
+    if financial_api_key and not financial_api_key.startswith("your-"):
         headers["X-API-KEY"] = financial_api_key
 
     url = "https://api.financialdatasets.ai/financials/search/line-items"
@@ -198,7 +260,7 @@ def get_insider_trades(
     # If not in cache, fetch from API
     headers = {}
     financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
+    if financial_api_key and not financial_api_key.startswith("your-"):
         headers["X-API-KEY"] = financial_api_key
 
     all_trades = []
@@ -264,7 +326,7 @@ def get_company_news(
     # If not in cache, fetch from API
     headers = {}
     financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
+    if financial_api_key and not financial_api_key.startswith("your-"):
         headers["X-API-KEY"] = financial_api_key
 
     all_news = []
