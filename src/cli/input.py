@@ -1,4 +1,5 @@
 import sys
+import os
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import argparse
@@ -152,6 +153,27 @@ def select_model(use_ollama: bool, model_flag: str | None = None) -> tuple[str, 
             f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n"
         )
     else:
+        env_model = os.environ.get("AI_HEDGE_FUND_LLM_MODEL")
+        env_provider = os.environ.get("AI_HEDGE_FUND_LLM_PROVIDER")
+        if env_model:
+            model = find_model_by_name(env_model)
+            if env_provider:
+                provider = _normalize_model_provider(env_provider)
+                print(
+                    f"\nUsing .env model: {Fore.CYAN}{provider}{Style.RESET_ALL} - {Fore.GREEN + Style.BRIGHT}{env_model}{Style.RESET_ALL}\n"
+                )
+                return env_model, provider
+            if model:
+                print(
+                    f"\nUsing .env model: {Fore.CYAN}{model.provider.value}{Style.RESET_ALL} - {Fore.GREEN + Style.BRIGHT}{model.model_name}{Style.RESET_ALL}\n"
+                )
+                return model.model_name, model.provider.value
+            print(
+                f"{Fore.RED}AI_HEDGE_FUND_LLM_MODEL '{env_model}' is not in the model registry. "
+                f"Set AI_HEDGE_FUND_LLM_PROVIDER as well, or add the model to src/llm/api_models.json.{Style.RESET_ALL}"
+            )
+            sys.exit(1)
+
         model_choice = questionary.select(
             "Select your LLM model:",
             choices=[questionary.Choice(display, value=(name, provider)) for display, name, provider in LLM_ORDER],
@@ -187,6 +209,18 @@ def select_model(use_ollama: bool, model_flag: str | None = None) -> tuple[str, 
             print(f"\nSelected model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n")
 
     return model_name, model_provider or ""
+
+
+def _normalize_model_provider(provider: str) -> str:
+    normalized = provider.strip()
+    for model_provider in ModelProvider:
+        if normalized.lower() == model_provider.value.lower() or normalized.lower() == model_provider.name.lower():
+            return model_provider.value
+    print(
+        f"{Fore.RED}Unsupported AI_HEDGE_FUND_LLM_PROVIDER '{provider}'. "
+        f"Supported providers: {', '.join(p.value for p in ModelProvider)}{Style.RESET_ALL}"
+    )
+    sys.exit(1)
 
 
 def resolve_dates(start_date: str | None, end_date: str | None, *, default_months_back: int | None = None) -> tuple[str, str]:
@@ -286,5 +320,3 @@ def parse_cli_inputs(
         show_agent_graph=getattr(args, "show_agent_graph", False),
         raw_args=args,
     )
-
-
