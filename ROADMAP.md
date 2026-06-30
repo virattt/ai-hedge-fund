@@ -1,56 +1,39 @@
 # Roadmap
 
-This document tracks where the project is headed and where you can help. It's
-a living list — open a PR to add an item, claim one, or update status.
+Where the project is headed and where you can help. This is a living list — open a
+PR to add an item, claim one, or update status. For the bigger picture behind it,
+read [VISION.md](./VISION.md).
 
-> **Educational use only.** This project explores AI/quant techniques for
-> trading research. It is not investment advice and is not intended for real
-> trading.
-
-## How the project is structured
-
-The project is being rebuilt (under `v2/`) around a modular, testable
-architecture borrowed from how systematic funds actually operate
-(Rishi Narang's *Inside the Black Box*). Five components:
-
-```
-        ┌─────────────┐
-data ─▶ │ alpha models│ ─▶ portfolio ─▶ risk ─▶ execution ─▶ orders
-        │ (the edge)  │    construction   model    (broker)
-        └─────────────┘
-              ▲
-   backtesting + validation
-   (prove a model before trusting it)
-```
-
-- **Alpha models** form a *view* on what to hold — a conviction score (and, for
-  LLM agents, a written thesis). Both quantitative models and LLM "investor
-  agents" implement the same interface, so they're combined and compared the
-  same way. **This is the main place to contribute.**
-- **Portfolio construction** turns views into target positions (sizing, weights).
-- **Risk model** constrains exposure.
-- **Execution** places orders through a (pluggable) broker.
-- **Backtesting + validation** measure whether a model actually has an edge
-  before it's trusted with capital.
+> **Educational use only.** Not investment advice; not intended for real trading.
 
 ## Status legend
 
 ✅ Shipped · 🚧 In progress · ⬜ Planned
 
-## Infrastructure
+**Current focus:** point-in-time data correctness → first LLM analyst (Buffett) →
+the `run_cycle` engine. The tables below are a capability map, not a strict order;
+where items depend on each other, the dependency is noted.
+
+## The engine
+
+The core: a **fund** as a persistent object, and one pipeline (`run_cycle`) that runs
+it in backtest, paper, or live mode (see [VISION.md](./VISION.md)).
 
 | Item | Status |
 |------|--------|
-| Data layer — pluggable `DataClient` protocol + provider client | ✅ |
-| Event study engine — market-model abnormal returns (CARs) | ✅ |
-| Backtesting engine — simulate an alpha model over history, report return / Sharpe / drawdown | ✅ |
-| Validation — combinatorial purged cross-validation (CPCV), probability of backtest overfitting (PBO) | ⬜ |
-| Feature pipeline — reusable inputs for alpha models (e.g. market-regime detection) | ⬜ |
+| `AlphaModel` / `Signal` interface — the contract every analyst implements | ✅ |
+| Backtesting engine — run an alpha model over history; report return / Sharpe / drawdown | ✅ (to be rebuilt onto `run_cycle`) |
+| Event-study engine — market-model abnormal returns (CARs) | ✅ |
+| `run_cycle` — one pipeline (data → analysts → portfolio → risk → execution → ledger), three modes | ⬜ |
+| Fund object — persistent mandate, staff, capital, books | ⬜ |
+| Persistent ledger — positions, every decision + thesis, orders, fills, NAV history | ⬜ |
+| Point-in-time data correctness — as-of / filing-date queries, no lookahead | 🚧 |
+| Validation gate — CPCV, probability of backtest overfitting (PBO) | ⬜ |
 
-## Alpha models
+## Analysts (alpha models) — the main contribution surface
 
-The biggest contribution surface. Implement the `AlphaModel` interface, return a
-`Signal`, and it plugs straight into the backtester. Two flavors:
+Implement the `AlphaModel` interface, return a `Signal`, and it plugs straight into
+the engine. Two flavors:
 
 **Quantitative models** (pure math/data):
 
@@ -64,48 +47,83 @@ The biggest contribution surface. Implement the `AlphaModel` interface, return a
 | Statistical arbitrage | ⬜ |
 | *Your model here* | ⬜ |
 
-**LLM investor agents** (reason over fundamentals, emit a conviction + thesis).
-Porting these classic personas to the alpha-model interface — so each can be
-backtested and combined — is a great first contribution:
+**LLM investor agents** (reason over fundamentals in a famous investor's voice, emit
+a conviction + thesis). Porting these personas to the alpha-model interface — so each
+can be backtested and combined — is a great first contribution:
 
 | Agent | Status |
 |-------|--------|
-| Warren Buffett | 🚧 |
-| Charlie Munger | ⬜ |
-| Benjamin Graham | ⬜ |
-| Peter Lynch | ⬜ |
-| Stanley Druckenmiller | ⬜ |
-| Cathie Wood | ⬜ |
-| Michael Burry | ⬜ |
-| Bill Ackman | ⬜ |
-| Aswath Damodaran | ⬜ |
-| Phil Fisher | ⬜ |
-| Mohnish Pabrai | ⬜ |
-| Nassim Taleb | ⬜ |
-| Rakesh Jhunjhunwala | ⬜ |
+| Warren Buffett | ⬜ (next) |
+| Charlie Munger · Benjamin Graham · Peter Lynch · Stanley Druckenmiller | ⬜ |
+| Cathie Wood · Michael Burry · Bill Ackman · Aswath Damodaran | ⬜ |
+| Phil Fisher · Mohnish Pabrai · Nassim Taleb · Rakesh Jhunjhunwala | ⬜ |
 | *Your agent here* | ⬜ |
 
-## Portfolio, risk & execution
+## Strategies & allocation
 
 | Item | Status |
 |------|--------|
-| Portfolio construction — combine signals into target weights | ⬜ |
-| Risk model — exposure limits, position sizing | ⬜ |
-| Execution — pluggable broker layer for live/paper trading (e.g. Interactive Brokers) | ⬜ |
+| Strategy — bundle analysts + a portfolio policy + capital slice (a "pod") | ⬜ |
+| Portfolio construction — blend analyst views → target weights | ⬜ |
+| Multi-strategy fund — many pods running at once, netted into one book | ⬜ |
+| Allocator (CIO) — pluggable capital allocation across strategies | ⬜ |
+| ↳ Static (human-set dial) | ⬜ |
+| ↳ Risk-parity / inverse-vol | ⬜ |
+| ↳ Dynamic — feed winners, cut drawdowns (Millennium-style) | ⬜ |
+| ↳ LLM CIO — reasons over regime + each pod's track record | ⬜ |
+
+## Risk & execution
+
+| Item | Status |
+|------|--------|
+| Risk model — hard caps (pod-level budgets + fund-level limits) | ⬜ |
+| Broker protocol — pluggable, mirrors the `DataClient` pattern | ⬜ |
+| ↳ Simulated broker (backtest) | ⬜ |
+| ↳ Paper broker | ⬜ |
+| ↳ Live broker (Interactive Brokers / Alpaca) — opt-in plugin, off by default | ⬜ |
+
+## Autonomy
+
+| Item | Status |
+|------|--------|
+| Scheduler / daemon — market-calendar cron, idempotent ticks, kill-switch | ⬜ |
+| Observability — per-cycle events, notifications, heartbeat | ⬜ |
+| Research lab — backtest candidate strategies/allocators alongside the live fund | ⬜ |
+
+## Interfaces
+
+Thin clients over the engine — pick the surface, the core stays the same.
+
+| Item | Status |
+|------|--------|
+| CLI | ✅ (to become a thin client over the engine) |
+| Web dashboard — replayable, time-scrubbable reasoning ledger | 🚧 (frontend scaffold exists) |
+| TUI "cockpit" — streaming agent reasoning + watch mode | ⬜ |
+| Conversational control plane — operate the fund in natural language | ⬜ |
+
+## Data
+
+| Item | Status |
+|------|--------|
+| Data layer — pluggable `DataClient` protocol + provider client | ✅ |
+| Alternative data connectors — satellite imagery, web & social-media search, app-download trends, shipping data, etc. | ⬜ |
 
 ## Contributing
 
-The easiest way to make an impact:
+The easiest ways to make an impact:
 
-1. **Add an alpha model.** Pick an unchecked row above (or invent one),
-   implement the `AlphaModel` interface so `predict(...)` returns a `Signal`,
-   and add a test. The backtester will run it without any other changes.
-2. **Add an alternative data source.** We already have core market, fundamentals, and earnings data. Alpha models get
-   more powerful with alternative datasets — satellite imagery, web & social
-   (X) search, payment trends trends, macro data, shipping data, and the like. Add a connector
-   that brings a new, unique signal into the mix.
-3. **Build out a planned component** (validation, portfolio construction, risk,
-   execution).
+1. **Add an analyst (alpha model).** Pick an unchecked row above (or invent one),
+   implement the `AlphaModel` interface so `predict(...)` returns a `Signal`, and add
+   a test. The engine runs it without any other changes.
+2. **Add a strategy or an allocator.** Bundle analysts into a strategy, or contribute
+   a new capital-allocation policy (CIO).
+3. **Add an alternative data source.** [Financial Datasets](https://financialdatasets.ai)
+   provides the core market, fundamentals, and earnings data. Analysts get more
+   powerful with *complementary* datasets — satellite imagery, web & social-media
+   search, app-download trends, shipping data, and the like. Add a connector that brings a new,
+   unique signal into the mix.
+4. **Build out a planned component** (portfolio construction, risk, brokers, scheduler,
+   validation, an interface).
 
-Before starting something large, open an issue to claim it so work isn't
-duplicated. PRs that update this roadmap's status are encouraged.
+Before starting something large, open an issue to claim it so work isn't duplicated.
+PRs that update this roadmap's status are encouraged.
