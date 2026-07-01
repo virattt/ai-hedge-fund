@@ -79,7 +79,7 @@ cp .env.example .env
 # 用于运行 OpenAI 托管的 LLM（gpt-4o、gpt-4o-mini 等）
 OPENAI_API_KEY=your-openai-api-key
 
-# 用于获取驱动对冲基金的金融数据
+# 用于获取驱动对冲基金的金融数据（美股 financialdatasets.ai；A 股通过 akshare 获取，无需此 key）
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
@@ -107,24 +107,37 @@ poetry install
 
 #### 运行 AI 对冲基金
 ```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA
+poetry run python src/main.py --ticker 600519.SH,000858.SZ,300750.SZ
 ```
 
 你也可以指定 `--ollama` 参数，使用本地 LLM 来运行 AI 对冲基金。
 
 ```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --ollama
+poetry run python src/main.py --ticker 600519.SH,000858.SZ,300750.SZ --ollama
 ```
 
 你还可以选择性地指定起始和结束日期，在特定时间段内做出决策。
 
 ```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
+poetry run python src/main.py --ticker 600519.SH,000858.SZ,300750.SZ --start-date 2024-01-01 --end-date 2024-03-01
 ```
+
+#### A 股说明
+
+- **代码格式**：A 股使用 Tushare 格式——6 位代码 + 交易所后缀：`.SH`（上交所）、`.SZ`（深交所）、`.BJ`（北交所）。例如 `600519.SH`（贵州茅台）、`000858.SZ`（五粮液）、`300750.SZ`（宁德时代）。
+- **数据来源**：A 股行情与财报数据通过 [akshare](https://akshare.akfamily.xyz/) 获取，**无需 `FINANCIAL_DATASETS_API_KEY`**；该密钥仅用于美股（financialdatasets.ai）。
+- **仍需 LLM 密钥**：无论 A 股还是美股，agent 的推理都需要至少一个 LLM 密钥（如 `OPENAI_API_KEY`、`DEEPSEEK_API_KEY`，或使用 `--ollama` 本地模型）。
+- **数据局限**：akshare 的 TTM 财报目前以年报数据近似（详见 [`src/tools/api_akshare.py`](src/tools/api_akshare.py)）。
+
+#### 数据缓存（避免每个 agent 重复拉取数据）
+
+所有 agent 共享同一份**进程内内存缓存**（[`src/data/cache.py`](src/data/cache.py)）。工作流启动时，入口节点会先扫描各 agent 实际请求的财报科目与指标，**一次性预取**每只股票的数据（[`src/utils/data_warming.py`](src/utils/data_warming.py)）；随后 14 个分析 agent 并行运行时直接命中缓存，不再各自重复请求。此外 `search_line_items` 会按"字段子集"复用——后请求的 agent 只会拉取缓存里还没有的字段。
+
+效果（单只股票、全部 agent）：外部 API 调用从约 **27 次降到 7 次（≈74%）**，且预取阶段按股票并发、agent 阶段零调用。
 
 #### 运行回测器
 ```bash
-poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
+poetry run python src/backtester.py --ticker 600519.SH,000858.SZ,300750.SZ
 ```
 
 **示例输出：**
