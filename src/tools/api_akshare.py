@@ -178,6 +178,21 @@ def _safe_float(val) -> float | None:
         return None
 
 
+def _pct_to_decimal(val) -> float | None:
+    """Convert an akshare percent number (e.g. 32.53 meaning 32.53%) to a
+    decimal ratio (0.3253).
+
+    ``stock_financial_abstract`` returns ratios/margins/growth rates as percent
+    numbers. The project's :class:`FinancialMetrics` model expects decimal
+    ratios. Fields that are already dimensionless ratios (e.g. current_ratio =
+    3.5 meaning 3.5:1) must NOT be passed through this helper.
+    """
+    f = _safe_float(val)
+    if f is None:
+        return None
+    return f / 100.0
+
+
 def get_financial_metrics(
     ticker: str,
     end_date: str,
@@ -237,6 +252,12 @@ def get_financial_metrics(
     def _get(ind: str, pc: str) -> float | None:
         return lookup.get(ind, {}).get(pc)
 
+    # Percentage fields returned by stock_financial_abstract as percent numbers
+    # (e.g. 32.53 meaning 32.53%). These must be divided by 100 to produce the
+    # decimal ratios that FinancialMetrics expects.
+    def _pct(ind: str, pc: str) -> float | None:
+        return _pct_to_decimal(_get(ind, pc))
+
     metrics: list[FinancialMetrics] = []
     for pc in eligible:
         report_period = f"{pc[:4]}-{pc[4:6]}-{pc[6:]}"
@@ -255,12 +276,18 @@ def get_financial_metrics(
                 enterprise_value_to_revenue_ratio=None,
                 free_cash_flow_yield=None,
                 peg_ratio=None,
-                gross_margin=_get("毛利率", pc),
-                operating_margin=_get("营业利润率", pc),
-                net_margin=_get("销售净利率", pc),
-                return_on_equity=_get("净资产收益率(ROE)", pc),
-                return_on_assets=_get("总资产报酬率", pc),
-                return_on_invested_capital=_get("投入资本回报率", pc),
+                # --- percentage fields (divide by 100) ---
+                gross_margin=_pct("毛利率", pc),
+                operating_margin=_pct("营业利润率", pc),
+                net_margin=_pct("销售净利率", pc),
+                return_on_equity=_pct("净资产收益率(ROE)", pc),
+                return_on_assets=_pct("总资产报酬率", pc),
+                return_on_invested_capital=_pct("投入资本回报率", pc),
+                debt_to_equity=_pct("产权比率", pc),
+                debt_to_assets=_pct("资产负债率", pc),
+                revenue_growth=_pct("营业总收入增长率", pc),
+                earnings_growth=_pct("归属母公司净利润增长率", pc),
+                # --- ratio fields (already dimensionless, do NOT divide) ---
                 asset_turnover=_get("总资产周转率", pc),
                 inventory_turnover=_get("存货周转率", pc),
                 receivables_turnover=_get("应收账款周转率", pc),
@@ -271,17 +298,14 @@ def get_financial_metrics(
                 quick_ratio=_get("速动比率", pc),
                 cash_ratio=_get("现金比率", pc),
                 operating_cash_flow_ratio=None,
-                debt_to_equity=_get("产权比率", pc),
-                debt_to_assets=_get("资产负债率", pc),
                 interest_coverage=None,
-                revenue_growth=_get("营业总收入增长率", pc),
-                earnings_growth=_get("归属母公司净利润增长率", pc),
                 book_value_growth=None,
                 earnings_per_share_growth=None,
                 free_cash_flow_growth=None,
                 operating_income_growth=None,
                 ebitda_growth=None,
                 payout_ratio=None,
+                # --- per-share values (absolute, not ratios) ---
                 earnings_per_share=_get("基本每股收益", pc),
                 book_value_per_share=_get("每股净资产", pc),
                 free_cash_flow_per_share=_get("每股企业自由现金流量", pc),
@@ -414,17 +438,42 @@ def get_market_cap(
     end_date: str,
     api_key: str | None = None,
 ) -> float | None:
-    """Fetch total market cap (CNY) via ``akshare.stock_individual_info_em``.
+    """Fetch total market cap (CNY) via ``akshare.stock_zh_a_spot_em``.
 
-    Only returns the live market cap reliably (when ``end_date`` is today).
-    For historical dates we attempt a best-effort approximation using
-    shares-outstanding * historical close, but ``stock_individual_info_em``
-    does not always expose shares outstanding, so this may return ``None``.
-    The US ``api.py`` does not cache market cap either, so we skip caching.
+    ``stock_individual_info_em`` is broken in current akshare (Eastmoney API
+    returns a 3-column payload but akshare hardcodes a 2-column rename →
+    ``ValueError: Length mismatch``). We fall back to ``stock_zh_a_spot_em``,
+    which returns realtime spot data for all A-shares including a 总市值 column
+    valued in CNY (yuan).
+
+    Only returns the live market cap reliably (when ``end_date`` is today or
+    near-today). For historical dates the live cap is returned as a proxy (the
+    US ``api.py`` does not cache market cap either, so we skip caching).
     """
     code = a_share_code(ticker)
-    today = datetime.datetime.now().strftime("%Y-%m-%d")
 
+    # --- Primary: stock_zh_a_spot_em (realtime spot for all A-shares) ---
+    def _fetch_spot() -> pd.DataFrame:
+        df = ak.stock_zh_a_spot_em()
+        # Filter to the single ticker we care about
+        if "代码" in df.columns:
+            return df[df["代码"] == code]
+        return pd.DataFrame()
+
+    try:
+        spot = _with_retry(_fetch_spot)
+        if spot is not None and not spot.empty and "总市值" in spot.columns:
+            cap = _safe_float(spot.iloc[0]["总市值"])
+            if cap is not None and cap > 0:
+                return cap
+    except Exception as e:
+        logger.warning(
+            "akshare get_market_cap stock_zh_a_spot_em failed for %s: %s",
+            ticker,
+            e,
+        )
+
+    # --- Fallback: stock_individual_info_em (broken in some akshare versions) ---
     def _fetch_info() -> pd.DataFrame:
         return ak.stock_individual_info_em(symbol=code)
 
@@ -437,11 +486,11 @@ def get_market_cap(
     if df is None or df.empty:
         return None
 
-    # df shape varies across akshare versions: either ['item','value'] or
-    # a 3-column variant. Normalise defensively into a dict[item->value].
+    # Normalise defensively: the DataFrame may be 2-col (item, value) or
+    # a wider variant. Build a dict[item->value] from the first two columns.
     info: dict[str, object] = {}
     try:
-        if list(df.columns) >= 2:
+        if len(df.columns) >= 2:
             item_col, value_col = df.columns[0], df.columns[1]
             for _, row in df.iterrows():
                 info[str(row[item_col])] = row[value_col]
@@ -450,24 +499,7 @@ def get_market_cap(
     except (KeyError, TypeError, IndexError):
         return None
 
-    live_cap = _safe_float(info.get("总市值"))
-    if end_date == today:
-        return live_cap
-
-    # Historical best-effort: shares * historical close
-    # TODO: shares-outstanding field name varies across akshare versions; if
-    # missing, we fall back to returning the live cap as a rough proxy.
-    if live_cap is None:
-        return None
-
-    # Try to get historical close for end_date
-    try:
-        prices = get_prices(ticker, end_date, end_date)
-        if prices:
-            return live_cap  # fallback: live cap as proxy
-    except Exception:
-        pass
-    return live_cap
+    return _safe_float(info.get("总市值"))
 
 
 # ---------------------------------------------------------------------------
