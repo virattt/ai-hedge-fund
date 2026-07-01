@@ -350,6 +350,13 @@ def get_market_cap(
 
 def prices_to_df(prices: list[Price]) -> pd.DataFrame:
     """Convert prices to a DataFrame."""
+    if not prices:
+        # Return an empty frame with the expected schema so callers can safely
+        # rely on the columns/index instead of hitting a KeyError on "time".
+        empty = pd.DataFrame(columns=["open", "close", "high", "low", "volume", "time"])
+        empty.index = pd.DatetimeIndex([], name="Date")
+        return empty
+
     df = pd.DataFrame([p.model_dump() for p in prices])
     df["Date"] = pd.to_datetime(df["time"])
     df.set_index("Date", inplace=True)
