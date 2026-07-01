@@ -79,6 +79,9 @@ OPENAI_API_KEY=your-openai-api-key
 
 # For getting financial data to power the hedge fund
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
+
+# Optional: enrich the sentiment analyst with Adanos market sentiment
+ADANOS_API_KEY=your-adanos-api-key
 ```
 
 **Important**: You must set at least one LLM API key (e.g. `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY`) for the hedge fund to work. 
