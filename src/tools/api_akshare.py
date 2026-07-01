@@ -320,8 +320,131 @@ def get_financial_metrics(
 
 
 # ---------------------------------------------------------------------------
-# 3. Line items — STUB
+# 3. Line items
 # ---------------------------------------------------------------------------
+
+# Each English line-item name maps to a **list** of candidate Chinese column
+# names across the three statements (first match wins). Sources:
+#   - 利润表 (income statement)   via stock_financial_report_sina
+#   - 资产负债表 (balance sheet)  via stock_financial_report_sina
+#   - 现金流量表 (cash flow)      via stock_financial_report_sina
+_LINE_ITEM_MAP: dict[str, list[str]] = {
+    # --- income statement fields ---
+    "revenue": ["营业收入", "营业总收入"],
+    "operating_income": ["营业利润"],
+    "operating_expense": ["营业成本"],  # COGS — closest match
+    "gross_profit": ["毛利"],  # may not exist as a column; computed below
+    "net_income": ["归属于母公司所有者的净利润", "净利润"],
+    "earnings_per_share": ["基本每股收益"],
+    "research_and_development": ["研发费用"],
+    "interest_expense": ["利息支出", "利息费用", "财务费用"],
+    # --- balance sheet fields ---
+    "total_assets": ["资产总计"],
+    "current_assets": ["流动资产合计"],
+    "current_liabilities": ["流动负债合计"],
+    "total_liabilities": ["负债合计"],
+    "shareholders_equity": [
+        "归属于母公司股东权益合计",
+        "所有者权益(或股东权益)合计",
+    ],
+    "cash_and_equivalents": ["货币资金"],
+    "intangible_assets": ["无形资产"],
+    "goodwill_and_intangible_assets": ["商誉", "无形资产"],  # sum if both present
+    "total_debt": ["短期借款", "长期借款"],  # sum of short-term + long-term debt
+    "outstanding_shares": ["实收资本(或股本)"],
+    "book_value_per_share": ["每股净资产"],
+    # --- cash flow statement fields ---
+    "capital_expenditure": [
+        "购建固定资产、无形资产和其他长期资产所支付的现金",
+    ],
+    "depreciation_and_amortization": [
+        "固定资产折旧",  # may not be directly in the statement
+    ],
+    "dividends_and_other_cash_distributions": [
+        "分配股利、利润或偿付利息所支付的现金",
+    ],
+    "issuance_or_purchase_of_equity_shares": [
+        "吸收投资收到的现金",
+    ],
+}
+
+# In-process cache for the three statements per (ticker, end_date).
+# An agent run hits search_line_items ~14 times per ticker; this cache means
+# we only do 3 HTTP fetches total instead of 42.
+_statement_cache: dict[tuple[str, str], dict[str, pd.DataFrame]] = {}
+
+
+def _fetch_statements(ticker: str, end_date: str) -> dict[str, pd.DataFrame]:
+    """Fetch and cache the three Chinese financial statements for ``ticker``.
+
+    Returns a dict with keys ``"income"``, ``"balance"``, ``"cashflow"``.
+    Missing statements are omitted from the dict (caller checks with ``.get``).
+    """
+    cache_key = (ticker, end_date)
+    if cache_key in _statement_cache:
+        return _statement_cache[cache_key]
+
+    code = a_share_code(ticker)
+    # Sina uses sh/sz prefix
+    if ticker.endswith(".SH"):
+        sina_stock = f"sh{code}"
+    elif ticker.endswith(".SZ"):
+        sina_stock = f"sz{code}"
+    elif ticker.endswith(".BJ"):
+        sina_stock = f"bj{code}"
+    else:
+        sina_stock = code
+
+    statements: dict[str, pd.DataFrame] = {}
+
+    for key, symbol in [
+        ("income", "利润表"),
+        ("balance", "资产负债表"),
+        ("cashflow", "现金流量表"),
+    ]:
+        def _fetch() -> pd.DataFrame:
+            return ak.stock_financial_report_sina(stock=sina_stock, symbol=symbol)
+
+        try:
+            df = _with_retry(_fetch)
+            if df is not None and not df.empty:
+                statements[key] = df
+        except Exception as e:
+            logger.warning(
+                "akshare search_line_items: failed to fetch %s for %s: %s",
+                symbol,
+                ticker,
+                e,
+            )
+        # Rate-limit between statement fetches
+        time.sleep(0.3)
+
+    _statement_cache[cache_key] = statements
+    return statements
+
+
+def _extract_value(
+    statement: pd.DataFrame | None,
+    candidates: list[str],
+    report_date: str,
+) -> float | None:
+    """Look up a value from a statement by trying candidate column names.
+
+    ``report_date`` is a normalised ``YYYYMMDD`` string matching the ``报告日``
+    column. Returns the first successful match or ``None``.
+    """
+    if statement is None or report_date is None:
+        return None
+    for col in candidates:
+        if col not in statement.columns:
+            continue
+        row = statement[statement["报告日"] == report_date]
+        if row.empty:
+            continue
+        return _safe_float(row.iloc[0][col])
+    return None
+
+
 def search_line_items(
     ticker: str,
     line_items: list[str],
@@ -330,15 +453,259 @@ def search_line_items(
     limit: int = 10,
     api_key: str | None = None,
 ) -> list[LineItem]:
-    """Return ``[]`` for A-shares.
+    """Fetch line items for A-shares via ``akshare.stock_financial_report_sina``.
 
-    TODO: A-share line-item mapping would need to be built per agent request,
-    translating each requested US-style field name (e.g. ``net_income``,
-    ``total_assets``) to the corresponding Chinese label in
-    ``akshare.stock_financial_abstract``. The agents already handle an empty
-    list gracefully, so this stub is intentionally non-fatal.
+    Maps the 30 project-level English line-item names to Chinese column names
+    in the three financial statements (income / balance / cash flow).
+
+    **Period limitation**: ``stock_financial_report_sina`` returns all report
+    periods (quarterly + annual). For ``period="annual"`` only year-end
+    (``12-31``) periods are returned. For ``period="ttm"`` or
+    ``period="quarterly"`` we fall back to annual data — proper TTM math
+    would need 4-quarter rolling calculations and is out of scope for this PR.
+
+    Results are sorted most-recent-first and capped at ``limit``. Periods
+    after ``end_date`` are filtered out.
     """
-    return []
+    if not line_items:
+        return []
+
+    statements = _fetch_statements(ticker, end_date)
+    if not statements:
+        return []
+
+    income_df = statements.get("income")
+    balance_df = statements.get("balance")
+    cashflow_df = statements.get("cashflow")
+
+    # Collect all available report periods from the income statement (primary).
+    # Fall back to balance or cash flow if income is missing.
+    primary = None
+    for candidate in (income_df, balance_df, cashflow_df):
+        if candidate is not None and not candidate.empty:
+            primary = candidate
+            break
+    if primary is None:
+        return []
+
+    all_dates = set(primary["报告日"].tolist())
+    for df in (balance_df, cashflow_df):
+        if df is not None:
+            all_dates.update(df["报告日"].tolist())
+
+    end_norm = end_date.replace("-", "")
+
+    if period == "annual":
+        eligible = sorted(
+            (d for d in all_dates if d and d <= end_norm and d.endswith("1231")),
+            reverse=True,
+        )
+    else:
+        # TTM / quarterly: fall back to annual data (documented limitation).
+        # We still only use year-end periods to avoid mixing Q1/Q3 cumulative
+        # data which would produce nonsensical values.
+        eligible = sorted(
+            (d for d in all_dates if d and d <= end_norm and d.endswith("1231")),
+            reverse=True,
+        )
+
+    eligible = eligible[:limit]
+    if not eligible:
+        return []
+
+    results: list[LineItem] = []
+    for report_date_norm in eligible:
+        report_period = (
+            f"{report_date_norm[:4]}-{report_date_norm[4:6]}-{report_date_norm[6:]}"
+        )
+
+        # Initialise all requested fields to None so that agents can safely
+        # access them via attribute lookup (e.g. ``fi.total_debt is not None``)
+        # without triggering AttributeError on the Pydantic model. Without
+        # this, accessing an unset extra field raises AttributeError even
+        # though model_config allows extra fields.
+        fields: dict[str, float | None] = {name: None for name in line_items}
+
+        for item_name in line_items:
+            candidates = _LINE_ITEM_MAP.get(item_name)
+            if candidates is None:
+                continue
+
+            # Determine which statement to look in based on the field type.
+            # We try all three statements — first match wins.
+            val = None
+            for stmt in (income_df, balance_df, cashflow_df):
+                val = _extract_value(stmt, candidates, report_date_norm)
+                if val is not None:
+                    break
+
+            if val is not None:
+                fields[item_name] = val
+
+        # --- Computed / derived fields ---
+        # These override direct lookups if the underlying components are present.
+
+        # goodwill_and_intangible_assets = goodwill + intangibles
+        if "goodwill_and_intangible_assets" in line_items:
+            gw = _extract_value(balance_df, ["商誉"], report_date_norm) or 0.0
+            ia = _extract_value(balance_df, ["无形资产"], report_date_norm) or 0.0
+            if gw or ia:
+                fields["goodwill_and_intangible_assets"] = gw + ia
+
+        # total_debt = short-term + long-term borrowing + bonds
+        if "total_debt" in line_items:
+            short_debt = _extract_value(
+                balance_df, ["短期借款"], report_date_norm
+            ) or 0.0
+            long_debt = _extract_value(
+                balance_df, ["长期借款"], report_date_norm
+            ) or 0.0
+            bonds = _extract_value(
+                balance_df, ["应付债券"], report_date_norm
+            ) or 0.0
+            total = short_debt + long_debt + bonds
+            fields["total_debt"] = total if total > 0 else None
+
+        # working_capital = current_assets - current_liabilities
+        if "working_capital" in line_items:
+            ca = _extract_value(balance_df, ["流动资产合计"], report_date_norm)
+            cl = _extract_value(balance_df, ["流动负债合计"], report_date_norm)
+            if ca is not None and cl is not None:
+                fields["working_capital"] = ca - cl
+
+        # free_cash_flow = operating_cash_flow - capex
+        if "free_cash_flow" in line_items:
+            ocf = _extract_value(
+                cashflow_df, ["经营活动产生的现金流量净额"], report_date_norm
+            )
+            capex = _extract_value(
+                cashflow_df,
+                ["购建固定资产、无形资产和其他长期资产所支付的现金"],
+                report_date_norm,
+            )
+            if ocf is not None and capex is not None:
+                fields["free_cash_flow"] = ocf - capex
+            elif ocf is not None:
+                # If capex missing, at least set OCF as a rough proxy
+                fields["free_cash_flow"] = ocf
+
+        # gross_profit = revenue - operating_expense (COGS)
+        if "gross_profit" in line_items:
+            rev = _extract_value(income_df, ["营业收入", "营业总收入"], report_date_norm)
+            cogs = _extract_value(income_df, ["营业成本"], report_date_norm)
+            if rev is not None and cogs is not None:
+                fields["gross_profit"] = rev - cogs
+
+        # gross_margin = gross_profit / revenue  (decimal ratio)
+        if "gross_margin" in line_items:
+            rev = _extract_value(income_df, ["营业收入", "营业总收入"], report_date_norm)
+            cogs = _extract_value(income_df, ["营业成本"], report_date_norm)
+            if rev is not None and cogs is not None and rev != 0:
+                fields["gross_margin"] = (rev - cogs) / rev
+
+        # operating_margin = operating_income / revenue  (decimal ratio)
+        if "operating_margin" in line_items:
+            op_income = _extract_value(income_df, ["营业利润"], report_date_norm)
+            rev = _extract_value(income_df, ["营业收入", "营业总收入"], report_date_norm)
+            if op_income is not None and rev is not None and rev != 0:
+                fields["operating_margin"] = op_income / rev
+
+        # debt_to_equity = total_debt / shareholders_equity  (decimal ratio)
+        if "debt_to_equity" in line_items:
+            short_debt = _extract_value(
+                balance_df, ["短期借款"], report_date_norm
+            ) or 0.0
+            long_debt = _extract_value(
+                balance_df, ["长期借款"], report_date_norm
+            ) or 0.0
+            bonds = _extract_value(
+                balance_df, ["应付债券"], report_date_norm
+            ) or 0.0
+            equity = _extract_value(
+                balance_df,
+                ["归属于母公司股东权益合计", "所有者权益(或股东权益)合计"],
+                report_date_norm,
+            )
+            total_debt_val = short_debt + long_debt + bonds
+            if equity is not None and equity != 0 and total_debt_val > 0:
+                fields["debt_to_equity"] = total_debt_val / equity
+
+        # return_on_invested_capital = net_income / (debt + equity)
+        # (simplified ROIC approximation)
+        if "return_on_invested_capital" in line_items:
+            ni = _extract_value(
+                income_df,
+                ["归属于母公司所有者的净利润", "净利润"],
+                report_date_norm,
+            )
+            short_debt = _extract_value(
+                balance_df, ["短期借款"], report_date_norm
+            ) or 0.0
+            long_debt = _extract_value(
+                balance_df, ["长期借款"], report_date_norm
+            ) or 0.0
+            bonds = _extract_value(
+                balance_df, ["应付债券"], report_date_norm
+            ) or 0.0
+            equity = _extract_value(
+                balance_df,
+                ["归属于母公司股东权益合计", "所有者权益(或股东权益)合计"],
+                report_date_norm,
+            )
+            invested = short_debt + long_debt + bonds + (equity or 0)
+            if ni is not None and invested > 0:
+                fields["return_on_invested_capital"] = ni / invested
+
+        # ebit: Chinese 营业利润 (operating profit) is the closest analogue.
+        # Under post-2017 PRC accounting standards, 营业利润 excludes interest
+        # expense for non-financial firms, making it a reasonable EBIT proxy.
+        if "ebit" in line_items:
+            op_income = _extract_value(income_df, ["营业利润"], report_date_norm)
+            if op_income is not None:
+                fields["ebit"] = op_income
+
+        # ebitda = ebit + depreciation_and_amortization
+        if "ebitda" in line_items:
+            op_income = _extract_value(income_df, ["营业利润"], report_date_norm)
+            da = _extract_value(
+                cashflow_df,
+                ["固定资产折旧、油气资产折耗、生产性生物资产折旧"],
+                report_date_norm,
+            )
+            if op_income is not None and da is not None:
+                fields["ebitda"] = op_income + da
+            elif op_income is not None:
+                fields["ebitda"] = op_income  # without D&A — still useful
+
+        # book_value_per_share: compute from equity / shares if not directly
+        # available from the statement (Sina reports don't include 每股净资产).
+        if "book_value_per_share" in line_items and not fields.get("book_value_per_share"):
+            equity = _extract_value(
+                balance_df,
+                ["归属于母公司股东权益合计", "所有者权益(或股东权益)合计"],
+                report_date_norm,
+            )
+            shares = _extract_value(balance_df, ["实收资本(或股本)"], report_date_norm)
+            if equity is not None and shares is not None and shares > 0:
+                fields["book_value_per_share"] = equity / shares
+
+        # Skip periods where ALL requested fields are None (no data at all).
+        if not any(v is not None for v in fields.values()):
+            continue
+        if not fields:
+            continue
+
+        results.append(
+            LineItem(
+                ticker=ticker,
+                report_period=report_period,
+                period=period,
+                currency="CNY",
+                **fields,
+            )
+        )
+
+    return results
 
 
 # ---------------------------------------------------------------------------
