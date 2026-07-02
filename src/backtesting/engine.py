@@ -22,6 +22,7 @@ from src.tools.api import (
     get_financial_metrics,
     get_insider_trades,
 )
+from src.tools.markets import is_a_share
 
 
 class BacktestEngine:
@@ -104,7 +105,14 @@ class BacktestEngine:
         else:
             self._portfolio_values = []
 
+        # Previous-day closes for A-share 涨跌停 price-limit filter
+        prev_closes: Dict[str, float] = {}
+
         for current_date in dates:
+            # Clear T+1 locked shares from yesterday's buys at the start of
+            # each new trading day.
+            self._portfolio.advance_day()
+
             lookback_start = (current_date - relativedelta(months=1)).strftime("%Y-%m-%d")
             current_date_str = current_date.strftime("%Y-%m-%d")
             previous_date_str = (current_date - relativedelta(days=1)).strftime("%Y-%m-%d")
@@ -146,8 +154,20 @@ class BacktestEngine:
                 d = decisions.get(ticker, {"action": "hold", "quantity": 0})
                 action = d.get("action", "hold")
                 qty = d.get("quantity", 0)
-                executed_qty = self._executor.execute_trade(ticker, action, qty, current_prices[ticker], self._portfolio)
+                prev_close = prev_closes.get(ticker) if is_a_share(ticker) else None
+                executed_qty = self._executor.execute_trade(
+                    ticker,
+                    action,
+                    qty,
+                    current_prices[ticker],
+                    self._portfolio,
+                    previous_close=prev_close,
+                )
                 executed_trades[ticker] = executed_qty
+
+            # Remember today's close as the next day's previous close.
+            for ticker, price in current_prices.items():
+                prev_closes[ticker] = price
 
             total_value = calculate_portfolio_value(self._portfolio, current_prices)
             exposures = compute_exposures(self._portfolio, current_prices)

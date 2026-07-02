@@ -27,6 +27,8 @@ def test_apply_long_buy_partial_fill_when_insufficient_cash() -> None:
 def test_apply_long_sell_realized_gain_and_cost_basis_reset(portfolio: Portfolio) -> None:
     # Buy 100 @ 50, then sell 100 @ 60 → realized gain = 100 * (60-50) = 1000
     portfolio.apply_long_buy("AAPL", 100, 50.0)
+    # Advance day so T+1 locked shares become sellable
+    portfolio.advance_day()
     executed = portfolio.apply_long_sell("AAPL", 100, 60.0)
     assert executed == 100
     snap = portfolio.get_snapshot()
@@ -40,6 +42,8 @@ def test_apply_long_sell_realized_gain_and_cost_basis_reset(portfolio: Portfolio
 def test_apply_long_sell_clamps_to_owned() -> None:
     p = Portfolio(tickers=["AAPL"], initial_cash=10_000.0, margin_requirement=0.5)
     p.apply_long_buy("AAPL", 10, 100.0)
+    # Advance day so T+1 locked shares become sellable
+    p.advance_day()
     # Try to sell 20, but only 10 owned
     executed = p.apply_long_sell("AAPL", 20, 100.0)
     assert executed == 10

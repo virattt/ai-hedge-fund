@@ -93,7 +93,25 @@ def run_hedge_fund(
 
 
 def start(state: AgentState):
-    """Initialize the workflow with the input message."""
+    """Initialize the workflow, then pre-warm the shared data cache.
+
+    Warming introspects the selected analyst modules and fetches the union of
+    data they will request *before* they fan out concurrently — so the
+    rate-limited financialdatasets API is hit once per distinct key instead of
+    once per agent. See :mod:`src.utils.data_warming`.
+    """
+    data = state.get("data", {}) if isinstance(state, dict) else {}
+    tickers = data.get("tickers") or []
+    end_date = data.get("end_date")
+    if tickers and end_date:
+        try:
+            from src.utils.api_key import get_api_key_from_state
+            from src.utils.data_warming import warm_cache_for_tickers
+
+            api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+            warm_cache_for_tickers(tickers, end_date, api_key=api_key)
+        except Exception as e:  # noqa: BLE001 - warm is an optimisation; never block the run
+            print(f"Cache warm skipped: {e}")
     return state
 
 

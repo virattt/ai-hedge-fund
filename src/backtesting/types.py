@@ -18,14 +18,21 @@ class Action(str, Enum):
 ActionLiteral = Literal["buy", "sell", "short", "cover", "hold"]
 
 
-class PositionState(TypedDict):
-    """Represents per-ticker position state in the portfolio."""
+class PositionState(TypedDict, total=False):
+    """Represents per-ticker position state in the portfolio.
+
+    ``locked_long`` is used by A-share T+1 settlement: shares bought on day N
+    are locked until day N+1.  The field is optional so that older code that
+    does not set it continues to work; consumers should default missing values
+    to ``0``.
+    """
 
     long: int
     short: int
     long_cost_basis: float
     short_cost_basis: float
     short_margin_used: float
+    locked_long: int  # A-share T+1: shares bought today, not sellable until next day
 
 
 class TickerRealizedGains(TypedDict):
