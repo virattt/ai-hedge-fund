@@ -47,9 +47,9 @@ class PEADModel(QuantModel):
     def name(self) -> str:
         return "pead"
 
-    def predict(self, ticker: str, date: str, fd_client: DataClient) -> Signal:
+    def predict(self, ticker: str, date: str, data_client: DataClient) -> Signal:
         as_of = _parse_date(date)
-        events = self._qualifying_events(ticker, fd_client)
+        events = self._qualifying_events(ticker, data_client)
 
         # Point-in-time: only consider filings on or before `date` (no lookahead)
         past = [e for e in events if _parse_date(e["filing_date"]) <= as_of]
@@ -90,7 +90,7 @@ class PEADModel(QuantModel):
     def _neutral(self, ticker: str, date: str) -> Signal:
         return Signal(model_name=self.name, ticker=ticker, date=date, value=0.0)
 
-    def _qualifying_events(self, ticker: str, fd_client: DataClient) -> list[dict]:
+    def _qualifying_events(self, ticker: str, data_client: DataClient) -> list[dict]:
         """Return BEAT/MISS events for a ticker, deduped + retrospective-filtered.
 
         Mirrors the Week 3 PEAD cleaning: one event per (report_period),
@@ -102,7 +102,7 @@ class PEADModel(QuantModel):
         if ticker in self._cache:
             records = self._cache[ticker]
         else:
-            records = fd_client.get_earnings_history(ticker, limit=self._earnings_limit)
+            records = data_client.get_earnings_history(ticker, limit=self._earnings_limit)
             self._cache[ticker] = records
 
         best: dict[str, tuple[int, EarningsRecord]] = {}

@@ -67,7 +67,7 @@ _CAR_WINDOWS = [(0, 1), (0, 5), (0, 20)]  # the three event windows we compute C
 
 def compute_car(
     tickers: list[str],
-    fd_client: DataClient,
+    data_client: DataClient,
     *,
     earnings_limit: int = 12,
     market_ticker: str = _MARKET_TICKER,
@@ -84,7 +84,7 @@ def compute_car(
 
     Args:
         tickers:              List of stock ticker symbols.
-        fd_client:            Data provider (any DataClient; FDClient in production).
+        data_client:            Data provider (any DataClient; FDClient in production).
         earnings_limit:       Max earnings periods to fetch per ticker.
         market_ticker:        Market benchmark ticker (default "SPY").
         n_bootstrap:          Number of bootstrap resamples for CIs.
@@ -98,7 +98,7 @@ def compute_car(
 
     # Fetch market (SPY) prices once — covers all tickers.
     # Start from 2023-01-01 to have enough history for any event's estimation window.
-    spy_prices = fd_client.get_prices(market_ticker, "2023-01-01", today)
+    spy_prices = data_client.get_prices(market_ticker, "2023-01-01", today)
     if not spy_prices:
         logger.warning("No SPY prices returned — cannot compute CARs")
         return EventStudyResult(skipped_tickers=list(tickers))
@@ -111,7 +111,7 @@ def compute_car(
 
     for ticker in tickers:
         events = _compute_ticker_events(
-            ticker, fd_client, spy_closes, earnings_limit=earnings_limit,
+            ticker, data_client, spy_closes, earnings_limit=earnings_limit,
         )
         if events:
             all_events.extend(events)
@@ -136,7 +136,7 @@ def compute_car(
 
 def _compute_ticker_events(
     ticker: str,
-    fd_client: DataClient,
+    data_client: DataClient,
     spy_closes: dict[str, float],
     *,
     earnings_limit: int = 12,
@@ -151,7 +151,7 @@ def _compute_ticker_events(
     5. Process each event through the market model pipeline.
     """
     # Step 1: Get earnings filings for this ticker
-    records = fd_client.get_earnings_history(ticker, limit=earnings_limit)
+    records = data_client.get_earnings_history(ticker, limit=earnings_limit)
     if not records:
         return []
 
@@ -169,7 +169,7 @@ def _compute_ticker_events(
     price_start = (min_date - timedelta(days=400)).isoformat()
     price_end = min(max_date + timedelta(days=35), today).isoformat()
 
-    stock_prices = fd_client.get_prices(ticker, price_start, price_end)
+    stock_prices = data_client.get_prices(ticker, price_start, price_end)
     if not stock_prices:
         return []
 
