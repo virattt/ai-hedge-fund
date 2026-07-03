@@ -21,6 +21,18 @@ from v2.data.models import (
 logger = logging.getLogger(__name__)
 
 
+class FDClientError(Exception):
+    """An API request failed for infrastructure reasons (auth, rate limit,
+    server error, network). Distinct from "no data exists" — that returns
+    empty. A backtest must crash on this, not treat it as no-data.
+    """
+
+    def __init__(self, message: str, *, status_code: int | None = None, path: str | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.path = path
+
+
 class FDClient:
     """Financial Datasets API client.
 
@@ -90,10 +102,18 @@ class FDClient:
         period: str = "ttm",
         limit: int = 10,
     ) -> list[FinancialMetrics]:
-        """Fetch financial metrics up to *end_date*."""
+        """Fetch financial metrics that were PUBLIC as of *end_date*.
+
+        Point-in-time: filters on ``filing_date`` (when the SEC filing was
+        accepted, ET) — not ``report_period`` (the fiscal period end, which
+        precedes public availability by 3-6 weeks and would leak the future
+        into a backtest). Rows without a known filing_date are excluded
+        server-side, so everything returned was provably knowable on
+        *end_date*.
+        """
         data = self._get("/financial-metrics/", {
             "ticker": ticker,
-            "report_period_lte": end_date,
+            "filing_date_lte": end_date,
             "period": period,
             "limit": limit,
         }, response_key="financial_metrics")
@@ -212,7 +232,14 @@ class FDClient:
         path: str,
         **kwargs,
     ) -> requests.Response | None:
-        """HTTP request with retry on 429. Never raises."""
+        """HTTP request with retry on 429.
+
+        Fail-loud contract: raises FDClientError on network errors, HTTP
+        errors, and exhausted rate-limit retries. Returns None ONLY for
+        404 — "this data doesn't exist" is a data fact, not a failure.
+        Silently returning empty on real failures poisons backtests
+        (missing data reads as "no signal").
+        """
         url = self.BASE_URL + path
         for attempt, delay in enumerate((*self._RETRY_DELAYS, None)):
             try:
@@ -220,8 +247,9 @@ class FDClient:
                     method, url, timeout=self._timeout, **kwargs,
                 )
             except requests.RequestException as exc:
-                logger.warning("Request error on %s %s: %s", method, path, exc)
-                return None
+                raise FDClientError(
+                    f"{method} {path} failed: {exc}", path=path,
+                ) from exc
 
             if resp.status_code == 429 and delay is not None:
                 logger.info(
@@ -231,14 +259,18 @@ class FDClient:
                 time.sleep(delay)
                 continue
 
-            if resp.status_code >= 400:
-                logger.warning("%s %s returned %d", method, path, resp.status_code)
+            if resp.status_code == 404:
                 return None
+
+            if resp.status_code >= 400:
+                raise FDClientError(
+                    f"{method} {path} returned {resp.status_code}: {resp.text[:200]}",
+                    status_code=resp.status_code, path=path,
+                )
 
             return resp
 
-        logger.warning(
-            "Rate limit exhausted after %d retries on %s %s",
-            len(self._RETRY_DELAYS), method, path,
+        raise FDClientError(
+            f"{method} {path} rate limited (429) after {len(self._RETRY_DELAYS)} retries",
+            status_code=429, path=path,
         )
-        return None

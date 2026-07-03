@@ -32,7 +32,7 @@ from datetime import date, datetime, timedelta
 import numpy as np
 
 from v2.backtesting.models import BacktestResult, PerformanceMetrics, Trade
-from v2.data.client import FDClient
+from v2.data.protocol import DataClient
 from v2.signals.base import AlphaModel
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ class BacktestEngine:
         self,
         model: AlphaModel,
         tickers: list[str],
-        fd_client: FDClient,
+        fd_client: DataClient,
         start_date: str,
         end_date: str,
         *,
@@ -99,7 +99,7 @@ class BacktestEngine:
         self,
         model: AlphaModel,
         ticker: str,
-        fd_client: FDClient,
+        fd_client: DataClient,
         start_date: str,
         end_date: str,
         *,

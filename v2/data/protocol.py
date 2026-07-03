@@ -23,6 +23,7 @@ from v2.data.models import (
     CompanyFacts,
     CompanyNews,
     Earnings,
+    EarningsRecord,
     FinancialMetrics,
     InsiderTrade,
     Price,
@@ -33,7 +34,13 @@ from v2.data.models import (
 class DataClient(Protocol):
     """Protocol that all data providers must satisfy.
 
-    Methods return empty lists or None on failure — never raise.
+    Contract: empty list / None means the data genuinely doesn't exist.
+    Infrastructure failures (auth, rate limits, network, server errors)
+    must RAISE — a provider that silently returns empty on failure poisons
+    backtests, because missing data is indistinguishable from "no signal".
+
+    get_financial_metrics must be point-in-time: return only data that was
+    publicly filed by *end_date*, not data whose fiscal period ended by then.
     """
 
     def get_prices(
@@ -71,3 +78,11 @@ class DataClient(Protocol):
     def get_company_facts(self, ticker: str) -> CompanyFacts | None: ...
 
     def get_earnings(self, ticker: str) -> Earnings | None: ...
+
+    def get_earnings_history(
+        self,
+        ticker: str,
+        limit: int = 12,
+    ) -> list[EarningsRecord]: ...
+
+    def get_market_cap(self, ticker: str, end_date: str) -> float | None: ...
