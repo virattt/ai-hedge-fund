@@ -89,6 +89,8 @@ can be backtested and combined — is a great first contribution:
 | Scheduler / daemon — market-calendar cron, idempotent ticks, kill-switch | ⬜ |
 | Observability — per-cycle events, notifications, heartbeat | ⬜ |
 | Research lab — backtest candidate strategies/allocators alongside the live fund | ⬜ |
+| Strategy generator — composes candidate strategies from the building blocks (analysts × policies × parameters), driven by the fund's mandate | ⬜ |
+| Auto-promotion — winners graduate into the live fund through the validation gate (CPCV/PBO), human-approved by default (depends: research lab, validation gate) | ⬜ |
 
 ## Interfaces
 
@@ -116,7 +118,9 @@ The easiest ways to make an impact:
    implement the `AlphaModel` interface so `predict(...)` returns a `Signal`, and add
    a test. The engine runs it without any other changes.
 2. **Add a strategy or an allocator.** Bundle analysts into a strategy, or contribute
-   a new capital-allocation policy (CIO).
+   a new capital-allocation policy (CIO). Every analyst, strategy, and allocator also
+   becomes a building block the strategy generator can compose — contributions
+   compound.
 3. **Add an alternative data source.** [Financial Datasets](https://financialdatasets.ai)
    provides the core market, fundamentals, and earnings data. Analysts get more
    powerful with *complementary* datasets — satellite imagery, web & social-media

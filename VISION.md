@@ -6,8 +6,8 @@
 ## The idea in one sentence
 
 An **AI hedge fund you can run as a persistent system** — an entity whose analysts
-are AI, that researches ideas, trades on a schedule, and explains every decision it
-makes. Backtest today; paper-trade; and, opt-in, trade live.
+are AI, that finds and tests its own strategies, trades on a schedule, and explains
+every decision it makes. Backtest today; paper-trade; and, opt-in, trade live.
 
 Most "AI trading" projects are one-shot scripts: run it, get a signal, exit. We're
 building the opposite — a **fund as a first-class, living thing**. You give it a
@@ -126,9 +126,19 @@ A real shop trades its book *and* researches new ideas at the same time. So does
                   the live fund hot-swaps to the better mandate
 ```
 
-You don't "graduate" from backtest to live. The fund runs continuously while you
-explore new analysts, new strategies, and new allocation policies in the lab — and
-promote the winners into the running fund.
+You don't "graduate" from backtest to live. The fund runs continuously while the lab
+explores new analysts, new strategies, and new allocation policies — and the winners
+get promoted into the running fund. The lab operates at two levels:
+
+- **Level 1 — you run the lab.** You propose the candidates ("add Munger, drop PEAD,
+  tilt the allocator 70/30"), backtest them over history, and promote the winners
+  yourself. This is the loop the system is built around today.
+- **Level 2 — the fund runs its own lab** *(aspirational)*. Give it a mandate → it
+  finds strategies → backtests them → promotes the winners. A research agent composes
+  candidate strategies from the building blocks the community contributes — analysts
+  × portfolio policies × parameters — tests them in the same lab, and graduates
+  winners through the validation gate. Same loop, same lab; the researcher is now
+  also AI. This is where the project is headed, not what ships today.
 
 ## What we will not compromise on
 
@@ -143,6 +153,10 @@ reason about:
 - **The LLM never touches the trade.** Language models form *views* and *narrate*
   decisions. Deterministic code sizes positions and places orders, and risk limits are
   hard gates an agent cannot exceed.
+- **Self-improvement is gated.** The fund may invent and test its own strategies, but
+  nothing it invents gets capital without passing the validation gate (overfitting
+  checks like CPCV/PBO) — and promotion into a live book stays human-approved by
+  default.
 - **Paper before real, always.** Live trading is opt-in and off by default.
 - **Open and forkable.** Every layer is a documented interface. The fund explains
   itself — each decision keeps the analyst's written thesis — and you can fork the
