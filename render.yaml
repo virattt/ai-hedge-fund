@@ -1,72 +1,78 @@
 # Render Blueprint for the AI Hedge Fund web application.
-# Deploys three resources: a Postgres database, the FastAPI backend, and the
-# React/Vite frontend (served as a static site). Fork this repo and click
+# Deploys three resources — a Postgres database, the FastAPI backend, and the
+# React/Vite frontend (served as a static site) — grouped under a single Render
+# project so they show up together in the Dashboard. Fork this repo and click
 # "Deploy to Render" — the only manual step is supplying at least one LLM API key.
-services:
-  # FastAPI backend (REST API that runs the hedge fund + backtester)
-  - type: web
-    name: ai-hedge-fund-api
-    runtime: python
-    plan: free
-    buildCommand: pip install "poetry==2.4.1" && poetry config virtualenvs.create false && poetry install --no-interaction --no-ansi --no-root --without dev
-    startCommand: python -m uvicorn app.backend.main:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /
-    envVars:
-      # Repo root on the import path so `app.backend` and `src` packages resolve
-      - key: PYTHONPATH
-        value: .
-      # numpy/scipy/pandas pins in this project require Python 3.11
-      - key: PYTHON_VERSION
-        value: "3.11.9"
-      # Managed Postgres connection string (auto-wired from the database below)
-      - key: DATABASE_URL
-        fromDatabase:
-          name: ai-hedge-fund-db
-          property: connectionString
-      # LLM credentials. Set LLM_PROVIDER to your provider (one of: OpenAI,
-      # Anthropic, Groq, Google, DeepSeek, OpenRouter, xAI, Kimi, GigaChat) and
-      # LLM_API_KEY to that provider's API key. The app defaults to OpenAI
-      # gpt-4.1; if LLM_PROVIDER is not OpenAI, pick a matching model in the app
-      # UI. Keys can also be set later in the app UI.
-      - key: LLM_PROVIDER
-        sync: false
-      - key: LLM_API_KEY
-        sync: false
-      # Optional financial-data provider (premium tickers). Free tickers work
-      # without it.
-      - key: FINANCIAL_DATASETS_API_KEY
-        sync: false
-      # CORS allow-list — auto-wired to the deployed frontend's host. Scheme-less
-      # host; the backend prepends https:// (see app/backend/main.py).
-      - key: FRONTEND_URL
-        fromService:
-          name: ai-hedge-fund-web
-          type: web
-          property: host
+projects:
+  - name: ai-hedge-fund
+    environments:
+      - name: production
+        services:
+          # FastAPI backend (REST API that runs the hedge fund + backtester)
+          - type: web
+            name: ai-hedge-fund-api
+            runtime: python
+            plan: free
+            buildCommand: pip install "poetry==2.4.1" && poetry config virtualenvs.create false && poetry install --no-interaction --no-ansi --no-root --without dev
+            startCommand: python -m uvicorn app.backend.main:app --host 0.0.0.0 --port $PORT
+            healthCheckPath: /
+            envVars:
+              # Repo root on the import path so `app.backend` and `src` packages resolve
+              - key: PYTHONPATH
+                value: .
+              # numpy/scipy/pandas pins in this project require Python 3.11
+              - key: PYTHON_VERSION
+                value: "3.11.9"
+              # Managed Postgres connection string (auto-wired from the database below)
+              - key: DATABASE_URL
+                fromDatabase:
+                  name: ai-hedge-fund-db
+                  property: connectionString
+              # LLM credentials. Set LLM_API_KEY to an OpenAI key and the app runs on
+              # OpenAI gpt-5.5 out of the box — LLM_PROVIDER can be left blank. To use a
+              # different provider, set LLM_PROVIDER (one of: OpenAI, Anthropic, Groq,
+              # Google, DeepSeek, OpenRouter, xAI, Kimi, GigaChat), put that provider's
+              # key in LLM_API_KEY, and pick a matching model in the app UI. Keys can
+              # also be set later in the app UI.
+              - key: LLM_API_KEY
+                sync: false
+              - key: LLM_PROVIDER
+                sync: false
+              # Optional financial-data provider (premium tickers). Free tickers work
+              # without it.
+              - key: FINANCIAL_DATASETS_API_KEY
+                sync: false
+              # CORS allow-list — auto-wired to the deployed frontend's host. Scheme-less
+              # host; the backend prepends https:// (see app/backend/main.py).
+              - key: FRONTEND_URL
+                fromService:
+                  name: ai-hedge-fund-web
+                  type: web
+                  property: host
 
-  # React/Vite frontend (single-page app served over Render's CDN)
-  - type: web
-    name: ai-hedge-fund-web
-    runtime: static
-    rootDir: app/frontend
-    buildCommand: npm ci && npx vite build
-    staticPublishPath: ./dist
-    envVars:
-      # Baked into the bundle at build time; points the SPA at the backend API.
-      # `host` has no scheme, so the frontend prepends https:// (see src/lib/api-base.ts).
-      - key: VITE_API_URL
-        fromService:
-          name: ai-hedge-fund-api
-          type: web
-          property: host
-    routes:
-      # SPA fallback: serve index.html for client-side routes
-      - type: rewrite
-        source: /*
-        destination: /index.html
+          # React/Vite frontend (single-page app served over Render's CDN)
+          - type: web
+            name: ai-hedge-fund-web
+            runtime: static
+            rootDir: app/frontend
+            buildCommand: npm ci && npx vite build
+            staticPublishPath: ./dist
+            envVars:
+              # Baked into the bundle at build time; points the SPA at the backend API.
+              # `host` has no scheme, so the frontend prepends https:// (see src/lib/api-base.ts).
+              - key: VITE_API_URL
+                fromService:
+                  name: ai-hedge-fund-api
+                  type: web
+                  property: host
+            routes:
+              # SPA fallback: serve index.html for client-side routes
+              - type: rewrite
+                source: /*
+                destination: /index.html
 
-databases:
-  - name: ai-hedge-fund-db
-    databaseName: hedge_fund
-    user: hedge_fund
-    plan: free
+        databases:
+          - name: ai-hedge-fund-db
+            databaseName: hedge_fund
+            user: hedge_fund
+            plan: free
