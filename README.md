@@ -9,7 +9,7 @@ Deploy an AI-powered hedge fund on Render in one click. A team of ~19 famous-inv
 
 ## Architecture
 
-The [`render.yaml`](render.yaml) Blueprint provisions three resources:
+The [`render.yaml`](render.yaml) Blueprint provisions three resources, grouped under a single **`ai-hedge-fund`** Render project (a `production` environment) so they appear together in the Dashboard:
 
 ```
                  ┌─────────────────────────┐
@@ -38,7 +38,7 @@ The [`render.yaml`](render.yaml) Blueprint provisions three resources:
 
 ## What's pre-baked for Render
 
-- **One Blueprint, three services.** `render.yaml` declares the backend, frontend, and database — no manual service creation.
+- **One Blueprint, one project.** `render.yaml` declares the backend, frontend, and database inside a single `ai-hedge-fund` project — no manual service creation, and all resources land in one Dashboard project.
 - **`DATABASE_URL` is auto-wired** from the managed Postgres into the backend. You never set it by hand.
 - **`VITE_API_URL` is auto-wired** from the backend's URL into the frontend build. The front end knows where the API lives with no configuration.
 - **CORS is auto-wired and locked down.** `FRONTEND_URL` is injected from the frontend service's host, so the backend allows exactly that origin (plus localhost for dev) — not a blanket `*.onrender.com`.
@@ -75,8 +75,8 @@ Set these in the Render Dashboard at deploy time, or later from the app's **Sett
 
 | Variable | Required? | What it's for |
 |----------|-----------|---------------|
-| `LLM_PROVIDER` | required | Your LLM provider: one of `OpenAI`, `Anthropic`, `Groq`, `Google`, `DeepSeek`, `OpenRouter`, `xAI`, `Kimi`, `GigaChat`. |
-| `LLM_API_KEY` | required | API key for the provider named in `LLM_PROVIDER`. Keys: [OpenAI](https://platform.openai.com/), [Anthropic](https://anthropic.com/), [Groq](https://groq.com/), [Google Gemini](https://ai.dev/), [DeepSeek](https://deepseek.com/). |
+| `LLM_API_KEY` | required | API key for your LLM provider. With no `LLM_PROVIDER` set, this is treated as an OpenAI key. Keys: [OpenAI](https://platform.openai.com/), [Anthropic](https://anthropic.com/), [Groq](https://groq.com/), [Google Gemini](https://ai.dev/), [DeepSeek](https://deepseek.com/). |
+| `LLM_PROVIDER` | optional | Provider for `LLM_API_KEY`, one of `OpenAI`, `Anthropic`, `Groq`, `Google`, `DeepSeek`, `OpenRouter`, `xAI`, `Kimi`, `GigaChat`. Leave blank to use OpenAI. |
 | `FINANCIAL_DATASETS_API_KEY` | optional | Financial data for tickers beyond the five free ones — [financialdatasets.ai](https://financialdatasets.ai/) |
 | `DATABASE_URL` | auto | Injected from the managed Postgres — **do not set manually**. |
 | `VITE_API_URL` | auto | Injected into the frontend build, pointing at the backend — **do not set manually**. |
@@ -84,10 +84,10 @@ Set these in the Render Dashboard at deploy time, or later from the app's **Sett
 
 ### Choosing your LLM
 
-The app defaults to **OpenAI `gpt-4.1`**. `LLM_API_KEY` only supplies the credential for the provider named in `LLM_PROVIDER` — it does **not** change which model runs.
+Set `LLM_API_KEY` to an OpenAI key and the app runs on **OpenAI `gpt-5.5`** out of the box — no `LLM_PROVIDER` needed. `LLM_PROVIDER` only supplies the credential routing; it does **not** by itself change which model runs.
 
-- If `LLM_PROVIDER=OpenAI`, it works with the default model out of the box.
-- If `LLM_PROVIDER` is any other provider, **pick a matching-provider model in the app UI** (or pass `--provider` on the CLI). Otherwise the app keeps requesting the OpenAI default, your key won't match it, and you'll see an "OpenAI API key not found" error.
+- Leaving `LLM_PROVIDER` blank (or setting it to `OpenAI`) works with the default model out of the box.
+- To use any other provider, set `LLM_PROVIDER` to that provider and **pick a matching-provider model in the app UI** (or pass `--provider` on the CLI). Otherwise the app keeps requesting the OpenAI default, your key won't match it, and you'll see an "OpenAI API key not found" error.
 
 You can also set per-provider keys (e.g. `OPENAI_API_KEY`) or manage keys from the app's **Settings** page; those take precedence over `LLM_API_KEY` for their provider.
 
@@ -133,13 +133,6 @@ Locally the backend falls back to SQLite when `DATABASE_URL` is unset, so no dat
 | Frontend loads but can't reach the API | Confirm `ai-hedge-fund-api` is live; for a custom frontend domain, add it to `FRONTEND_URL` on the backend. |
 | "OpenAI API key not found" with a non-OpenAI key | Your `LLM_PROVIDER` isn't OpenAI but the app is still requesting the OpenAI default — pick a matching-provider model in the app UI (or `--provider` on the CLI). |
 | Data doesn't persist across restarts | You're on the free Postgres (expires after 30 days) or fell back to SQLite locally — upgrade the DB plan for durability. |
-
-## Security
-
-- **Secrets live in environment variables**, never in the repo. All keys are declared `sync: false` in `render.yaml`, so Render prompts for them.
-- **CORS** is scoped to the exact `FRONTEND_URL` origin (auto-wired to your frontend, plus localhost for dev) — not `*` and not a blanket `*.onrender.com` wildcard that would expose the API to other Render tenants.
-- `.gitignore` covers `.env`, build artifacts, and local database files.
-- The app stores any keys you enter in its **Settings** page in the database; treat the database and dashboard access as sensitive.
 
 ## What this template does and doesn't do
 

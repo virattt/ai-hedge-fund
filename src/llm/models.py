@@ -157,8 +157,10 @@ def _resolve_api_key(provider: ModelProvider, *key_names: str, api_keys: dict = 
          backwards compatibility with local .env / CLI usage).
       3. The generic ``LLM_API_KEY`` — but only when ``LLM_PROVIDER`` names this
          provider. This lets a Render deploy supply a single ``LLM_API_KEY`` +
-         ``LLM_PROVIDER`` pair instead of one env var per provider. The key is
-         never returned for a provider that ``LLM_PROVIDER`` does not name, so a
+         ``LLM_PROVIDER`` pair instead of one env var per provider. When
+         ``LLM_PROVIDER`` is unset it defaults to ``openai``, so supplying just
+         ``LLM_API_KEY`` (an OpenAI key) works out of the box. The key is never
+         returned for a provider that ``LLM_PROVIDER`` does not name, so a
          mismatched request falls through to the usual "key not found" error.
     """
     for name in key_names:
@@ -169,7 +171,7 @@ def _resolve_api_key(provider: ModelProvider, *key_names: str, api_keys: dict = 
         key = os.getenv(name)
         if key:
             return key
-    llm_provider = os.getenv("LLM_PROVIDER", "").strip().lower()
+    llm_provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
     if llm_provider and llm_provider in (provider.value.lower(), provider.name.lower()):
         return os.getenv("LLM_API_KEY")
     return None
