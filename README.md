@@ -4,6 +4,14 @@ This is a proof of concept for an AI-powered hedge fund.  The goal of this proje
 
 > **🚧 The project is evolving.** We're rebuilding it into a persistent, always-on AI hedge fund — a *fund* as a first-class entity you can backtest, paper-trade, and (opt-in) run live, with the investor agents reimagined as pluggable, backtestable "alpha models." Read the **[Vision →](VISION.md)** and the **[Roadmap →](ROADMAP.md)**.
 
+## Deploy the web app to Render
+
+Deploy the full-stack web application (FastAPI backend + React frontend + Postgres) with one click. After clicking, add at least one LLM API key in the Render Dashboard — everything else is provisioned automatically.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Ho1yShif/ai-hedge-fund)
+
+See [Deploy to Render](#-deploy-to-render) below for the full walkthrough and what each environment variable does.
+
 This system employs several agents working together:
 
 1. Aswath Damodaran Agent - The Dean of Valuation, focuses on story, numbers, and disciplined valuation
@@ -45,6 +53,7 @@ This project is for **educational and research purposes only**.
 By using this software, you agree to use it solely for learning purposes.
 
 ## Table of Contents
+- [🚀 Deploy to Render](#-deploy-to-render)
 - [How to Install](#how-to-install)
 - [How to Run](#how-to-run)
   - [⌨️ Command Line Interface](#️-command-line-interface)
@@ -52,6 +61,41 @@ By using this software, you agree to use it solely for learning purposes.
 - [How to Contribute](#how-to-contribute)
 - [Feature Requests](#feature-requests)
 - [License](#license)
+
+## 🚀 Deploy to Render
+
+The web application can run entirely on [Render](https://render.com) using the [`render.yaml`](render.yaml) Blueprint in this repo. One click provisions three resources:
+
+- **`ai-hedge-fund-api`** — the FastAPI backend (`web` service)
+- **`ai-hedge-fund-web`** — the React/Vite frontend (static site)
+- **`ai-hedge-fund-db`** — a managed PostgreSQL database
+
+### Steps
+
+1. Fork this repository (the Blueprint deploys from your fork's default branch).
+2. Click the **Deploy to Render** button at the top of this README (or in the Render Dashboard, choose **New → Blueprint** and point it at your fork).
+3. When prompted, fill in **at least one LLM API key** (see below). Leave the rest blank if unused.
+4. Click **Apply**. Render builds the backend, builds the frontend, provisions the database, and wires them together automatically.
+
+The frontend's `VITE_API_URL` is wired to the backend automatically, and `DATABASE_URL` is injected from the managed database — you don't set either by hand.
+
+### Environment variables
+
+Keys can be set at deploy time in the Render Dashboard, or later from the app's **Settings** page. Supply **at least one** LLM provider key; the data key is optional for common tickers.
+
+| Variable | Required? | What it's for |
+|----------|-----------|---------------|
+| `OPENAI_API_KEY` | one LLM key required | OpenAI models (GPT-5, etc.) — [platform.openai.com](https://platform.openai.com/) |
+| `ANTHROPIC_API_KEY` | one LLM key required | Anthropic Claude models — [anthropic.com](https://anthropic.com/) |
+| `GROQ_API_KEY` | one LLM key required | Groq-hosted models — [groq.com](https://groq.com/) |
+| `GOOGLE_API_KEY` | one LLM key required | Google Gemini models — [ai.dev](https://ai.dev/) |
+| `DEEPSEEK_API_KEY` | one LLM key required | DeepSeek models — [deepseek.com](https://deepseek.com/) |
+| `FINANCIAL_DATASETS_API_KEY` | optional | Financial data. AAPL, GOOGL, MSFT, NVDA, TSLA are free without a key; other tickers need one — [financialdatasets.ai](https://financialdatasets.ai/) |
+| `DATABASE_URL` | auto | Injected from the managed Postgres database — do not set manually. |
+| `VITE_API_URL` | auto | Injected into the frontend build, pointing at the backend — do not set manually. |
+| `FRONTEND_URL` | optional | Extra allowed CORS origin(s), comma-separated. Only needed if you serve the frontend from a custom domain; any `*.onrender.com` origin is already allowed. |
+
+> **Note:** The database uses Render's free plan, which expires after 30 days. Upgrade the database plan in the Dashboard for persistent use. The system is for **educational purposes only** and does not place real trades.
 
 ## How to Install
 
