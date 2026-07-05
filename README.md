@@ -1,44 +1,154 @@
-# AI Hedge Fund
+# AI Hedge Fund on Render
 
-This is a proof of concept for an AI-powered hedge fund.  The goal of this project is to explore the use of AI to make trading decisions.  This project is for **educational** purposes only and is not intended for real trading or investment.
-
-> **🚧 The project is evolving.** We're rebuilding it into a persistent, always-on AI hedge fund — a *fund* as a first-class entity you can backtest, paper-trade, and (opt-in) run live, with the investor agents reimagined as pluggable, backtestable "alpha models." Read the **[Vision →](VISION.md)** and the **[Roadmap →](ROADMAP.md)**.
-
-## Deploy the web app to Render
-
-Deploy the full-stack web application (FastAPI backend + React frontend + Postgres) with one click. After clicking, add at least one LLM API key in the Render Dashboard — everything else is provisioned automatically.
+Deploy an AI-powered hedge fund on Render in one click. A team of ~19 famous-investor agents — Warren Buffett, Charlie Munger, Michael Burry, Cathie Wood, and more — analyze the tickers you choose and produce trading signals and a final portfolio decision. You get a **FastAPI backend**, a **React web UI**, and a **managed PostgreSQL database**, all wired together automatically.
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Ho1yShif/ai-hedge-fund)
 
-See [Deploy to Render](#-deploy-to-render) below for the full walkthrough and what each environment variable does.
+> [!WARNING]
+> This project is for **educational and research purposes only**. It does **not** place real trades and is not investment advice. See the [Disclaimer](#disclaimer).
 
-This system employs several agents working together:
+## Architecture
 
-1. Aswath Damodaran Agent - The Dean of Valuation, focuses on story, numbers, and disciplined valuation
-2. Ben Graham Agent - The godfather of value investing, only buys hidden gems with a margin of safety
-3. Bill Ackman Agent - An activist investor, takes bold positions and pushes for change
-4. Cathie Wood Agent - The queen of growth investing, believes in the power of innovation and disruption
-5. Charlie Munger Agent - Warren Buffett's partner, only buys wonderful businesses at fair prices
-6. Michael Burry Agent - The Big Short contrarian who hunts for deep value
-7. Mohnish Pabrai Agent - The Dhandho investor, who looks for doubles at low risk
-8. Nassim Taleb Agent - The Black Swan risk analyst, focuses on tail risk, antifragility, and asymmetric payoffs
-9. Peter Lynch Agent - Practical investor who seeks "ten-baggers" in everyday businesses
-10. Phil Fisher Agent - Meticulous growth investor who uses deep "scuttlebutt" research 
-11. Rakesh Jhunjhunwala Agent - The Big Bull of India
-12. Stanley Druckenmiller Agent - Macro legend who hunts for asymmetric opportunities with growth potential
-13. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
-14. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
-15. Sentiment Agent - Analyzes market sentiment and generates trading signals
-16. Fundamentals Agent - Analyzes fundamental data and generates trading signals
-17. Technicals Agent - Analyzes technical indicators and generates trading signals
-18. Risk Manager - Calculates risk metrics and sets position limits
-19. Portfolio Manager - Makes final trading decisions and generates orders
+The [`render.yaml`](render.yaml) Blueprint provisions three resources:
 
-<img width="1042" alt="Screenshot 2025-03-22 at 6 19 07 PM" src="https://github.com/user-attachments/assets/cbae3dcf-b571-490d-b0ad-3f0f035ac0d4" />
+```
+                 ┌─────────────────────────┐
+ Browser  ─────► │  ai-hedge-fund-web       │   React/Vite static site (CDN)
+                 │  (static site)           │
+                 └───────────┬─────────────┘
+                             │ VITE_API_URL (auto-wired)
+                             ▼
+                 ┌─────────────────────────┐
+                 │  ai-hedge-fund-api       │   FastAPI backend (agents + backtester)
+                 │  (web service, Python)   │
+                 └───────────┬─────────────┘
+                             │ DATABASE_URL (auto-wired)
+                             ▼
+                 ┌─────────────────────────┐
+                 │  ai-hedge-fund-db        │   Managed PostgreSQL
+                 │  (Postgres)              │
+                 └─────────────────────────┘
+```
 
-Note: the system does not actually make any trades.
+| Resource | Type | Role |
+|----------|------|------|
+| `ai-hedge-fund-api` | Python web service | REST API that runs the agents and the backtester |
+| `ai-hedge-fund-web` | Static site | React/Vite front end served over Render's CDN |
+| `ai-hedge-fund-db` | PostgreSQL | Persists saved flows, runs, and API keys |
 
-[![Twitter Follow](https://img.shields.io/twitter/follow/virattt?style=social)](https://twitter.com/virattt)
+## What's pre-baked for Render
+
+- **One Blueprint, three services.** `render.yaml` declares the backend, frontend, and database — no manual service creation.
+- **`DATABASE_URL` is auto-wired** from the managed Postgres into the backend. You never set it by hand.
+- **`VITE_API_URL` is auto-wired** from the backend's URL into the frontend build. The front end knows where the API lives with no configuration.
+- **CORS just works.** The backend allows any `*.onrender.com` origin, so the deployed front end can call it immediately (plus an optional `FRONTEND_URL` for custom domains).
+- **SPA routing** is handled by a static-site rewrite to `index.html`.
+
+## Prerequisites
+
+**Required:**
+- A [Render account](https://dashboard.render.com/register) (the free plan is enough to try it).
+- **At least one LLM API key** — any one of: [OpenAI](https://platform.openai.com/), [Anthropic](https://anthropic.com/), [Groq](https://groq.com/), [Google Gemini](https://ai.dev/), or [DeepSeek](https://deepseek.com/).
+
+**Optional:**
+- A [Financial Datasets](https://financialdatasets.ai/) API key. `AAPL`, `GOOGL`, `MSFT`, `NVDA`, and `TSLA` are free without a key; other tickers need one.
+
+## Deploy
+
+### Option 1: Deploy button
+
+1. **Fork** this repository (the Blueprint deploys from your fork's default branch).
+2. In your fork's README, click the **Deploy to Render** button (update the button URL to point at your fork if you renamed it).
+3. When Render prompts for environment variables, fill in **at least one LLM API key**. Leave the rest blank.
+4. Click **Apply**. Render builds the backend, builds the frontend, provisions Postgres, and connects them.
+
+### Option 2: Manual Blueprint sync
+
+1. **Fork** this repository.
+2. In the Render Dashboard, choose **New → Blueprint**.
+3. Connect your GitHub account and select your fork. Render reads `render.yaml` automatically.
+4. Fill in the environment variables (below) and click **Apply**.
+
+## Environment variables
+
+Set these in the Render Dashboard at deploy time, or later from the app's **Settings** page. Supply **at least one** LLM provider key.
+
+| Variable | Required? | What it's for |
+|----------|-----------|---------------|
+| `OPENAI_API_KEY` | one LLM key required | OpenAI models — [platform.openai.com](https://platform.openai.com/) |
+| `ANTHROPIC_API_KEY` | one LLM key required | Anthropic Claude models — [anthropic.com](https://anthropic.com/) |
+| `GROQ_API_KEY` | one LLM key required | Groq-hosted models — [groq.com](https://groq.com/) |
+| `GOOGLE_API_KEY` | one LLM key required | Google Gemini models — [ai.dev](https://ai.dev/) |
+| `DEEPSEEK_API_KEY` | one LLM key required | DeepSeek models — [deepseek.com](https://deepseek.com/) |
+| `FINANCIAL_DATASETS_API_KEY` | optional | Financial data for tickers beyond the five free ones — [financialdatasets.ai](https://financialdatasets.ai/) |
+| `DATABASE_URL` | auto | Injected from the managed Postgres — **do not set manually**. |
+| `VITE_API_URL` | auto | Injected into the frontend build, pointing at the backend — **do not set manually**. |
+| `FRONTEND_URL` | optional | Extra allowed CORS origin(s), comma-separated. Only needed for a custom frontend domain; `*.onrender.com` is already allowed. |
+
+## Post-deploy setup
+
+1. Wait for all three services to go **live** in the Dashboard (the first backend build takes a few minutes).
+2. If you didn't set your LLM key at deploy time, add it now: either on the `ai-hedge-fund-api` service's **Environment** tab, or in the app's **Settings** page once it's open.
+3. Open the `ai-hedge-fund-web` URL and start a run.
+
+## Using the AI hedge fund
+
+In the web UI you pick the tickers to analyze, choose which investor agents participate, and select the LLM model. The agents each produce a signal; a **Risk Manager** sets position limits and a **Portfolio Manager** makes the final call. You can also run a **backtester** over a historical date range.
+
+The investor agents include:
+
+Aswath Damodaran · Ben Graham · Bill Ackman · Cathie Wood · Charlie Munger · Michael Burry · Mohnish Pabrai · Nassim Taleb · Peter Lynch · Phil Fisher · Rakesh Jhunjhunwala · Stanley Druckenmiller · Warren Buffett — plus **Valuation**, **Sentiment**, **Fundamentals**, and **Technicals** analysts, a **Risk Manager**, and a **Portfolio Manager**.
+
+## Cost expectations
+
+The Blueprint uses **free** plans for all three resources so you can try it at no cost. Note:
+
+- Free web services **spin down** after inactivity; the first request after idle takes ~30–60s to wake.
+- The **free Postgres database expires after 30 days**. Upgrade the database plan in the Dashboard for persistent use.
+- LLM and financial-data API usage is billed by those providers, not by Render.
+
+## Run locally
+
+The app also runs locally (CLI and web). See [`app/README.md`](app/README.md) for the full-stack web app and the quick CLI path below:
+
+```bash
+cp .env.example .env          # add at least one LLM key
+poetry install
+poetry run python src/main.py --ticker AAPL,MSFT,NVDA
+poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
+```
+
+Locally the backend falls back to SQLite when `DATABASE_URL` is unset, so no database setup is required for development.
+
+## Troubleshooting
+
+| Symptom | Likely cause / fix |
+|---------|--------------------|
+| Backend deploy fails during build | Python version mismatch — the Blueprint pins `PYTHON_VERSION=3.11.9`; keep it (deps require 3.11). |
+| App loads but every run errors with an auth/key message | No LLM key set. Add one on the `ai-hedge-fund-api` **Environment** tab or in the app's **Settings**. |
+| First request hangs ~30–60s | Free-tier cold start — the service is waking up. Subsequent requests are fast. |
+| Runs work for some tickers but not others | Tickers outside the five free ones need `FINANCIAL_DATASETS_API_KEY`. |
+| Frontend loads but can't reach the API | Confirm `ai-hedge-fund-api` is live; for a custom frontend domain, set `FRONTEND_URL` on the backend. |
+| Data doesn't persist across restarts | You're on the free Postgres (expires after 30 days) or fell back to SQLite locally — upgrade the DB plan for durability. |
+
+## Security
+
+- **Secrets live in environment variables**, never in the repo. All keys are declared `sync: false` in `render.yaml`, so Render prompts for them.
+- **CORS** is scoped to `*.onrender.com` (plus any `FRONTEND_URL` you add) rather than a blanket `*`.
+- `.gitignore` covers `.env`, build artifacts, and local database files.
+- The app stores any keys you enter in its **Settings** page in the database; treat the database and dashboard access as sensitive.
+
+## What this template does and doesn't do
+
+**Does:**
+- Deploy a working, multi-agent AI hedge-fund web app on Render with one click.
+- Provision and wire together a backend, frontend, and Postgres database.
+- Let you experiment with different investor agents, LLMs, and backtests.
+
+**Doesn't:**
+- Place real trades or connect to a brokerage.
+- Provide investment advice or guarantees of any kind.
+- Ship production hardening (auth, rate limiting) — it's a demo/educational template.
 
 ## Disclaimer
 
@@ -52,152 +162,6 @@ This project is for **educational and research purposes only**.
 
 By using this software, you agree to use it solely for learning purposes.
 
-## Table of Contents
-- [🚀 Deploy to Render](#-deploy-to-render)
-- [How to Install](#how-to-install)
-- [How to Run](#how-to-run)
-  - [⌨️ Command Line Interface](#️-command-line-interface)
-  - [🖥️ Web Application](#️-web-application)
-- [How to Contribute](#how-to-contribute)
-- [Feature Requests](#feature-requests)
-- [License](#license)
-
-## 🚀 Deploy to Render
-
-The web application can run entirely on [Render](https://render.com) using the [`render.yaml`](render.yaml) Blueprint in this repo. One click provisions three resources:
-
-- **`ai-hedge-fund-api`** — the FastAPI backend (`web` service)
-- **`ai-hedge-fund-web`** — the React/Vite frontend (static site)
-- **`ai-hedge-fund-db`** — a managed PostgreSQL database
-
-### Steps
-
-1. Fork this repository (the Blueprint deploys from your fork's default branch).
-2. Click the **Deploy to Render** button at the top of this README (or in the Render Dashboard, choose **New → Blueprint** and point it at your fork).
-3. When prompted, fill in **at least one LLM API key** (see below). Leave the rest blank if unused.
-4. Click **Apply**. Render builds the backend, builds the frontend, provisions the database, and wires them together automatically.
-
-The frontend's `VITE_API_URL` is wired to the backend automatically, and `DATABASE_URL` is injected from the managed database — you don't set either by hand.
-
-### Environment variables
-
-Keys can be set at deploy time in the Render Dashboard, or later from the app's **Settings** page. Supply **at least one** LLM provider key; the data key is optional for common tickers.
-
-| Variable | Required? | What it's for |
-|----------|-----------|---------------|
-| `OPENAI_API_KEY` | one LLM key required | OpenAI models (GPT-5, etc.) — [platform.openai.com](https://platform.openai.com/) |
-| `ANTHROPIC_API_KEY` | one LLM key required | Anthropic Claude models — [anthropic.com](https://anthropic.com/) |
-| `GROQ_API_KEY` | one LLM key required | Groq-hosted models — [groq.com](https://groq.com/) |
-| `GOOGLE_API_KEY` | one LLM key required | Google Gemini models — [ai.dev](https://ai.dev/) |
-| `DEEPSEEK_API_KEY` | one LLM key required | DeepSeek models — [deepseek.com](https://deepseek.com/) |
-| `FINANCIAL_DATASETS_API_KEY` | optional | Financial data. AAPL, GOOGL, MSFT, NVDA, TSLA are free without a key; other tickers need one — [financialdatasets.ai](https://financialdatasets.ai/) |
-| `DATABASE_URL` | auto | Injected from the managed Postgres database — do not set manually. |
-| `VITE_API_URL` | auto | Injected into the frontend build, pointing at the backend — do not set manually. |
-| `FRONTEND_URL` | optional | Extra allowed CORS origin(s), comma-separated. Only needed if you serve the frontend from a custom domain; any `*.onrender.com` origin is already allowed. |
-
-> **Note:** The database uses Render's free plan, which expires after 30 days. Upgrade the database plan in the Dashboard for persistent use. The system is for **educational purposes only** and does not place real trades.
-
-## How to Install
-
-Before you can run the AI Hedge Fund, you'll need to install it and set up your API keys. These steps are common to both the full-stack web application and command line interface.
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/virattt/ai-hedge-fund.git
-cd ai-hedge-fund
-```
-
-### 2. Set up API keys
-
-Create a `.env` file for your API keys:
-```bash
-# Create .env file for your API keys (in the root directory)
-cp .env.example .env
-```
-
-Open and edit the `.env` file to add your API keys:
-```bash
-# For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
-OPENAI_API_KEY=your-openai-api-key
-
-# For getting financial data to power the hedge fund
-FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
-```
-
-**Important**: You must set at least one LLM API key (e.g. `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY`) for the hedge fund to work. 
-
-## How to Run
-
-### ⌨️ Command Line Interface
-
-You can run the AI Hedge Fund directly via terminal. This approach offers more granular control and is useful for automation, scripting, and integration purposes.
-
-<img width="992" alt="Screenshot 2025-01-06 at 5 50 17 PM" src="https://github.com/user-attachments/assets/e8ca04bf-9989-4a7d-a8b4-34e04666663b" />
-
-#### Quick Start
-
-1. Install Poetry (if not already installed):
-```bash
-curl -sSL https://install.python-poetry.org | python3 -
-```
-
-2. Install dependencies:
-```bash
-poetry install
-```
-
-#### Run the AI Hedge Fund
-```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA
-```
-
-You can also specify a `--ollama` flag to run the AI hedge fund using local LLMs.
-
-```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --ollama
-```
-
-You can optionally specify the start and end dates to make decisions over a specific time period.
-
-```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
-```
-
-#### Run the Backtester
-```bash
-poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
-```
-
-**Example Output:**
-<img width="941" alt="Screenshot 2025-01-06 at 5 47 52 PM" src="https://github.com/user-attachments/assets/00e794ea-8628-44e6-9a84-8f8a31ad3b47" />
-
-
-Note: The `--ollama`, `--start-date`, and `--end-date` flags work for the backtester, as well!
-
-### 🖥️ Web Application
-
-The new way to run the AI Hedge Fund is through our web application that provides a user-friendly interface. This is recommended for users who prefer visual interfaces over command line tools.
-
-Please see detailed instructions on how to install and run the web application [here](https://github.com/virattt/ai-hedge-fund/tree/main/app).
-
-<img width="1721" alt="Screenshot 2025-06-28 at 6 41 03 PM" src="https://github.com/user-attachments/assets/b95ab696-c9f4-416c-9ad1-51feb1f5374b" />
-
-
-## How to Contribute
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-**Important**: Please keep your pull requests small and focused.  This will make it easier to review and merge.
-
-## Feature Requests
-
-If you have a feature request, please open an [issue](https://github.com/virattt/ai-hedge-fund/issues) and make sure it is tagged with `enhancement`.
-
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT — see [LICENSE](LICENSE). Based on [virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fund).
