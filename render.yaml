@@ -23,20 +23,26 @@ services:
         fromDatabase:
           name: ai-hedge-fund-db
           property: connectionString
-      # LLM + data provider keys. Supply at least one LLM key for the fund to run.
-      # Leave the rest blank if unused. Keys can also be set later in the app UI.
-      - key: OPENAI_API_KEY
+      # LLM credentials. Set LLM_PROVIDER to your provider (one of: OpenAI,
+      # Anthropic, Groq, Google, DeepSeek, OpenRouter, xAI, Kimi, GigaChat) and
+      # LLM_API_KEY to that provider's API key. The app defaults to OpenAI
+      # gpt-4.1; if LLM_PROVIDER is not OpenAI, pick a matching model in the app
+      # UI. Keys can also be set later in the app UI.
+      - key: LLM_PROVIDER
         sync: false
-      - key: ANTHROPIC_API_KEY
+      - key: LLM_API_KEY
         sync: false
-      - key: GROQ_API_KEY
-        sync: false
-      - key: GOOGLE_API_KEY
-        sync: false
-      - key: DEEPSEEK_API_KEY
-        sync: false
+      # Optional financial-data provider (premium tickers). Free tickers work
+      # without it.
       - key: FINANCIAL_DATASETS_API_KEY
         sync: false
+      # CORS allow-list — auto-wired to the deployed frontend's host. Scheme-less
+      # host; the backend prepends https:// (see app/backend/main.py).
+      - key: FRONTEND_URL
+        fromService:
+          name: ai-hedge-fund-web
+          type: web
+          property: host
 
   # React/Vite frontend (single-page app served over Render's CDN)
   - type: web

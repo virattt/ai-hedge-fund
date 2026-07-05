@@ -41,14 +41,14 @@ The [`render.yaml`](render.yaml) Blueprint provisions three resources:
 - **One Blueprint, three services.** `render.yaml` declares the backend, frontend, and database — no manual service creation.
 - **`DATABASE_URL` is auto-wired** from the managed Postgres into the backend. You never set it by hand.
 - **`VITE_API_URL` is auto-wired** from the backend's URL into the frontend build. The front end knows where the API lives with no configuration.
-- **CORS just works.** The backend allows any `*.onrender.com` origin, so the deployed front end can call it immediately (plus an optional `FRONTEND_URL` for custom domains).
+- **CORS is auto-wired and locked down.** `FRONTEND_URL` is injected from the frontend service's host, so the backend allows exactly that origin (plus localhost for dev) — not a blanket `*.onrender.com`.
 - **SPA routing** is handled by a static-site rewrite to `index.html`.
 
 ## Prerequisites
 
 **Required:**
 - A [Render account](https://dashboard.render.com/register) (the free plan is enough to try it).
-- **At least one LLM API key** — any one of: [OpenAI](https://platform.openai.com/), [Anthropic](https://anthropic.com/), [Groq](https://groq.com/), [Google Gemini](https://ai.dev/), or [DeepSeek](https://deepseek.com/).
+- **An LLM provider and API key** — pick one of [OpenAI](https://platform.openai.com/), [Anthropic](https://anthropic.com/), [Groq](https://groq.com/), [Google Gemini](https://ai.dev/), or [DeepSeek](https://deepseek.com/), and supply it via `LLM_PROVIDER` + `LLM_API_KEY`.
 
 **Optional:**
 - A [Financial Datasets](https://financialdatasets.ai/) API key. `AAPL`, `GOOGL`, `MSFT`, `NVDA`, and `TSLA` are free without a key; other tickers need one.
@@ -59,7 +59,7 @@ The [`render.yaml`](render.yaml) Blueprint provisions three resources:
 
 1. **Fork** this repository (the Blueprint deploys from your fork's default branch).
 2. In your fork's README, click the **Deploy to Render** button (update the button URL to point at your fork if you renamed it).
-3. When Render prompts for environment variables, fill in **at least one LLM API key**. Leave the rest blank.
+3. When Render prompts for environment variables, set **`LLM_PROVIDER`** and **`LLM_API_KEY`** (see [Environment variables](#environment-variables)). Leave the rest blank.
 4. Click **Apply**. Render builds the backend, builds the frontend, provisions Postgres, and connects them.
 
 ### Option 2: Manual Blueprint sync
@@ -71,19 +71,25 @@ The [`render.yaml`](render.yaml) Blueprint provisions three resources:
 
 ## Environment variables
 
-Set these in the Render Dashboard at deploy time, or later from the app's **Settings** page. Supply **at least one** LLM provider key.
+Set these in the Render Dashboard at deploy time, or later from the app's **Settings** page. Supply **one** LLM provider and its key.
 
 | Variable | Required? | What it's for |
 |----------|-----------|---------------|
-| `OPENAI_API_KEY` | one LLM key required | OpenAI models — [platform.openai.com](https://platform.openai.com/) |
-| `ANTHROPIC_API_KEY` | one LLM key required | Anthropic Claude models — [anthropic.com](https://anthropic.com/) |
-| `GROQ_API_KEY` | one LLM key required | Groq-hosted models — [groq.com](https://groq.com/) |
-| `GOOGLE_API_KEY` | one LLM key required | Google Gemini models — [ai.dev](https://ai.dev/) |
-| `DEEPSEEK_API_KEY` | one LLM key required | DeepSeek models — [deepseek.com](https://deepseek.com/) |
+| `LLM_PROVIDER` | required | Your LLM provider: one of `OpenAI`, `Anthropic`, `Groq`, `Google`, `DeepSeek`, `OpenRouter`, `xAI`, `Kimi`, `GigaChat`. |
+| `LLM_API_KEY` | required | API key for the provider named in `LLM_PROVIDER`. Keys: [OpenAI](https://platform.openai.com/), [Anthropic](https://anthropic.com/), [Groq](https://groq.com/), [Google Gemini](https://ai.dev/), [DeepSeek](https://deepseek.com/). |
 | `FINANCIAL_DATASETS_API_KEY` | optional | Financial data for tickers beyond the five free ones — [financialdatasets.ai](https://financialdatasets.ai/) |
 | `DATABASE_URL` | auto | Injected from the managed Postgres — **do not set manually**. |
 | `VITE_API_URL` | auto | Injected into the frontend build, pointing at the backend — **do not set manually**. |
-| `FRONTEND_URL` | optional | Extra allowed CORS origin(s), comma-separated. Only needed for a custom frontend domain; `*.onrender.com` is already allowed. |
+| `FRONTEND_URL` | auto | Injected from the frontend service host and used as the CORS allow-list. Set manually only for a custom frontend domain (comma-separated origins). |
+
+### Choosing your LLM
+
+The app defaults to **OpenAI `gpt-4.1`**. `LLM_API_KEY` only supplies the credential for the provider named in `LLM_PROVIDER` — it does **not** change which model runs.
+
+- If `LLM_PROVIDER=OpenAI`, it works with the default model out of the box.
+- If `LLM_PROVIDER` is any other provider, **pick a matching-provider model in the app UI** (or pass `--provider` on the CLI). Otherwise the app keeps requesting the OpenAI default, your key won't match it, and you'll see an "OpenAI API key not found" error.
+
+You can also set per-provider keys (e.g. `OPENAI_API_KEY`) or manage keys from the app's **Settings** page; those take precedence over `LLM_API_KEY` for their provider.
 
 ## Post-deploy setup
 
@@ -101,11 +107,7 @@ Aswath Damodaran · Ben Graham · Bill Ackman · Cathie Wood · Charlie Munger �
 
 ## Cost expectations
 
-The Blueprint uses **free** plans for all three resources so you can try it at no cost. Note:
-
-- Free web services **spin down** after inactivity; the first request after idle takes ~30–60s to wake.
-- The **free Postgres database expires after 30 days**. Upgrade the database plan in the Dashboard for persistent use.
-- LLM and financial-data API usage is billed by those providers, not by Render.
+The Blueprint uses **free** plans for all three resources so you can try it at no cost.
 
 ## Run locally
 
@@ -128,13 +130,14 @@ Locally the backend falls back to SQLite when `DATABASE_URL` is unset, so no dat
 | App loads but every run errors with an auth/key message | No LLM key set. Add one on the `ai-hedge-fund-api` **Environment** tab or in the app's **Settings**. |
 | First request hangs ~30–60s | Free-tier cold start — the service is waking up. Subsequent requests are fast. |
 | Runs work for some tickers but not others | Tickers outside the five free ones need `FINANCIAL_DATASETS_API_KEY`. |
-| Frontend loads but can't reach the API | Confirm `ai-hedge-fund-api` is live; for a custom frontend domain, set `FRONTEND_URL` on the backend. |
+| Frontend loads but can't reach the API | Confirm `ai-hedge-fund-api` is live; for a custom frontend domain, add it to `FRONTEND_URL` on the backend. |
+| "OpenAI API key not found" with a non-OpenAI key | Your `LLM_PROVIDER` isn't OpenAI but the app is still requesting the OpenAI default — pick a matching-provider model in the app UI (or `--provider` on the CLI). |
 | Data doesn't persist across restarts | You're on the free Postgres (expires after 30 days) or fell back to SQLite locally — upgrade the DB plan for durability. |
 
 ## Security
 
 - **Secrets live in environment variables**, never in the repo. All keys are declared `sync: false` in `render.yaml`, so Render prompts for them.
-- **CORS** is scoped to `*.onrender.com` (plus any `FRONTEND_URL` you add) rather than a blanket `*`.
+- **CORS** is scoped to the exact `FRONTEND_URL` origin (auto-wired to your frontend, plus localhost for dev) — not `*` and not a blanket `*.onrender.com` wildcard that would expose the API to other Render tenants.
 - `.gitignore` covers `.env`, build artifacts, and local database files.
 - The app stores any keys you enter in its **Settings** page in the database; treat the database and dashboard access as sensitive.
 
@@ -148,7 +151,7 @@ Locally the backend falls back to SQLite when `DATABASE_URL` is unset, so no dat
 **Doesn't:**
 - Place real trades or connect to a brokerage.
 - Provide investment advice or guarantees of any kind.
-- Ship production hardening (auth, rate limiting) — it's a demo/educational template.
+- Ship a production system with auth and rate limiting — it's a demo/educational template.
 
 ## Disclaimer
 
@@ -159,8 +162,6 @@ This project is for **educational and research purposes only**.
 - Creator assumes no liability for financial losses
 - Consult a financial advisor for investment decisions
 - Past performance does not indicate future results
-
-By using this software, you agree to use it solely for learning purposes.
 
 ## License
 

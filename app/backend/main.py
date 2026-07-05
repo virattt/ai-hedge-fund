@@ -18,18 +18,37 @@ app = FastAPI(title="AI Hedge Fund API", description="Backend API for AI Hedge F
 # Initialize database tables (this is safe to run multiple times)
 Base.metadata.create_all(bind=engine)
 
-# Configure CORS. Local dev defaults are always allowed; explicit extra origins
-# (e.g. a custom frontend domain) come from the comma-separated FRONTEND_URL env
-# var, and any Render-hosted frontend (*.onrender.com) is allowed via regex so the
-# Blueprint deploys and works without knowing the frontend URL ahead of time.
+# Configure CORS. Local dev defaults are always allowed. Every other allowed
+# origin must be listed explicitly in the comma-separated FRONTEND_URL env var
+# (the Blueprint auto-wires this to the deployed frontend's host). We deliberately
+# do NOT use a wildcard regex: allowing all *.onrender.com would let any other
+# Render tenant make credentialed requests to this API.
 default_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
-extra_origins = [origin.strip() for origin in os.environ.get("FRONTEND_URL", "").split(",") if origin.strip()]
+
+
+def _normalize_origin(origin: str) -> str:
+    """Normalize an origin for the CORS allow-list.
+
+    Render's `fromService` host property yields a scheme-less host (e.g.
+    "my-app.onrender.com"), so prepend https:// when no scheme is present —
+    mirroring the frontend's own handling in app/frontend/src/lib/api-base.ts.
+    """
+    origin = origin.strip().rstrip("/")
+    if origin and "://" not in origin:
+        origin = f"https://{origin}"
+    return origin
+
+
+extra_origins = [
+    _normalize_origin(origin)
+    for origin in os.environ.get("FRONTEND_URL", "").split(",")
+    if origin.strip()
+]
 allow_origins = default_origins + extra_origins
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
-    allow_origin_regex=r"https://.*\.onrender\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
