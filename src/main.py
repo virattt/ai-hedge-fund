@@ -7,6 +7,7 @@ from colorama import Fore, Style, init
 import questionary
 from src.agents.portfolio_manager import portfolio_management_agent
 from src.agents.risk_manager import risk_management_agent
+from src.agents.consensus_manager import consensus_manager_agent
 from src.graph.state import AgentState
 from src.utils.display import print_trading_output
 from src.utils.analysts import ANALYST_ORDER, get_analyst_nodes
@@ -52,13 +53,18 @@ def run_hedge_fund(
     selected_analysts: list[str] = [],
     model_name: str = "gpt-4.1",
     model_provider: str = "OpenAI",
+    use_consensus: bool = False,
+    consensus_strategy: str = "weighted",
 ):
     # Start progress tracking
     progress.start()
 
     try:
         # Build workflow (default to all analysts when none provided)
-        workflow = create_workflow(selected_analysts if selected_analysts else None)
+        workflow = create_workflow(
+            selected_analysts if selected_analysts else None,
+            use_consensus=use_consensus,
+        )
         agent = workflow.compile()
 
         final_state = agent.invoke(
@@ -79,6 +85,7 @@ def run_hedge_fund(
                     "show_reasoning": show_reasoning,
                     "model_name": model_name,
                     "model_provider": model_provider,
+                    "consensus_strategy": consensus_strategy,
                 },
             },
         )
@@ -97,8 +104,13 @@ def start(state: AgentState):
     return state
 
 
-def create_workflow(selected_analysts=None):
-    """Create the workflow with selected analysts."""
+def create_workflow(selected_analysts=None, use_consensus: bool = False):
+    """Create the workflow with selected analysts.
+
+    When use_consensus=True, inserts a consensus_manager node between
+    risk_management and portfolio_manager that aggregates all analyst
+    signals into a structured consensus view before the final decision.
+    """
     workflow = StateGraph(AgentState)
     workflow.add_node("start_node", start)
 
@@ -123,7 +135,14 @@ def create_workflow(selected_analysts=None):
         node_name = analyst_nodes[analyst_key][0]
         workflow.add_edge(node_name, "risk_management_agent")
 
-    workflow.add_edge("risk_management_agent", "portfolio_manager")
+    if use_consensus:
+        # Insert consensus manager between risk and portfolio
+        workflow.add_node("consensus_manager", consensus_manager_agent)
+        workflow.add_edge("risk_management_agent", "consensus_manager")
+        workflow.add_edge("consensus_manager", "portfolio_manager")
+    else:
+        workflow.add_edge("risk_management_agent", "portfolio_manager")
+
     workflow.add_edge("portfolio_manager", END)
 
     workflow.set_entry_point("start_node")
@@ -175,5 +194,7 @@ if __name__ == "__main__":
         selected_analysts=inputs.selected_analysts,
         model_name=inputs.model_name,
         model_provider=inputs.model_provider,
+        use_consensus=inputs.use_consensus,
+        consensus_strategy=inputs.consensus_strategy,
     )
     print_trading_output(result)

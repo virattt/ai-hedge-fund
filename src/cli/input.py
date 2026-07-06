@@ -223,6 +223,8 @@ class CLIInputs:
     margin_requirement: float
     show_reasoning: bool = False
     show_agent_graph: bool = False
+    use_consensus: bool = False
+    consensus_strategy: str = "weighted"
     raw_args: Optional[argparse.Namespace] = None
 
 
@@ -262,6 +264,20 @@ def parse_cli_inputs(
     if include_graph_flag:
         parser.add_argument("--show-agent-graph", action="store_true", help="Show the agent graph")
 
+    parser.add_argument(
+        "--consensus",
+        action="store_true",
+        dest="use_consensus",
+        help="Enable consensus aggregation of analyst signals before final decision",
+    )
+    parser.add_argument(
+        "--consensus-strategy",
+        type=str,
+        default="weighted",
+        choices=["weighted", "majority", "mean"],
+        help="Consensus strategy: weighted (default), majority, or mean",
+    )
+
     args = parser.parse_args()
 
     # Normalize parsed values
@@ -284,6 +300,8 @@ def parse_cli_inputs(
         margin_requirement=getattr(args, "margin_requirement", 0.0),
         show_reasoning=getattr(args, "show_reasoning", False),
         show_agent_graph=getattr(args, "show_agent_graph", False),
+        use_consensus=getattr(args, "use_consensus", False),
+        consensus_strategy=getattr(args, "consensus_strategy", "weighted"),
         raw_args=args,
     )
 
