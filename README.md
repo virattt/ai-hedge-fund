@@ -62,7 +62,9 @@ The [`render.yaml`](render.yaml) Blueprint provisions three resources, grouped u
 3. When Render prompts for environment variables, set **`LLM_PROVIDER`** and **`LLM_API_KEY`** (see [Environment variables](#environment-variables)). Leave the rest blank.
 4. Click **Apply**. Render builds the backend, builds the frontend, provisions Postgres, and connects them.
 
-> On a fresh **Apply**, Render wires the two services' public URLs to each other automatically (`VITE_API_URL` and `FRONTEND_URL`) — there's no manual URL step and no post-Apply redeploy needed.
+> On a fresh **Apply**, Render wires the two services' public URLs to each other automatically (`VITE_API_URL` and `FRONTEND_URL`) — there's no manual URL step.
+>
+> As part of this, the backend deploys **twice** — once on creation, then again automatically once the frontend's URL is wired into `FRONTEND_URL`. Wait for the **second** backend deploy to go **live** before testing; until then you may briefly see CORS errors.
 
 ### Option 2: Manual Blueprint sync
 
