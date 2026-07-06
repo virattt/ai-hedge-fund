@@ -62,6 +62,8 @@ The [`render.yaml`](render.yaml) Blueprint provisions three resources, grouped u
 3. When Render prompts for environment variables, set **`LLM_PROVIDER`** and **`LLM_API_KEY`** (see [Environment variables](#environment-variables)). Leave the rest blank.
 4. Click **Apply**. Render builds the backend, builds the frontend, provisions Postgres, and connects them.
 
+> On a fresh **Apply**, Render wires the two services' public URLs to each other automatically (`VITE_API_URL` and `FRONTEND_URL`) — there's no manual URL step and no post-Apply redeploy needed.
+
 ### Option 2: Manual Blueprint sync
 
 1. **Fork** this repository.
@@ -79,8 +81,8 @@ Set these in the Render Dashboard at deploy time, or later from the app's **Sett
 | `LLM_PROVIDER` | optional | Provider for `LLM_API_KEY`, one of `OpenAI`, `Anthropic`, `Groq`, `Google`, `DeepSeek`, `OpenRouter`, `xAI`, `Kimi`, `GigaChat`. Leave blank to use OpenAI. |
 | `FINANCIAL_DATASETS_API_KEY` | optional | Financial data for tickers beyond the five free ones — [financialdatasets.ai](https://financialdatasets.ai/) |
 | `DATABASE_URL` | auto | Injected from the managed Postgres — **do not set manually**. |
-| `VITE_API_URL` | auto | Injected into the frontend build, pointing at the backend — **do not set manually**. |
-| `FRONTEND_URL` | auto | Injected from the frontend service host and used as the CORS allow-list. Set manually only for a custom frontend domain (comma-separated origins). |
+| `VITE_API_URL` | auto | Injected into the frontend build from the backend's `RENDER_EXTERNAL_URL` (its `https://…onrender.com` URL, slug included) — **do not set manually**. |
+| `FRONTEND_URL` | auto | Injected from the frontend's `RENDER_EXTERNAL_URL` and used as the CORS allow-list. Set manually only for a custom frontend domain (comma-separated origins). |
 
 ### Choosing your LLM
 
@@ -130,7 +132,7 @@ Locally the backend falls back to SQLite when `DATABASE_URL` is unset, so no dat
 | App loads but every run errors with an auth/key message | No LLM key set. Add one on the `ai-hedge-fund-api` **Environment** tab or in the app's **Settings**. |
 | First request hangs ~30–60s | Free-tier cold start — the service is waking up. Subsequent requests are fast. |
 | Runs work for some tickers but not others | Tickers outside the five free ones need `FINANCIAL_DATASETS_API_KEY`. |
-| Frontend loads but can't reach the API | Confirm `ai-hedge-fund-api` is live; for a custom frontend domain, add it to `FRONTEND_URL` on the backend. |
+| Frontend loads but the flows list spins forever / CORS errors in the network tab | The backend's `FRONTEND_URL` must equal the frontend's URL (it's the CORS allow-list). A fresh **Apply** wires this automatically, but a **code-only redeploy does not (re)create `fromService` env vars** — so if `FRONTEND_URL` is missing (e.g. it was added to `render.yaml` after the first deploy, or you renamed a service), run a **Blueprint sync** (Dashboard → your Blueprint → **Sync**), not just a redeploy. For a custom frontend domain, add it to `FRONTEND_URL` (comma-separated origins). |
 | "OpenAI API key not found" with a non-OpenAI key | Your `LLM_PROVIDER` isn't OpenAI but the app is still requesting the OpenAI default — pick a matching-provider model in the app UI (or `--provider` on the CLI). |
 | Data doesn't persist across restarts | You're on the free Postgres (expires after 30 days) or fell back to SQLite locally — upgrade the DB plan for durability. |
 
