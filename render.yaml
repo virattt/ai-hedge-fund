@@ -42,13 +42,15 @@ projects:
               # without it.
               - key: FINANCIAL_DATASETS_API_KEY
                 sync: false
-              # CORS allow-list — auto-wired to the deployed frontend's host. Scheme-less
-              # host; the backend prepends https:// (see app/backend/main.py).
+              # CORS allow-list — auto-wired to the deployed frontend's public URL.
+              # RENDER_EXTERNAL_URL is the frontend service's own https://<slug>.onrender.com
+              # (protocol included, correct slug even when Render appends a suffix). See
+              # app/backend/main.py, which also tolerates a scheme-less/comma-separated value.
               - key: FRONTEND_URL
                 fromService:
                   name: ai-hedge-fund-web
                   type: web
-                  property: host
+                  envVarKey: RENDER_EXTERNAL_URL
 
           # React/Vite frontend (single-page app served over Render's CDN)
           - type: web
@@ -59,12 +61,14 @@ projects:
             staticPublishPath: ./dist
             envVars:
               # Baked into the bundle at build time; points the SPA at the backend API.
-              # `host` has no scheme, so the frontend prepends https:// (see src/lib/api-base.ts).
+              # RENDER_EXTERNAL_URL is the backend service's own https://<slug>.onrender.com
+              # (protocol + correct slug included). See app/frontend/src/lib/api-base.ts,
+              # which uses a scheme-qualified value as-is.
               - key: VITE_API_URL
                 fromService:
                   name: ai-hedge-fund-api
                   type: web
-                  property: host
+                  envVarKey: RENDER_EXTERNAL_URL
             routes:
               # SPA fallback: serve index.html for client-side routes
               - type: rewrite
