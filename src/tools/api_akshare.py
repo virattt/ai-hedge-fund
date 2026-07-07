@@ -313,17 +313,20 @@ def get_financial_metrics(
     metrics: list[FinancialMetrics] = []
     for pc in eligible:
         report_period = f"{pc[:4]}-{pc[4:6]}-{pc[6:]}"
+        # Point-in-time valuation as of this report period's date (Tushare
+        # daily_basic). None when no token / insufficient points / no data.
+        v = api_tushare.get_valuation(ticker, report_period)
         metrics.append(
             FinancialMetrics(
                 ticker=ticker,
                 report_period=report_period,
                 period=period,
                 currency="CNY",
-                market_cap=None,  # handled separately in get_market_cap
+                market_cap=(v["market_cap"] if v else None),
                 enterprise_value=None,
-                price_to_earnings_ratio=None,
-                price_to_book_ratio=None,
-                price_to_sales_ratio=None,
+                price_to_earnings_ratio=(v["pe"] if v else None),
+                price_to_book_ratio=(v["pb"] if v else None),
+                price_to_sales_ratio=(v["ps"] if v else None),
                 enterprise_value_to_ebitda_ratio=None,
                 enterprise_value_to_revenue_ratio=None,
                 free_cash_flow_yield=None,
