@@ -187,9 +187,11 @@ def get_agent_model_config(state, agent_name):
         if model_name and model_provider:
             return model_name, model_provider.value if hasattr(model_provider, 'value') else str(model_provider)
     
-    # Fall back to global configuration (system defaults)
+    # Fall back to global configuration (system defaults). The provider must be a
+    # ModelProvider *value* ("OpenAI"), not its enum name ("OPENAI"), or get_model_info
+    # and get_model won't recognize it. See the get_default_model() path in call_llm.
     model_name = state.get("metadata", {}).get("model_name") or "gpt-5.5"
-    model_provider = state.get("metadata", {}).get("model_provider") or "OPENAI"
+    model_provider = state.get("metadata", {}).get("model_provider") or "OpenAI"
     
     # Convert enum to string if necessary
     if hasattr(model_provider, 'value'):
