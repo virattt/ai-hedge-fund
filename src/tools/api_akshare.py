@@ -113,6 +113,18 @@ def _with_retry(
     raise RuntimeError("unreachable")
 
 
+def _sina_symbol(ticker: str) -> str:
+    """Build the sh/sz/bj-prefixed symbol Sina expects (e.g. ``sh600519``)."""
+    code = a_share_code(ticker)
+    if ticker.endswith(".SH"):
+        return f"sh{code}"
+    if ticker.endswith(".SZ"):
+        return f"sz{code}"
+    if ticker.endswith(".BJ"):
+        return f"bj{code}"
+    return code
+
+
 # ---------------------------------------------------------------------------
 # 1. Prices
 # ---------------------------------------------------------------------------
@@ -132,23 +144,27 @@ def get_prices(
     end_ak = end_date.replace("-", "")
 
     def _fetch() -> pd.DataFrame:
+        # Primary: Eastmoney forward-adjusted. Eastmoney has been persistently
+        # dropping connections, so on failure (or empty) fall over to Sina.
         try:
-            return ak.stock_zh_a_hist(
+            df = ak.stock_zh_a_hist(
                 symbol=code,
                 period="daily",
                 start_date=start_ak,
                 end_date=end_ak,
                 adjust="qfq",
             )
+            if df is not None and not df.empty:
+                return df
         except Exception:
-            # Fallback: raw (unadjusted) prices
-            return ak.stock_zh_a_hist(
-                symbol=code,
-                period="daily",
-                start_date=start_ak,
-                end_date=end_ak,
-                adjust="",
-            )
+            pass
+        # Failover: Sina forward-adjusted.
+        return ak.stock_zh_a_daily(
+            symbol=_sina_symbol(ticker),
+            start_date=start_ak,
+            end_date=end_ak,
+            adjust="qfq",
+        )
 
     try:
         df = _with_retry(_fetch)
@@ -159,16 +175,23 @@ def get_prices(
     if df is None or df.empty:
         return []
 
-    # Column map: 日期/开盘/收盘/最高/最低/成交量/成交额/振幅/涨跌幅/涨跌额/换手率
-    col_map = {
-        "日期": "time",
-        "开盘": "open",
-        "收盘": "close",
-        "最高": "high",
-        "最低": "low",
-        "成交量": "volume",
-    }
-    df = df.rename(columns=col_map)
+    # Column map depends on which source returned. Eastmoney uses Chinese
+    # column names; Sina (stock_zh_a_daily) uses English names and returns
+    # ``date`` as a datetime.date — str() below stringifies it correctly.
+    if "日期" in df.columns:
+        df = df.rename(
+            columns={
+                "日期": "time",
+                "开盘": "open",
+                "收盘": "close",
+                "最高": "high",
+                "最低": "low",
+                "成交量": "volume",
+            }
+        )
+    elif "date" in df.columns:
+        df = df.rename(columns={"date": "time"})
+        # open / high / low / close / volume already match the Price fields
 
     prices: list[Price] = []
     for _, row in df.iterrows():
@@ -412,16 +435,7 @@ def _fetch_statements(ticker: str, end_date: str) -> dict[str, pd.DataFrame]:
     if cache_key in _statement_cache:
         return _statement_cache[cache_key]
 
-    code = a_share_code(ticker)
-    # Sina uses sh/sz prefix
-    if ticker.endswith(".SH"):
-        sina_stock = f"sh{code}"
-    elif ticker.endswith(".SZ"):
-        sina_stock = f"sz{code}"
-    elif ticker.endswith(".BJ"):
-        sina_stock = f"bj{code}"
-    else:
-        sina_stock = code
+    sina_stock = _sina_symbol(ticker)
 
     statements: dict[str, pd.DataFrame] = {}
 
