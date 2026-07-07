@@ -55,6 +55,12 @@ _spot_table: pd.DataFrame | None = None
 # full retry backoff (~30s) against a dead endpoint — so failures are memoized
 # too, not just successes.
 _spot_table_attempted: bool = False
+# Per-(ticker, end_date) memo of the resolved market cap (value OR None). The
+# full Tushare→spot→info attempt chain is expensive to fail (each layer
+# retries); without this, the 10+ analysts that call get_market_cap per ticker
+# would each re-pay that cost. Serialized on a per-key fetch_lock so concurrent
+# analysts for the same ticker compute it exactly once.
+_market_cap_cache: dict[tuple[str, str], float | None] = {}
 
 T = TypeVar("T")
 
@@ -890,7 +896,7 @@ def _get_spot_table() -> pd.DataFrame | None:
         return _spot_table
 
 
-def get_market_cap(
+def _compute_market_cap(
     ticker: str,
     end_date: str,
     api_key: str | None = None,
@@ -959,6 +965,29 @@ def get_market_cap(
         return None
 
     return _safe_float(info.get("总市值"))
+
+
+def get_market_cap(
+    ticker: str,
+    end_date: str,
+    api_key: str | None = None,
+) -> float | None:
+    """Total market cap (CNY) for ``ticker``, memoized per (ticker, end_date).
+
+    Thin concurrency-safe wrapper around :func:`_compute_market_cap`: the full
+    Tushare→spot→info attempt chain runs once per ticker, then the result
+    (value or None) is cached for the rest of the analyst fan-out. Without this
+    every analyst re-pays the Eastmoney retry cost against a dead endpoint.
+    """
+    key = (ticker, end_date)
+    if key in _market_cap_cache:
+        return _market_cap_cache[key]
+    with _cache.fetch_lock(f"akshare:market_cap:{ticker}:{end_date}"):
+        if key in _market_cap_cache:
+            return _market_cap_cache[key]
+        value = _compute_market_cap(ticker, end_date, api_key)
+        _market_cap_cache[key] = value
+        return value
 
 
 # ---------------------------------------------------------------------------

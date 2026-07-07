@@ -29,6 +29,7 @@ def fresh_akshare_state(monkeypatch):
     # failure (N calls) rather than a setup error.
     monkeypatch.setattr(api_akshare, "_spot_table", None, raising=False)
     monkeypatch.setattr(api_akshare, "_spot_table_attempted", False, raising=False)
+    monkeypatch.setattr(api_akshare, "_market_cap_cache", {})
     # get_market_cap now consults Tushare first; force the no-token path so
     # these spot-path tests are deterministic even if TUSHARE_TOKEN is in env.
     monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
