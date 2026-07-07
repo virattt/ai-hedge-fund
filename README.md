@@ -109,6 +109,17 @@ The investor agents include:
 
 Aswath Damodaran · Ben Graham · Bill Ackman · Cathie Wood · Charlie Munger · Michael Burry · Mohnish Pabrai · Nassim Taleb · Peter Lynch · Phil Fisher · Rakesh Jhunjhunwala · Stanley Druckenmiller · Warren Buffett — plus **Valuation**, **Sentiment**, **Fundamentals**, and **Technicals** analysts, a **Risk Manager**, and a **Portfolio Manager**.
 
+### Build your first flow
+
+The canvas starts empty. A runnable flow must **connect its nodes with edges** and **end in a Portfolio Manager** — the run follows the edges out of the Stock Input, so anything not wired downstream is ignored, and without a Portfolio Manager no trading decisions are produced.
+
+The quickest way to a working flow:
+
+- **Use a template** — drop one of the built-in multi-node templates (e.g. *Value Investors*), which already wire analysts into a Portfolio Manager. Then just set your tickers and run.
+- **Or build the minimal flow by hand** — add a **Stock Input**, one or more **analyst** nodes (e.g. Michael Burry), and a **Portfolio Manager**, then connect them: **Stock Input → analyst(s) → Portfolio Manager**. (A Risk Manager is inserted automatically between analysts and the Portfolio Manager.)
+
+If a run finishes with no decisions, your flow is missing a Portfolio Manager or its nodes aren't connected — see Troubleshooting.
+
 ## Cost expectations
 
 The Blueprint uses **free** plans for all three resources so you can try it at no cost.
@@ -132,6 +143,7 @@ Locally the backend falls back to SQLite when `DATABASE_URL` is unset, so no dat
 |---------|--------------------|
 | Backend deploy fails during build | Python version mismatch — the Blueprint pins `PYTHON_VERSION=3.11.9`; keep it (deps require 3.11). |
 | App loads but every run errors with an auth/key message | No LLM key set. Add one on the `ai-hedge-fund-api` **Environment** tab or in the app's **Settings**. |
+| A run finishes but shows no decisions (or the backtester errors) | The flow has no **Portfolio Manager** node, or its nodes aren't connected. Wire your analysts into a Portfolio Manager (**Stock Input → analyst(s) → Portfolio Manager**) or start from a built-in template — see [Build your first flow](#build-your-first-flow). |
 | First request hangs ~30–60s | Free-tier cold start — the service is waking up. Subsequent requests are fast. |
 | Runs work for some tickers but not others | Tickers outside the five free ones need `FINANCIAL_DATASETS_API_KEY`. |
 | Frontend loads but the flows list spins forever / CORS errors in the network tab | The backend's `FRONTEND_URL` must equal the frontend's URL (it's the CORS allow-list). A fresh **Apply** wires this automatically, but a **code-only redeploy does not (re)create `fromService` env vars** — so if `FRONTEND_URL` is missing (e.g. it was added to `render.yaml` after the first deploy, or you renamed a service), run a **Blueprint sync** (Dashboard → your Blueprint → **Sync**), not just a redeploy. For a custom frontend domain, add it to `FRONTEND_URL` (comma-separated origins). |
