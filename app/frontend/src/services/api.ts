@@ -1,6 +1,6 @@
 import { NodeStatus, OutputNodeData, useNodeContext } from '@/contexts/node-context';
 import { Agent } from '@/data/agents';
-import { LanguageModel } from '@/data/models';
+import { LanguageModel, ModelStatus } from '@/data/models';
 import { extractBaseAgentKey } from '@/data/node-mappings';
 import { flowConnectionManager } from '@/hooks/use-flow-connection';
 import {
@@ -42,6 +42,24 @@ export const api = {
       return data.models;
     } catch (error) {
       console.error('Failed to fetch models:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Gets which model providers are configured on the backend (via env vars).
+   * No key values are ever returned — only provider names and the default model.
+   * @returns Promise that resolves to the model status
+   */
+  getModelStatus: async (): Promise<ModelStatus> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/language-models/status`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to fetch model status:', error);
       throw error;
     }
   },

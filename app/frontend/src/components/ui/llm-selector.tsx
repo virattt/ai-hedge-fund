@@ -17,6 +17,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { type LanguageModel } from "@/data/models"
+import { useConfiguredProviders } from "@/hooks/use-configured-providers"
 import { cn } from "@/lib/utils"
 
 interface ModelSelectorProps {
@@ -30,9 +31,17 @@ export function ModelSelector({
   models, 
   value, 
   onChange, 
-  placeholder = "Select a model..." 
+  placeholder = "Select a model..."
 }: ModelSelectorProps) {
   const [open, setOpen] = React.useState(false)
+  const { providers } = useConfiguredProviders()
+
+  // A model is enabled if its provider has a key configured on the backend. While the
+  // provider list is still loading (null), don't gray anything out.
+  const isEnabled = React.useCallback(
+    (model: LanguageModel) => providers === null || providers.includes(model.provider),
+    [providers]
+  )
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -57,15 +66,25 @@ export function ModelSelector({
           <CommandList className="bg-node">
             <CommandEmpty>No model found.</CommandEmpty>
             <CommandGroup>
-              {models.map((model) => (
+              {models.map((model) => {
+                const enabled = isEnabled(model);
+                return (
                 <CommandItem
                   key={model.model_name}
                   value={model.model_name}
+                  disabled={!enabled}
+                  title={enabled ? undefined : `No API key configured for ${model.provider}`}
                   className={cn(
-                    "cursor-pointer bg-node hover:bg-accent",
+                    "bg-node",
+                    enabled
+                      ? "cursor-pointer hover:bg-accent"
+                      : "opacity-40 cursor-not-allowed data-[disabled=true]:opacity-40",
                     value === model.model_name && "bg-blue-600/10 border-l-2 border-blue-500/50"
                   )}
                   onSelect={(currentValue) => {
+                    if (!enabled) {
+                      return;
+                    }
                     if (currentValue === value) {
                       onChange(null);
                     } else {
@@ -87,7 +106,8 @@ export function ModelSelector({
                     </Badge>
                   </div>
                 </CommandItem>
-              ))}
+                );
+              })}
             </CommandGroup>
           </CommandList>
         </Command>

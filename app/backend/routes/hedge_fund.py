@@ -9,7 +9,6 @@ from app.backend.models.events import StartEvent, ProgressUpdateEvent, ErrorEven
 from app.backend.services.graph import create_graph, parse_hedge_fund_response, run_graph_async
 from app.backend.services.portfolio import create_portfolio
 from app.backend.services.backtest_service import BacktestService
-from app.backend.services.api_key_service import ApiKeyService
 from src.utils.progress import progress
 from src.utils.analysts import get_agents_list
 
@@ -25,10 +24,10 @@ router = APIRouter(prefix="/hedge-fund")
 )
 async def run(request_data: HedgeFundRequest, request: Request, db: Session = Depends(get_db)):
     try:
-        # Hydrate API keys from database if not provided
-        if not request_data.api_keys:
-            api_key_service = ApiKeyService(db)
-            request_data.api_keys = api_key_service.get_api_keys_dict()
+        # API keys come only from backend environment variables (never from the request
+        # body or the database). Resolve the default model from the configured provider
+        # so a single-provider deploy works without the user picking a model.
+        request_data.resolve_default_model()
 
         # Create the portfolio
         portfolio = create_portfolio(request_data.initial_cash, request_data.margin_requirement, request_data.tickers, request_data.portfolio_positions)
@@ -182,10 +181,9 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
 async def backtest(request_data: BacktestRequest, request: Request, db: Session = Depends(get_db)):
     """Run a continuous backtest over a time period with streaming updates."""
     try:
-        # Hydrate API keys from database if not provided
-        if not request_data.api_keys:
-            api_key_service = ApiKeyService(db)
-            request_data.api_keys = api_key_service.get_api_keys_dict()
+        # API keys come only from backend environment variables. Resolve the default
+        # model from the configured provider (see /hedge-fund/run for details).
+        request_data.resolve_default_model()
 
         # Convert model_provider to string if it's an enum
         model_provider = request_data.model_provider

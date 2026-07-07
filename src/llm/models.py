@@ -148,6 +148,73 @@ def get_models_list():
     ]
 
 
+# Environment variable names that supply each provider's API key. Single source of
+# truth for "which providers are configured" (see ``is_provider_configured``). Mirrors
+# the key names passed to ``_resolve_api_key`` in ``get_model`` below.
+PROVIDER_ENV_KEYS: dict = {
+    ModelProvider.OPENAI: ["OPENAI_API_KEY"],
+    ModelProvider.ANTHROPIC: ["ANTHROPIC_API_KEY"],
+    ModelProvider.GROQ: ["GROQ_API_KEY"],
+    ModelProvider.DEEPSEEK: ["DEEPSEEK_API_KEY"],
+    ModelProvider.GOOGLE: ["GOOGLE_API_KEY"],
+    ModelProvider.OPENROUTER: ["OPENROUTER_API_KEY"],
+    ModelProvider.KIMI: ["MOONSHOT_API_KEY", "KIMI_API_KEY"],
+    ModelProvider.XAI: ["XAI_API_KEY"],
+    ModelProvider.GIGACHAT: ["GIGACHAT_API_KEY", "GIGACHAT_CREDENTIALS"],
+    ModelProvider.AZURE_OPENAI: ["AZURE_OPENAI_API_KEY"],
+}
+
+
+def is_provider_configured(provider: ModelProvider) -> bool:
+    """Return True if ``provider`` has an API key available from the environment.
+
+    Keys come exclusively from environment variables (see the security posture note
+    in the README): a provider-specific var (e.g. ``OPENAI_API_KEY``), or the generic
+    ``LLM_API_KEY`` when ``LLM_PROVIDER`` names this provider (``LLM_PROVIDER`` defaults
+    to ``openai``). Ollama needs no key, and GigaChat also accepts user/password auth.
+    """
+    # Ollama runs locally without an API key.
+    if provider == ModelProvider.OLLAMA:
+        return True
+    # GigaChat can authenticate with user/password instead of a key.
+    if provider == ModelProvider.GIGACHAT and (os.getenv("GIGACHAT_USER") or os.getenv("GIGACHAT_PASSWORD")):
+        return True
+    for name in PROVIDER_ENV_KEYS.get(provider, []):
+        if os.getenv(name):
+            return True
+    llm_provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
+    if os.getenv("LLM_API_KEY") and llm_provider in (provider.value.lower(), provider.name.lower()):
+        return True
+    return False
+
+
+def get_configured_providers() -> List[str]:
+    """Return the ``ModelProvider`` value strings that have a key configured via env."""
+    return [p.value for p in ModelProvider if is_provider_configured(p)]
+
+
+def get_default_model() -> "LLMModel | None":
+    """Pick a sensible default cloud model for the configured provider(s).
+
+    Prefers a model from the provider named by ``LLM_PROVIDER`` when that provider is
+    configured, otherwise the first available model from any configured provider. Only
+    considers cloud models (``AVAILABLE_MODELS``); returns ``None`` when no cloud
+    provider has a key, which callers surface as an actionable "no key configured" error.
+    """
+    llm_provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
+    configured = {p for p in ModelProvider if is_provider_configured(p)}
+    preferred = [
+        m for m in AVAILABLE_MODELS
+        if m.provider in configured and llm_provider in (m.provider.value.lower(), m.provider.name.lower())
+    ]
+    if preferred:
+        return preferred[0]
+    for model in AVAILABLE_MODELS:
+        if model.provider in configured:
+            return model
+    return None
+
+
 def _resolve_api_key(provider: ModelProvider, *key_names: str, api_keys: dict = None) -> str | None:
     """Resolve a provider's API key.
 

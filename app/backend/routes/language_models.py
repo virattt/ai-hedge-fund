@@ -1,9 +1,11 @@
 from fastapi import APIRouter, HTTPException
 from typing import List, Dict, Any
 
+import os
+
 from app.backend.models.schemas import ErrorResponse
 from app.backend.services.ollama_service import OllamaService
-from src.llm.models import get_models_list
+from src.llm.models import get_models_list, get_configured_providers, get_default_model
 
 router = APIRouter(prefix="/language-models")
 
@@ -59,4 +61,33 @@ async def get_language_model_providers():
         
         return {"providers": list(providers.values())}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve providers: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve providers: {str(e)}")
+
+
+@router.get(
+    path="/status",
+    responses={
+        200: {"description": "Which model providers are configured via environment variables"},
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+)
+async def get_language_model_status():
+    """Report which providers have an API key configured on the server.
+
+    API keys are supplied only through backend environment variables (never entered or
+    stored in the UI). The frontend uses this to gray out models whose provider has no
+    key and to warn when nothing is configured. No key values are ever returned.
+    """
+    try:
+        configured = get_configured_providers()
+        default_model = get_default_model()
+        return {
+            "configured_providers": configured,
+            "default_provider": os.getenv("LLM_PROVIDER") or None,
+            "default_model": (
+                {"model_name": default_model.model_name, "provider": default_model.provider.value}
+                if default_model else None
+            ),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve model status: {str(e)}")
