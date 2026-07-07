@@ -25,6 +25,28 @@ from src.data.models import (
 # Global cache instance
 _cache = get_cache()
 
+# The .env.example placeholder — a non-empty but invalid value. Treated as "no key"
+# so a copied-but-unedited placeholder doesn't force a 401 on free tickers.
+_PLACEHOLDER_FINANCIAL_KEY = "your-financial-datasets-api-key"
+
+# Emit the "invalid/missing FINANCIAL_DATASETS_API_KEY" warning at most once per process
+# instead of once per ticker per call.
+_warned_financial_401 = False
+
+
+def _financial_headers(api_key: str | None = None) -> dict:
+    """Build request headers for financialdatasets.ai.
+
+    Uses ``api_key`` if given, else ``FINANCIAL_DATASETS_API_KEY`` from the environment.
+    A blank/whitespace value or the ``.env.example`` placeholder is treated as unset, so a
+    misconfigured key does not force a 401 — free tickers (e.g. AAPL/NVDA/TSLA) fetch
+    anonymously. Returns ``{"X-API-KEY": key}`` only for a real value.
+    """
+    key = (api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY") or "").strip()
+    if not key or key == _PLACEHOLDER_FINANCIAL_KEY:
+        return {}
+    return {"X-API-KEY": key}
+
 
 def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: dict = None, max_retries: int = 3) -> requests.Response:
     """
@@ -55,7 +77,19 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
             print(f"Rate limited (429). Attempt {attempt + 1}/{max_retries + 1}. Waiting {delay}s before retrying...")
             time.sleep(delay)
             continue
-        
+
+        # A 401 means the FINANCIAL_DATASETS_API_KEY is missing or invalid. Warn once
+        # per process instead of once per ticker per call; callers still degrade gracefully.
+        if response.status_code == 401:
+            global _warned_financial_401
+            if not _warned_financial_401:
+                _warned_financial_401 = True
+                logger.warning(
+                    "financialdatasets.ai returned 401 — FINANCIAL_DATASETS_API_KEY is "
+                    "missing or invalid; premium data unavailable. Free tickers still work "
+                    "with no key set."
+                )
+
         # Return the response (whether success, other errors, or final 429)
         return response
 
@@ -70,10 +104,7 @@ def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None)
         return [Price(**price) for price in cached_data]
 
     # If not in cache, fetch from API
-    headers = {}
-    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
-        headers["X-API-KEY"] = financial_api_key
+    headers = _financial_headers(api_key)
 
     url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
     response = _make_api_request(url, headers)
@@ -112,10 +143,7 @@ def get_financial_metrics(
         return [FinancialMetrics(**metric) for metric in cached_data]
 
     # If not in cache, fetch from API
-    headers = {}
-    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
-        headers["X-API-KEY"] = financial_api_key
+    headers = _financial_headers(api_key)
 
     url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
     response = _make_api_request(url, headers)
@@ -148,10 +176,7 @@ def search_line_items(
 ) -> list[LineItem]:
     """Fetch line items from API."""
     # If not in cache or insufficient data, fetch from API
-    headers = {}
-    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
-        headers["X-API-KEY"] = financial_api_key
+    headers = _financial_headers(api_key)
 
     url = "https://api.financialdatasets.ai/financials/search/line-items"
 
@@ -196,10 +221,7 @@ def get_insider_trades(
         return [InsiderTrade(**trade) for trade in cached_data]
 
     # If not in cache, fetch from API
-    headers = {}
-    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
-        headers["X-API-KEY"] = financial_api_key
+    headers = _financial_headers(api_key)
 
     all_trades = []
     current_end_date = end_date
@@ -262,10 +284,7 @@ def get_company_news(
         return [CompanyNews(**news) for news in cached_data]
 
     # If not in cache, fetch from API
-    headers = {}
-    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
-        headers["X-API-KEY"] = financial_api_key
+    headers = _financial_headers(api_key)
 
     all_news = []
     current_end_date = end_date
@@ -321,15 +340,14 @@ def get_market_cap(
     # Check if end_date is today
     if end_date == datetime.datetime.now().strftime("%Y-%m-%d"):
         # Get the market cap from company facts API
-        headers = {}
-        financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-        if financial_api_key:
-            headers["X-API-KEY"] = financial_api_key
+        headers = _financial_headers(api_key)
 
         url = f"https://api.financialdatasets.ai/company/facts/?ticker={ticker}"
         response = _make_api_request(url, headers)
         if response.status_code != 200:
-            print(f"Error fetching company facts: {ticker} - {response.status_code}")
+            # 401s are already warned once (deduped) in _make_api_request; keep the
+            # per-ticker detail at debug level so it doesn't spam the logs.
+            logger.debug("Company facts request for %s returned %s", ticker, response.status_code)
             return None
 
         data = response.json()

@@ -1,12 +1,12 @@
 [
   {
-    "display_name": "Fable 5",
-    "model_name": "claude-fable-5",
+    "display_name": "Opus 4.8",
+    "model_name": "claude-opus-4-8",
     "provider": "Anthropic"
   },
   {
-    "display_name": "Opus 4.8",
-    "model_name": "claude-opus-4-8",
+    "display_name": "Fable 5",
+    "model_name": "claude-fable-5",
     "provider": "Anthropic"
   },
   {

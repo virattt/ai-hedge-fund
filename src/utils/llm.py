@@ -2,7 +2,7 @@
 
 import json
 from pydantic import BaseModel
-from src.llm.models import get_model, get_model_info
+from src.llm.models import get_default_model, get_model, get_model_info
 from src.utils.progress import progress
 from src.graph.state import AgentState
 
@@ -34,9 +34,17 @@ def call_llm(
     if state and agent_name:
         model_name, model_provider = get_agent_model_config(state, agent_name)
     else:
-        # Use system defaults when no state or agent_name is provided
-        model_name = "gpt-5.5"
-        model_provider = "OPENAI"
+        # Use the system default for whichever provider is configured (env-var keys),
+        # rather than a hardcoded provider/model. This makes an Anthropic-only deploy
+        # default to Opus 4.8 instead of failing on a missing OpenAI key.
+        default_model = get_default_model()
+        if default_model is None:
+            raise ValueError(
+                "No LLM provider configured. Set an API key (e.g. ANTHROPIC_API_KEY or "
+                "OPENAI_API_KEY), or LLM_API_KEY together with LLM_PROVIDER."
+            )
+        model_name = default_model.model_name
+        model_provider = default_model.provider.value
 
     # API keys come exclusively from backend environment variables (see
     # src/llm/models._resolve_api_key), never from the request.
