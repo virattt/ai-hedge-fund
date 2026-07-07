@@ -13,6 +13,7 @@ def fresh_state(monkeypatch):
 
     monkeypatch.setattr(api_akshare, "_cache", Cache())
     monkeypatch.setattr(api_akshare, "_spot_table", None, raising=False)
+    monkeypatch.setattr(api_akshare, "_spot_table_attempted", False, raising=False)
 
 
 def test_tushare_value_is_returned_without_hitting_spot(fresh_state, monkeypatch):

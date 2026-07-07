@@ -28,10 +28,46 @@ def fresh_akshare_state(monkeypatch):
     # also run against the unfixed code so the bug shows up as an assertion
     # failure (N calls) rather than a setup error.
     monkeypatch.setattr(api_akshare, "_spot_table", None, raising=False)
+    monkeypatch.setattr(api_akshare, "_spot_table_attempted", False, raising=False)
     # get_market_cap now consults Tushare first; force the no-token path so
     # these spot-path tests are deterministic even if TUSHARE_TOKEN is in env.
     monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
     return cache
+
+
+def test_spot_failure_is_memoized_second_call_skips_refetch(fresh_akshare_state, monkeypatch):
+    """A dead Eastmoney endpoint must not be re-retried on every market-cap call.
+
+    10+ analysts each call get_market_cap per ticker; without memoizing the
+    spot-table FAILURE, each call would re-pay the full ~30s retry backoff
+    against a dead endpoint.
+    """
+    monkeypatch.setattr(api_akshare.time, "sleep", lambda *_: None)
+    calls = {"n": 0}
+
+    def boom():
+        calls["n"] += 1
+        raise ConnectionError("RemoteDisconnected")
+
+    monkeypatch.setattr(api_akshare.ak, "stock_zh_a_spot_em", boom)
+    # Per-ticker fallback must also fail, so get_market_cap returns None.
+    monkeypatch.setattr(
+        api_akshare.ak,
+        "stock_individual_info_em",
+        lambda symbol: (_ for _ in ()).throw(ConnectionError("dead")),
+    )
+
+    assert api_akshare.get_market_cap("600519.SH", "2026-07-07") is None
+    after_first = calls["n"]
+    assert after_first > 0, "first call should have attempted the spot endpoint"
+
+    assert api_akshare.get_market_cap("603444.SH", "2026-07-07") is None
+    after_second = calls["n"]
+    # The second call must add ZERO spot fetches — the failure was memoized.
+    # (Without memoization the second call would re-pay the full retry backoff.)
+    assert after_second == after_first, (
+        f"second get_market_cap re-fetched spot ({after_first} → {after_second})"
+    )
 
 
 def test_get_market_cap_fetches_spot_table_once_across_callers(fresh_akshare_state, monkeypatch):

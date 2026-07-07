@@ -49,6 +49,12 @@ _cache = get_cache()
 # connection mid-flight (``RemoteDisconnected``). Guarded by ``fetch_lock`` so
 # simultaneous misses serialise to a single network call.
 _spot_table: pd.DataFrame | None = None
+# True once we have attempted to populate ``_spot_table`` this process. The
+# Eastmoney spot endpoint can be persistently unreachable; without this flag
+# every ``get_market_cap`` call (10+ analysts × N tickers) would re-pay the
+# full retry backoff (~30s) against a dead endpoint — so failures are memoized
+# too, not just successes.
+_spot_table_attempted: bool = False
 
 T = TypeVar("T")
 
@@ -854,14 +860,18 @@ def _get_spot_table() -> pd.DataFrame | None:
     the per-key lock, populates ``_spot_table``, and every subsequent caller —
     including those that waited on the lock — reuses it.
     """
-    global _spot_table
-    if _spot_table is not None:
+    global _spot_table, _spot_table_attempted
+    if _spot_table_attempted:
         return _spot_table
     with _cache.fetch_lock("akshare:stock_zh_a_spot_em"):
-        # Re-check inside the lock: another thread may have populated it while
-        # we were queued.
-        if _spot_table is not None:
+        # Re-check inside the lock: another thread may have already attempted
+        # the fetch while we were queued.
+        if _spot_table_attempted:
             return _spot_table
+        # Mark attempted BEFORE fetching so a failure (dead Eastmoney endpoint)
+        # is memoized too — otherwise every get_market_cap call re-pays the full
+        # retry backoff against a dead endpoint.
+        _spot_table_attempted = True
 
         def _fetch_spot() -> pd.DataFrame:
             return ak.stock_zh_a_spot_em()
