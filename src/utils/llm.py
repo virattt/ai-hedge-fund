@@ -1,6 +1,7 @@
 """Helper functions for LLM"""
 
 import json
+from typing import Any
 from pydantic import BaseModel
 from src.llm.models import get_default_model, get_model, get_model_info
 from src.utils.progress import progress
@@ -8,7 +9,7 @@ from src.graph.state import AgentState
 
 
 def call_llm(
-    prompt: any,
+    prompt: Any,
     pydantic_model: type[BaseModel],
     agent_name: str | None = None,
     state: AgentState | None = None,
@@ -29,7 +30,6 @@ def call_llm(
     Returns:
         An instance of the specified Pydantic model
     """
-    
     # Extract model configuration if state is provided and agent_name is available
     if state and agent_name:
         model_name, model_provider = get_agent_model_config(state, agent_name)
@@ -51,8 +51,11 @@ def call_llm(
     model_info = get_model_info(model_name, model_provider)
     llm = get_model(model_name, model_provider)
 
-    # For non-JSON support models, we can use structured output
-    if not (model_info and not model_info.has_json_mode()):
+    # Some models (DeepSeek, Gemini, Anthropic reasoning, most Ollama) don't support
+    # JSON mode. For those we prompt for JSON and parse it out of the response ourselves;
+    # otherwise we let LangChain enforce the schema via structured output.
+    needs_manual_json = model_info is not None and not model_info.has_json_mode()
+    if not needs_manual_json:
         llm = llm.with_structured_output(
             pydantic_model,
             method="json_mode",
@@ -61,11 +64,9 @@ def call_llm(
     # Call the LLM with retries
     for attempt in range(max_retries):
         try:
-            # Call the LLM
             result = llm.invoke(prompt)
 
-            # For non-JSON support models, we need to extract and parse the JSON manually
-            if model_info and not model_info.has_json_mode():
+            if needs_manual_json:
                 parsed_result = extract_json_from_response(result.content)
                 if parsed_result:
                     return pydantic_model(**parsed_result)
@@ -172,29 +173,28 @@ def extract_json_from_response(content) -> dict | None:
     return None
 
 
-def get_agent_model_config(state, agent_name):
+def get_agent_model_config(state: AgentState, agent_name: str) -> tuple[str, str]:
     """
     Get model configuration for a specific agent from the state.
     Falls back to global model configuration if agent-specific config is not available.
     Always returns valid model_name and model_provider values.
     """
     request = state.get("metadata", {}).get("request")
-    
-    if request and hasattr(request, 'get_agent_model_config'):
+
+    if request and hasattr(request, "get_agent_model_config"):
         # Get agent-specific model configuration
         model_name, model_provider = request.get_agent_model_config(agent_name)
-        # Ensure we have valid values
         if model_name and model_provider:
-            return model_name, model_provider.value if hasattr(model_provider, 'value') else str(model_provider)
-    
+            return model_name, _provider_value(model_provider)
+
     # Fall back to global configuration (system defaults). The provider must be a
     # ModelProvider *value* ("OpenAI"), not its enum name ("OPENAI"), or get_model_info
     # and get_model won't recognize it. See the get_default_model() path in call_llm.
     model_name = state.get("metadata", {}).get("model_name") or "gpt-5.5"
     model_provider = state.get("metadata", {}).get("model_provider") or "OpenAI"
-    
-    # Convert enum to string if necessary
-    if hasattr(model_provider, 'value'):
-        model_provider = model_provider.value
-    
-    return model_name, model_provider
+    return model_name, _provider_value(model_provider)
+
+
+def _provider_value(model_provider) -> str:
+    """Normalize a provider to its string value, whether it's a ModelProvider enum or str."""
+    return model_provider.value if hasattr(model_provider, "value") else str(model_provider)

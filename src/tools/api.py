@@ -5,8 +5,6 @@ import pandas as pd
 import requests
 import time
 
-logger = logging.getLogger(__name__)
-
 from src.data.cache import get_cache
 from src.data.models import (
     CompanyNews,
@@ -21,6 +19,8 @@ from src.data.models import (
     InsiderTradeResponse,
     CompanyFactsResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 # Global cache instance
 _cache = get_cache()
@@ -48,10 +48,10 @@ def _financial_headers(api_key: str | None = None) -> dict:
     return {"X-API-KEY": key}
 
 
-def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: dict = None, max_retries: int = 3) -> requests.Response:
+def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: dict | None = None, max_retries: int = 3) -> requests.Response:
     """
     Make an API request with rate limiting handling and moderate backoff.
-    
+
     Args:
         url: The URL to request
         headers: Headers to include in the request
@@ -74,7 +74,10 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
         if response.status_code == 429 and attempt < max_retries:
             # Linear backoff: 60s, 90s, 120s, 150s...
             delay = 60 + (30 * attempt)
-            print(f"Rate limited (429). Attempt {attempt + 1}/{max_retries + 1}. Waiting {delay}s before retrying...")
+            logger.warning(
+                "Rate limited (429). Attempt %d/%d. Waiting %ds before retrying...",
+                attempt + 1, max_retries + 1, delay,
+            )
             time.sleep(delay)
             continue
 
@@ -94,7 +97,7 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
         return response
 
 
-def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> list[Price]:
+def get_prices(ticker: str, start_date: str, end_date: str, api_key: str | None = None) -> list[Price]:
     """Fetch price data from cache or API."""
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date}_{end_date}"
@@ -132,7 +135,7 @@ def get_financial_metrics(
     end_date: str,
     period: str = "ttm",
     limit: int = 10,
-    api_key: str = None,
+    api_key: str | None = None,
 ) -> list[FinancialMetrics]:
     """Fetch financial metrics from cache or API."""
     # Create a cache key that includes all parameters to ensure exact matches
@@ -172,10 +175,9 @@ def search_line_items(
     end_date: str,
     period: str = "ttm",
     limit: int = 10,
-    api_key: str = None,
+    api_key: str | None = None,
 ) -> list[LineItem]:
-    """Fetch line items from API."""
-    # If not in cache or insufficient data, fetch from API
+    """Fetch line items from the API (not cached)."""
     headers = _financial_headers(api_key)
 
     url = "https://api.financialdatasets.ai/financials/search/line-items"
@@ -201,7 +203,6 @@ def search_line_items(
     if not search_results:
         return []
 
-    # Cache the results
     return search_results[:limit]
 
 
@@ -210,7 +211,7 @@ def get_insider_trades(
     end_date: str,
     start_date: str | None = None,
     limit: int = 1000,
-    api_key: str = None,
+    api_key: str | None = None,
 ) -> list[InsiderTrade]:
     """Fetch insider trades from cache or API."""
     # Create a cache key that includes all parameters to ensure exact matches
@@ -273,7 +274,7 @@ def get_company_news(
     end_date: str,
     start_date: str | None = None,
     limit: int = 1000,
-    api_key: str = None,
+    api_key: str | None = None,
 ) -> list[CompanyNews]:
     """Fetch company news from cache or API."""
     # Create a cache key that includes all parameters to ensure exact matches
@@ -334,7 +335,7 @@ def get_company_news(
 def get_market_cap(
     ticker: str,
     end_date: str,
-    api_key: str = None,
+    api_key: str | None = None,
 ) -> float | None:
     """Fetch market cap from the API."""
     # Check if end_date is today
@@ -378,7 +379,7 @@ def prices_to_df(prices: list[Price]) -> pd.DataFrame:
     return df
 
 
-# Update the get_price_data function to use the new functions
-def get_price_data(ticker: str, start_date: str, end_date: str, api_key: str = None) -> pd.DataFrame:
+def get_price_data(ticker: str, start_date: str, end_date: str, api_key: str | None = None) -> pd.DataFrame:
+    """Fetch prices for a ticker and return them as a DataFrame."""
     prices = get_prices(ticker, start_date, end_date, api_key=api_key)
     return prices_to_df(prices)
