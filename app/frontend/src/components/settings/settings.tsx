@@ -24,7 +24,7 @@ export function Settings({ className }: SettingsProps) {
       id: 'api',
       label: 'API Keys',
       icon: Key,
-      description: 'API endpoints and authentication',
+      description: 'Provider keys (configured via backend env vars)',
     },
     {
       id: 'models',

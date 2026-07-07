@@ -9,7 +9,6 @@ import json
 
 from src.graph.state import AgentState, show_agent_reasoning
 from src.tools.api import get_company_news
-from src.utils.api_key import get_api_key_from_state
 from src.utils.llm import call_llm
 from src.utils.progress import progress
 from typing_extensions import Literal
@@ -40,7 +39,6 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
     data = state.get("data", {})
     end_date = data.get("end_date")
     tickers = data.get("tickers")
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
     sentiment_analysis = {}
 
     for ticker in tickers:
@@ -49,7 +47,6 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
             ticker=ticker,
             end_date=end_date,
             limit=100,
-            api_key=api_key,
         )
 
         company_news = company_news or []

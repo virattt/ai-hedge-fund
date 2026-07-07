@@ -5,8 +5,6 @@ import asyncio
 import os
 
 from app.backend.routes import api_router
-from app.backend.database.connection import engine
-from app.backend.database.models import Base
 from app.backend.services.ollama_service import ollama_service
 
 # Configure logging
@@ -15,8 +13,11 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AI Hedge Fund API", description="Backend API for AI Hedge Fund", version="0.1.0")
 
-# Initialize database tables (this is safe to run multiple times)
-Base.metadata.create_all(bind=engine)
+# The database schema is owned by Alembic — migrations run on deploy via the
+# service startCommand (`alembic upgrade head`) and locally via the one-time
+# step documented in the README. We deliberately do NOT call
+# Base.metadata.create_all here: it only ever creates missing tables (never
+# ALTERs/drops), which would silently diverge from the migration history.
 
 # Configure CORS. Local dev defaults are always allowed. Every other allowed
 # origin must be listed explicitly in the comma-separated FRONTEND_URL env var

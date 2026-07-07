@@ -148,69 +148,133 @@ def get_models_list():
     ]
 
 
-def _resolve_api_key(provider: ModelProvider, *key_names: str, api_keys: dict = None) -> str | None:
-    """Resolve a provider's API key.
+# Environment variable names that supply each provider's API key. Single source of
+# truth for "which providers are configured" (see ``is_provider_configured``). Mirrors
+# the key names passed to ``_resolve_api_key`` in ``get_model`` below.
+PROVIDER_ENV_KEYS: dict = {
+    ModelProvider.OPENAI: ["OPENAI_API_KEY"],
+    ModelProvider.ANTHROPIC: ["ANTHROPIC_API_KEY"],
+    ModelProvider.GROQ: ["GROQ_API_KEY"],
+    ModelProvider.DEEPSEEK: ["DEEPSEEK_API_KEY"],
+    ModelProvider.GOOGLE: ["GOOGLE_API_KEY"],
+    ModelProvider.OPENROUTER: ["OPENROUTER_API_KEY"],
+    ModelProvider.KIMI: ["MOONSHOT_API_KEY", "KIMI_API_KEY"],
+    ModelProvider.XAI: ["XAI_API_KEY"],
+    ModelProvider.GIGACHAT: ["GIGACHAT_API_KEY", "GIGACHAT_CREDENTIALS"],
+    ModelProvider.AZURE_OPENAI: ["AZURE_OPENAI_API_KEY"],
+}
+
+
+def _llm_provider_matches(provider: ModelProvider) -> bool:
+    """Return True if ``LLM_PROVIDER`` names ``provider``.
+
+    ``LLM_PROVIDER`` defaults to ``openai`` when unset, so supplying just
+    ``LLM_API_KEY`` (an OpenAI key) works out of the box.
+    """
+    llm_provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
+    return llm_provider in (provider.value.lower(), provider.name.lower())
+
+
+def is_provider_configured(provider: ModelProvider) -> bool:
+    """Return True if ``provider`` has an API key available from the environment.
+
+    Keys come exclusively from environment variables (see the security posture note
+    in the README): a provider-specific var (e.g. ``OPENAI_API_KEY``), or the generic
+    ``LLM_API_KEY`` when ``LLM_PROVIDER`` names this provider. Ollama needs no key, and
+    GigaChat also accepts user/password auth.
+    """
+    # Ollama runs locally without an API key.
+    if provider == ModelProvider.OLLAMA:
+        return True
+    # GigaChat can authenticate with user/password instead of a key.
+    if provider == ModelProvider.GIGACHAT and (os.getenv("GIGACHAT_USER") or os.getenv("GIGACHAT_PASSWORD")):
+        return True
+    for name in PROVIDER_ENV_KEYS.get(provider, []):
+        if os.getenv(name):
+            return True
+    return bool(os.getenv("LLM_API_KEY")) and _llm_provider_matches(provider)
+
+
+def get_configured_providers() -> List[str]:
+    """Return the ``ModelProvider`` value strings that have a key configured via env."""
+    return [p.value for p in ModelProvider if is_provider_configured(p)]
+
+
+def get_default_model() -> "LLMModel | None":
+    """Pick a sensible default cloud model for the configured provider(s).
+
+    Prefers a model from the provider named by ``LLM_PROVIDER`` when that provider is
+    configured, otherwise the first available model from any configured provider. Only
+    considers cloud models (``AVAILABLE_MODELS``); returns ``None`` when no cloud
+    provider has a key, which callers surface as an actionable "no key configured" error.
+    """
+    configured = {p for p in ModelProvider if is_provider_configured(p)}
+    preferred = [
+        m for m in AVAILABLE_MODELS
+        if m.provider in configured and _llm_provider_matches(m.provider)
+    ]
+    if preferred:
+        return preferred[0]
+    for model in AVAILABLE_MODELS:
+        if model.provider in configured:
+            return model
+    return None
+
+
+def _resolve_api_key(provider: ModelProvider, *key_names: str) -> str | None:
+    """Resolve a provider's API key from environment variables.
 
     Precedence:
-      1. An explicit ``api_keys`` dict (web-app request / DB-stored keys).
-      2. The provider-specific env var(s), e.g. ``OPENAI_API_KEY`` (kept for
-         backwards compatibility with local .env / CLI usage).
-      3. The generic ``LLM_API_KEY`` — but only when ``LLM_PROVIDER`` names this
+      1. The provider-specific env var(s), e.g. ``OPENAI_API_KEY``.
+      2. The generic ``LLM_API_KEY`` — but only when ``LLM_PROVIDER`` names this
          provider. This lets a Render deploy supply a single ``LLM_API_KEY`` +
-         ``LLM_PROVIDER`` pair instead of one env var per provider. When
-         ``LLM_PROVIDER`` is unset it defaults to ``openai``, so supplying just
-         ``LLM_API_KEY`` (an OpenAI key) works out of the box. The key is never
-         returned for a provider that ``LLM_PROVIDER`` does not name, so a
-         mismatched request falls through to the usual "key not found" error.
+         ``LLM_PROVIDER`` pair instead of one env var per provider. The key is never
+         returned for a provider that ``LLM_PROVIDER`` does not name, so a mismatched
+         request falls through to the usual "key not found" error.
     """
-    for name in key_names:
-        key = (api_keys or {}).get(name)
-        if key:
-            return key
     for name in key_names:
         key = os.getenv(name)
         if key:
             return key
-    llm_provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
-    if llm_provider and llm_provider in (provider.value.lower(), provider.name.lower()):
+    if _llm_provider_matches(provider):
         return os.getenv("LLM_API_KEY")
     return None
 
 
-def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | None:
+def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | None:
     if model_provider == ModelProvider.GROQ:
-        api_key = _resolve_api_key(ModelProvider.GROQ, "GROQ_API_KEY", api_keys=api_keys)
+        api_key = _resolve_api_key(ModelProvider.GROQ, "GROQ_API_KEY")
         if not api_key:
             # Print error to console
-            print(f"API Key Error: Please make sure GROQ_API_KEY is set in your .env file or provided via API keys.")
-            raise ValueError("Groq API key not found.  Please make sure GROQ_API_KEY is set in your .env file or provided via API keys.")
+            print(f"API Key Error: Please make sure GROQ_API_KEY is set in your .env file.")
+            raise ValueError("Groq API key not found.  Please make sure GROQ_API_KEY is set in your .env file.")
         return ChatGroq(model=model_name, api_key=api_key)
     elif model_provider == ModelProvider.OPENAI:
         # Get and validate API key
-        api_key = _resolve_api_key(ModelProvider.OPENAI, "OPENAI_API_KEY", api_keys=api_keys)
+        api_key = _resolve_api_key(ModelProvider.OPENAI, "OPENAI_API_KEY")
         base_url = os.getenv("OPENAI_API_BASE")
         if not api_key:
             # Print error to console
-            print(f"API Key Error: Please make sure OPENAI_API_KEY is set in your .env file or provided via API keys.")
-            raise ValueError("OpenAI API key not found.  Please make sure OPENAI_API_KEY is set in your .env file or provided via API keys.")
+            print(f"API Key Error: Please make sure OPENAI_API_KEY is set in your .env file.")
+            raise ValueError("OpenAI API key not found.  Please make sure OPENAI_API_KEY is set in your .env file.")
         return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
     elif model_provider == ModelProvider.ANTHROPIC:
-        api_key = _resolve_api_key(ModelProvider.ANTHROPIC, "ANTHROPIC_API_KEY", api_keys=api_keys)
+        api_key = _resolve_api_key(ModelProvider.ANTHROPIC, "ANTHROPIC_API_KEY")
         if not api_key:
-            print(f"API Key Error: Please make sure ANTHROPIC_API_KEY is set in your .env file or provided via API keys.")
-            raise ValueError("Anthropic API key not found.  Please make sure ANTHROPIC_API_KEY is set in your .env file or provided via API keys.")
+            print(f"API Key Error: Please make sure ANTHROPIC_API_KEY is set in your .env file.")
+            raise ValueError("Anthropic API key not found.  Please make sure ANTHROPIC_API_KEY is set in your .env file.")
         return ChatAnthropic(model=model_name, api_key=api_key)
     elif model_provider == ModelProvider.DEEPSEEK:
-        api_key = _resolve_api_key(ModelProvider.DEEPSEEK, "DEEPSEEK_API_KEY", api_keys=api_keys)
+        api_key = _resolve_api_key(ModelProvider.DEEPSEEK, "DEEPSEEK_API_KEY")
         if not api_key:
-            print(f"API Key Error: Please make sure DEEPSEEK_API_KEY is set in your .env file or provided via API keys.")
-            raise ValueError("DeepSeek API key not found.  Please make sure DEEPSEEK_API_KEY is set in your .env file or provided via API keys.")
+            print(f"API Key Error: Please make sure DEEPSEEK_API_KEY is set in your .env file.")
+            raise ValueError("DeepSeek API key not found.  Please make sure DEEPSEEK_API_KEY is set in your .env file.")
         return ChatDeepSeek(model=model_name, api_key=api_key)
     elif model_provider == ModelProvider.GOOGLE:
-        api_key = _resolve_api_key(ModelProvider.GOOGLE, "GOOGLE_API_KEY", api_keys=api_keys)
+        api_key = _resolve_api_key(ModelProvider.GOOGLE, "GOOGLE_API_KEY")
         if not api_key:
-            print(f"API Key Error: Please make sure GOOGLE_API_KEY is set in your .env file or provided via API keys.")
-            raise ValueError("Google API key not found.  Please make sure GOOGLE_API_KEY is set in your .env file or provided via API keys.")
+            print(f"API Key Error: Please make sure GOOGLE_API_KEY is set in your .env file.")
+            raise ValueError("Google API key not found.  Please make sure GOOGLE_API_KEY is set in your .env file.")
         return ChatGoogleGenerativeAI(model=model_name, api_key=api_key)
     elif model_provider == ModelProvider.OLLAMA:
         # For Ollama, we use a base URL instead of an API key
@@ -222,10 +286,10 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
             base_url=base_url,
         )
     elif model_provider == ModelProvider.OPENROUTER:
-        api_key = _resolve_api_key(ModelProvider.OPENROUTER, "OPENROUTER_API_KEY", api_keys=api_keys)
+        api_key = _resolve_api_key(ModelProvider.OPENROUTER, "OPENROUTER_API_KEY")
         if not api_key:
-            print(f"API Key Error: Please make sure OPENROUTER_API_KEY is set in your .env file or provided via API keys.")
-            raise ValueError("OpenRouter API key not found. Please make sure OPENROUTER_API_KEY is set in your .env file or provided via API keys.")
+            print(f"API Key Error: Please make sure OPENROUTER_API_KEY is set in your .env file.")
+            raise ValueError("OpenRouter API key not found. Please make sure OPENROUTER_API_KEY is set in your .env file.")
         
         # Get optional site URL and name for headers
         site_url = os.getenv("YOUR_SITE_URL", "https://github.com/virattt/ai-hedge-fund")
@@ -243,28 +307,28 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
             }
         )
     elif model_provider == ModelProvider.KIMI:
-        api_key = _resolve_api_key(ModelProvider.KIMI, "MOONSHOT_API_KEY", "KIMI_API_KEY", api_keys=api_keys)
+        api_key = _resolve_api_key(ModelProvider.KIMI, "MOONSHOT_API_KEY", "KIMI_API_KEY")
         if not api_key:
-            print(f"API Key Error: Please make sure MOONSHOT_API_KEY (or KIMI_API_KEY) is set in your .env file or provided via API keys.")
-            raise ValueError("Kimi API key not found. Please make sure MOONSHOT_API_KEY (or KIMI_API_KEY) is set in your .env file or provided via API keys.")
+            print(f"API Key Error: Please make sure MOONSHOT_API_KEY (or KIMI_API_KEY) is set in your .env file.")
+            raise ValueError("Kimi API key not found. Please make sure MOONSHOT_API_KEY (or KIMI_API_KEY) is set in your .env file.")
         # Kimi exposes an OpenAI-compatible endpoint. Default to the international host;
         # users in mainland China can override via MOONSHOT_BASE_URL=https://api.moonshot.cn/v1.
         base_url = os.getenv("MOONSHOT_BASE_URL") or os.getenv("KIMI_BASE_URL") or "https://api.moonshot.ai/v1"
         return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
     elif model_provider == ModelProvider.XAI:
-        api_key = _resolve_api_key(ModelProvider.XAI, "XAI_API_KEY", api_keys=api_keys)
+        api_key = _resolve_api_key(ModelProvider.XAI, "XAI_API_KEY")
         if not api_key:
-            print(f"API Key Error: Please make sure XAI_API_KEY is set in your .env file or provided via API keys.")
-            raise ValueError("xAI API key not found. Please make sure XAI_API_KEY is set in your .env file or provided via API keys.")
+            print(f"API Key Error: Please make sure XAI_API_KEY is set in your .env file.")
+            raise ValueError("xAI API key not found. Please make sure XAI_API_KEY is set in your .env file.")
         return ChatXAI(model=model_name, api_key=api_key)
     elif model_provider == ModelProvider.GIGACHAT:
         if os.getenv("GIGACHAT_USER") or os.getenv("GIGACHAT_PASSWORD"):
             return GigaChat(model=model_name)
         else: 
-            api_key = _resolve_api_key(ModelProvider.GIGACHAT, "GIGACHAT_API_KEY", "GIGACHAT_CREDENTIALS", api_keys=api_keys)
+            api_key = _resolve_api_key(ModelProvider.GIGACHAT, "GIGACHAT_API_KEY", "GIGACHAT_CREDENTIALS")
             if not api_key:
-                print("API Key Error: Please make sure api_keys is set in your .env file or provided via API keys.")
-                raise ValueError("GigaChat API key not found. Please make sure GIGACHAT_API_KEY is set in your .env file or provided via API keys.")
+                print("API Key Error: Please make sure GIGACHAT_API_KEY is set in your .env file.")
+                raise ValueError("GigaChat API key not found. Please make sure GIGACHAT_API_KEY is set in your .env file.")
 
             return GigaChat(credentials=api_key, model=model_name)
     elif model_provider == ModelProvider.AZURE_OPENAI:

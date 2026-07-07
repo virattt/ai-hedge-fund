@@ -1,5 +1,4 @@
 from logging.config import fileConfig
-import os
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -10,13 +9,12 @@ from alembic import context
 # access to the values within the .ini file in use.
 config = context.config
 
-# Prefer a managed database (e.g. Render Postgres) via DATABASE_URL when set,
-# overriding the local SQLite default in alembic.ini.
-_database_url = os.environ.get("DATABASE_URL")
-if _database_url:
-    if _database_url.startswith("postgres://"):
-        _database_url = _database_url.replace("postgres://", "postgresql://", 1)
-    config.set_main_option("sqlalchemy.url", _database_url)
+# Resolve the database URL exactly the way the app does (managed Postgres via
+# DATABASE_URL with the postgres:// -> postgresql:// rewrite, else the app's
+# absolute SQLite path) so Alembic and the running app always agree on which
+# database they target — overriding the placeholder in alembic.ini.
+from app.backend.database.connection import _resolve_database_url
+config.set_main_option("sqlalchemy.url", _resolve_database_url())
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

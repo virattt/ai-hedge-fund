@@ -38,15 +38,10 @@ def call_llm(
         model_name = "gpt-5.5"
         model_provider = "OPENAI"
 
-    # Extract API keys from state if available
-    api_keys = None
-    if state:
-        request = state.get("metadata", {}).get("request")
-        if request and hasattr(request, 'api_keys'):
-            api_keys = request.api_keys
-
+    # API keys come exclusively from backend environment variables (see
+    # src/llm/models._resolve_api_key), never from the request.
     model_info = get_model_info(model_name, model_provider)
-    llm = get_model(model_name, model_provider, api_keys)
+    llm = get_model(model_name, model_provider)
 
     # For non-JSON support models, we can use structured output
     if not (model_info and not model_info.has_json_mode()):

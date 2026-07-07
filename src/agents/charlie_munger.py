@@ -7,7 +7,6 @@ import json
 from typing_extensions import Literal
 from src.utils.progress import progress
 from src.utils.llm import call_llm
-from src.utils.api_key import get_api_key_from_state
 
 class CharlieMungerSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
@@ -23,13 +22,12 @@ def charlie_munger_agent(state: AgentState, agent_id: str = "charlie_munger_agen
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
     analysis_data = {}
     munger_analysis = {}
     
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=10, api_key=api_key)  # Munger looks at longer periods
+        metrics = get_financial_metrics(ticker, end_date, period="annual", limit=10)  # Munger looks at longer periods
         
         progress.update_status(agent_id, ticker, "Gathering financial line items")
         financial_line_items = search_line_items(
@@ -53,11 +51,10 @@ def charlie_munger_agent(state: AgentState, agent_id: str = "charlie_munger_agen
             end_date,
             period="annual",
             limit=10,  # Munger examines long-term trends
-            api_key=api_key,
         )
         
         progress.update_status(agent_id, ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+        market_cap = get_market_cap(ticker, end_date)
         
         progress.update_status(agent_id, ticker, "Fetching insider trades")
         # Munger values management with skin in the game
@@ -65,7 +62,6 @@ def charlie_munger_agent(state: AgentState, agent_id: str = "charlie_munger_agen
             ticker,
             end_date,
             limit=100,
-            api_key=api_key,
         )
         
         progress.update_status(agent_id, ticker, "Fetching company news")
@@ -74,7 +70,6 @@ def charlie_munger_agent(state: AgentState, agent_id: str = "charlie_munger_agen
             ticker,
             end_date,
             limit=10,
-            api_key=api_key,
         )
         
         progress.update_status(agent_id, ticker, "Analyzing moat strength")

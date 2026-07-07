@@ -1,319 +1,172 @@
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { apiKeysService } from '@/services/api-keys-api';
-import { Eye, EyeOff, Key, Trash2 } from 'lucide-react';
+import { getModelStatus, type ModelStatus } from '@/data/models';
+import { cn } from '@/lib/utils';
+import { AlertTriangle, CheckCircle2, ExternalLink, Key } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-interface ApiKey {
-  key: string;
+interface ProviderInfo {
+  // Matches the backend ModelProvider value reported in configured_providers.
+  provider: string;
   label: string;
   description: string;
   url: string;
-  placeholder: string;
+  // The environment variable(s) that supply this provider's key.
+  envVars: string[];
 }
 
-const FINANCIAL_API_KEYS: ApiKey[] = [
-  {
-    key: 'FINANCIAL_DATASETS_API_KEY',
-    label: 'Financial Datasets API',
-    description: 'For getting financial data to power the hedge fund',
-    url: 'https://financialdatasets.ai/',
-    placeholder: 'your-financial-datasets-api-key'
-  }
-];
-
-const LLM_API_KEYS: ApiKey[] = [
-  {
-    key: 'ANTHROPIC_API_KEY',
-    label: 'Anthropic API',
-    description: 'For Claude models (claude-4-sonnet, claude-4.1-opus, etc.)',
-    url: 'https://anthropic.com/',
-    placeholder: 'your-anthropic-api-key'
-  },
-  {
-    key: 'DEEPSEEK_API_KEY',
-    label: 'DeepSeek API',
-    description: 'For DeepSeek models (deepseek-chat, deepseek-reasoner, etc.)',
-    url: 'https://deepseek.com/',
-    placeholder: 'your-deepseek-api-key'
-  },
-  {
-    key: 'GROQ_API_KEY',
-    label: 'Groq API',
-    description: 'For Groq-hosted models (deepseek, llama3, etc.)',
-    url: 'https://groq.com/',
-    placeholder: 'your-groq-api-key'
-  },
-  {
-    key: 'GOOGLE_API_KEY',
-    label: 'Google API',
-    description: 'For Gemini models (gemini-2.5-flash, gemini-2.5-pro)',
-    url: 'https://ai.dev/',
-    placeholder: 'your-google-api-key'
-  },
-  {
-    key: 'OPENAI_API_KEY',
-    label: 'OpenAI API',
-    description: 'For OpenAI models (gpt-4o, gpt-4o-mini, etc.)',
-    url: 'https://platform.openai.com/',
-    placeholder: 'your-openai-api-key'
-  },
-  {
-    key: 'MOONSHOT_API_KEY',
-    label: 'Moonshot (Kimi) API',
-    description: 'For Kimi / Moonshot models (kimi-k2, kimi-latest, moonshot-v1-*)',
-    url: 'https://platform.moonshot.ai/',
-    placeholder: 'your-moonshot-api-key'
-  },
-  {
-    key: 'OPENROUTER_API_KEY',
-    label: 'OpenRouter API',
-    description: 'For OpenRouter models (gpt-4o, gpt-4o-mini, etc.)',
-    url: 'https://openrouter.ai/',
-    placeholder: 'your-openrouter-api-key'
-  },
-  {
-    key: 'GIGACHAT_API_KEY',
-    label: 'GigaChat API',
-    description: 'For GigaChat models (GigaChat-2-Max, etc.)',
-    url: 'https://github.com/ai-forever/gigachat',
-    placeholder: 'your-gigachat-api-key'
-  }
+// Display list of providers shown in the status panel; configured state comes from the
+// backend's /language-models/status. `provider` must match a backend ModelProvider value,
+// and this is a curated subset of backend PROVIDER_ENV_KEYS (src/llm/models.py) — keep the
+// two in sync when adding a provider users should see here.
+const LLM_PROVIDERS: ProviderInfo[] = [
+  { provider: 'OpenAI', label: 'OpenAI', description: 'GPT models (e.g. gpt-5.5)', url: 'https://platform.openai.com/', envVars: ['OPENAI_API_KEY'] },
+  { provider: 'Anthropic', label: 'Anthropic', description: 'Claude models (e.g. claude-opus-4-8)', url: 'https://console.anthropic.com/', envVars: ['ANTHROPIC_API_KEY'] },
+  { provider: 'Google', label: 'Google', description: 'Gemini models', url: 'https://ai.dev/', envVars: ['GOOGLE_API_KEY'] },
+  { provider: 'DeepSeek', label: 'DeepSeek', description: 'DeepSeek models', url: 'https://deepseek.com/', envVars: ['DEEPSEEK_API_KEY'] },
+  { provider: 'xAI', label: 'xAI', description: 'Grok models', url: 'https://x.ai/', envVars: ['XAI_API_KEY'] },
+  { provider: 'Kimi', label: 'Moonshot (Kimi)', description: 'Kimi / Moonshot models', url: 'https://platform.moonshot.ai/', envVars: ['MOONSHOT_API_KEY'] },
+  { provider: 'Groq', label: 'Groq', description: 'Groq-hosted models', url: 'https://groq.com/', envVars: ['GROQ_API_KEY'] },
+  { provider: 'OpenRouter', label: 'OpenRouter', description: 'OpenRouter models', url: 'https://openrouter.ai/', envVars: ['OPENROUTER_API_KEY'] },
 ];
 
 export function ApiKeysSettings() {
-  const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
-  const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
+  const [status, setStatus] = useState<ModelStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load API keys from backend on component mount
   useEffect(() => {
-    loadApiKeys();
+    let cancelled = false;
+    getModelStatus()
+      .then((s) => {
+        if (!cancelled) {
+          setStatus(s);
+          setError(null);
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e?.message || 'Failed to load model status');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const loadApiKeys = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const apiKeysSummary = await apiKeysService.getAllApiKeys();
-      
-      // Load actual key values for existing keys
-      const keysData: Record<string, string> = {};
-      for (const summary of apiKeysSummary) {
-        try {
-          const fullKey = await apiKeysService.getApiKey(summary.provider);
-          keysData[summary.provider] = fullKey.key_value;
-        } catch (err) {
-          console.warn(`Failed to load key for ${summary.provider}:`, err);
-        }
-      }
-      
-      setApiKeys(keysData);
-    } catch (err) {
-      console.error('Failed to load API keys:', err);
-      setError('Failed to load API keys. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleKeyChange = async (key: string, value: string) => {
-    // Update local state immediately for responsive UI
-    setApiKeys(prev => ({
-      ...prev,
-      [key]: value
-    }));
-
-    // Auto-save with debouncing
-    try {
-      if (value.trim()) {
-        await apiKeysService.createOrUpdateApiKey({
-          provider: key,
-          key_value: value.trim(),
-          is_active: true
-        });
-      } else {
-        // If value is empty, delete the key
-        try {
-          await apiKeysService.deleteApiKey(key);
-        } catch (err) {
-          // Key might not exist, which is fine
-          console.log(`Key ${key} not found for deletion, which is expected`);
-        }
-      }
-    } catch (err) {
-      console.error(`Failed to save API key ${key}:`, err);
-      setError(`Failed to save ${key}. Please try again.`);
-    }
-  };
-
-  const toggleKeyVisibility = (key: string) => {
-    setVisibleKeys(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  };
-
-  const clearKey = async (key: string) => {
-    try {
-      await apiKeysService.deleteApiKey(key);
-      setApiKeys(prev => {
-        const newKeys = { ...prev };
-        delete newKeys[key];
-        return newKeys;
-      });
-    } catch (err) {
-      console.error(`Failed to delete API key ${key}:`, err);
-      setError(`Failed to delete ${key}. Please try again.`);
-    }
-  };
-
-  const renderApiKeySection = (title: string, description: string, keys: ApiKey[], icon: React.ReactNode) => (
-    <Card className="bg-panel border-gray-700 dark:border-gray-700">
-      <CardHeader>
-        <CardTitle className="text-lg font-medium text-primary flex items-center gap-2">
-          {icon}
-          {title}
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {keys.map((apiKey) => (
-          <div key={apiKey.key} className="space-y-2">
-                         <button
-               className="text-sm font-medium text-primary hover:text-blue-500 cursor-pointer transition-colors text-left"
-               onClick={() => window.open(apiKey.url, '_blank')}
-             >
-               {apiKey.label}
-             </button>
-            <div className="relative">
-              <Input
-                type={visibleKeys[apiKey.key] ? 'text' : 'password'}
-                placeholder={apiKey.placeholder}
-                value={apiKeys[apiKey.key] || ''}
-                onChange={(e) => handleKeyChange(apiKey.key, e.target.value)}
-                className="pr-20"
-              />
-              <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                {apiKeys[apiKey.key] && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 hover:bg-red-500/10 hover:text-red-500"
-                    onClick={() => clearKey(apiKey.key)}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => toggleKeyVisibility(apiKey.key)}
-                >
-                  {visibleKeys[apiKey.key] ? (
-                    <EyeOff className="h-3 w-3" />
-                  ) : (
-                    <Eye className="h-3 w-3" />
-                  )}
-                </Button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-xl font-semibold text-primary mb-2">API Keys</h2>
-          <p className="text-sm text-muted-foreground">
-            Loading API keys...
-          </p>
-        </div>
-        <Card className="bg-panel border-gray-700 dark:border-gray-700">
-          <CardContent className="p-6">
-            <div className="text-sm text-muted-foreground">
-              Please wait while we load your API keys...
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  const configured = new Set(status?.configured_providers || []);
+  const llmConfigured = LLM_PROVIDERS.filter((p) => configured.has(p.provider));
+  const noneConfigured = !loading && !error && llmConfigured.length === 0;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-primary mb-2">API Keys</h2>
-        <p className="text-sm text-muted-foreground">
-          Configure API endpoints and authentication credentials for financial data and language models.
-          Changes are automatically saved.
-        </p>
+    <div className="max-w-3xl">
+      <div className="mb-6 flex items-center gap-2">
+        <Key className="h-5 w-5 text-primary" />
+        <h2 className="text-lg font-semibold text-primary">API Keys</h2>
       </div>
 
-      {/* Error Message */}
+      {/* Env-var-only posture */}
+      <Card className="mb-4 border-border bg-node">
+        <CardContent className="pt-4 text-sm text-muted-foreground">
+          API keys are read <span className="font-medium text-primary">only from backend environment variables</span> — they
+          are never entered or stored in this UI. Set them on your backend service (for a Render deploy, in the service's
+          Environment settings), then redeploy. The simplest setup is a single{' '}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">LLM_API_KEY</code> plus{' '}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">LLM_PROVIDER</code> (e.g.{' '}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">Anthropic</code>). Provider-specific vars like{' '}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">OPENAI_API_KEY</code> also work.
+        </CardContent>
+      </Card>
+
+      {loading && <div className="text-sm text-muted-foreground">Checking configured providers…</div>}
+
       {error && (
-        <Card className="bg-red-500/5 border-red-500/20">
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              <Key className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
-              <div className="space-y-1">
-                <h4 className="text-sm font-medium text-red-500">Error</h4>
-                <p className="text-xs text-muted-foreground">{error}</p>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setError(null);
-                    loadApiKeys();
-                  }}
-                  className="text-xs mt-2 p-0 h-auto text-red-500 hover:text-red-400"
-                >
-                  Try again
-                </Button>
-              </div>
-            </div>
+        <Card className="mb-4 border-red-500/40 bg-red-500/5">
+          <CardContent className="flex items-center gap-2 pt-4 text-sm text-red-500">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            Couldn't reach the backend to check configured providers: {error}
           </CardContent>
         </Card>
       )}
 
-      {/* Financial Data API Keys */}
-      {renderApiKeySection(
-        'Financial Data',
-        'API keys for accessing financial market data and datasets.',
-        FINANCIAL_API_KEYS,
-        <Key className="h-4 w-4" />
+      {noneConfigured && (
+        <Card className="mb-4 border-amber-500/50 bg-amber-500/10">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-4 w-4" />
+              No LLM API key configured
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-amber-700 dark:text-amber-300">
+            The app can't run until an LLM key is set on the backend. Add{' '}
+            <code className="rounded bg-black/10 px-1 py-0.5 text-xs dark:bg-white/10">LLM_API_KEY</code> and{' '}
+            <code className="rounded bg-black/10 px-1 py-0.5 text-xs dark:bg-white/10">LLM_PROVIDER</code> (or a
+            provider-specific key like{' '}
+            <code className="rounded bg-black/10 px-1 py-0.5 text-xs dark:bg-white/10">OPENAI_API_KEY</code>) as
+            environment variables on your backend service, then redeploy.
+          </CardContent>
+        </Card>
       )}
 
-      {/* LLM API Keys */}
-      {renderApiKeySection(
-        'Language Models',
-        'API keys for accessing various large language model providers.',
-        LLM_API_KEYS,
-        <Key className="h-4 w-4" />
+      {!loading && !error && !noneConfigured && (
+        <div className="mb-4 flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+          <CheckCircle2 className="h-4 w-4" />
+          Configured: {llmConfigured.map((p) => p.label).join(', ')}
+          {status?.default_model && (
+            <span className="text-muted-foreground">
+              · default model <code className="rounded bg-muted px-1 py-0.5 text-xs">{status.default_model.model_name}</code>
+            </span>
+          )}
+        </div>
       )}
 
-      {/* Security Note */}
-      <Card className="bg-amber-500/5 border-amber-500/20">
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <Key className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" />
-            <div className="space-y-1">
-              <h4 className="text-sm font-medium text-amber-500">Security Note</h4>
-              <p className="text-xs text-muted-foreground">
-                API keys are stored securely on your local system and changes are automatically saved. 
-                Keep your API keys secure and don't share them with others.
-              </p>
+      {/* Provider list */}
+      <div className="flex flex-col gap-2">
+        {LLM_PROVIDERS.map((p) => {
+          const isConfigured = configured.has(p.provider);
+          return (
+            <div
+              key={p.provider}
+              className="flex items-center justify-between rounded-md border border-border bg-node px-3 py-2"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <a
+                    href={p.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                  >
+                    {p.label}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                  <code className="rounded bg-muted px-1 py-0.5 text-xs text-muted-foreground">{p.envVars.join(' / ')}</code>
+                </div>
+                <div className="text-xs text-muted-foreground">{p.description}</div>
+              </div>
+              <span
+                className={cn(
+                  'shrink-0 rounded-full px-2 py-0.5 text-xs font-medium',
+                  isConfigured
+                    ? 'bg-green-500/15 text-green-600 dark:text-green-400'
+                    : 'bg-muted text-muted-foreground'
+                )}
+              >
+                {isConfigured ? 'Configured' : 'Not configured'}
+              </span>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          );
+        })}
+      </div>
+
+      <div className="mt-6 text-xs text-muted-foreground">
+        Market data uses <code className="rounded bg-muted px-1 py-0.5">FINANCIAL_DATASETS_API_KEY</code> (also an
+        environment variable). Free tickers (AAPL, GOOGL, MSFT, NVDA, TSLA) work without it.
+      </div>
     </div>
   );
-} 
+}

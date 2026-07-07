@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import List, Optional, Dict, Any
-from src.llm.models import ModelProvider
+from src.llm.models import ModelProvider, get_default_model
 from enum import Enum
 from app.backend.services.graph import extract_base_agent_key
 
@@ -59,26 +59,50 @@ class ErrorResponse(BaseModel):
 
 # Base class for shared fields between HedgeFundRequest and BacktestRequest
 class BaseHedgeFundRequest(BaseModel):
+    # Reject unknown fields (422) rather than silently dropping them. Notably this
+    # rejects any `api_keys` a stale or malicious client might send: keys are read
+    # only from backend environment variables, never from the request body.
+    model_config = ConfigDict(extra="forbid")
+
     tickers: List[str]
     graph_nodes: List[GraphNode]
     graph_edges: List[GraphEdge]
     agent_models: Optional[List[AgentModelConfig]] = None
-    model_name: Optional[str] = "gpt-5.5"
-    model_provider: Optional[ModelProvider] = ModelProvider.OPENAI
+    # Defaults are resolved from the configured provider at request time (see
+    # resolve_default_model). Left as None so an env-var-only deploy that supplies,
+    # say, an Anthropic key isn't forced onto the OpenAI default.
+    model_name: Optional[str] = None
+    model_provider: Optional[ModelProvider] = None
     margin_requirement: float = 0.0
     portfolio_positions: Optional[List[PortfolioPosition]] = None
-    api_keys: Optional[Dict[str, str]] = None
+    # NOTE: API keys are intentionally NOT accepted from the browser. They are read
+    # only from backend environment variables (see src/llm/models._resolve_api_key).
 
     def get_agent_ids(self) -> List[str]:
         """Extract agent IDs from graph structure"""
         return [node.id for node in self.graph_nodes]
 
-    def get_agent_model_config(self, agent_id: str) -> tuple[str, ModelProvider]:
+    def resolve_default_model(self) -> None:
+        """Fill model_name/model_provider from the env-configured provider when unset.
+
+        The frontend sends no global model (per-agent models travel in agent_models),
+        so without this the run would fall back to a hardcoded OpenAI default even when
+        only, e.g., an Anthropic key is configured. No-op if no cloud provider has a key
+        (callers surface the "no key configured" error instead)."""
+        if self.model_name and self.model_provider:
+            return
+        default = get_default_model()
+        if default is None:
+            return
+        self.model_name = self.model_name or default.model_name
+        self.model_provider = self.model_provider or default.provider
+
+    def get_agent_model_config(self, agent_id: str) -> tuple[Optional[str], Optional[ModelProvider]]:
         """Get model configuration for a specific agent"""
         if self.agent_models:
             # Extract base agent key from unique node ID for matching
             base_agent_key = extract_base_agent_key(agent_id)
-            
+
             for config in self.agent_models:
                 # Check both unique node ID and base agent key for matches
                 config_base_key = extract_base_agent_key(config.agent_id)
@@ -238,54 +262,3 @@ class FlowRunSummaryResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
-
-# API Key schemas
-class ApiKeyCreateRequest(BaseModel):
-    """Request to create or update an API key"""
-    provider: str = Field(..., min_length=1, max_length=100)
-    key_value: str = Field(..., min_length=1)
-    description: Optional[str] = None
-    is_active: bool = True
-
-
-class ApiKeyUpdateRequest(BaseModel):
-    """Request to update an existing API key"""
-    key_value: Optional[str] = Field(None, min_length=1)
-    description: Optional[str] = None
-    is_active: Optional[bool] = None
-
-
-class ApiKeyResponse(BaseModel):
-    """Complete API key response"""
-    id: int
-    provider: str
-    key_value: str
-    is_active: bool
-    description: Optional[str]
-    created_at: datetime
-    updated_at: Optional[datetime]
-    last_used: Optional[datetime]
-
-    class Config:
-        from_attributes = True
-
-
-class ApiKeySummaryResponse(BaseModel):
-    """API key response without the actual key value"""
-    id: int
-    provider: str
-    is_active: bool
-    description: Optional[str]
-    created_at: datetime
-    updated_at: Optional[datetime]
-    last_used: Optional[datetime]
-    has_key: bool = True  # Indicates if a key is set
-
-    class Config:
-        from_attributes = True
-
-
-class ApiKeyBulkUpdateRequest(BaseModel):
-    """Request to update multiple API keys at once"""
-    api_keys: List[ApiKeyCreateRequest]

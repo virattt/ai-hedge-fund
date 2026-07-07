@@ -34,7 +34,7 @@ The [`render.yaml`](render.yaml) Blueprint provisions three resources, grouped u
 |----------|------|------|
 | `ai-hedge-fund-api` | Python web service | REST API that runs the agents and the backtester |
 | `ai-hedge-fund-web` | Static site | React/Vite front end served over Render's CDN |
-| `ai-hedge-fund-db` | PostgreSQL | Persists saved flows, runs, and API keys |
+| `ai-hedge-fund-db` | PostgreSQL | Persists saved flows and runs |
 
 ## What's pre-baked for Render
 
@@ -75,7 +75,7 @@ The [`render.yaml`](render.yaml) Blueprint provisions three resources, grouped u
 
 ## Environment variables
 
-Set these in the Render Dashboard at deploy time, or later from the app's **Settings** page. Supply **one** LLM provider and its key.
+Set these in the Render Dashboard (the `ai-hedge-fund-api` service's **Environment** tab), at deploy time or later. API keys are read **only** from these environment variables — never entered or stored in the app UI (see [API-key security](#api-key-security)). Supply **one** LLM provider and its key.
 
 | Variable | Required? | What it's for |
 |----------|-----------|---------------|
@@ -88,17 +88,21 @@ Set these in the Render Dashboard at deploy time, or later from the app's **Sett
 
 ### Choosing your LLM
 
-Set `LLM_API_KEY` to an OpenAI key and the app runs on **OpenAI `gpt-5.5`** out of the box — no `LLM_PROVIDER` needed. `LLM_PROVIDER` only supplies the credential routing; it does **not** by itself change which model runs.
+Set `LLM_API_KEY` to an OpenAI key and the app runs on **OpenAI `gpt-5.5`** out of the box — no `LLM_PROVIDER` needed.
 
-- Leaving `LLM_PROVIDER` blank (or setting it to `OpenAI`) works with the default model out of the box.
-- To use any other provider, set `LLM_PROVIDER` to that provider and **pick a matching-provider model in the app UI** (or pass `--provider` on the CLI). Otherwise the app keeps requesting the OpenAI default, your key won't match it, and you'll see an "OpenAI API key not found" error.
+- Leaving `LLM_PROVIDER` blank (or setting it to `OpenAI`) uses the OpenAI default model.
+- To use another provider, set `LLM_PROVIDER` to that provider (e.g. `Anthropic`). The app then **automatically defaults runs to a matching-provider model** and, in the model pickers, **grays out models whose provider has no key** — so you can't accidentally pick a model your key can't run. You can still choose any other enabled model per agent.
 
-You can also set per-provider keys (e.g. `OPENAI_API_KEY`) or manage keys from the app's **Settings** page; those take precedence over `LLM_API_KEY` for their provider.
+You can also set per-provider keys (e.g. `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`); those take precedence over `LLM_API_KEY` for their provider. On the CLI, pass `--provider` / `--model` as before.
+
+### API-key security
+
+Upstream stores API keys in the database and lets you enter them in the UI — fine for a single-user local tool, but on a public URL with no auth it exposes every operator's keys. This template removes that path: keys are read **only** from backend environment variables (`LLM_API_KEY` / `LLM_PROVIDER`, provider-specific vars like `OPENAI_API_KEY`, and `FINANCIAL_DATASETS_API_KEY`) — never entered in the browser, sent in request bodies, or stored server-side. The **Settings → API Keys** page is read-only, showing *which* providers are configured (no values).
 
 ## Post-deploy setup
 
 1. Wait for all three services to go **live** in the Dashboard (the first backend build takes a few minutes).
-2. If you didn't set your LLM key at deploy time, add it now: either on the `ai-hedge-fund-api` service's **Environment** tab, or in the app's **Settings** page once it's open.
+2. If you didn't set your LLM key at deploy time, add it now on the `ai-hedge-fund-api` service's **Environment** tab and redeploy. (Keys are backend env vars only — see [API-key security](#api-key-security).)
 3. Open the `ai-hedge-fund-web` URL and start a run.
 
 ## Using the AI hedge fund
@@ -130,17 +134,25 @@ poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
 
 Locally the backend falls back to SQLite when `DATABASE_URL` is unset, so no database setup is required for development.
 
+The database schema is managed by [Alembic](https://alembic.sqlalchemy.org/), not created automatically on startup. Before running the **web** backend for the first time (and after pulling schema changes), apply migrations once from the repo root:
+
+```bash
+poetry run alembic -c app/backend/alembic.ini upgrade head
+```
+
+On Render this runs for you on every deploy — it's baked into the backend service's `startCommand`, so a fresh fork's database is built automatically and no manual migration step is needed.
+
 ## Troubleshooting
 
 | Symptom | Likely cause / fix |
 |---------|--------------------|
 | Backend deploy fails during build | Python version mismatch — the Blueprint pins `PYTHON_VERSION=3.11.9`; keep it (deps require 3.11). |
-| App loads but every run errors with an auth/key message | No LLM key set. Add one on the `ai-hedge-fund-api` **Environment** tab or in the app's **Settings**. |
+| App loads but every run errors with an auth/key message | No LLM key set. Add one on the `ai-hedge-fund-api` **Environment** tab and redeploy. The app's **Settings → API Keys** page shows which providers are currently configured. |
 | A run finishes but shows no decisions (or the backtester errors) | The flow has no **Portfolio Manager** node, or its nodes aren't connected. Wire your analysts into a Portfolio Manager (**Stock Input → analyst(s) → Portfolio Manager**) or start from a built-in template — see [Build your first flow](#build-your-first-flow). |
 | First request hangs ~30–60s | Free-tier cold start — the service is waking up. Subsequent requests are fast. |
 | Runs work for some tickers but not others | Tickers outside the five free ones need `FINANCIAL_DATASETS_API_KEY`. |
 | Frontend loads but the flows list spins forever / CORS errors in the network tab | The backend's `FRONTEND_URL` must equal the frontend's URL (it's the CORS allow-list). A fresh **Apply** wires this automatically, but a **code-only redeploy does not (re)create `fromService` env vars** — so if `FRONTEND_URL` is missing (e.g. it was added to `render.yaml` after the first deploy, or you renamed a service), run a **Blueprint sync** (Dashboard → your Blueprint → **Sync**), not just a redeploy. For a custom frontend domain, add it to `FRONTEND_URL` (comma-separated origins). |
-| "OpenAI API key not found" with a non-OpenAI key | Your `LLM_PROVIDER` isn't OpenAI but the app is still requesting the OpenAI default — pick a matching-provider model in the app UI (or `--provider` on the CLI). |
+| "OpenAI API key not found" with a non-OpenAI key | Set `LLM_PROVIDER` to your provider (e.g. `Anthropic`) so the app defaults runs to a matching-provider model. Confirm it under **Settings → API Keys** ("Configured: …"). On the CLI, pass `--provider`. |
 | Data doesn't persist across restarts | You're on the free Postgres (expires after 30 days) or fell back to SQLite locally — upgrade the DB plan for durability. |
 
 ## What this template does and doesn't do
