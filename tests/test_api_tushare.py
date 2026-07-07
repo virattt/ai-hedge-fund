@@ -58,3 +58,86 @@ def test_to_float_rejects_nan_inf_and_garbage():
     assert api_tushare._to_float("not-a-number") is None
     assert api_tushare._to_float("3.14") == 3.14
     assert api_tushare._to_float(0.0) == 0.0
+
+
+def _valuation_frame(ts_code="600519.SH", total_mv=2.0e7, pe=30.0, pb=8.0, ps=15.0):
+    """total_mv is in 万元 (2.0e7 万元 == 2.0e11 元)."""
+    return pd.DataFrame(
+        [
+            {
+                "ts_code": ts_code,
+                "trade_date": "20260707",
+                "total_mv": total_mv,
+                "pe": pe,
+                "pb": pb,
+                "ps": ps,
+                "circ_mv": total_mv,
+            }
+        ]
+    )
+
+
+def _fake_pro_with(daily_basic_fn):
+    pro = types.SimpleNamespace()
+    pro.daily_basic = daily_basic_fn
+    return pro
+
+
+def test_permission_error_trips_breaker_and_second_call_is_free(fresh, monkeypatch):
+    calls = {"n": 0}
+
+    def bad(trade_date=""):
+        calls["n"] += 1
+        raise RuntimeError("抱歉，您权限不足，需要 2000 积分")
+
+    monkeypatch.setattr(api_tushare, "_get_pro", lambda: _fake_pro_with(bad))
+
+    assert api_tushare._daily_basic_table("20260707") is None
+    assert api_tushare._disabled is True
+    assert api_tushare._daily_basic_table("20260707") is None  # short-circuit
+    assert calls["n"] == 1  # breaker prevented a second SDK call
+
+
+def test_transient_error_does_not_trip_breaker(fresh, monkeypatch):
+    def flaky(trade_date=""):
+        raise ConnectionError("RemoteDisconnected")
+
+    monkeypatch.setattr(api_tushare, "_get_pro", lambda: _fake_pro_with(flaky))
+
+    assert api_tushare._daily_basic_table("20260707") is None
+    assert api_tushare._disabled is False  # transient must NOT latch
+
+
+def test_empty_frame_returns_none_without_tripping(fresh, monkeypatch):
+    monkeypatch.setattr(
+        api_tushare, "_get_pro", lambda: _fake_pro_with(lambda trade_date="": pd.DataFrame())
+    )
+    assert api_tushare._daily_basic_table("20260707") is None
+    assert api_tushare._disabled is False
+
+
+def test_table_is_memoized_per_trade_date(fresh, monkeypatch):
+    calls = {"n": 0}
+
+    def single(trade_date=""):
+        calls["n"] += 1
+        return _valuation_frame()
+
+    monkeypatch.setattr(api_tushare, "_get_pro", lambda: _fake_pro_with(single))
+
+    first = api_tushare._daily_basic_table("20260707")
+    second = api_tushare._daily_basic_table("20260707")
+    assert first is second  # same cached DataFrame object
+    assert calls["n"] == 1
+
+
+def test_no_token_returns_none_without_calling_sdk(fresh, monkeypatch):
+    calls = {"n": 0}
+
+    def boom(trade_date=""):
+        calls["n"] += 1
+        raise AssertionError("SDK must not be called without a token")
+
+    monkeypatch.setattr(api_tushare, "_get_pro", lambda: None)
+    assert api_tushare._daily_basic_table("20260707") is None
+    assert calls["n"] == 0

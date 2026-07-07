@@ -81,3 +81,72 @@ def _to_float(v) -> float | None:
     if not math.isfinite(f):  # NaN or ±inf
         return None
     return f
+
+
+def _is_permission_error(exc: BaseException | None, payload: Any) -> bool:
+    """True if Tushare rejected the call for permission / points reasons.
+
+    Tushare may raise OR return a one-row error DataFrame; handle both.
+    """
+    if exc is not None and any(t in str(exc) for t in _PERMISSION_TOKENS):
+        return True
+    if isinstance(payload, pd.DataFrame) and not payload.empty:
+        cols = {str(c).lower() for c in payload.columns}
+        if "code" in cols or "msg" in cols:
+            joined = " ".join(str(v) for v in payload.iloc[0].tolist())
+            return any(t in joined for t in _PERMISSION_TOKENS)
+    return False
+
+
+def _daily_basic_table(trade_date: str) -> pd.DataFrame | None:
+    """Return the full-market daily_basic frame for ``trade_date`` (YYYYMMDD).
+
+    Memoized per trade_date and serialised on a per-date lock so the fan-out
+    fires one network call per date. Trips the breaker on a permission error;
+    returns ``None`` (without tripping) on empty or transient errors.
+    """
+    global _disabled
+    if _disabled:
+        return None
+    if trade_date in _daily_basic_tables:
+        return _daily_basic_tables[trade_date]
+
+    pro = _get_pro()
+    if pro is None:
+        return None
+
+    with _cache.fetch_lock(f"tushare:daily_basic:{trade_date}"):
+        if _disabled:
+            return None
+        if trade_date in _daily_basic_tables:
+            return _daily_basic_tables[trade_date]
+        try:
+            df = pro.daily_basic(trade_date=trade_date)
+        except Exception as e:  # noqa: BLE001 - Tushare raises varied types
+            if _is_permission_error(e, None):
+                logger.warning(
+                    "tushare daily_basic permission denied (needs 2000 points) "
+                    "— disabling Tushare valuation for this run: %s",
+                    e,
+                )
+                _disabled = True
+                return None
+            # Transient: do not memoize, do not trip — let the caller retry.
+            logger.warning(
+                "tushare daily_basic transient error for %s: %s", trade_date, e
+            )
+            return None
+
+        if _is_permission_error(None, df):
+            logger.warning(
+                "tushare daily_basic returned a permission-error payload "
+                "— disabling Tushare valuation for this run"
+            )
+            _disabled = True
+            return None
+
+        if df is None or df.empty:
+            return None  # non-trading day / future date — caller walks back
+
+        _daily_basic_tables[trade_date] = df
+        return df
