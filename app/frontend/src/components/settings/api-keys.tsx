@@ -165,7 +165,8 @@ export function ApiKeysSettings() {
 
       <div className="mt-6 text-xs text-muted-foreground">
         Market data uses <code className="rounded bg-muted px-1 py-0.5">FINANCIAL_DATASETS_API_KEY</code> (also an
-        environment variable). Free tickers (AAPL, GOOGL, MSFT, NVDA, TSLA) work without it.
+        environment variable). It's required for real results — financialdatasets.ai has no free tier (from $20).
+        Without a funded key, runs return no data ($N/A, hold 0).
       </div>
     </div>
   );

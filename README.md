@@ -50,8 +50,8 @@ The [`render.yaml`](render.yaml) Blueprint provisions three resources, grouped u
 - A [Render account](https://dashboard.render.com/register) (the free plan is enough to try it).
 - **An LLM provider and API key** — pick one of [OpenAI](https://platform.openai.com/), [Anthropic](https://anthropic.com/), [Groq](https://groq.com/), [Google Gemini](https://ai.dev/), or [DeepSeek](https://deepseek.com/), and supply it via `LLM_PROVIDER` + `LLM_API_KEY`.
 
-**Optional:**
-- A [Financial Datasets](https://financialdatasets.ai/) API key. `AAPL`, `GOOGL`, `MSFT`, `NVDA`, and `TSLA` are free without a key; other tickers need one.
+**Required for real results:**
+- A [Financial Datasets](https://financialdatasets.ai/) API key for market data (stock prices + fundamentals), supplied via `FINANCIAL_DATASETS_API_KEY`. financialdatasets.ai **no longer has a free tier** — the cheapest option is **$20 one-time for 1,000 requests** ([pricing](https://www.financialdatasets.ai/pricing)). Without a funded key, runs still complete but every ticker returns no data (`$N/A`, `hold 0`). The app can deploy without it, but you'll need it before any run produces real signals.
 
 ## Deploy
 
@@ -81,7 +81,7 @@ Set these in the Render Dashboard (the `ai-hedge-fund-api` service's **Environme
 |----------|-----------|---------------|
 | `LLM_API_KEY` | required | API key for your LLM provider. With no `LLM_PROVIDER` set, this is treated as an OpenAI key. Keys: [OpenAI](https://platform.openai.com/), [Anthropic](https://anthropic.com/), [Groq](https://groq.com/), [Google Gemini](https://ai.dev/), [DeepSeek](https://deepseek.com/). |
 | `LLM_PROVIDER` | optional | Provider for `LLM_API_KEY`, one of `OpenAI`, `Anthropic`, `Groq`, `Google`, `DeepSeek`, `OpenRouter`, `xAI`, `Kimi`, `GigaChat`. Leave blank to use OpenAI. |
-| `FINANCIAL_DATASETS_API_KEY` | optional | Financial data for tickers beyond the five free ones — [financialdatasets.ai](https://financialdatasets.ai/) |
+| `FINANCIAL_DATASETS_API_KEY` | required for real runs | Market data (prices + fundamentals) for all tickers — [financialdatasets.ai](https://financialdatasets.ai/). **No free tier**; from $20 one-time ([pricing](https://www.financialdatasets.ai/pricing)). Deploy succeeds without it, but every run returns empty (`$N/A`, `hold 0`). |
 | `DATABASE_URL` | auto | Injected from the managed Postgres — **do not set manually**. |
 | `VITE_API_URL` | auto | Injected into the frontend build from the backend's `RENDER_EXTERNAL_URL` (its `https://…onrender.com` URL, slug included) — **do not set manually**. |
 | `FRONTEND_URL` | auto | Injected from the frontend's `RENDER_EXTERNAL_URL` and used as the CORS allow-list. Set manually only for a custom frontend domain (comma-separated origins). |
@@ -150,7 +150,7 @@ On Render this runs for you on every deploy — it's baked into the backend serv
 | App loads but every run errors with an auth/key message | No LLM key set. Add one on the `ai-hedge-fund-api` **Environment** tab and redeploy. The app's **Settings → API Keys** page shows which providers are currently configured. |
 | A run finishes but shows no decisions (or the backtester errors) | The flow has no **Portfolio Manager** node, or its nodes aren't connected. Wire your analysts into a Portfolio Manager (**Stock Input → analyst(s) → Portfolio Manager**) or start from a built-in template — see [Build your first flow](#build-your-first-flow). |
 | First request hangs ~30–60s | Free-tier cold start — the service is waking up. Subsequent requests are fast. |
-| Runs work for some tickers but not others | Tickers outside the five free ones need `FINANCIAL_DATASETS_API_KEY`. |
+| Every ticker shows `$N/A` and `hold 0 / 100%` | Missing, invalid, or unfunded `FINANCIAL_DATASETS_API_KEY`. financialdatasets.ai returns `401` (no key) or `402` (key valid but no credits), so no market data reaches the agents. Set a funded key ([from $20](https://www.financialdatasets.ai/pricing)) on the `ai-hedge-fund-api` **Environment** tab and redeploy. |
 | Frontend loads but the flows list spins forever / CORS errors in the network tab | The backend's `FRONTEND_URL` must equal the frontend's URL (it's the CORS allow-list). A fresh **Apply** wires this automatically, but a **code-only redeploy does not (re)create `fromService` env vars** — so if `FRONTEND_URL` is missing (e.g. it was added to `render.yaml` after the first deploy, or you renamed a service), run a **Blueprint sync** (Dashboard → your Blueprint → **Sync**), not just a redeploy. For a custom frontend domain, add it to `FRONTEND_URL` (comma-separated origins). |
 | "OpenAI API key not found" with a non-OpenAI key | Set `LLM_PROVIDER` to your provider (e.g. `Anthropic`) so the app defaults runs to a matching-provider model. Confirm it under **Settings → API Keys** ("Configured: …"). On the CLI, pass `--provider`. |
 | Data doesn't persist across restarts | You're on the free Postgres (expires after 30 days) or fell back to SQLite locally — upgrade the DB plan for durability. |

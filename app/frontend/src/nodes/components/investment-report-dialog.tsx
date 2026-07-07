@@ -98,6 +98,13 @@ export function InvestmentReportDialog({
   // Extract unique tickers from the data
   const tickers = Object.keys(outputNodeData.decisions || {});
 
+  // No market data reached the agents when every ticker's price is absent/zero.
+  // This is the 401/402 signature (missing or unfunded FINANCIAL_DATASETS_API_KEY):
+  // prices come back empty, so decisions collapse to a placeholder "hold 0 / 100%".
+  const missingData =
+    tickers.length > 0 &&
+    tickers.every(ticker => !(Number(outputNodeData.current_prices?.[ticker]) > 0));
+
   // Use the unique node IDs directly since they're now stored as keys in analyst_signals
   const connectedUniqueAgentIds = Array.from(connectedAgentIds);
   const agents = Object.keys(outputNodeData.analyst_signals || {})
@@ -115,6 +122,18 @@ export function InvestmentReportDialog({
         </DialogHeader>
 
         <div className="space-y-8 my-4">
+          {/* No-data warning: fires when no market data reached the agents */}
+          {missingData && (
+            <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              <p className="font-semibold">No market data returned for this run.</p>
+              <p className="mt-1 text-destructive/90">
+                Every ticker came back with no price, so the results below are placeholders
+                (<span className="font-medium">hold / 0</span>) — not a real analysis. Set a funded{' '}
+                <code className="rounded bg-destructive/10 px-1 py-0.5">FINANCIAL_DATASETS_API_KEY</code>{' '}
+                (financialdatasets.ai — no free tier, from $20) and re-run.
+              </p>
+            </div>
+          )}
           {/* Summary Section */}
           <section>
             <h2 className="text-lg font-semibold mb-4">Summary</h2>
