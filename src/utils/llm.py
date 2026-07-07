@@ -2,7 +2,7 @@
 
 import json
 from pydantic import BaseModel
-from src.llm.models import get_model, get_model_info
+from src.llm.models import get_default_model, get_model, get_model_info
 from src.utils.progress import progress
 from src.graph.state import AgentState
 
@@ -34,9 +34,17 @@ def call_llm(
     if state and agent_name:
         model_name, model_provider = get_agent_model_config(state, agent_name)
     else:
-        # Use system defaults when no state or agent_name is provided
-        model_name = "gpt-5.5"
-        model_provider = "OPENAI"
+        # Use the system default for whichever provider is configured (env-var keys),
+        # rather than a hardcoded provider/model. This makes an Anthropic-only deploy
+        # default to Opus 4.8 instead of failing on a missing OpenAI key.
+        default_model = get_default_model()
+        if default_model is None:
+            raise ValueError(
+                "No LLM provider configured. Set an API key (e.g. ANTHROPIC_API_KEY or "
+                "OPENAI_API_KEY), or LLM_API_KEY together with LLM_PROVIDER."
+            )
+        model_name = default_model.model_name
+        model_provider = default_model.provider.value
 
     # API keys come exclusively from backend environment variables (see
     # src/llm/models._resolve_api_key), never from the request.
@@ -179,9 +187,11 @@ def get_agent_model_config(state, agent_name):
         if model_name and model_provider:
             return model_name, model_provider.value if hasattr(model_provider, 'value') else str(model_provider)
     
-    # Fall back to global configuration (system defaults)
+    # Fall back to global configuration (system defaults). The provider must be a
+    # ModelProvider *value* ("OpenAI"), not its enum name ("OPENAI"), or get_model_info
+    # and get_model won't recognize it. See the get_default_model() path in call_llm.
     model_name = state.get("metadata", {}).get("model_name") or "gpt-5.5"
-    model_provider = state.get("metadata", {}).get("model_provider") or "OPENAI"
+    model_provider = state.get("metadata", {}).get("model_provider") or "OpenAI"
     
     # Convert enum to string if necessary
     if hasattr(model_provider, 'value'):

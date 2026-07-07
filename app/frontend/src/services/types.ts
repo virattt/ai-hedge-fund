@@ -1,9 +1,21 @@
-// Shared types for API requests and responses
+// Shared types for API requests and responses.
+// Values must match the backend ModelProvider enum (src/llm/models.py); the runtime
+// model list is fetched from the backend, so this is a type-safety mirror only.
 export enum ModelProvider {
-  OPENAI = 'OpenAI',
+  ALIBABA = 'Alibaba',
   ANTHROPIC = 'Anthropic',
+  DEEPSEEK = 'DeepSeek',
+  GOOGLE = 'Google',
   GROQ = 'Groq',
+  KIMI = 'Kimi',
+  META = 'Meta',
+  MISTRAL = 'Mistral',
+  OPENAI = 'OpenAI',
   OLLAMA = 'Ollama',
+  OPENROUTER = 'OpenRouter',
+  GIGACHAT = 'GigaChat',
+  AZURE_OPENAI = 'Azure OpenAI',
+  XAI = 'xAI',
 }
 
 export interface AgentModelConfig {

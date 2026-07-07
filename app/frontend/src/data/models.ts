@@ -3,7 +3,9 @@ import { api } from '@/services/api';
 export interface LanguageModel {
   display_name: string;
   model_name: string;
-  provider: "Anthropic" | "DeepSeek" | "Google" | "Groq" | "OpenAI";
+  // The runtime list is fetched from the backend, so `provider` is any backend
+  // ModelProvider value (src/llm/models.py). Typed as string to avoid drift.
+  provider: string;
 }
 
 // Which providers have a key configured on the backend (from env vars only).
