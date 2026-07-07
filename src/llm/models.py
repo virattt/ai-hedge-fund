@@ -10,7 +10,6 @@ from langchain_gigachat import GigaChat
 from langchain_ollama import ChatOllama
 from enum import Enum
 from pydantic import BaseModel
-from typing import Tuple, List
 from pathlib import Path
 
 
@@ -40,7 +39,7 @@ class LLMModel(BaseModel):
     model_name: str
     provider: ModelProvider
 
-    def to_choice_tuple(self) -> Tuple[str, str, str]:
+    def to_choice_tuple(self) -> tuple[str, str, str]:
         """Convert to format needed for questionary choices"""
         return (self.display_name, self.model_name, self.provider.value)
 
@@ -83,10 +82,9 @@ class LLMModel(BaseModel):
         return self.provider == ModelProvider.OLLAMA
 
 
-# Load models from JSON file
-def load_models_from_json(json_path: str) -> List[LLMModel]:
+def load_models_from_json(json_path: str) -> list[LLMModel]:
     """Load models from a JSON file"""
-    with open(json_path, 'r') as f:
+    with open(json_path, "r") as f:
         models_data = json.load(f)
 
     models = []
@@ -192,7 +190,7 @@ def is_provider_configured(provider: ModelProvider) -> bool:
     return bool(os.getenv("LLM_API_KEY")) and _llm_provider_matches(provider)
 
 
-def get_configured_providers() -> List[str]:
+def get_configured_providers() -> list[str]:
     """Return the ``ModelProvider`` value strings that have a key configured via env."""
     return [p.value for p in ModelProvider if is_provider_configured(p)]
 
