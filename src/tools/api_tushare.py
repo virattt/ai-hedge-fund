@@ -150,3 +150,46 @@ def _daily_basic_table(trade_date: str) -> pd.DataFrame | None:
 
         _daily_basic_tables[trade_date] = df
         return df
+
+
+def get_valuation(ticker: str, as_of_date: str) -> dict | None:
+    """Point-in-time valuation for ``ticker`` as of the latest trading day
+    ≤ ``as_of_date``.
+
+    ``ticker`` is a Tushare ts_code (e.g. ``600519.SH``) — the project's
+    internal A-share format, no conversion needed.
+    ``as_of_date`` is ``YYYY-MM-DD``.
+
+    Returns ``{"market_cap", "pe", "pb", "ps", "trade_date"}`` or ``None``.
+    ``market_cap`` is in CNY (yuan); Tushare ships it in 万元 so we multiply
+    by 1e4.
+    """
+    if _disabled or _get_pro() is None:
+        return None
+
+    import datetime as _dt
+
+    target = as_of_date.replace("-", "")
+    dt = _dt.datetime.strptime(target, "%Y%m%d")
+    # Walk back up to 7 calendar days to find a populated trading day
+    # (covers the longest CN holiday closures).
+    for back in range(8):
+        ymd = (dt - _dt.timedelta(days=back)).strftime("%Y%m%d")
+        df = _daily_basic_table(ymd)
+        if df is None:
+            if _disabled:
+                return None
+            continue  # empty/non-trading day → try the previous day
+        row = df[df["ts_code"] == ticker]
+        if row.empty:
+            continue
+        r = row.iloc[0]
+        total_mv_wan = _to_float(r.get("total_mv"))
+        return {
+            "market_cap": total_mv_wan * 1e4 if total_mv_wan is not None else None,
+            "pe": _to_float(r.get("pe")),
+            "pb": _to_float(r.get("pb")),
+            "ps": _to_float(r.get("ps")),
+            "trade_date": ymd,
+        }
+    return None

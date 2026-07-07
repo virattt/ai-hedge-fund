@@ -141,3 +141,46 @@ def test_no_token_returns_none_without_calling_sdk(fresh, monkeypatch):
     monkeypatch.setattr(api_tushare, "_get_pro", lambda: None)
     assert api_tushare._daily_basic_table("20260707") is None
     assert calls["n"] == 0
+
+
+def test_get_valuation_converts_units_and_returns_ratios(fresh, monkeypatch):
+    monkeypatch.setattr(
+        api_tushare,
+        "_get_pro",
+        lambda: _fake_pro_with(
+            lambda trade_date="": _valuation_frame() if trade_date == "20260707" else pd.DataFrame()
+        ),
+    )
+
+    v = api_tushare.get_valuation("600519.SH", "2026-07-07")
+    assert v is not None
+    assert v["market_cap"] == pytest.approx(2.0e7 * 1e4)  # 万元 → 元
+    assert v["pe"] == 30.0
+    assert v["pb"] == 8.0
+    assert v["ps"] == 15.0
+    assert v["trade_date"] == "20260707"
+
+
+def test_get_valuation_walks_back_to_nearest_trading_day(fresh, monkeypatch):
+    # 2026-07-04 is a Saturday; only Friday 2026-07-03 has data.
+    def fake(trade_date=""):
+        return _valuation_frame() if trade_date == "20260703" else pd.DataFrame()
+
+    monkeypatch.setattr(api_tushare, "_get_pro", lambda: _fake_pro_with(fake))
+
+    v = api_tushare.get_valuation("600519.SH", "2026-07-04")
+    assert v is not None
+    assert v["trade_date"] == "20260703"
+
+
+def test_get_valuation_missing_ticker_returns_none(fresh, monkeypatch):
+    monkeypatch.setattr(
+        api_tushare, "_get_pro", lambda: _fake_pro_with(lambda trade_date="": _valuation_frame())
+    )
+    assert api_tushare.get_valuation("999999.SH", "2026-07-07") is None
+
+
+def test_get_valuation_disabled_short_circuits(monkeypatch):
+    monkeypatch.setattr(api_tushare, "_disabled", True)
+    monkeypatch.setenv("TUSHARE_TOKEN", "fake-token")
+    assert api_tushare.get_valuation("600519.SH", "2026-07-07") is None
