@@ -10,7 +10,6 @@ export interface LanguageModel {
 // API keys are never entered or stored in the UI.
 export interface ModelStatus {
   configured_providers: string[];
-  default_provider: string | null;
   default_model: { model_name: string; provider: string } | null;
 }
 
@@ -33,16 +32,12 @@ export const getModelStatus = async (): Promise<ModelStatus> => {
 
 /**
  * Get the list of provider names that have an API key configured on the backend.
- * Returns an empty array on failure (callers treat that as "none configured").
+ * Throws if the status endpoint is unavailable so callers can distinguish a real
+ * "none configured" ([]) from an error and fail open (see useConfiguredProviders).
  */
 export const getConfiguredProviders = async (): Promise<string[]> => {
-  try {
-    const status = await getModelStatus();
-    return status.configured_providers || [];
-  } catch (error) {
-    console.error('Failed to fetch configured providers:', error);
-    return [];
-  }
+  const status = await getModelStatus();
+  return status.configured_providers || [];
 };
 
 /**

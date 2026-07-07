@@ -1,9 +1,7 @@
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
 import asyncio
 
-from app.backend.database import get_db
 from app.backend.models.schemas import ErrorResponse, HedgeFundRequest, BacktestRequest, BacktestDayResult, BacktestPerformanceMetrics
 from app.backend.models.events import StartEvent, ProgressUpdateEvent, ErrorEvent, CompleteEvent
 from app.backend.services.graph import create_graph, parse_hedge_fund_response, run_graph_async
@@ -22,7 +20,7 @@ router = APIRouter(prefix="/hedge-fund")
         500: {"model": ErrorResponse, "description": "Internal server error"},
     },
 )
-async def run(request_data: HedgeFundRequest, request: Request, db: Session = Depends(get_db)):
+async def run(request_data: HedgeFundRequest, request: Request):
     try:
         # API keys come only from backend environment variables (never from the request
         # body or the database). Resolve the default model from the configured provider
@@ -178,7 +176,7 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
         500: {"model": ErrorResponse, "description": "Internal server error"},
     },
 )
-async def backtest(request_data: BacktestRequest, request: Request, db: Session = Depends(get_db)):
+async def backtest(request_data: BacktestRequest, request: Request):
     """Run a continuous backtest over a time period with streaming updates."""
     try:
         # API keys come only from backend environment variables. Resolve the default

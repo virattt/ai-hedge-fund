@@ -78,7 +78,7 @@ export function ModelSelector({
                     "bg-node",
                     enabled
                       ? "cursor-pointer hover:bg-accent"
-                      : "opacity-40 cursor-not-allowed data-[disabled=true]:opacity-40",
+                      : "opacity-40 cursor-not-allowed",
                     value === model.model_name && "bg-blue-600/10 border-l-2 border-blue-500/50"
                   )}
                   onSelect={(currentValue) => {

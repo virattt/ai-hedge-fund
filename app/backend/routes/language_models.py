@@ -1,8 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from typing import List, Dict, Any
 
-import os
-
 from app.backend.models.schemas import ErrorResponse
 from app.backend.services.ollama_service import OllamaService
 from src.llm.models import get_models_list, get_configured_providers, get_default_model
@@ -83,7 +81,6 @@ async def get_language_model_status():
         default_model = get_default_model()
         return {
             "configured_providers": configured,
-            "default_provider": os.getenv("LLM_PROVIDER") or None,
             "default_model": (
                 {"model_name": default_model.model_name, "provider": default_model.provider.value}
                 if default_model else None

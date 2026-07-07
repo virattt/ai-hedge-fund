@@ -92,6 +92,3 @@ class HedgeFundFlowRunCycle(Base):
     # Metadata
     trigger_reason = Column(String(100), nullable=True)  # scheduled, manual, market_event, etc.
     market_conditions = Column(JSON, nullable=True)  # Market data snapshot at cycle start
-
-
- 

@@ -14,7 +14,10 @@ interface ProviderInfo {
   envVars: string[];
 }
 
-// Providers the model registry can use. Configured state comes from the backend.
+// Display list of providers shown in the status panel; configured state comes from the
+// backend's /language-models/status. `provider` must match a backend ModelProvider value,
+// and this is a curated subset of backend PROVIDER_ENV_KEYS (src/llm/models.py) — keep the
+// two in sync when adding a provider users should see here.
 const LLM_PROVIDERS: ProviderInfo[] = [
   { provider: 'OpenAI', label: 'OpenAI', description: 'GPT models (e.g. gpt-5.5)', url: 'https://platform.openai.com/', envVars: ['OPENAI_API_KEY'] },
   { provider: 'Anthropic', label: 'Anthropic', description: 'Claude models (e.g. claude-opus-4-8)', url: 'https://console.anthropic.com/', envVars: ['ANTHROPIC_API_KEY'] },
@@ -56,7 +59,6 @@ export function ApiKeysSettings() {
   }, []);
 
   const configured = new Set(status?.configured_providers || []);
-  // Ollama needs no key, so ignore it when deciding whether an LLM key is set.
   const llmConfigured = LLM_PROVIDERS.filter((p) => configured.has(p.provider));
   const noneConfigured = !loading && !error && llmConfigured.length === 0;
 

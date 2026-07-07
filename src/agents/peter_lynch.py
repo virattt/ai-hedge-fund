@@ -12,7 +12,6 @@ import json
 from typing_extensions import Literal
 from src.utils.progress import progress
 from src.utils.llm import call_llm
-from src.utils.api_key import get_api_key_from_state
 
 
 class PeterLynchSignal(BaseModel):
@@ -42,7 +41,6 @@ def peter_lynch_agent(state: AgentState, agent_id: str = "peter_lynch_agent"):
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
     analysis_data = {}
     lynch_analysis = {}
 
@@ -68,17 +66,16 @@ def peter_lynch_agent(state: AgentState, agent_id: str = "peter_lynch_agent"):
             end_date,
             period="annual",
             limit=5,
-            api_key=api_key,
         )
 
         progress.update_status(agent_id, ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+        market_cap = get_market_cap(ticker, end_date)
 
         progress.update_status(agent_id, ticker, "Fetching insider trades")
-        insider_trades = get_insider_trades(ticker, end_date, limit=50, api_key=api_key)
+        insider_trades = get_insider_trades(ticker, end_date, limit=50)
 
         progress.update_status(agent_id, ticker, "Fetching company news")
-        company_news = get_company_news(ticker, end_date, limit=50, api_key=api_key)
+        company_news = get_company_news(ticker, end_date, limit=50)
 
         # Perform sub-analyses:
         progress.update_status(agent_id, ticker, "Analyzing growth")

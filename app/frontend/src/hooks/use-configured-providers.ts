@@ -7,7 +7,9 @@ import { getConfiguredProviders } from '@/data/models';
  * the backend via environment variables. Used to gray out models whose provider has no
  * key and to warn when nothing is configured.
  *
- * `providers` is null while loading so callers can avoid graying everything prematurely.
+ * `providers` is null while loading, and stays null if the status fetch fails, so callers
+ * treat "unknown" the same as loading and fail open (enable all models) rather than graying
+ * everything out on a transient backend blip. Runs still enforce keys server-side.
  */
 export function useConfiguredProviders() {
   const [providers, setProviders] = useState<string[] | null>(null);
@@ -20,6 +22,10 @@ export function useConfiguredProviders() {
         if (!cancelled) {
           setProviders(result);
         }
+      })
+      .catch((error) => {
+        // Leave providers null (unknown) so the selector fails open.
+        console.error('Failed to fetch configured providers:', error);
       })
       .finally(() => {
         if (!cancelled) {

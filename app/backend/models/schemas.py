@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import List, Optional, Dict, Any
 from src.llm.models import ModelProvider, get_default_model
 from enum import Enum
@@ -59,6 +59,11 @@ class ErrorResponse(BaseModel):
 
 # Base class for shared fields between HedgeFundRequest and BacktestRequest
 class BaseHedgeFundRequest(BaseModel):
+    # Reject unknown fields (422) rather than silently dropping them. Notably this
+    # rejects any `api_keys` a stale or malicious client might send: keys are read
+    # only from backend environment variables, never from the request body.
+    model_config = ConfigDict(extra="forbid")
+
     tickers: List[str]
     graph_nodes: List[GraphNode]
     graph_edges: List[GraphEdge]
@@ -92,7 +97,7 @@ class BaseHedgeFundRequest(BaseModel):
         self.model_name = self.model_name or default.model_name
         self.model_provider = self.model_provider or default.provider
 
-    def get_agent_model_config(self, agent_id: str) -> tuple[str, ModelProvider]:
+    def get_agent_model_config(self, agent_id: str) -> tuple[Optional[str], Optional[ModelProvider]]:
         """Get model configuration for a specific agent"""
         if self.agent_models:
             # Extract base agent key from unique node ID for matching
