@@ -18,6 +18,7 @@ All public entry points return ``None`` on failure — they never raise.
 from __future__ import annotations
 
 import logging
+import math
 import os
 from typing import Any
 
@@ -65,13 +66,18 @@ def _get_pro() -> Any:
 
 
 def _to_float(v) -> float | None:
-    """Coerce to float, treating NaN / None / garbage as None."""
+    """Coerce to float, treating NaN / ±inf / None / garbage as None.
+
+    Tushare's ``daily_basic`` computes ratios like ``pe = price / eps``, which
+    is ``inf`` for loss-making tickers; letting inf through would silently
+    poison downstream aggregations (mean/median PE → inf).
+    """
     if v is None:
         return None
     try:
         f = float(v)
     except (TypeError, ValueError):
         return None
-    if f != f:  # NaN
+    if not math.isfinite(f):  # NaN or ±inf
         return None
     return f
