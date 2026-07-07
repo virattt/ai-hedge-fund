@@ -126,10 +126,22 @@ async def run(request_data: HedgeFundRequest, request: Request, db: Session = De
                     yield ErrorEvent(message="Failed to generate hedge fund decisions").to_sse()
                     return
 
+                # Parse the final trading decisions. Empty here means the graph produced no
+                # decisions message — almost always a misconfigured flow (no Portfolio Manager,
+                # or analyst nodes not connected to one), so surface an actionable error instead
+                # of silently completing with nothing.
+                decisions = parse_hedge_fund_response(result.get("messages", [])[-1].content)
+                if not decisions:
+                    yield ErrorEvent(
+                        message="No trading decisions were produced. Make sure your flow connects "
+                                "one or more analyst nodes to a Portfolio Manager node."
+                    ).to_sse()
+                    return
+
                 # Send the final result
                 final_data = CompleteEvent(
                     data={
-                        "decisions": parse_hedge_fund_response(result.get("messages", [])[-1].content),
+                        "decisions": decisions,
                         "analyst_signals": result.get("data", {}).get("analyst_signals", {}),
                         "current_prices": result.get("data", {}).get("current_prices", {}),
                     }
