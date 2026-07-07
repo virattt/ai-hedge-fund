@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import random
 import time
 from typing import Callable, TypeVar
 
@@ -39,17 +40,42 @@ logger = logging.getLogger(__name__)
 # Global cache instance (same one used by api.py — in-memory, shared)
 _cache = get_cache()
 
+# Process-wide memo for the all-market spot table returned by
+# ``stock_zh_a_spot_em``. That endpoint ships *every* A-share (~5,000 rows) in
+# one call, so we fetch it once and look each ticker up from the shared table.
+# Without this, the concurrent analyst fan-out fires the heavy endpoint once
+# per agent per ticker and Eastmoney rate-limits the run — closing the
+# connection mid-flight (``RemoteDisconnected``). Guarded by ``fetch_lock`` so
+# simultaneous misses serialise to a single network call.
+_spot_table: pd.DataFrame | None = None
+
 T = TypeVar("T")
 
 
-def _with_retry(fn: Callable[[], T], retries: int = 1, delay: float = 2.0) -> T:
-    """Call ``fn`` with a single retry on common akshare transient errors.
+def _with_retry(
+    fn: Callable[[], T],
+    retries: int = 1,
+    delay: float = 2.0,
+    backoff: float = 2.0,
+    jitter: float = 0.0,
+) -> T:
+    """Call ``fn`` with retries on common akshare transient errors.
 
-    akshare already does some internal rate-limit handling, so we keep this
-    simple: one retry after ``delay`` seconds on ``JSONDecodeError``,
-    ``ConnectionError``, ``RemoteDisconnected`` or an empty DataFrame result.
-    Any other exception propagates immediately (the caller wraps in try/except
-    and returns ``[]``/``None``).
+    Waits ``delay * backoff**attempt`` before retry number ``attempt + 1``, plus
+    up to ``jitter`` seconds of randomness. The jitter desyncs concurrent
+    retries so a roomful of agents rate-limited at the same instant don't all
+    wake up together and get dropped again — relevant for the shared spot-table
+    fetch, which is the single gating call for every ticker's market cap.
+
+    akshare already does some internal rate-limit handling, so the defaults
+    (``retries=1``, ``jitter=0``) preserve the original one-retry-after-``delay``
+    behaviour for the existing per-ticker callers; the spot-table fetch asks
+    for ``retries=3`` with jitter.
+
+    Retries on ``JSONDecodeError``, ``ConnectionError``, ``RemoteDisconnected``,
+    ``TimeoutError`` or an empty DataFrame result. Any other exception
+    propagates immediately (the caller wraps in try/except and returns
+    ``[]``/``None``).
     """
     last_exc: Exception | None = None
     for attempt in range(retries + 1):
@@ -62,21 +88,23 @@ def _with_retry(fn: Callable[[], T], retries: int = 1, delay: float = 2.0) -> T:
                 for token in ("jsondecodeerror", "connection", "remotedisconnected", "timeout")
             ) or isinstance(e, (ConnectionError, TimeoutError))
             if transient and attempt < retries:
+                wait = delay * (backoff ** attempt) + random.uniform(0, jitter)
                 logger.warning(
                     "akshare transient error for %s: %s — retrying after %.1fs",
                     getattr(fn, "__name__", fn),
                     e,
-                    delay,
+                    wait,
                 )
                 last_exc = e
-                time.sleep(delay)
+                time.sleep(wait)
                 continue
             raise
         else:
             # Treat empty DataFrame as a transient signal worth one retry
             if isinstance(result, pd.DataFrame) and result.empty and attempt < retries:
-                logger.warning("akshare returned empty DataFrame — retrying after %.1fs", delay)
-                time.sleep(delay)
+                wait = delay * (backoff ** attempt) + random.uniform(0, jitter)
+                logger.warning("akshare returned empty DataFrame — retrying after %.1fs", wait)
+                time.sleep(wait)
                 continue
             return result
     # All retries exhausted: re-raise the last transient exception
@@ -800,45 +828,76 @@ def get_company_news(
 # ---------------------------------------------------------------------------
 # 6. Market cap
 # ---------------------------------------------------------------------------
+def _get_spot_table() -> pd.DataFrame | None:
+    """Return the shared all-market spot table, fetching it at most once.
+
+    ``stock_zh_a_spot_em`` is the heaviest A-share call (it returns ~5,000
+    rows), so concurrent callers must not each fire it. The first miss acquires
+    the per-key lock, populates ``_spot_table``, and every subsequent caller —
+    including those that waited on the lock — reuses it.
+    """
+    global _spot_table
+    if _spot_table is not None:
+        return _spot_table
+    with _cache.fetch_lock("akshare:stock_zh_a_spot_em"):
+        # Re-check inside the lock: another thread may have populated it while
+        # we were queued.
+        if _spot_table is not None:
+            return _spot_table
+
+        def _fetch_spot() -> pd.DataFrame:
+            return ak.stock_zh_a_spot_em()
+
+        # This is the single gating call for every ticker's market cap, so give
+        # it real backoff (2s→4s→8s) + jitter — a flat one-shot retry isn't
+        # enough if Eastmoney drops the connection under load.
+        try:
+            df = _with_retry(_fetch_spot, retries=3, delay=2.0, backoff=2.0, jitter=1.0)
+        except Exception as e:
+            logger.warning("akshare spot-table fetch failed: %s", e)
+            return None
+        if df is None or df.empty:
+            return None
+        _spot_table = df
+        return _spot_table
+
+
 def get_market_cap(
     ticker: str,
     end_date: str,
     api_key: str | None = None,
 ) -> float | None:
-    """Fetch total market cap (CNY) via ``akshare.stock_zh_a_spot_em``.
+    """Fetch total market cap (CNY) via the shared ``stock_zh_a_spot_em`` table.
 
-    ``stock_individual_info_em`` is broken in current akshare (Eastmoney API
-    returns a 3-column payload but akshare hardcodes a 2-column rename →
-    ``ValueError: Length mismatch``). We fall back to ``stock_zh_a_spot_em``,
-    which returns realtime spot data for all A-shares including a 总市值 column
-    valued in CNY (yuan).
+    ``stock_zh_a_spot_em`` returns realtime spot data for *all* A-shares
+    including a 总市值 column valued in CNY (yuan). Because one call covers
+    every ticker, it is fetched once per process (see :func:`_get_spot_table`)
+    and shared across the whole analyst fan-out.
 
     Only returns the live market cap reliably (when ``end_date`` is today or
     near-today). For historical dates the live cap is returned as a proxy (the
-    US ``api.py`` does not cache market cap either, so we skip caching).
+    US ``api.py`` does not cache market cap either).
+
+    ``stock_individual_info_em`` (the fallback) is broken in some akshare
+    versions — Eastmoney returns a 3-column payload but akshare hardcodes a
+    2-column rename → ``ValueError: Length mismatch`` — so it is only used if
+    the spot table is unavailable.
     """
     code = a_share_code(ticker)
 
-    # --- Primary: stock_zh_a_spot_em (realtime spot for all A-shares) ---
-    def _fetch_spot() -> pd.DataFrame:
-        df = ak.stock_zh_a_spot_em()
-        # Filter to the single ticker we care about
-        if "代码" in df.columns:
-            return df[df["代码"] == code]
-        return pd.DataFrame()
-
-    try:
-        spot = _with_retry(_fetch_spot)
-        if spot is not None and not spot.empty and "总市值" in spot.columns:
-            cap = _safe_float(spot.iloc[0]["总市值"])
+    # --- Primary: shared all-market spot table (fetched once per process) ---
+    spot = _get_spot_table()
+    if (
+        spot is not None
+        and not spot.empty
+        and "代码" in spot.columns
+        and "总市值" in spot.columns
+    ):
+        row = spot[spot["代码"] == code]
+        if not row.empty:
+            cap = _safe_float(row.iloc[0]["总市值"])
             if cap is not None and cap > 0:
                 return cap
-    except Exception as e:
-        logger.warning(
-            "akshare get_market_cap stock_zh_a_spot_em failed for %s: %s",
-            ticker,
-            e,
-        )
 
     # --- Fallback: stock_individual_info_em (broken in some akshare versions) ---
     def _fetch_info() -> pd.DataFrame:
