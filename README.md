@@ -139,6 +139,14 @@ poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
 
 Locally the backend falls back to SQLite when `DATABASE_URL` is unset, so no database setup is required for development.
 
+The database schema is managed by [Alembic](https://alembic.sqlalchemy.org/), not created automatically on startup. Before running the **web** backend for the first time (and after pulling schema changes), apply migrations once from the repo root:
+
+```bash
+poetry run alembic -c app/backend/alembic.ini upgrade head
+```
+
+On Render this runs for you on every deploy — it's baked into the backend service's `startCommand`, so a fresh fork's database is built automatically and no manual migration step is needed.
+
 ## Troubleshooting
 
 | Symptom | Likely cause / fix |

@@ -14,7 +14,12 @@ projects:
             runtime: python
             plan: free
             buildCommand: pip install "poetry==2.4.1" && poetry config virtualenvs.create false && poetry install --no-interaction --no-ansi --no-root --without dev
-            startCommand: python -m uvicorn app.backend.main:app --host 0.0.0.0 --port $PORT
+            # Apply DB migrations before booting. `&&` fails the start loudly if a
+            # migration errors (no silent bad-schema start). Idempotent: on a fresh
+            # fork's empty DB it builds the schema; on an up-to-date DB it's a no-op.
+            # Migrations live in startCommand (not preDeployCommand) because the free
+            # plan has no preDeploy step; free = single instance, so no migration race.
+            startCommand: alembic -c app/backend/alembic.ini upgrade head && python -m uvicorn app.backend.main:app --host 0.0.0.0 --port $PORT
             healthCheckPath: /
             envVars:
               # Repo root on the import path so `app.backend` and `src` packages resolve
@@ -32,8 +37,8 @@ projects:
               # OpenAI gpt-5.5 out of the box — LLM_PROVIDER can be left blank. To use a
               # different provider, set LLM_PROVIDER (one of: OpenAI, Anthropic, Groq,
               # Google, DeepSeek, OpenRouter, xAI, Kimi, GigaChat), put that provider's
-              # key in LLM_API_KEY, and pick a matching model in the app UI. Keys can
-              # also be set later in the app UI.
+              # key in LLM_API_KEY, and pick a matching model in the app UI. Keys are
+              # read only from these backend env vars — they cannot be set in the app UI.
               - key: LLM_API_KEY
                 sync: false
               - key: LLM_PROVIDER
