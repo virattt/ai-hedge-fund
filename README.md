@@ -105,17 +105,10 @@ You can also set per-provider keys (e.g. `OPENAI_API_KEY`) or manage keys from t
 
 In the web UI you pick the tickers to analyze, choose which investor agents participate, and select the LLM model. The agents each produce a signal; a **Risk Manager** sets position limits and a **Portfolio Manager** makes the final call. You can also run a **backtester** over a historical date range.
 
-The investor agents include:
-
-Aswath Damodaran · Ben Graham · Bill Ackman · Cathie Wood · Charlie Munger · Michael Burry · Mohnish Pabrai · Nassim Taleb · Peter Lynch · Phil Fisher · Rakesh Jhunjhunwala · Stanley Druckenmiller · Warren Buffett — plus **Valuation**, **Sentiment**, **Fundamentals**, and **Technicals** analysts, a **Risk Manager**, and a **Portfolio Manager**.
-
-### Build your first flow
-
-The canvas starts empty. A runnable flow must **connect its nodes with edges** and **end in a Portfolio Manager** — the run follows the edges out of the Stock Input, so anything not wired downstream is ignored, and without a Portfolio Manager no trading decisions are produced.
-
 The quickest way to a working flow:
 
-- **Use a template** — drop one of the built-in multi-node templates (e.g. *Value Investors*), which already wire analysts into a Portfolio Manager. Then just set your tickers and run.
+- **Use a ready-made Swarm example** — In the right-hand menu under `Components`, expand the `Swarms` menu. Select *Value Investors*, or one of the other options, which already wire analysts into a Portfolio Manager. Then just set your tickers and run.
+
 - **Or build the minimal flow by hand** — add a **Stock Input**, one or more **analyst** nodes (e.g. Michael Burry), and a **Portfolio Manager**, then connect them: **Stock Input → analyst(s) → Portfolio Manager**. (A Risk Manager is inserted automatically between analysts and the Portfolio Manager.)
 
 If a run finishes with no decisions, your flow is missing a Portfolio Manager or its nodes aren't connected — see Troubleshooting.
