@@ -33,6 +33,7 @@ from src.data.models import (
     LineItem,
     Price,
 )
+from src.tools import api_tushare
 from src.tools.markets import a_share_code
 
 logger = logging.getLogger(__name__)
@@ -899,7 +900,12 @@ def get_market_cap(
     """
     code = a_share_code(ticker)
 
-    # --- Primary: shared all-market spot table (fetched once per process) ---
+    # --- Primary: Tushare daily_basic (stable, authenticated) ---
+    v = api_tushare.get_valuation(ticker, end_date)
+    if v and v.get("market_cap"):
+        return v["market_cap"]
+
+    # --- Secondary: shared all-market spot table (Eastmoney; currently flaky) ---
     spot = _get_spot_table()
     if (
         spot is not None
