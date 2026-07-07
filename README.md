@@ -97,12 +97,7 @@ You can also set per-provider keys (e.g. `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`);
 
 ### API-key security
 
-This template treats API keys as **backend secrets, not app data**:
-
-- Keys are read **only** from the backend's environment variables (`LLM_API_KEY` / `LLM_PROVIDER`, or provider-specific vars like `OPENAI_API_KEY`, plus `FINANCIAL_DATASETS_API_KEY`). They are never entered into, sent from, or stored by the browser, and the API does not accept keys in request bodies.
-- The app has **no key-storage database** — there is no endpoint that stores or returns key values. The **Settings → API Keys** page is read-only: it shows *which* providers are configured (derived from env vars, no values) and warns when none are.
-
-This matters because the app is deployed to a public URL with no authentication. Storing keys server-side and reading them back over an unauthenticated API (the upstream single-user default) would expose them to anyone who finds the URL, so this template removes that path entirely.
+Upstream stores API keys in the database and lets you enter them in the UI — fine for a single-user local tool, but on a public URL with no auth it exposes every operator's keys. This template removes that path: keys are read **only** from backend environment variables (`LLM_API_KEY` / `LLM_PROVIDER`, provider-specific vars like `OPENAI_API_KEY`, and `FINANCIAL_DATASETS_API_KEY`) — never entered in the browser, sent in request bodies, or stored server-side. The **Settings → API Keys** page is read-only, showing *which* providers are configured (no values).
 
 ## Post-deploy setup
 
