@@ -79,7 +79,7 @@ cp .env.example .env
 # 用于运行 OpenAI 托管的 LLM（gpt-4o、gpt-4o-mini 等）
 OPENAI_API_KEY=your-openai-api-key
 
-# 用于获取驱动对冲基金的金融数据（美股 financialdatasets.ai；A 股通过 akshare 获取，无需此 key）
+# 用于获取驱动对冲基金的金融数据（美股 financialdatasets.ai；A 股默认通过 AKShare/efinance 获取，无需此 key）
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
@@ -125,9 +125,10 @@ poetry run python src/main.py --ticker 600519.SH,000858.SZ,300750.SZ --start-dat
 #### A 股说明
 
 - **代码格式**：A 股使用 Tushare 格式——6 位代码 + 交易所后缀：`.SH`（上交所）、`.SZ`（深交所）、`.BJ`（北交所）。例如 `600519.SH`（贵州茅台）、`000858.SZ`（五粮液）、`300750.SZ`（宁德时代）。
-- **数据来源**：A 股行情与财报数据通过 [akshare](https://akshare.akfamily.xyz/) 获取，**无需 `FINANCIAL_DATASETS_API_KEY`**；该密钥仅用于美股（financialdatasets.ai）。
+- **数据来源**：A 股默认使用免费数据源：[AKShare](https://akshare.akfamily.xyz/) + efinance，必要时再用 Yahoo Finance 做兜底，**无需 `FINANCIAL_DATASETS_API_KEY`**；该密钥仅用于美股（financialdatasets.ai）。
+- **可选 Tushare**：如需 Tushare `daily_basic` 的历史时点估值，可设置 `A_SHARE_USE_TUSHARE_VALUATION=true`，并配置 `TUSHARE_TOKEN` 或 `TUSHARE_DATASETS_API_KEY`。默认不开启，避免额度/频率限制影响普通运行。
 - **仍需 LLM 密钥**：无论 A 股还是美股，agent 的推理都需要至少一个 LLM 密钥（如 `OPENAI_API_KEY`、`DEEPSEEK_API_KEY`，或使用 `--ollama` 本地模型）。
-- **数据局限**：akshare 的 TTM 财报目前以年报数据近似（详见 [`src/tools/api_akshare.py`](src/tools/api_akshare.py)）。
+- **数据局限**：AKShare 的 TTM 财报目前以年报数据近似（详见 [`src/tools/api_akshare.py`](src/tools/api_akshare.py)）。
 
 #### 数据缓存（避免每个 agent 重复拉取数据）
 

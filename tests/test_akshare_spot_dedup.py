@@ -30,9 +30,14 @@ def fresh_akshare_state(monkeypatch):
     monkeypatch.setattr(api_akshare, "_spot_table", None, raising=False)
     monkeypatch.setattr(api_akshare, "_spot_table_attempted", False, raising=False)
     monkeypatch.setattr(api_akshare, "_market_cap_cache", {})
-    # get_market_cap now consults Tushare first; force the no-token path so
-    # these spot-path tests are deterministic even if TUSHARE_TOKEN is in env.
+    # Keep fallback providers deterministic so these tests isolate the AKShare
+    # spot-table memoization behavior.
     monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+    monkeypatch.delenv("TUSHARE_DATASETS_API_KEY", raising=False)
+    monkeypatch.delenv("A_SHARE_USE_TUSHARE_VALUATION", raising=False)
+    monkeypatch.setattr(api_akshare.api_tushare._get_pro, "_pro", None, raising=False)
+    monkeypatch.setattr(api_akshare.api_efinance, "get_market_cap", lambda ticker: None)
+    monkeypatch.setattr(api_akshare.api_yfinance, "get_market_cap", lambda ticker: None)
     return cache
 
 

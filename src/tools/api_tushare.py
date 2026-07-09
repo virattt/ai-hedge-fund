@@ -1,16 +1,18 @@
-"""A-share valuation provider backed by Tushare pro ``daily_basic``.
+"""Optional A-share valuation provider backed by Tushare pro ``daily_basic``.
 
-Fills the valuation block (market_cap / pe / pb / ps) that akshare cannot
-supply reliably: Eastmoney endpoints are persistently blocked and Sina carries
-no market cap. Tushare's authenticated ``daily_basic`` is the stable source.
+Fills the point-in-time valuation block (market_cap / pe / pb / ps) when the
+caller explicitly opts in. The default A-share layer uses free sources
+(AKShare + efinance, with Yahoo Finance as a best-effort fallback) so normal
+runs do not consume Tushare quota.
 
 Token & degradation
 -------------------
-- Reads ``TUSHARE_TOKEN`` from the environment. Absent → this module is a
-  no-op (every public call returns ``None``); the rest of the A-share layer
-  falls back to its current behaviour.
-- On a Tushare *permission / insufficient-points* error the module latches a
-  process-wide breaker so we never re-fire the gated endpoint per ticker.
+- Reads ``TUSHARE_TOKEN`` or ``TUSHARE_DATASETS_API_KEY`` from the environment.
+  Absent → this module is a no-op (every public call returns ``None``); the
+  rest of the A-share layer stays on free data sources.
+- On a Tushare *permission / insufficient-points / frequency-limit* error the
+  module latches a process-wide breaker so we never re-fire the gated endpoint
+  per ticker.
 - Transient network errors are NOT breaker-worthy.
 
 All public entry points return ``None`` on failure — they never raise.
@@ -39,10 +41,19 @@ _daily_basic_tables: dict[str, pd.DataFrame] = {}
 # points). Once tripped, get_valuation short-circuits for the rest of the run.
 _disabled: bool = False
 
-# Marks permission-style errors in Tushare exception text / error payloads.
+# Marks non-retryable Tushare errors in exception text / error payloads.
 _PERMISSION_TOKENS = (
     "权限", "permission", "积分", "40203", "40001", "40002", "40003",
+    "频率", "频次", "超限", "rate limit", "frequency",
 )
+
+
+def _get_token() -> str:
+    """Return the configured Tushare token, accepting the legacy project name."""
+    return (
+        os.environ.get("TUSHARE_TOKEN", "").strip()
+        or os.environ.get("TUSHARE_DATASETS_API_KEY", "").strip()
+    )
 
 
 def _get_pro() -> Any:
@@ -51,7 +62,7 @@ def _get_pro() -> Any:
     Imports ``tushare`` lazily so this module loads even when the package or
     token is absent — US-only runs and token-less CI must not break.
     """
-    token = os.environ.get("TUSHARE_TOKEN", "").strip()
+    token = _get_token()
     if not token:
         return None
     cached = getattr(_get_pro, "_pro", None)
@@ -125,7 +136,7 @@ def _daily_basic_table(trade_date: str) -> pd.DataFrame | None:
         except Exception as e:  # noqa: BLE001 - Tushare raises varied types
             if _is_permission_error(e, None):
                 logger.warning(
-                    "tushare daily_basic permission denied (needs 2000 points) "
+                    "tushare daily_basic unavailable for this run "
                     "— disabling Tushare valuation for this run: %s",
                     e,
                 )

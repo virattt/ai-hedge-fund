@@ -28,6 +28,8 @@ def fresh(monkeypatch):
 
 def test_get_pro_returns_none_when_no_token(monkeypatch):
     monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+    monkeypatch.delenv("TUSHARE_DATASETS_API_KEY", raising=False)
+    monkeypatch.setattr(api_tushare._get_pro, "_pro", None, raising=False)
     assert api_tushare._get_pro() is None
 
 
@@ -46,6 +48,21 @@ def test_get_pro_returns_cached_client_when_token_set(monkeypatch):
     assert first is client
     assert second is client
     assert pro_api.call_count == 1  # cached → pro_api constructed only once
+
+
+def test_get_pro_accepts_tushare_datasets_api_key(monkeypatch):
+    monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+    monkeypatch.setenv("TUSHARE_DATASETS_API_KEY", "datasets-token")
+    seen = {}
+    fake_ts = types.ModuleType("tushare")
+    fake_ts.set_token = lambda token: seen.setdefault("token", token)
+    client = object()
+    fake_ts.pro_api = Mock(return_value=client)
+    monkeypatch.setitem(sys.modules, "tushare", fake_ts)
+    monkeypatch.setattr(api_tushare._get_pro, "_pro", None, raising=False)
+
+    assert api_tushare._get_pro() is client
+    assert seen["token"] == "datasets-token"
 
 
 def test_to_float_rejects_nan_inf_and_garbage():
@@ -96,6 +113,21 @@ def test_permission_error_trips_breaker_and_second_call_is_free(fresh, monkeypat
     assert api_tushare._disabled is True
     assert api_tushare._daily_basic_table("20260707") is None  # short-circuit
     assert calls["n"] == 1  # breaker prevented a second SDK call
+
+
+def test_rate_limit_trips_breaker_and_second_call_is_free(fresh, monkeypatch):
+    calls = {"n": 0}
+
+    def limited(trade_date=""):
+        calls["n"] += 1
+        raise RuntimeError("抱歉，您访问接口(daily_basic)频率超限(1次/小时)")
+
+    monkeypatch.setattr(api_tushare, "_get_pro", lambda: _fake_pro_with(limited))
+
+    assert api_tushare._daily_basic_table("20260707") is None
+    assert api_tushare._disabled is True
+    assert api_tushare._daily_basic_table("20260706") is None
+    assert calls["n"] == 1
 
 
 def test_transient_error_does_not_trip_breaker(fresh, monkeypatch):

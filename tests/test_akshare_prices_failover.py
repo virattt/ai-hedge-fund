@@ -19,6 +19,8 @@ def fresh_cache(monkeypatch):
     from src.data.cache import Cache
 
     monkeypatch.setattr(api_akshare, "_cache", Cache())
+    monkeypatch.setattr(api_akshare.api_efinance, "get_prices", lambda *args, **kwargs: [])
+    monkeypatch.setattr(api_akshare.api_yfinance, "get_prices", lambda *args, **kwargs: [])
 
 
 def _sina_row(d, o, h, l, c, v):
@@ -77,3 +79,69 @@ def test_hist_empty_falls_over_to_sina(fresh_cache, monkeypatch):
     prices = api_akshare.get_prices("600519.SH", "2026-07-01", "2026-07-07")
     assert len(prices) == 1
     assert prices[0].close == 1.5
+
+
+def test_hist_and_sina_failure_falls_over_to_efinance(fresh_cache, monkeypatch):
+    monkeypatch.setattr(api_akshare.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(
+        api_akshare.ak,
+        "stock_zh_a_hist",
+        lambda **kw: (_ for _ in ()).throw(ConnectionError("RemoteDisconnected")),
+    )
+    monkeypatch.setattr(
+        api_akshare.ak,
+        "stock_zh_a_daily",
+        lambda **kw: (_ for _ in ()).throw(ConnectionError("RemoteDisconnected")),
+    )
+
+    fallback = [
+        api_akshare.Price(
+            time="2026-07-06",
+            open=10.0,
+            close=11.0,
+            high=12.0,
+            low=9.5,
+            volume=1000,
+        )
+    ]
+    monkeypatch.setattr(api_akshare.api_efinance, "get_prices", lambda *args, **kwargs: fallback)
+    monkeypatch.setattr(
+        api_akshare.api_yfinance,
+        "get_prices",
+        lambda *args, **kwargs: pytest.fail("Yahoo must not be called when efinance resolves"),
+    )
+
+    prices = api_akshare.get_prices("603444.SH", "2026-07-01", "2026-07-07")
+    assert prices == fallback
+
+    cached = api_akshare.get_prices("603444.SH", "2026-07-01", "2026-07-07")
+    assert cached[0].close == 11.0
+
+
+def test_hist_sina_and_efinance_failure_falls_over_to_yfinance(fresh_cache, monkeypatch):
+    monkeypatch.setattr(api_akshare.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(
+        api_akshare.ak,
+        "stock_zh_a_hist",
+        lambda **kw: (_ for _ in ()).throw(ConnectionError("RemoteDisconnected")),
+    )
+    monkeypatch.setattr(
+        api_akshare.ak,
+        "stock_zh_a_daily",
+        lambda **kw: (_ for _ in ()).throw(ConnectionError("RemoteDisconnected")),
+    )
+    monkeypatch.setattr(api_akshare.api_efinance, "get_prices", lambda *args, **kwargs: [])
+    fallback = [
+        api_akshare.Price(
+            time="2026-07-06",
+            open=10.0,
+            close=12.0,
+            high=12.5,
+            low=9.5,
+            volume=2000,
+        )
+    ]
+    monkeypatch.setattr(api_akshare.api_yfinance, "get_prices", lambda *args, **kwargs: fallback)
+
+    prices = api_akshare.get_prices("603444.SH", "2026-07-01", "2026-07-07")
+    assert prices == fallback

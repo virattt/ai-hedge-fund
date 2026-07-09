@@ -80,6 +80,7 @@ Open and edit the `.env` file to add your API keys:
 OPENAI_API_KEY=your-openai-api-key
 
 # For getting financial data to power the hedge fund
+# US equities use financialdatasets.ai; A-shares default to free AKShare/efinance.
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
@@ -121,6 +122,12 @@ You can optionally specify the start and end dates to make decisions over a spec
 ```bash
 poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
 ```
+
+#### A-share support
+
+- **Ticker format**: use Tushare-style codes: 6 digits + exchange suffix, such as `600519.SH`, `000858.SZ`, or `300750.SZ`.
+- **Data sources**: A-shares default to free sources: [AKShare](https://akshare.akfamily.xyz/) + efinance, with Yahoo Finance as a best-effort fallback. `FINANCIAL_DATASETS_API_KEY` is only needed for US equities.
+- **Optional Tushare**: set `A_SHARE_USE_TUSHARE_VALUATION=true` plus `TUSHARE_TOKEN` or `TUSHARE_DATASETS_API_KEY` only if you want Tushare `daily_basic` point-in-time valuation data.
 
 #### Run the Backtester
 ```bash

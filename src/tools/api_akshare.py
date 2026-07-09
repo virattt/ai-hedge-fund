@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import os
 import random
 import time
 from typing import Callable, TypeVar
@@ -33,7 +34,7 @@ from src.data.models import (
     LineItem,
     Price,
 )
-from src.tools import api_tushare
+from src.tools import api_efinance, api_tushare, api_yfinance
 from src.tools.markets import a_share_code
 
 logger = logging.getLogger(__name__)
@@ -56,13 +57,29 @@ _spot_table: pd.DataFrame | None = None
 # too, not just successes.
 _spot_table_attempted: bool = False
 # Per-(ticker, end_date) memo of the resolved market cap (value OR None). The
-# full Tushare→spot→info attempt chain is expensive to fail (each layer
-# retries); without this, the 10+ analysts that call get_market_cap per ticker
-# would each re-pay that cost. Serialized on a per-key fetch_lock so concurrent
-# analysts for the same ticker compute it exactly once.
+# full free-source attempt chain is expensive to fail (spot table, efinance,
+# per-ticker AKShare, then Yahoo); without this, the 10+ analysts that call
+# get_market_cap per ticker would each re-pay that cost. Serialized on a
+# per-key fetch_lock so concurrent analysts for the same ticker compute it
+# exactly once.
 _market_cap_cache: dict[tuple[str, str], float | None] = {}
 
 T = TypeVar("T")
+
+
+def _use_tushare_valuation() -> bool:
+    return os.getenv("A_SHARE_USE_TUSHARE_VALUATION", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _cache_and_return_prices(cache_key: str, prices: list[Price]) -> list[Price]:
+    if prices:
+        _cache.set_prices(cache_key, [p.model_dump() for p in prices])
+    return prices
 
 
 def _with_retry(
@@ -183,10 +200,22 @@ def get_prices(
         df = _with_retry(_fetch)
     except Exception as e:
         logger.warning("akshare get_prices failed for %s: %s", ticker, e)
-        return []
+        prices = api_efinance.get_prices(ticker, start_date, end_date)
+        if prices:
+            return _cache_and_return_prices(cache_key, prices)
+        return _cache_and_return_prices(
+            cache_key,
+            api_yfinance.get_prices(ticker, start_date, end_date),
+        )
 
     if df is None or df.empty:
-        return []
+        prices = api_efinance.get_prices(ticker, start_date, end_date)
+        if prices:
+            return _cache_and_return_prices(cache_key, prices)
+        return _cache_and_return_prices(
+            cache_key,
+            api_yfinance.get_prices(ticker, start_date, end_date),
+        )
 
     # Column map depends on which source returned. Eastmoney uses Chinese
     # column names; Sina (stock_zh_a_daily) uses English names and returns
@@ -224,7 +253,13 @@ def get_prices(
             continue
 
     if not prices:
-        return []
+        prices = api_efinance.get_prices(ticker, start_date, end_date)
+        if prices:
+            return _cache_and_return_prices(cache_key, prices)
+        return _cache_and_return_prices(
+            cache_key,
+            api_yfinance.get_prices(ticker, start_date, end_date),
+        )
 
     _cache.set_prices(cache_key, [p.model_dump() for p in prices])
     return prices
@@ -322,23 +357,31 @@ def get_financial_metrics(
     def _pct(ind: str, pc: str) -> float | None:
         return _pct_to_decimal(_get(ind, pc))
 
+    current_valuation = api_efinance.get_realtime_valuation(ticker) or {}
+
     metrics: list[FinancialMetrics] = []
-    for pc in eligible:
+    for idx, pc in enumerate(eligible):
         report_period = f"{pc[:4]}-{pc[4:6]}-{pc[6:]}"
-        # Point-in-time valuation as of this report period's date (Tushare
-        # daily_basic). None when no token / insufficient points / no data.
-        v = api_tushare.get_valuation(ticker, report_period)
+        # Default to free realtime valuation for the latest record. Tushare
+        # point-in-time valuation is opt-in to avoid consuming rate-limited quota
+        # during normal A-share runs.
+        if idx == 0 and current_valuation:
+            v = current_valuation
+        elif _use_tushare_valuation():
+            v = api_tushare.get_valuation(ticker, report_period)
+        else:
+            v = None
         metrics.append(
             FinancialMetrics(
                 ticker=ticker,
                 report_period=report_period,
                 period=period,
                 currency="CNY",
-                market_cap=(v["market_cap"] if v else None),
+                market_cap=(v.get("market_cap") if v else None),
                 enterprise_value=None,
-                price_to_earnings_ratio=(v["pe"] if v else None),
-                price_to_book_ratio=(v["pb"] if v else None),
-                price_to_sales_ratio=(v["ps"] if v else None),
+                price_to_earnings_ratio=(v.get("pe") if v else None),
+                price_to_book_ratio=(v.get("pb") if v else None),
+                price_to_sales_ratio=(v.get("ps") if v else None),
                 enterprise_value_to_ebitda_ratio=None,
                 enterprise_value_to_revenue_ratio=None,
                 free_cash_flow_yield=None,
@@ -901,12 +944,12 @@ def _compute_market_cap(
     end_date: str,
     api_key: str | None = None,
 ) -> float | None:
-    """Fetch total market cap (CNY) via the shared ``stock_zh_a_spot_em`` table.
+    """Fetch total market cap (CNY) via free A-share quote providers.
 
-    ``stock_zh_a_spot_em`` returns realtime spot data for *all* A-shares
-    including a 总市值 column valued in CNY (yuan). Because one call covers
-    every ticker, it is fetched once per process (see :func:`_get_spot_table`)
-    and shared across the whole analyst fan-out.
+    The default source order is AKShare all-market spot table, efinance
+    realtime quotes, AKShare per-ticker info, then Yahoo Finance as a
+    best-effort quote fallback. Tushare daily_basic is only used when
+    ``A_SHARE_USE_TUSHARE_VALUATION`` is explicitly enabled.
 
     Only returns the live market cap reliably (when ``end_date`` is today or
     near-today). For historical dates the live cap is returned as a proxy (the
@@ -919,12 +962,7 @@ def _compute_market_cap(
     """
     code = a_share_code(ticker)
 
-    # --- Primary: Tushare daily_basic (stable, authenticated) ---
-    v = api_tushare.get_valuation(ticker, end_date)
-    if v and v.get("market_cap"):
-        return v["market_cap"]
-
-    # --- Secondary: shared all-market spot table (Eastmoney; currently flaky) ---
+    # --- Primary: shared all-market spot table (AKShare/Eastmoney; free) ---
     spot = _get_spot_table()
     if (
         spot is not None
@@ -932,13 +970,18 @@ def _compute_market_cap(
         and "代码" in spot.columns
         and "总市值" in spot.columns
     ):
-        row = spot[spot["代码"] == code]
+        row = spot[spot["代码"].astype(str).str.zfill(6) == code]
         if not row.empty:
             cap = _safe_float(row.iloc[0]["总市值"])
             if cap is not None and cap > 0:
                 return cap
 
-    # --- Fallback: stock_individual_info_em (broken in some akshare versions) ---
+    # --- Secondary: efinance realtime quotes (free Eastmoney-backed source) ---
+    efinance_cap = api_efinance.get_market_cap(ticker)
+    if efinance_cap:
+        return efinance_cap
+
+    # --- Tertiary: AKShare per-ticker info (broken in some akshare versions) ---
     def _fetch_info() -> pd.DataFrame:
         return ak.stock_individual_info_em(symbol=code)
 
@@ -946,25 +989,37 @@ def _compute_market_cap(
         df = _with_retry(_fetch_info)
     except Exception as e:
         logger.warning("akshare get_market_cap failed for %s: %s", ticker, e)
-        return None
+        df = None
 
     if df is None or df.empty:
-        return None
+        df = None
 
     # Normalise defensively: the DataFrame may be 2-col (item, value) or
     # a wider variant. Build a dict[item->value] from the first two columns.
-    info: dict[str, object] = {}
-    try:
-        if len(df.columns) >= 2:
-            item_col, value_col = df.columns[0], df.columns[1]
-            for _, row in df.iterrows():
-                info[str(row[item_col])] = row[value_col]
-        else:
-            return None
-    except (KeyError, TypeError, IndexError):
-        return None
+    if df is not None:
+        info: dict[str, object] = {}
+        try:
+            if len(df.columns) >= 2:
+                item_col, value_col = df.columns[0], df.columns[1]
+                for _, row in df.iterrows():
+                    info[str(row[item_col])] = row[value_col]
+                cap = _safe_float(info.get("总市值"))
+                if cap:
+                    return cap
+        except (KeyError, TypeError, IndexError):
+            pass
 
-    return _safe_float(info.get("总市值"))
+    # --- Fourth: Yahoo Finance quote fallback ---
+    yahoo_cap = api_yfinance.get_market_cap(ticker)
+    if yahoo_cap:
+        return yahoo_cap
+
+    # --- Final optional enhanced source: Tushare daily_basic ---
+    if _use_tushare_valuation():
+        v = api_tushare.get_valuation(ticker, end_date)
+        if v and v.get("market_cap"):
+            return v["market_cap"]
+    return None
 
 
 def get_market_cap(
@@ -975,9 +1030,9 @@ def get_market_cap(
     """Total market cap (CNY) for ``ticker``, memoized per (ticker, end_date).
 
     Thin concurrency-safe wrapper around :func:`_compute_market_cap`: the full
-    Tushare→spot→info attempt chain runs once per ticker, then the result
-    (value or None) is cached for the rest of the analyst fan-out. Without this
-    every analyst re-pays the Eastmoney retry cost against a dead endpoint.
+    free-source attempt chain runs once per ticker, then the result (value or
+    None) is cached for the rest of the analyst fan-out. Without this every
+    analyst re-pays the Eastmoney retry cost against a dead endpoint.
     """
     key = (ticker, end_date)
     if key in _market_cap_cache:
