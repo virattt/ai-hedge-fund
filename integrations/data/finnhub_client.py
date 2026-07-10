@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import logging
+import os
+import threading
 import time
+from collections import deque
 from datetime import datetime, timedelta
 
 import requests
@@ -23,7 +26,38 @@ from v2.data.models import (
 logger = logging.getLogger(__name__)
 
 _BASE_URL = "https://finnhub.io/api/v1"
-_RETRY_DELAYS = (2, 5, 10)
+_RETRY_DELAYS = (5, 15, 30)
+
+
+class _SlidingWindowLimiter:
+    """Thread-safe limiter: at most `max_per_minute` calls per rolling minute.
+
+    Analyst agents run concurrently (langgraph thread pool), so without a
+    process-wide gate a multi-ticker cycle bursts straight into Finnhub's
+    per-minute quota and dies with 429s.
+    """
+
+    def __init__(self, max_per_minute: int) -> None:
+        self._max = max(1, max_per_minute)
+        self._events: deque[float] = deque()
+        self._lock = threading.Lock()
+
+    def wait(self) -> None:
+        while True:
+            with self._lock:
+                now = time.monotonic()
+                while self._events and now - self._events[0] >= 60.0:
+                    self._events.popleft()
+                if len(self._events) < self._max:
+                    self._events.append(now)
+                    return
+                sleep_for = 60.0 - (now - self._events[0]) + 0.05
+            time.sleep(min(max(sleep_for, 0.1), 5.0))
+
+
+# Shared across all client instances — new clients are created per cycle,
+# but the Finnhub quota is per API key. Free tier allows 60/min.
+_LIMITER = _SlidingWindowLimiter(int(os.getenv("FINNHUB_CALLS_PER_MIN", "50")))
 
 
 class FinnhubDataClient:
@@ -42,12 +76,14 @@ class FinnhubDataClient:
         url = f"{_BASE_URL}{path}"
 
         for attempt, delay in enumerate((*_RETRY_DELAYS, None)):
+            _LIMITER.wait()
             try:
                 resp = self._session.get(url, params=params, timeout=30)
             except requests.RequestException as exc:
                 raise DataClientError(f"Finnhub {path} failed: {exc}", path=path) from exc
 
             if resp.status_code == 429 and delay is not None:
+                logger.warning("Finnhub %s rate limited (429) — retrying in %ss", path, delay)
                 time.sleep(delay)
                 continue
 

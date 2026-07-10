@@ -43,7 +43,7 @@ poetry install --with alpaca
 Once `DATA_PROVIDER=composite` is set, **no code changes needed** — v1 agents and the CLI automatically use the composite backend via `src/tools/api.py`.
 
 ```bash
-poetry run alpaca-fund --ticker AAPL,MSFT,NVDA --broker alpaca --analysts-all --model gpt-4.1
+poetry run alpaca-fund --ticker AAPL,MSFT,NVDA --broker alpaca --analysts-all --model gpt-5.5
 ```
 
 For v2 directly:

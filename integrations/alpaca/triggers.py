@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from integrations.alpaca.market_hours import now_et
+from integrations.alpaca.rate_limit import RateLimiter
 from integrations.alpaca.session import TradingSessionState
 from integrations.alpaca.strategy import SchedulerConfig
 from src.tools.api import get_company_news, get_prices
@@ -18,19 +19,26 @@ logger = logging.getLogger(__name__)
 class TriggerEvaluation:
     fired: bool = False
     reasons: list[str] = field(default_factory=list)
+    symbols: list[str] = field(default_factory=list)
 
-    def add(self, reason: str) -> None:
+    def add(self, reason: str, *, symbol: str | None = None) -> None:
         self.fired = True
         self.reasons.append(reason)
+        if symbol:
+            sym = symbol.upper()
+            if sym not in self.symbols:
+                self.symbols.append(sym)
 
 
 class TriggerMonitor:
     """Detect price swings, benchmark moves, and fresh news."""
 
-    def __init__(self, config: SchedulerConfig) -> None:
+    def __init__(self, config: SchedulerConfig, *, news_limiter: RateLimiter | None = None) -> None:
         self._config = config
+        self._news_limiter = news_limiter or RateLimiter(config.news_calls_per_minute)
 
     def evaluate(self, tickers: list[str], session: TradingSessionState) -> TriggerEvaluation:
+        """Full evaluation (legacy) — price swings via daily bars + news."""
         result = TriggerEvaluation()
         if not session.open_reference_prices:
             return result
@@ -40,6 +48,16 @@ class TriggerMonitor:
 
         self._check_price_swings(tickers, session, result)
         self._check_spy_move(session, result)
+        news = self.check_news(tickers, session)
+        if news.fired:
+            result.fired = True
+            result.reasons.extend(news.reasons)
+            result.symbols.extend(s for s in news.symbols if s not in result.symbols)
+        return result
+
+    def check_news(self, tickers: list[str], session: TradingSessionState) -> TriggerEvaluation:
+        """News-only check with rate limiting (for watch loop)."""
+        result = TriggerEvaluation()
         self._check_news(tickers, session, result)
         return result
 
@@ -78,7 +96,8 @@ class TriggerMonitor:
             if move >= threshold:
                 result.add(
                     f"{ticker.upper()} moved {move * 100:.1f}% vs open reference "
-                    f"(${ref:.2f} → ${current:.2f})"
+                    f"(${ref:.2f} → ${current:.2f})",
+                    symbol=ticker,
                 )
 
     def _check_spy_move(self, session: TradingSessionState, result: TriggerEvaluation) -> None:
@@ -111,6 +130,7 @@ class TriggerMonitor:
 
         for ticker in tickers:
             try:
+                self._news_limiter.wait(cost=1)
                 articles = get_company_news(ticker, end, start_date=start, limit=20) or []
             except Exception as exc:
                 logger.debug("News fetch failed for %s: %s", ticker, exc)
@@ -119,7 +139,10 @@ class TriggerMonitor:
                 key = f"{ticker.upper()}|{article.date}|{article.title}"
                 if key not in seen:
                     new_keys.append(key)
-                    result.add(f"New headline for {ticker.upper()}: {article.title[:80]}")
+                    result.add(
+                        f"New headline for {ticker.upper()}: {article.title[:80]}",
+                        symbol=ticker,
+                    )
 
         if new_keys:
             session.mark_news_check(new_keys)

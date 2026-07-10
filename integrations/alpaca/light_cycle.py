@@ -82,11 +82,24 @@ def run_light_analysis(
                 logger.warning("Unknown light analyst %s — skipping", key)
                 continue
             _node_name, agent_func = analyst_nodes[key]
-            update = agent_func(state)
+            try:
+                update = agent_func(state)
+            except Exception as exc:
+                # One analyst losing its data feed (network blip, provider
+                # outage) must not abort the cycle — the vote simply runs
+                # without that analyst's signals.
+                logger.warning("Light analyst %s failed — continuing without it: %s", key, exc)
+                continue
             state = _apply_update(state, update)
 
-        update = risk_management_agent(state)
-        state = _apply_update(state, update)
+        try:
+            update = risk_management_agent(state)
+            state = _apply_update(state, update)
+        except Exception as exc:
+            # Without risk limits every decision degrades to a safe hold
+            # (no prices / zero position limits), which is the right
+            # fallback when the data feed is flaking.
+            logger.warning("Risk manager failed — all decisions will hold: %s", exc)
 
         decisions = generate_light_decisions(
             tickers=tickers,

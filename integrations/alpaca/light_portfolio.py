@@ -8,6 +8,14 @@ from src.agents.portfolio_manager import compute_allowed_actions
 
 _SIGNAL_SCORE = {"bullish": 1.0, "neutral": 0.0, "bearish": -1.0}
 
+# Minimum conviction before a light cycle trades at all. Light cycles run
+# every few minutes, so acting on marginal votes creates constant churn.
+_TRADE_THRESHOLD = 0.5
+
+# Skip adds smaller than this fraction of the name's total risk limit —
+# prevents 1-2 share dribble orders as a position hovers near target.
+_MIN_DELTA_FRACTION = 0.05
+
 
 def _aggregate_ticker_signals(ticker_signals: dict[str, dict[str, Any]]) -> tuple[str, float]:
     total = 0.0
@@ -30,6 +38,71 @@ def _aggregate_ticker_signals(ticker_signals: dict[str, dict[str, Any]]) -> tupl
     return "neutral", abs(score)
 
 
+def _total_position_limit(
+    ticker_risk: dict[str, Any],
+    remaining_limit: float,
+    existing_value: float,
+) -> float:
+    """The name's full dollar risk limit (not just what's left of it)."""
+    reasoning = ticker_risk.get("reasoning")
+    if isinstance(reasoning, dict):
+        limit = reasoning.get("position_limit")
+        if limit:
+            return float(limit)
+    return remaining_limit + existing_value
+
+
+def _size_trade(
+    direction: str,
+    strength: float,
+    *,
+    current_price: float,
+    ticker_risk: dict[str, Any],
+    remaining_limit: float,
+    long_shares: int,
+    short_shares: int,
+    allowed: dict[str, int],
+) -> tuple[str, int, str]:
+    """Trade toward a conviction-scaled target position.
+
+    The target is `strength × total risk limit`, and only the *delta* between
+    target and current position is ordered. Repeated cycles with the same
+    signal therefore converge instead of stacking new orders every run.
+    """
+    confidence = int(min(100, max(30, strength * 100)))
+    vote = f"Light vote: {direction} ({confidence}%)"
+
+    if direction == "neutral" or strength < _TRADE_THRESHOLD:
+        return "hold", 0, f"{vote} — below trade threshold"
+
+    if direction == "bullish":
+        unwind, extend = "cover", "buy"
+        opposing, existing = short_shares, long_shares
+    else:
+        unwind, extend = "sell", "short"
+        opposing, existing = long_shares, short_shares
+
+    # Exit an opposing position before building the new one.
+    if opposing > 0 and unwind in allowed:
+        quantity = min(opposing, int(allowed[unwind]))
+        if quantity > 0:
+            return unwind, quantity, f"{vote} — unwind opposing position"
+
+    if extend not in allowed or current_price <= 0:
+        return "hold", 0, f"{vote} — no valid trade"
+
+    total_limit = _total_position_limit(ticker_risk, remaining_limit, existing * current_price)
+    target_shares = int((total_limit * min(strength, 1.0)) // current_price)
+    delta = target_shares - existing
+    if delta <= 0 or delta * current_price < _MIN_DELTA_FRACTION * total_limit:
+        return "hold", 0, f"{vote} — at target ({existing}/{target_shares} shares)"
+
+    quantity = min(delta, int(allowed[extend]))
+    if quantity <= 0:
+        return "hold", 0, f"{vote} — size capped to 0"
+    return extend, quantity, f"{vote} — toward target {target_shares} shares"
+
+
 def generate_light_decisions(
     tickers: list[str],
     analyst_signals: dict[str, Any],
@@ -41,9 +114,21 @@ def generate_light_decisions(
 
     decisions: dict[str, dict[str, Any]] = {}
     for ticker in tickers:
-        current_price = float(risk_data.get(ticker, {}).get("current_price", 0.0))
-        position_limit = float(risk_data.get(ticker, {}).get("remaining_position_limit", 0.0))
-        max_shares = int(position_limit // current_price) if current_price > 0 else 0
+        ticker_risk = risk_data.get(ticker, {})
+        current_price = float(ticker_risk.get("current_price", 0.0))
+        remaining_limit = float(ticker_risk.get("remaining_position_limit", 0.0))
+        max_shares = int(remaining_limit // current_price) if current_price > 0 else 0
+
+        if current_price <= 0:
+            # No risk/price data (risk manager failed or feed gap) — never
+            # trade blind, not even unwinds.
+            decisions[ticker] = {
+                "action": "hold",
+                "quantity": 0,
+                "confidence": 100,
+                "reasoning": "No price/risk data (light) — holding",
+            }
+            continue
 
         ticker_signals: dict[str, dict[str, Any]] = {}
         for agent, signals in analyst_signals.items():
@@ -72,32 +157,17 @@ def generate_light_decisions(
         direction, strength = _aggregate_ticker_signals(ticker_signals)
         confidence = int(min(100, max(30, strength * 100)))
 
-        action = "hold"
-        quantity = 0
-        reasoning = f"Light vote: {direction} ({confidence}%)"
-
-        if direction == "bullish" and strength >= 0.35:
-            if "buy" in allowed:
-                action = "buy"
-                quantity = max(1, int(max_shares * min(strength, 0.5)))
-            elif "cover" in allowed:
-                action = "cover"
-                quantity = max(1, int(allowed["cover"] * min(strength, 0.5)))
-        elif direction == "bearish" and strength >= 0.35:
-            if "sell" in allowed:
-                action = "sell"
-                quantity = max(1, int(allowed["sell"] * min(strength, 0.5)))
-            elif "short" in allowed:
-                action = "short"
-                quantity = max(1, int(allowed["short"] * min(strength, 0.5)))
-
-        if action != "hold":
-            cap = allowed.get(action, 0)
-            quantity = min(quantity, int(cap)) if cap else 0
-            if quantity <= 0:
-                action = "hold"
-                quantity = 0
-                reasoning = "Light: signal present but size capped to 0"
+        position = portfolio.get("positions", {}).get(ticker, {})
+        action, quantity, reasoning = _size_trade(
+            direction,
+            strength,
+            current_price=current_price,
+            ticker_risk=ticker_risk,
+            remaining_limit=remaining_limit,
+            long_shares=int(position.get("long", 0) or 0),
+            short_shares=int(position.get("short", 0) or 0),
+            allowed=allowed,
+        )
 
         decisions[ticker] = {
             "action": action,

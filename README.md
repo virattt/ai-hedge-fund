@@ -15,7 +15,7 @@ Custom code lives under `integrations/` so we can `git fetch upstream` without c
 | **Alpaca broker & CLI** | `integrations/alpaca/` | `alpaca-fund` — sync portfolio, run agents, execute orders, **daemon** |
 | **Composite data** | `integrations/data/` | `DATA_PROVIDER=composite` — Alpaca prices/news + Finnhub fundamentals |
 | **Broker abstraction** | `integrations/broker/` | Pluggable `BrokerClient` (`noop`, Alpaca) |
-| **Trading daemon** | `integrations/alpaca/scheduler.py` | Heavy LLM at open, light rule-based refresh every 5m, event triggers |
+| **Trading daemon** | `integrations/alpaca/scheduler.py` | Watch loop (live prices) → light/heavy escalation |
 | **Cycle ledger** | `data/ledger/` | JSON log per run (`heavy` / `light` / `triggered_heavy`) |
 | **Scheduler state** | `data/scheduler/` | Per-day session file for idempotency and triggers |
 | **v2 quant stack** | `v2/` | PEAD signals, backtesting (upstream; not wired to daemon yet) |
@@ -111,7 +111,7 @@ MARGIN_REQUIREMENT=0.5
 ### Daemon / scheduler (optional)
 
 ```env
-SCHEDULER_HEAVY_MODEL=gpt-4.1
+SCHEDULER_HEAVY_MODEL=gpt-5.5
 SCHEDULER_HEAVY_PROVIDER=OpenAI
 SCHEDULER_HEAVY_ANALYSTS=warren_buffett,charlie_munger,aswath_damodaran,michael_burry,valuation_analyst,fundamentals_analyst,technical_analyst
 SCHEDULER_LIGHT_ANALYSTS=technical_analyst,fundamentals_analyst,valuation_analyst,growth_analyst,sentiment_analyst
@@ -133,13 +133,13 @@ poetry run alpaca-fund status
 **2. Dry run (simulated $100k, no Alpaca account required)**
 
 ```bash
-poetry run alpaca-fund --ticker AAPL --analysts warren_buffett --model gpt-4.1
+poetry run alpaca-fund --ticker AAPL --analysts warren_buffett --model gpt-5.5
 ```
 
 **3. Paper sync (real account state, no orders)**
 
 ```bash
-poetry run alpaca-fund --ticker AAPL,MSFT,NVDA --broker alpaca --analysts warren_buffett,valuation_analyst --model gpt-4.1
+poetry run alpaca-fund --ticker AAPL,MSFT,NVDA --broker alpaca --analysts warren_buffett,valuation_analyst --model gpt-5.5
 ```
 
 ## Alpaca CLI (`alpaca-fund`)
@@ -159,7 +159,7 @@ Entry point: `integrations/alpaca/cli.py` · Full docs: [integrations/alpaca/REA
 --execute                # submit orders (paper if ALPACA_PAPER=true)
 --analysts warren_buffett,valuation_analyst
 --analysts-all           # all agents (slow; many API calls)
---model gpt-4.1
+--model gpt-5.5
 --ollama                 # local LLM picker
 --show-reasoning
 --no-ledger              # skip data/ledger/ write
@@ -169,24 +169,24 @@ Entry point: `integrations/alpaca/cli.py` · Full docs: [integrations/alpaca/REA
 **Paper execution (one cycle)**
 
 ```bash
-poetry run alpaca-fund --ticker AAPL --broker alpaca --execute --analysts warren_buffett --model gpt-4.1
+poetry run alpaca-fund --ticker AAPL --broker alpaca --execute --analysts warren_buffett --model gpt-5.5
 ```
 
 **Upstream-style single run (no Alpaca integration)**
 
 ```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --analysts warren_buffett --model gpt-4.1
+poetry run python src/main.py --ticker AAPL,MSFT,NVDA --analysts warren_buffett --model gpt-5.5
 ```
 
 ## Trading daemon
 
-Runs during **US regular session** (9:30–16:00 ET):
+Runs an **infinite watch loop** during US session (9:30–16:00 ET). Each ~60s tick fetches batched live prices (no LLM, no Finnhub fundamentals), runs algorithmic signals, and escalates only when needed:
 
-| Cycle | When | LLM? |
+| Layer | When | LLM? |
 |-------|------|------|
-| **Heavy** | Once after open (default 9:35 ET) | Yes — configurable analyst panel |
-| **Light** | Every 5 minutes | No — rule-based analysts only |
-| **Triggered heavy** | Price swing, SPY move, or new news | Yes (cooldown between triggers) |
+| **Watch** | Every 60s | No — live price + momentum signals |
+| **Light** | Every 5m or on watch alert | No — rule-based analysts |
+| **Heavy** | At open + major moves/news | Yes |
 
 **Test the daemon (read-only, safe)**
 
@@ -194,13 +194,15 @@ Runs during **US regular session** (9:30–16:00 ET):
 poetry run alpaca-fund daemon --ticker AAPL,MSFT,NVDA --broker alpaca -v
 ```
 
-If the market is closed, the process waits for the next open. Stop with `Ctrl+C`.
+You'll see `--- WATCH ---` lines with prices, % moves, and escalation level. If the market is closed, it waits for the next open. Stop with `Ctrl+C`.
 
 **Paper execution**
 
 ```bash
 poetry run alpaca-fund daemon --ticker AAPL,MSFT --broker alpaca --execute -v
 ```
+
+**Tune in `.env`:** `SCHEDULER_WATCH_INTERVAL_SEC`, `SCHEDULER_WATCH_TICK_MOVE_PCT`, `SCHEDULER_ALPACA_CALLS_PER_MIN`. Full list: [integrations/alpaca/README.md](integrations/alpaca/README.md).
 
 Outputs:
 
@@ -212,7 +214,7 @@ Outputs:
 Simulates **one agent pipeline per business day** over a date range (upstream harness):
 
 ```bash
-poetry run backtester --ticker AAPL --start-date 2025-06-01 --end-date 2025-06-15 --analysts warren_buffett --model gpt-4.1
+poetry run backtester --ticker AAPL --start-date 2025-06-01 --end-date 2025-06-15 --analysts warren_buffett --model gpt-5.5
 ```
 
 Or:

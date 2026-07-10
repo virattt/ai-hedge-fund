@@ -23,6 +23,11 @@ def positions_to_portfolio(
     """Convert broker state into the portfolio dict used by src/main.py agents."""
     portfolio = {
         "cash": account.cash,
+        # Real account state so position sizing can't overspend: Alpaca's
+        # "cash" is inflated by short-sale proceeds, and buying_power is the
+        # broker's own Reg-T headroom (0 when the account is maxed out).
+        "equity": account.equity,
+        "buying_power": account.buying_power,
         "margin_requirement": margin_requirement,
         "margin_used": 0.0,
         "positions": {

@@ -56,7 +56,10 @@ node_modules
 # Outputs
 outputs/
 /scratchpad/
-data/ledger/
+
+# Runtime-generated data (ledger, universe cache, reports, scheduler state)
+/data/
+/reports/
 
 # Database files (users will have their own local databases)
 *.db

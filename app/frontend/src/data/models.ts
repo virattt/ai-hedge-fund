@@ -33,7 +33,7 @@ export const getModels = async (): Promise<LanguageModel[]> => {
 export const getDefaultModel = async (): Promise<LanguageModel | null> => {
   try {
     const models = await getModels();
-    return models.find(model => model.model_name === "gpt-4.1") || models[0] || null;
+    return models.find(model => model.model_name === "gpt-5.5") || models[0] || null;
   } catch (error) {
     console.error('Failed to get default model:', error);
     return null;

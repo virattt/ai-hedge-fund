@@ -19,15 +19,46 @@ from src.cli.input import parse_tickers, select_analysts, select_model
 load_dotenv()
 
 
-def build_run_parser(parser: argparse.ArgumentParser) -> None:
+def _add_ticker_source_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--tickers",
         "--ticker",
         dest="tickers",
         type=str,
-        required=True,
         help="Comma-separated tickers (e.g., AAPL,MSFT,NVDA)",
     )
+    parser.add_argument(
+        "--universe",
+        dest="universe",
+        type=str,
+        nargs="?",
+        const="latest",
+        help="Load tickers from a universe snapshot: 'latest' (default) or a path. "
+        "Build one with `alpaca-fund universe build`.",
+    )
+
+
+def _resolve_tickers(args, parser: argparse.ArgumentParser) -> list[str]:
+    """Resolve tickers from --tickers or --universe (exactly one required)."""
+    if args.tickers and args.universe:
+        parser.error("Use either --tickers or --universe, not both.")
+    if args.universe:
+        from integrations.universe import load_universe_config, resolve_universe_tickers
+
+        try:
+            return resolve_universe_tickers(args.universe, load_universe_config().output_dir)
+        except ValueError as exc:
+            parser.error(str(exc))
+    if not args.tickers:
+        parser.error("Either --tickers or --universe is required.")
+    tickers = parse_tickers(args.tickers)
+    if not tickers:
+        parser.error("At least one ticker is required.")
+    return tickers
+
+
+def build_run_parser(parser: argparse.ArgumentParser) -> None:
+    _add_ticker_source_args(parser)
     parser.add_argument(
         "--broker",
         choices=["noop", "alpaca"],
@@ -81,14 +112,7 @@ def build_run_parser(parser: argparse.ArgumentParser) -> None:
 
 
 def build_daemon_parser(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--tickers",
-        "--ticker",
-        dest="tickers",
-        type=str,
-        required=True,
-        help="Comma-separated tickers (e.g., AAPL,MSFT,NVDA)",
-    )
+    _add_ticker_source_args(parser)
     parser.add_argument(
         "--broker",
         choices=["noop", "alpaca"],
@@ -136,9 +160,7 @@ def cmd_daemon(argv: list[str]) -> int:
     if args.execute and args.broker != "alpaca":
         parser.error("--execute requires --broker alpaca")
 
-    tickers = parse_tickers(args.tickers)
-    if not tickers:
-        parser.error("At least one ticker is required.")
+    tickers = _resolve_tickers(args, parser)
 
     config = load_scheduler_config()
     print(
@@ -174,6 +196,79 @@ def cmd_daemon(argv: list[str]) -> int:
     return 0
 
 
+def cmd_report(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        description="Generate performance reports from Alpaca fills + cycle ledgers.",
+    )
+    parser.add_argument(
+        "--period",
+        choices=["daily", "weekly", "monthly", "yearly", "all"],
+        default="daily",
+        help="Report period (default: daily). 'all' runs daily plus any period ending today.",
+    )
+    parser.add_argument(
+        "--date",
+        type=str,
+        help="Report end date YYYY-MM-DD (default: today's trading date)",
+    )
+    parser.add_argument(
+        "--no-advisory",
+        action="store_true",
+        help="Skip the LLM-generated upgrade advisory (uses rule-based fallback)",
+    )
+    args = parser.parse_args(argv)
+
+    from datetime import date as date_cls
+
+    from integrations.alpaca.reporting import (
+        build_daily_report,
+        build_period_report,
+        generate_advisory,
+        run_end_of_day_reports,
+        save_report,
+        _fallback_advisory,
+    )
+
+    config = load_scheduler_config()
+    day = date_cls.fromisoformat(args.date) if args.date else None
+
+    try:
+        if args.period == "all":
+            results = run_end_of_day_reports(
+                model_name=config.heavy_model_name,
+                model_provider=config.heavy_model_provider,
+                day=day,
+            )
+        else:
+            if args.period == "daily":
+                report = build_daily_report(day)
+            else:
+                report = build_period_report(args.period, day)
+            if args.no_advisory:
+                report.advisory = _fallback_advisory(report)
+            else:
+                report.advisory = generate_advisory(
+                    report,
+                    model_name=config.heavy_model_name,
+                    model_provider=config.heavy_model_provider,
+                )
+            results = [(report, save_report(report))]
+    except ValueError as exc:
+        print(f"Report error: {exc}", file=sys.stderr)
+        return 1
+
+    for report, path in results:
+        print(f"{report.period} report saved: {path}")
+        print(
+            f"  P&L: {report.pnl} ({report.pnl_pct}%) | fills: {report.fills} | "
+            f"turnover: {report.turnover_x}x"
+        )
+    if results:
+        print("\nUpgrade advisory (paste into Cursor):\n")
+        print(results[0][0].advisory)
+    return 0
+
+
 def cmd_run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description="Run one AI hedge fund trading cycle.",
@@ -189,9 +284,7 @@ def cmd_run(argv: list[str]) -> int:
     if args.execute and args.broker != "alpaca":
         parser.error("--execute requires --broker alpaca")
 
-    tickers = parse_tickers(args.tickers)
-    if not tickers:
-        parser.error("At least one ticker is required.")
+    tickers = _resolve_tickers(args, parser)
 
     flags = {
         "analysts": args.analysts,
@@ -238,6 +331,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if argv and argv[0] == "daemon":
         return cmd_daemon(argv[1:])
+
+    if argv and argv[0] == "universe":
+        from integrations.universe.cli import cmd_universe
+
+        return cmd_universe(argv[1:])
+
+    if argv and argv[0] == "report":
+        return cmd_report(argv[1:])
 
     if argv and argv[0] == "run":
         return cmd_run(argv[1:])

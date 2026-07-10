@@ -86,6 +86,20 @@ def execute_orders(
             )
             continue
 
-        results.append(broker.submit_order(order))
+        try:
+            results.append(broker.submit_order(order))
+        except Exception as exc:
+            # A rejected order (e.g. insufficient buying power) must not
+            # abort the cycle — remaining orders, the ledger write, and
+            # session bookkeeping still need to run.
+            logger.warning("Order %s %s %d rejected: %s", order.action, order.ticker, order.quantity, exc)
+            results.append(
+                OrderResult(
+                    submitted=False,
+                    dry_run=False,
+                    order=order,
+                    message=f"Broker rejected order: {exc}",
+                )
+            )
 
     return results

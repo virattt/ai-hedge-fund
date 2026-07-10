@@ -168,8 +168,13 @@ def risk_management_agent(state: AgentState, agent_id: str = "risk_management_ag
         # Calculate remaining limit for this position
         remaining_position_limit = position_limit - current_position_value
         
-        # Ensure we don't exceed available cash
-        max_position_size = min(remaining_position_limit, portfolio.get("cash", 0))
+        # Ensure we don't exceed available cash. Broker "cash" can include
+        # short-sale proceeds, so cap by real buying power when provided.
+        available_cash = portfolio.get("cash", 0)
+        buying_power = portfolio.get("buying_power")
+        if buying_power is not None:
+            available_cash = min(available_cash, buying_power)
+        max_position_size = min(remaining_position_limit, available_cash)
         
         risk_analysis[ticker] = {
             "remaining_position_limit": float(max_position_size),
