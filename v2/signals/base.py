@@ -22,7 +22,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
 
-from v2.data.client import FDClient
+from v2.data.protocol import DataClient
 from v2.models import Signal
 
 
@@ -40,7 +40,7 @@ class AlphaModel(ABC):
         self,
         ticker: str,
         date: str,
-        fd_client: FDClient,
+        fd_client: DataClient,
     ) -> Signal:
         """Form a point-in-time view on *ticker* as of *date*.
 

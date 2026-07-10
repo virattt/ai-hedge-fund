@@ -31,7 +31,7 @@ from datetime import date, datetime, timedelta
 
 import numpy as np
 
-from v2.data.client import FDClient
+from v2.data.protocol import DataClient
 from v2.data.models import EarningsRecord
 from v2.event_study.models import (
     AggregateResult,
@@ -67,7 +67,7 @@ _CAR_WINDOWS = [(0, 1), (0, 5), (0, 20)]  # the three event windows we compute C
 
 def compute_car(
     tickers: list[str],
-    fd_client: FDClient,
+    fd_client: DataClient,
     *,
     earnings_limit: int = 12,
     market_ticker: str = _MARKET_TICKER,
@@ -84,7 +84,7 @@ def compute_car(
 
     Args:
         tickers:              List of stock ticker symbols.
-        fd_client:            FDClient instance (manages API auth + retries).
+        fd_client:            Data provider (any DataClient; FDClient in production).
         earnings_limit:       Max earnings periods to fetch per ticker.
         market_ticker:        Market benchmark ticker (default "SPY").
         n_bootstrap:          Number of bootstrap resamples for CIs.
@@ -136,7 +136,7 @@ def compute_car(
 
 def _compute_ticker_events(
     ticker: str,
-    fd_client: FDClient,
+    fd_client: DataClient,
     spy_closes: dict[str, float],
     *,
     earnings_limit: int = 12,

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from v2.data.client import FDClient
+from v2.data.protocol import DataClient
 from v2.data.models import EarningsRecord
 from v2.models import Signal
 from v2.signals.base import QuantModel
@@ -47,7 +47,7 @@ class PEADModel(QuantModel):
     def name(self) -> str:
         return "pead"
 
-    def predict(self, ticker: str, date: str, fd_client: FDClient) -> Signal:
+    def predict(self, ticker: str, date: str, fd_client: DataClient) -> Signal:
         as_of = _parse_date(date)
         events = self._qualifying_events(ticker, fd_client)
 
@@ -90,7 +90,7 @@ class PEADModel(QuantModel):
     def _neutral(self, ticker: str, date: str) -> Signal:
         return Signal(model_name=self.name, ticker=ticker, date=date, value=0.0)
 
-    def _qualifying_events(self, ticker: str, fd_client: FDClient) -> list[dict]:
+    def _qualifying_events(self, ticker: str, fd_client: DataClient) -> list[dict]:
         """Return BEAT/MISS events for a ticker, deduped + retrospective-filtered.
 
         Mirrors the Week 3 PEAD cleaning: one event per (report_period),
