@@ -6,6 +6,7 @@ import json
 import numpy as np
 import pandas as pd
 from src.utils.api_key import get_api_key_from_state
+from src.agents.regime_detector import detect_regime, regime_position_multiplier
 
 ##### Risk Management Agent #####
 def risk_management_agent(state: AgentState, agent_id: str = "risk_management_agent"):
@@ -14,7 +15,23 @@ def risk_management_agent(state: AgentState, agent_id: str = "risk_management_ag
     data = state["data"]
     tickers = data["tickers"]
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
-    
+
+    # Detect market regime from SPY price data
+    regime_state = None
+    try:
+        spy_prices = get_prices(
+            ticker="SPY",
+            start_date=data["start_date"],
+            end_date=data["end_date"],
+            api_key=api_key,
+        )
+        if spy_prices:
+            spy_df = prices_to_df(spy_prices)
+            regime_state = detect_regime(spy_df)
+            progress.update_status(agent_id, None, f"Market regime: {regime_state.regime}")
+    except Exception:
+        pass
+
     # Initialize risk analysis for each ticker
     risk_analysis = {}
     current_prices = {}  # Store prices here to avoid redundant API calls
@@ -162,6 +179,9 @@ def risk_management_agent(state: AgentState, agent_id: str = "risk_management_ag
         
         # Combine volatility and correlation adjustments
         combined_limit_pct = vol_adjusted_limit_pct * corr_multiplier
+        # Apply regime overlay
+        regime_mult = regime_position_multiplier(regime_state.regime) if regime_state else 1.0
+        combined_limit_pct = combined_limit_pct * regime_mult
         # Convert to dollar position limit
         position_limit = total_portfolio_value * combined_limit_pct
         
@@ -190,7 +210,9 @@ def risk_management_agent(state: AgentState, agent_id: str = "risk_management_ag
                 "position_limit": float(position_limit),
                 "remaining_limit": float(remaining_position_limit),
                 "available_cash": float(portfolio.get("cash", 0)),
-                "risk_adjustment": f"Volatility x Correlation adjusted: {combined_limit_pct:.1%} (base {vol_adjusted_limit_pct:.1%})"
+                "risk_adjustment": f"Volatility x Correlation adjusted: {combined_limit_pct:.1%} (base {vol_adjusted_limit_pct:.1%})",
+                "regime": regime_state.regime if regime_state else "unknown",
+                "regime_multiplier": float(regime_mult),
             },
         }
         

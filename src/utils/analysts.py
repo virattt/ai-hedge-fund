@@ -20,6 +20,7 @@ from src.agents.mohnish_pabrai import mohnish_pabrai_agent
 from src.agents.nassim_taleb import nassim_taleb_agent
 from src.agents.news_sentiment import news_sentiment_agent
 from src.agents.growth_agent import growth_analyst_agent
+from src.agents.sec_filings import sec_filings_agent
 
 # Define analyst configuration - single source of truth
 ANALYST_CONFIG = {
@@ -174,6 +175,14 @@ ANALYST_CONFIG = {
         "agent_func": valuation_analyst_agent,
         "type": "analyst",
         "order": 18,
+    },
+    "sec_filings_analyst": {
+        "display_name": "SEC Filings Analyst",
+        "description": "Qualitative Filing Reader",
+        "investing_style": "Reads 10-K, 10-Q, and 8-K filings to extract management tone, risk factor changes, and forward guidance signals from primary source documents.",
+        "agent_func": sec_filings_agent,
+        "type": "analyst",
+        "order": 19,
     },
 }
 
