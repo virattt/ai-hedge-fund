@@ -56,6 +56,7 @@ node_modules
 # Outputs
 outputs/
 /scratchpad/
+data/ledger/
 
 # Database files (users will have their own local databases)
 *.db
