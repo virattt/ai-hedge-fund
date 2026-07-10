@@ -8,6 +8,7 @@ import time
 logger = logging.getLogger(__name__)
 
 from src.data.cache import get_cache
+from src.tools.markets import is_a_share
 from src.data.models import (
     CompanyNews,
     CompanyNewsResponse,
@@ -62,6 +63,11 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
 
 def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> list[Price]:
     """Fetch price data from cache or API."""
+    # A-share dispatch: route to akshare-backed layer
+    if is_a_share(ticker):
+        from src.tools import api_akshare
+        return api_akshare.get_prices(ticker, start_date, end_date, api_key=api_key)
+
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date}_{end_date}"
     
@@ -103,39 +109,53 @@ def get_financial_metrics(
     limit: int = 10,
     api_key: str = None,
 ) -> list[FinancialMetrics]:
-    """Fetch financial metrics from cache or API."""
-    # Create a cache key that includes all parameters to ensure exact matches
-    cache_key = f"{ticker}_{period}_{end_date}_{limit}"
-    
-    # Check cache first - simple exact match
-    if cached_data := _cache.get_financial_metrics(cache_key):
-        return [FinancialMetrics(**metric) for metric in cached_data]
+    """Fetch financial metrics from cache or API.
 
-    # If not in cache, fetch from API
-    headers = {}
-    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
-        headers["X-API-KEY"] = financial_api_key
+    Uses subset-on-limit caching: the cache key omits ``limit`` and the cache
+    remembers the largest limit fetched. A request for a smaller limit reuses a
+    larger cached fetch (the API returns most-recent-first, so slicing is
+    exact). This lets analysts that ask for ``annual/5``, ``annual/8`` and
+    ``annual/10`` share a single API call per period.
+    """
+    # A-share dispatch: route to akshare-backed layer
+    if is_a_share(ticker):
+        from src.tools import api_akshare
+        return api_akshare.get_financial_metrics(ticker, end_date, period=period, limit=limit, api_key=api_key)
 
-    url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
-    response = _make_api_request(url, headers)
-    if response.status_code != 200:
-        return []
+    # Key excludes limit: a larger cached limit can serve a smaller request.
+    cache_key = f"{ticker}_{period}_{end_date}"
 
-    # Parse response with Pydantic model
-    try:
-        metrics_response = FinancialMetricsResponse(**response.json())
-        financial_metrics = metrics_response.financial_metrics
-    except Exception as e:
-        logger.warning("Failed to parse financial metrics response for %s: %s", ticker, e)
-        return []
+    with _cache.fetch_lock(cache_key):
+        cached = _cache.get_financial_metrics(cache_key)
+        cached_limit = _cache.get_financial_metrics_limit(cache_key)
+        if cached is not None and cached_limit is not None and limit <= cached_limit:
+            return [FinancialMetrics(**metric) for metric in cached[:limit]]
 
-    if not financial_metrics:
-        return []
+        # Miss (cold or larger limit than cached): fetch from API.
+        headers = {}
+        financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+        if financial_api_key:
+            headers["X-API-KEY"] = financial_api_key
 
-    # Cache the results as dicts using the comprehensive cache key
-    _cache.set_financial_metrics(cache_key, [m.model_dump() for m in financial_metrics])
-    return financial_metrics
+        url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
+        response = _make_api_request(url, headers)
+        if response.status_code != 200:
+            return []
+
+        # Parse response with Pydantic model
+        try:
+            metrics_response = FinancialMetricsResponse(**response.json())
+            financial_metrics = metrics_response.financial_metrics
+        except Exception as e:
+            logger.warning("Failed to parse financial metrics response for %s: %s", ticker, e)
+            return []
+
+        if not financial_metrics:
+            return []
+
+        # Cache the results as dicts using the comprehensive cache key
+        _cache.set_financial_metrics(cache_key, [m.model_dump() for m in financial_metrics], limit=limit)
+        return financial_metrics
 
 
 def search_line_items(
@@ -146,38 +166,67 @@ def search_line_items(
     limit: int = 10,
     api_key: str = None,
 ) -> list[LineItem]:
-    """Fetch line items from API."""
-    # If not in cache or insufficient data, fetch from API
-    headers = {}
-    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
-        headers["X-API-KEY"] = financial_api_key
+    """Fetch line items from cache or API, reusing fields already fetched.
 
-    url = "https://api.financialdatasets.ai/financials/search/line-items"
+    Each analyst asks for a different basket of line items. The cache remembers
+    which fields have already been fetched for a given ``(ticker, period,
+    end_date, limit)`` key and only asks the API for the *missing* fields,
+    merging them into the cached rows. So once one analyst has pulled
+    ``revenue``/``net_income``, a later analyst that also needs them only pays
+    for whichever fields it additionally requested.
+    """
+    # A-share dispatch: route to akshare-backed layer
+    if is_a_share(ticker):
+        from src.tools import api_akshare
+        return api_akshare.search_line_items(ticker, line_items, end_date, period=period, limit=limit, api_key=api_key)
 
-    body = {
-        "tickers": [ticker],
-        "line_items": line_items,
-        "end_date": end_date,
-        "period": period,
-        "limit": limit,
-    }
-    response = _make_api_request(url, headers, method="POST", json_data=body)
-    if response.status_code != 200:
-        return []
-    
-    try:
-        data = response.json()
-        response_model = LineItemResponse(**data)
-        search_results = response_model.search_results
-    except Exception as e:
-        logger.warning("Failed to parse line items response for %s: %s", ticker, e)
-        return []
-    if not search_results:
-        return []
+    cache_key = f"{ticker}_{period}_{end_date}_{limit}"
+    requested = set(line_items)
 
-    # Cache the results
-    return search_results[:limit]
+    with _cache.fetch_lock(cache_key):
+        cached_fields = _cache.get_line_items_fields(cache_key)
+        missing = requested - cached_fields if cached_fields is not None else requested
+
+        if missing:
+            headers = {}
+            financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+            if financial_api_key:
+                headers["X-API-KEY"] = financial_api_key
+
+            url = "https://api.financialdatasets.ai/financials/search/line-items"
+            body = {
+                "tickers": [ticker],
+                "line_items": sorted(missing),
+                "end_date": end_date,
+                "period": period,
+                "limit": limit,
+            }
+            response = _make_api_request(url, headers, method="POST", json_data=body)
+            if response.status_code != 200:
+                return []
+
+            try:
+                response_model = LineItemResponse(**response.json())
+                search_results = response_model.search_results
+            except Exception as e:
+                logger.warning("Failed to parse line items response for %s: %s", ticker, e)
+                return []
+
+            if not search_results:
+                return []
+
+            # Cache the freshly fetched fields; set_line_items field-merges them
+            # into any existing rows for the same report_period.
+            _cache.set_line_items(
+                cache_key,
+                [item.model_dump() for item in search_results],
+                fields=missing,
+            )
+
+        cached = _cache.get_line_items(cache_key)
+        if not cached:
+            return []
+        return [LineItem(**row) for row in cached][:limit]
 
 
 def get_insider_trades(
@@ -188,6 +237,11 @@ def get_insider_trades(
     api_key: str = None,
 ) -> list[InsiderTrade]:
     """Fetch insider trades from cache or API."""
+    # A-share dispatch: route to akshare-backed layer (stub — returns [])
+    if is_a_share(ticker):
+        from src.tools import api_akshare
+        return api_akshare.get_insider_trades(ticker, end_date, start_date=start_date, limit=limit, api_key=api_key)
+
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
     
@@ -254,6 +308,11 @@ def get_company_news(
     api_key: str = None,
 ) -> list[CompanyNews]:
     """Fetch company news from cache or API."""
+    # A-share dispatch: route to akshare-backed layer
+    if is_a_share(ticker):
+        from src.tools import api_akshare
+        return api_akshare.get_company_news(ticker, end_date, start_date=start_date, limit=limit, api_key=api_key)
+
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
     
@@ -318,6 +377,11 @@ def get_market_cap(
     api_key: str = None,
 ) -> float | None:
     """Fetch market cap from the API."""
+    # A-share dispatch: route to akshare-backed layer
+    if is_a_share(ticker):
+        from src.tools import api_akshare
+        return api_akshare.get_market_cap(ticker, end_date, api_key=api_key)
+
     # Check if end_date is today
     if end_date == datetime.datetime.now().strftime("%Y-%m-%d"):
         # Get the market cap from company facts API

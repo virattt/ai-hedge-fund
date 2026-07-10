@@ -7,6 +7,8 @@ def test_trade_executor_routes_actions(portfolio):
     # buy
     qty = ex.execute_trade("AAPL", "buy", 10, 100.0, portfolio)
     assert qty == 10
+    # Advance day so T+1 locked shares become sellable
+    portfolio.advance_day()
     # sell
     qty = ex.execute_trade("AAPL", "sell", 5, 100.0, portfolio)
     assert qty == 5

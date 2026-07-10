@@ -32,6 +32,7 @@ class Portfolio:
                     "long_cost_basis": 0.0,
                     "short_cost_basis": 0.0,
                     "short_margin_used": 0.0,
+                    "locked_long": 0,
                 }
                 for ticker in tickers
             },
@@ -49,6 +50,7 @@ class Portfolio:
                 "long_cost_basis": p["long_cost_basis"],
                 "short_cost_basis": p["short_cost_basis"],
                 "short_margin_used": p["short_margin_used"],
+                "locked_long": p.get("locked_long", 0),
             }
             for t, p in self._portfolio["positions"].items()
         }
@@ -94,6 +96,7 @@ class Portfolio:
                 total_new_cost = cost
                 position["long_cost_basis"] = (total_old_cost + total_new_cost) / total_shares
             position["long"] = old_shares + quantity
+            position["locked_long"] = position.get("locked_long", 0) + quantity
             self._portfolio["cash"] -= cost
             return quantity
         max_quantity = int(self._portfolio["cash"] / price) if price > 0 else 0
@@ -107,13 +110,16 @@ class Portfolio:
                 total_new_cost = cost
                 position["long_cost_basis"] = (total_old_cost + total_new_cost) / total_shares
             position["long"] = old_shares + max_quantity
+            position["locked_long"] = position.get("locked_long", 0) + max_quantity
             self._portfolio["cash"] -= cost
             return max_quantity
         return 0
 
     def apply_long_sell(self, ticker: str, quantity: int, price: float) -> int:
         position = self._portfolio["positions"][ticker]
-        quantity = min(int(quantity), position["long"]) if quantity > 0 else 0
+        # Sellable = total long minus locked (T+1) shares bought today
+        sellable = position["long"] - position.get("locked_long", 0)
+        quantity = min(int(quantity), sellable) if quantity > 0 else 0
         if quantity <= 0:
             return 0
         avg_cost = position["long_cost_basis"] if position["long"] > 0 else 0.0
@@ -192,4 +198,14 @@ class Portfolio:
             position["short_cost_basis"] = 0.0
             position["short_margin_used"] = 0.0
         return quantity
+
+    def advance_day(self) -> None:
+        """Clear T+1 locks at the start of each new trading day.
+
+        Called by the engine before processing trades for a new day so that
+        shares purchased on the *previous* day become sellable.
+        """
+
+        for position in self._portfolio["positions"].values():
+            position["locked_long"] = 0
 

@@ -156,3 +156,131 @@ class TestCompanyNewsCache:
         result = cache.get_company_news("AAPL")
         assert len(result) == 2
         assert result[0]["title"] == "Earnings Beat"  # original preserved
+
+
+class TestLineItemsFieldTracking:
+    """Line-items cache now tracks which fields have been fetched per key and
+    merges new fields into existing rows (field-level union), so multiple agents
+    requesting overlapping fields share one logical fetch."""
+
+    def test_returns_none_fields_for_absent_key(self):
+        cache = Cache()
+        assert cache.get_line_items_fields("AAPL") is None
+
+    def test_tracks_fetched_fields(self):
+        cache = Cache()
+        cache.set_line_items("AAPL", [{"report_period": "2024-Q1", "revenue": 100}], fields={"revenue"})
+        assert cache.get_line_items_fields("AAPL") == {"revenue"}
+
+    def test_field_union_accumulates_across_sets(self):
+        cache = Cache()
+        cache.set_line_items("AAPL", [{"report_period": "2024-Q1", "revenue": 100}], fields={"revenue"})
+        cache.set_line_items("AAPL", [{"report_period": "2024-Q1", "net_income": 10}], fields={"net_income"})
+        assert cache.get_line_items_fields("AAPL") == {"revenue", "net_income"}
+
+    def test_merges_fields_within_same_report_period(self):
+        """Critical: row-level dedup would drop net_income here. Field-level merge keeps both."""
+        cache = Cache()
+        cache.set_line_items("AAPL", [{"report_period": "2024-Q1", "revenue": 100}], fields={"revenue"})
+        cache.set_line_items("AAPL", [{"report_period": "2024-Q1", "net_income": 10}], fields={"net_income"})
+        result = cache.get_line_items("AAPL")
+        assert len(result) == 1  # same report_period, not a new row
+        assert result[0]["revenue"] == 100
+        assert result[0]["net_income"] == 10
+
+    def test_preserves_existing_value_when_merging(self):
+        cache = Cache()
+        cache.set_line_items("AAPL", [{"report_period": "2024-Q1", "revenue": 100}], fields={"revenue"})
+        # second set targets a different field; revenue must be untouched
+        cache.set_line_items("AAPL", [{"report_period": "2024-Q1", "revenue": 999, "net_income": 10}], fields={"net_income"})
+        result = cache.get_line_items("AAPL")
+        assert result[0]["revenue"] == 100  # original preserved
+        assert result[0]["net_income"] == 10
+
+    def test_appends_new_report_periods(self):
+        cache = Cache()
+        cache.set_line_items("AAPL", [{"report_period": "2024-Q1", "revenue": 100}], fields={"revenue"})
+        cache.set_line_items("AAPL", [{"report_period": "2023-Q4", "revenue": 90}], fields={"revenue"})
+        result = cache.get_line_items("AAPL")
+        assert len(result) == 2
+
+    def test_back_compat_set_without_fields(self):
+        """Existing callers that omit `fields` still work; key is marked present."""
+        cache = Cache()
+        items = [{"report_period": "2024-Q1", "total_revenue": 5000}]
+        cache.set_line_items("AAPL", items)
+        assert cache.get_line_items("AAPL") == items
+        assert cache.get_line_items_fields("AAPL") == set()
+
+
+class TestFinancialMetricsLimitTracking:
+    """financial-metrics cache tracks the max limit fetched so a request for a
+    smaller limit can reuse a larger cached fetch (subset-on-limit)."""
+
+    def test_returns_none_limit_for_absent_key(self):
+        cache = Cache()
+        assert cache.get_financial_metrics_limit("AAPL") is None
+
+    def test_tracks_limit(self):
+        cache = Cache()
+        cache.set_financial_metrics("AAPL", [{"report_period": "2024-Q1"}], limit=10)
+        assert cache.get_financial_metrics_limit("AAPL") == 10
+
+    def test_limit_tracks_max(self):
+        cache = Cache()
+        cache.set_financial_metrics("AAPL", [{"report_period": "2024-Q1"}], limit=5)
+        cache.set_financial_metrics("AAPL", [{"report_period": "2024-Q1"}, {"report_period": "2023-Q4"}], limit=10)
+        assert cache.get_financial_metrics_limit("AAPL") == 10
+
+    def test_back_compat_set_without_limit(self):
+        cache = Cache()
+        metrics = [{"report_period": "2024-Q1", "revenue": 1000}]
+        cache.set_financial_metrics("AAPL", metrics)
+        assert cache.get_financial_metrics("AAPL") == metrics
+        assert cache.get_financial_metrics_limit("AAPL") is None
+
+
+class TestFetchLock:
+    """Per-key lock that lets concurrent agents serialize check-fetch-populate
+    for the same cache key (prevents thundering-herd duplicate API calls)."""
+
+    def test_is_usable_as_context_manager(self):
+        cache = Cache()
+        with cache.fetch_lock("AAPL_metrics"):
+            pass  # does not raise
+
+    def test_distinct_keys_do_not_deadlock(self):
+        cache = Cache()
+        with cache.fetch_lock("AAPL"):
+            with cache.fetch_lock("MSFT"):
+                pass
+
+    def test_serializes_concurrent_access_to_same_key(self):
+        import threading
+
+        cache = Cache()
+        state = {"current": 0, "max_concurrent": 0, "done": 0}
+        guard = threading.Lock()
+
+        def worker():
+            with cache.fetch_lock("K"):
+                with guard:
+                    state["current"] += 1
+                    state["max_concurrent"] = max(state["max_concurrent"], state["current"])
+                # burn a little time so overlap would be detected if lock failed
+                total = 0
+                for i in range(2000):
+                    total += i
+                with guard:
+                    state["current"] -= 1
+                    state["done"] += 1
+                assert total >= 0
+
+        threads = [threading.Thread(target=worker) for _ in range(12)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert state["done"] == 12
+        assert state["max_concurrent"] == 1  # proof of mutual exclusion
