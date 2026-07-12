@@ -6,8 +6,7 @@ import {
   BacktestPerformanceMetrics,
   BacktestRequest
 } from '@/services/types';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { API_ROUTES } from '@/services/api-routes';
 
 export const backtestApi = {
   /**
@@ -27,7 +26,7 @@ export const backtestApi = {
     const { signal } = controller;
 
     // Make a POST request to the backtest endpoint
-    fetch(`${API_BASE_URL}/hedge-fund/backtest`, {
+    fetch(API_ROUTES.hedgeFund.backtest, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

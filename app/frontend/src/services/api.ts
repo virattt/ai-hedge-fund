@@ -6,8 +6,7 @@ import { flowConnectionManager } from '@/hooks/use-flow-connection';
 import {
   HedgeFundRequest
 } from '@/services/types';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { API_ROUTES } from '@/services/api-routes';
 
 export const api = {
   /**
@@ -16,7 +15,7 @@ export const api = {
    */
   getAgents: async (): Promise<Agent[]> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/hedge-fund/agents`);
+      const response = await fetch(API_ROUTES.hedgeFund.agents);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -34,7 +33,7 @@ export const api = {
    */
   getLanguageModels: async (): Promise<LanguageModel[]> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/language-models/`);
+      const response = await fetch(API_ROUTES.languageModels);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -54,7 +53,7 @@ export const api = {
    */
   saveJsonFile: async (filename: string, data: any): Promise<void> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/storage/save-json`, {
+      const response = await fetch(API_ROUTES.storage.saveJson, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -106,7 +105,7 @@ export const api = {
     const { signal } = controller;
 
     // Make a POST request with the JSON body
-    fetch(`${API_BASE_URL}/hedge-fund/run`, {
+    fetch(API_ROUTES.hedgeFund.run, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

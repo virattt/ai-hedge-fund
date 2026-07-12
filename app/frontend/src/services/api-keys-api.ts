@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { API_ROUTES } from '@/services/api-routes';
 
 export interface ApiKey {
   id: number;
@@ -40,7 +40,7 @@ export interface ApiKeyBulkUpdateRequest {
 }
 
 class ApiKeysService {
-  private baseUrl = `${API_BASE_URL}/api-keys`;
+  private baseUrl = API_ROUTES.apiKeys;
 
   async getAllApiKeys(includeInactive = false): Promise<ApiKeySummary[]> {
     const params = new URLSearchParams();

@@ -172,6 +172,117 @@ This project is for **educational and research purposes only**.
 
 By using this software, you agree to use it solely for learning purposes.
 
+## Local Development Runbook
+
+### Clean Start (recommended)
+
+The `dev` script kills stale processes, initializes the DB, verifies routes, then starts both services with `--reload`:
+
+**Windows:**
+```cmd
+cd app
+dev.bat
+```
+
+**Mac/Linux:**
+```bash
+cd app
+./dev.sh
+```
+
+After startup you will see:
+```
+  Backend API:   http://localhost:8000
+  Swagger Docs:  http://localhost:8000/docs
+  Frontend:      http://localhost:5173
+```
+
+### Restart Backend Only
+
+```bash
+# From repo root:
+# Kill stale process
+lsof -ti :8000 | xargs kill -9        # Mac/Linux
+netstat -ano | findstr :8000           # Windows (note PID, then taskkill /F /PID <pid>)
+
+# Restart with --reload (ALWAYS use --reload in dev)
+.venv/bin/python -m uvicorn app.backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+### Initialize / Reset Database
+
+```bash
+# Initialize (safe — only creates missing tables/columns, never drops):
+python -m app.backend.scripts.db_init
+
+# Full reset (DELETES ALL DATA — asks for confirmation):
+python -m app.backend.scripts.db_init --reset
+```
+
+### Verify Routes Exist
+
+```bash
+python -m app.backend.scripts.verify_routes
+```
+
+Expected output:
+```
+[ROUTES] Checking required endpoints...
+  OK  POST   /portfolio/analyze
+  OK  GET    /portfolio/analyze/{job_id}
+  OK  GET    /portfolio/analysis/latest
+  OK  GET    /watchlist
+  OK  POST   /watchlist
+  ...
+[DB] Checking required tables...
+  OK  holdings (12 columns)
+  OK  watchlist (6 columns)
+  OK  portfolio_analysis_results (17 columns)
+  OK  analysis_jobs (9 columns)
+
+[VERIFY] ALL CHECKS PASSED
+```
+
+You can also check Swagger docs directly: http://localhost:8000/docs
+
+### Common Issues
+
+#### 404 on /portfolio/analyze (stale server)
+
+**Cause:** The backend was started before route files were created, and `--reload` was not used.
+
+**Fix:**
+1. Kill the old process: `lsof -ti :8000 | xargs kill -9`
+2. Restart with `--reload`: `uvicorn app.backend.main:app --reload --port 8000`
+3. Or just run `dev.bat` / `dev.sh`
+
+**Prevention:** Always use `--reload` in development. The `dev` script does this automatically.
+
+#### SQLite schema out of date (missing columns)
+
+**Cause:** SQLAlchemy `create_all()` creates new tables but cannot ALTER existing ones. If a column was added to a model after the table was first created, it won't appear automatically.
+
+**Fix:**
+```bash
+python -m app.backend.scripts.db_init
+```
+
+This adds any missing columns without dropping data.
+
+**Nuclear option** (deletes all data):
+```bash
+python -m app.backend.scripts.db_init --reset
+```
+
+#### Frontend shows data but "Analyze" button returns error
+
+Check that:
+1. Backend is running on port 8000 (not a stale instance)
+2. API keys are configured in Settings (needs FINANCIAL_DATASETS_API_KEY + an LLM key)
+3. Run `python -m app.backend.scripts.verify_routes` to confirm endpoints exist
+
+---
+
 ## Troubleshooting
 
 ### Common Issues

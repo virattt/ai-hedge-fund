@@ -40,6 +40,11 @@ function LayoutContent({ children }: { children: ReactNode }) {
     openTab(tabData);
   };
 
+  const handlePortfolioClick = () => {
+    const tabData = TabService.createPortfolioTab();
+    openTab(tabData);
+  };
+
   // Add keyboard shortcuts for toggling sidebars and fit view
   useLayoutKeyboardShortcuts(
     () => setIsRightCollapsed(!isRightCollapsed), // Cmd+I for right sidebar
@@ -111,6 +116,7 @@ function LayoutContent({ children }: { children: ReactNode }) {
         onToggleRight={() => setIsRightCollapsed(!isRightCollapsed)}
         onToggleBottom={toggleBottomPanel}
         onSettingsClick={handleSettingsClick}
+        onPortfolioClick={handlePortfolioClick}
       />
 
       {/* Tab Bar - positioned absolutely like bottom panel */}
