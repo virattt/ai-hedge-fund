@@ -124,6 +124,12 @@ LLM_ORDER = [model.to_choice_tuple() for model in AVAILABLE_MODELS]
 OLLAMA_LLM_ORDER = [model.to_choice_tuple() for model in OLLAMA_MODELS]
 
 
+# Per-request timeout for LLM calls, in seconds. Without it a hung provider
+# connection blocks an analysis task forever and the retry loop in call_llm
+# never gets a chance to run (see #618). Override with LLM_REQUEST_TIMEOUT.
+DEFAULT_REQUEST_TIMEOUT_SECONDS = float(os.getenv("LLM_REQUEST_TIMEOUT", "120"))
+
+
 def get_model_info(model_name: str, model_provider: str) -> LLMModel | None:
     """Get model information by model_name"""
     all_models = AVAILABLE_MODELS + OLLAMA_MODELS
@@ -155,7 +161,7 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
             # Print error to console
             print(f"API Key Error: Please make sure GROQ_API_KEY is set in your .env file or provided via API keys.")
             raise ValueError("Groq API key not found.  Please make sure GROQ_API_KEY is set in your .env file or provided via API keys.")
-        return ChatGroq(model=model_name, api_key=api_key)
+        return ChatGroq(model=model_name, api_key=api_key, timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS)
     elif model_provider == ModelProvider.OPENAI:
         # Get and validate API key
         api_key = (api_keys or {}).get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
@@ -164,25 +170,25 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
             # Print error to console
             print(f"API Key Error: Please make sure OPENAI_API_KEY is set in your .env file or provided via API keys.")
             raise ValueError("OpenAI API key not found.  Please make sure OPENAI_API_KEY is set in your .env file or provided via API keys.")
-        return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
+        return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url, timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS)
     elif model_provider == ModelProvider.ANTHROPIC:
         api_key = (api_keys or {}).get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
             print(f"API Key Error: Please make sure ANTHROPIC_API_KEY is set in your .env file or provided via API keys.")
             raise ValueError("Anthropic API key not found.  Please make sure ANTHROPIC_API_KEY is set in your .env file or provided via API keys.")
-        return ChatAnthropic(model=model_name, api_key=api_key)
+        return ChatAnthropic(model=model_name, api_key=api_key, timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS)
     elif model_provider == ModelProvider.DEEPSEEK:
         api_key = (api_keys or {}).get("DEEPSEEK_API_KEY") or os.getenv("DEEPSEEK_API_KEY")
         if not api_key:
             print(f"API Key Error: Please make sure DEEPSEEK_API_KEY is set in your .env file or provided via API keys.")
             raise ValueError("DeepSeek API key not found.  Please make sure DEEPSEEK_API_KEY is set in your .env file or provided via API keys.")
-        return ChatDeepSeek(model=model_name, api_key=api_key)
+        return ChatDeepSeek(model=model_name, api_key=api_key, timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS)
     elif model_provider == ModelProvider.GOOGLE:
         api_key = (api_keys or {}).get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not api_key:
             print(f"API Key Error: Please make sure GOOGLE_API_KEY is set in your .env file or provided via API keys.")
             raise ValueError("Google API key not found.  Please make sure GOOGLE_API_KEY is set in your .env file or provided via API keys.")
-        return ChatGoogleGenerativeAI(model=model_name, api_key=api_key)
+        return ChatGoogleGenerativeAI(model=model_name, api_key=api_key, request_timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS)
     elif model_provider == ModelProvider.OLLAMA:
         # For Ollama, we use a base URL instead of an API key
         # Check if OLLAMA_HOST is set (for Docker on macOS)
@@ -191,6 +197,7 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
         return ChatOllama(
             model=model_name,
             base_url=base_url,
+            client_kwargs={"timeout": DEFAULT_REQUEST_TIMEOUT_SECONDS},
         )
     elif model_provider == ModelProvider.OPENROUTER:
         api_key = (api_keys or {}).get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")
@@ -206,6 +213,7 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
             model=model_name,
             openai_api_key=api_key,
             openai_api_base="https://openrouter.ai/api/v1",
+            timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS,
             model_kwargs={
                 "extra_headers": {
                     "HTTP-Referer": site_url,
@@ -222,23 +230,23 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
         # Kimi exposes an OpenAI-compatible endpoint. Default to the international host;
         # users in mainland China can override via MOONSHOT_BASE_URL=https://api.moonshot.cn/v1.
         base_url = os.getenv("MOONSHOT_BASE_URL") or os.getenv("KIMI_BASE_URL") or "https://api.moonshot.ai/v1"
-        return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
+        return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url, timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS)
     elif model_provider == ModelProvider.XAI:
         api_key = (api_keys or {}).get("XAI_API_KEY") or os.getenv("XAI_API_KEY")
         if not api_key:
             print(f"API Key Error: Please make sure XAI_API_KEY is set in your .env file or provided via API keys.")
             raise ValueError("xAI API key not found. Please make sure XAI_API_KEY is set in your .env file or provided via API keys.")
-        return ChatXAI(model=model_name, api_key=api_key)
+        return ChatXAI(model=model_name, api_key=api_key, timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS)
     elif model_provider == ModelProvider.GIGACHAT:
         if os.getenv("GIGACHAT_USER") or os.getenv("GIGACHAT_PASSWORD"):
-            return GigaChat(model=model_name)
+            return GigaChat(model=model_name, timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS)
         else: 
             api_key = (api_keys or {}).get("GIGACHAT_API_KEY") or os.getenv("GIGACHAT_API_KEY") or os.getenv("GIGACHAT_CREDENTIALS")
             if not api_key:
                 print("API Key Error: Please make sure api_keys is set in your .env file or provided via API keys.")
                 raise ValueError("GigaChat API key not found. Please make sure GIGACHAT_API_KEY is set in your .env file or provided via API keys.")
 
-            return GigaChat(credentials=api_key, model=model_name)
+            return GigaChat(credentials=api_key, model=model_name, timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS)
     elif model_provider == ModelProvider.AZURE_OPENAI:
         # Get and validate API key
         api_key = os.getenv("AZURE_OPENAI_API_KEY")
@@ -258,7 +266,7 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
             # Print error to console
             print(f"Azure Deployment Name Error: Please make sure AZURE_OPENAI_DEPLOYMENT_NAME is set in your .env file.")
             raise ValueError("Azure OpenAI deployment name not found.  Please make sure AZURE_OPENAI_DEPLOYMENT_NAME is set in your .env file.")
-        return AzureChatOpenAI(azure_endpoint=azure_endpoint, azure_deployment=azure_deployment_name, api_key=api_key, api_version="2024-10-21")
+        return AzureChatOpenAI(azure_endpoint=azure_endpoint, azure_deployment=azure_deployment_name, api_key=api_key, api_version="2024-10-21", timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS)
     else:
         raise ValueError(
             f"Unsupported model provider: {model_provider}. "
