@@ -7,10 +7,18 @@ def test_calculate_portfolio_value(portfolio, prices):
     portfolio.apply_short_open("MSFT", 5, 200.0)
 
     value = calculate_portfolio_value(portfolio, prices)
-    # cash after trades
-    snap = portfolio.get_snapshot()
-    expected = snap["cash"] + 10 * 100.0 - 5 * 200.0
-    assert value == expected
+    assert value == 100_000.0
+
+
+def test_short_open_preserves_equity_and_marks_to_market() -> None:
+    from src.backtesting.portfolio import Portfolio
+
+    portfolio = Portfolio(tickers=["AAPL"], initial_cash=1_000.0, margin_requirement=0.5)
+    portfolio.apply_short_open("AAPL", 10, 100.0)
+
+    assert calculate_portfolio_value(portfolio, {"AAPL": 100.0}) == 1_000.0
+    assert calculate_portfolio_value(portfolio, {"AAPL": 110.0}) == 900.0
+    assert calculate_portfolio_value(portfolio, {"AAPL": 90.0}) == 1_100.0
 
 
 def test_compute_exposures(portfolio, prices):
