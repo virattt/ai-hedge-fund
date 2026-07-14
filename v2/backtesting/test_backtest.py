@@ -182,6 +182,19 @@ class TestMetrics:
         assert result.metrics.n_long == 2
         assert result.metrics.win_rate == 0.5
 
+    def test_wiped_out_book_annualizes_to_total_loss(self):
+        # A short's loss is unbounded: a full-size short on a stock that
+        # triples loses more than the account, taking equity below zero.
+        # Annualizing a negative growth factor must not blow up.
+        prices = _make_prices(100.0, 20, daily_change=0.25)
+        result = BacktestEngine(capital=10_000, per_trade=10_000).run_alpha(
+            FixedAlpha(-1.0), ["MEME"], MockFDClient(prices),
+            prices[0].time[:10], prices[6].time[:10], holding_days=5,
+        )
+        assert result.equity_curve[-1] < 0
+        assert result.metrics.total_return_pct < -1.0
+        assert result.metrics.annualized_return_pct == -1.0
+
 
 # ---------------------------------------------------------------------------
 # Integration — requires API key
