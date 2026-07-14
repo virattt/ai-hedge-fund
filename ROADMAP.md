@@ -41,7 +41,7 @@ the engine. Two flavors:
 |-------|--------|
 | Post-Earnings Announcement Drift (PEAD) | ✅ |
 | Market-regime detection (HMM / regime-switching) | ⬜ |
-| Momentum | ⬜ |
+| Momentum | ✅ |
 | Mean reversion | ⬜ |
 | Value / quality factors | ⬜ |
 | Statistical arbitrage | ⬜ |

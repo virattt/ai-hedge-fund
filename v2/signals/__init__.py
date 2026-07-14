@@ -9,10 +9,12 @@ from __future__ import annotations
 from v2.signals.base import AlphaModel, QuantModel
 from v2.signals.buffett import BuffettAgent
 from v2.signals.llm_agent import LLMAgent
+from v2.signals.momentum import MomentumModel
 from v2.signals.pead import PEADModel
 
 ALPHA_MODEL_REGISTRY: dict[str, type[AlphaModel]] = {
     "pead": PEADModel,
+    "momentum": MomentumModel,
     "buffett": BuffettAgent,
 }
 
@@ -21,6 +23,7 @@ __all__ = [
     "QuantModel",
     "LLMAgent",
     "BuffettAgent",
+    "MomentumModel",
     "PEADModel",
     "ALPHA_MODEL_REGISTRY",
 ]
