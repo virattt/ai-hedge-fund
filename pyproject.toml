@@ -7,7 +7,8 @@ readme = "README.md"
 packages = [
     { include = "src", from = "." },
     { include = "v2", from = "." },
-    { include = "app", from = "." }
+    { include = "app", from = "." },
+    { include = "integrations", from = "." },
 ]
 
 [tool.poetry.dependencies]
@@ -45,6 +46,9 @@ black = "^23.7.0"
 isort = "^5.12.0"
 flake8 = "^6.1.0"
 
+[tool.poetry.group.alpaca.dependencies]
+alpaca-py = "^0.42.0"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
@@ -60,3 +64,4 @@ force_alphabetical_sort_within_sections = true
 
 [tool.poetry.scripts]
 backtester = "src.backtesting.cli:main"
+alpaca-fund = "integrations.alpaca.cli:main"

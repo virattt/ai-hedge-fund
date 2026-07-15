@@ -106,6 +106,12 @@ def compute_allowed_actions(
     margin_requirement = float(portfolio.get("margin_requirement", 0.5))
     margin_used = float(portfolio.get("margin_used", 0.0))
     equity = float(portfolio.get("equity", cash))
+    # Broker-reported Reg-T headroom, when available (live/paper accounts).
+    # Alpaca's "cash" includes short-sale proceeds, so without this cap a
+    # heavily short account looks flush while its real buying power is 0.
+    raw_buying_power = portfolio.get("buying_power")
+    buying_power = float(raw_buying_power) if raw_buying_power is not None else None
+    spendable = cash if buying_power is None else min(cash, buying_power)
 
     for ticker in tickers:
         price = float(current_prices.get(ticker, 0.0))
@@ -123,8 +129,8 @@ def compute_allowed_actions(
         # Long side
         if long_shares > 0:
             actions["sell"] = long_shares
-        if cash > 0 and price > 0:
-            max_buy_cash = int(cash // price)
+        if spendable > 0 and price > 0:
+            max_buy_cash = int(spendable // price)
             max_buy = max(0, min(max_qty, max_buy_cash))
             if max_buy > 0:
                 actions["buy"] = max_buy
@@ -138,6 +144,11 @@ def compute_allowed_actions(
                 max_short = max_qty
             else:
                 available_margin = max(0.0, (equity / margin_requirement) - margin_used)
+                if buying_power is not None:
+                    # Shorting consumes buying power too — a maxed-out
+                    # account can't open new shorts regardless of the
+                    # internal margin estimate.
+                    available_margin = min(available_margin, buying_power)
                 max_short_margin = int(available_margin // price)
                 max_short = max(0, min(max_qty, max_short_margin))
             if max_short > 0:
