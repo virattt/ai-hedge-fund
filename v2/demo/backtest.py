@@ -202,9 +202,9 @@ def _tape_panel(trades: list, limit: int = 20) -> Panel:
                  title_align="left")
 
 
-def _frame(engine, trades_shown, n_total, width, footer: Text | None = None) -> Group:
-    curve = engine._build_equity_curve(trades_shown)
-    metrics = engine._compute_metrics(trades_shown, curve)
+def _frame(engine, ledger_shown, trades_shown, n_total, width, footer: Text | None = None) -> Group:
+    curve = engine._build_equity_curve(ledger_shown)
+    metrics = engine._compute_metrics(trades_shown, ledger_shown)
     parts = [
         _banner(),
         _stats_panel(metrics, curve[-1], n_total, len(trades_shown)),
@@ -245,16 +245,17 @@ def main() -> None:
                 model, TICKERS, fd, START_DATE, END_DATE, holding_days=HOLDING_DAYS,
             )
 
-        trades = sorted(result.trades, key=lambda t: (t.entry_date, t.ticker))
+        trades = sorted(result.trades, key=lambda t: (t.exit_date, t.ticker))
         if not trades:
             live.update(Text("  No trades generated.", style="red"))
             return
 
-        delay = max(0.02, min(0.35, REPLAY_SECONDS / len(trades)))
-        shown: list = []
-        for trade in trades:
-            shown.append(trade)
-            live.update(_frame(engine, shown, len(trades), curve_width))
+        exit_dates = sorted({trade.exit_date for trade in trades})
+        delay = max(0.02, min(0.35, REPLAY_SECONDS / len(exit_dates)))
+        for cutoff in exit_dates:
+            shown = [trade for trade in trades if trade.exit_date <= cutoff]
+            ledger_shown = [entry for entry in result.ledger if entry.date <= cutoff]
+            live.update(_frame(engine, ledger_shown, shown, len(trades), curve_width))
             time.sleep(delay)
 
         # Phase C — freeze on the final frame
@@ -266,7 +267,16 @@ def main() -> None:
             style="dim",
         )
         footer.append(f" · Sharpe {m.sharpe_ratio:.2f}", style="bold white")
-        live.update(_frame(engine, shown, len(trades), curve_width, footer=footer))
+        live.update(
+            _frame(
+                engine,
+                result.ledger,
+                trades,
+                len(trades),
+                curve_width,
+                footer=footer,
+            )
+        )
 
 
 if __name__ == "__main__":

@@ -1,27 +1,9 @@
-"""Backtesting engine — simulate trading an alpha model's views over time.
+"""Backtest alpha views through one cash-constrained, marked-to-market book.
 
-The engine queries an AlphaModel across a date grid, turns its convictions
-into trades, and computes performance (return, Sharpe, drawdown).
-
-IMPORTANT — separation of concerns (the "unify" decision):
-  - The AlphaModel forms *views* (conviction in [-1, +1]).
-  - This engine owns *mechanics* (entry timing, holding period, sizing).
-These mechanics are intentionally simple for now (threshold + fixed holding
-period + equal-dollar sizing). Week 8 portfolio construction will replace
-this harness with real position sizing and risk-aware weighting.
-
-Usage:
-    from datetime import date
-    from v2.data import FDClient
-    from v2.backtesting import BacktestEngine
-    from v2.signals import PEADModel
-
-    with FDClient() as fd:
-        engine = BacktestEngine(capital=100_000, per_trade=10_000)
-        result = engine.run_alpha(
-            PEADModel(), ["AAPL", "MSFT"], fd,
-            "2024-06-01", date.today().isoformat(), holding_days=5,
-        )
+The AlphaModel only forms views. This harness owns the intentionally simple
+mechanics: threshold entries, equal-dollar targets, fixed holding periods, and
+fully collateralized shorts. All tickers share one PortfolioLedger, so capital
+cannot be allocated independently more than once.
 """
 
 from __future__ import annotations
@@ -31,7 +13,8 @@ from datetime import date, datetime, timedelta
 
 import numpy as np
 
-from v2.backtesting.models import BacktestResult, PerformanceMetrics, Trade
+from v2.backtesting.ledger import PortfolioLedger, TradeIntent
+from v2.backtesting.models import BacktestResult, PerformanceMetrics, PortfolioLedgerEntry, Trade
 from v2.data.protocol import DataClient
 from v2.signals.base import AlphaModel
 
@@ -39,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class BacktestEngine:
-    """Simulates trading an alpha model's signals with equal-dollar sizing."""
+    """Simulate an alpha model against one shared portfolio."""
 
     def __init__(
         self,
@@ -47,8 +30,12 @@ class BacktestEngine:
         capital: float = 100_000.0,
         per_trade: float = 10_000.0,
     ) -> None:
-        self._capital = capital
-        self._per_trade = per_trade
+        if capital <= 0:
+            raise ValueError("capital must be positive")
+        if per_trade <= 0:
+            raise ValueError("per_trade must be positive")
+        self._capital = float(capital)
+        self._per_trade = float(per_trade)
 
     def run_alpha(
         self,
@@ -61,239 +48,236 @@ class BacktestEngine:
         threshold: float = 0.0,
         holding_days: int = 5,
     ) -> BacktestResult:
-        """Backtest an alpha model over [start_date, end_date].
+        """Backtest an alpha model over ``[start_date, end_date]``.
 
-        For each ticker we walk the trading-day grid, ask the model for its
-        view, and open a position whenever conviction clears `threshold`.
-        Positions are held for `holding_days` trading days.
-
-        Args:
-            model:        AlphaModel to backtest (e.g. PEADModel()).
-            tickers:      Universe to trade.
-            data_client:    Data client.
-            start_date:   First date to evaluate signals (YYYY-MM-DD).
-            end_date:     Last date to evaluate signals (YYYY-MM-DD).
-            threshold:    Minimum |conviction| to act on (0.0 = any nonzero view).
-            holding_days: Trading days to hold each position.
+        Candidate entries are generated per ticker, then executed together in
+        chronological order against a shared pool of cash. Same-day signals
+        split available cash equally up to ``per_trade`` each. The returned
+        ledger is marked to market at every available close through the later
+        of ``end_date`` and the final accepted exit.
         """
-        trades: list[Trade] = []
-        for ticker in tickers:
-            trades.extend(self._trade_ticker(
-                model, ticker, data_client, start_date, end_date,
-                threshold=threshold, holding_days=holding_days,
-            ))
+        if holding_days <= 0:
+            raise ValueError("holding_days must be positive")
+        if threshold < 0:
+            raise ValueError("threshold must be non-negative")
 
-        if not trades:
+        price_maps = self._load_price_maps(
+            tickers, data_client, start_date, end_date, holding_days,
+        )
+        if not price_maps:
             return BacktestResult()
 
-        trades.sort(key=lambda t: t.entry_date)
-        equity_curve = self._build_equity_curve(trades)
-        metrics = self._compute_metrics(trades, equity_curve)
-        return BacktestResult(trades=trades, metrics=metrics, equity_curve=equity_curve)
+        intents: list[TradeIntent] = []
+        for ticker in tickers:
+            price_map = price_maps.get(ticker)
+            if not price_map:
+                continue
+            intents.extend(
+                self._trade_ticker(
+                    model,
+                    ticker,
+                    data_client,
+                    price_map,
+                    start_date,
+                    end_date,
+                    threshold=threshold,
+                    holding_days=holding_days,
+                )
+            )
+
+        # Include padded dates while simulating so positions opened near the
+        # requested end can close mechanically.
+        padded_calendar = sorted(
+            {
+                day
+                for price_map in price_maps.values()
+                for day in price_map
+                if day >= start_date
+            }
+        )
+        ledger = PortfolioLedger(capital=self._capital, per_trade=self._per_trade)
+        trades, snapshots = ledger.run(intents, price_maps, padded_calendar)
+
+        final_date = max(
+            [end_date, *(trade.exit_date for trade in trades)],
+        )
+        snapshots = [snapshot for snapshot in snapshots if snapshot.date <= final_date]
+        equity_curve = self._build_equity_curve(snapshots)
+        metrics = self._compute_metrics(trades, snapshots) if trades else None
+        return BacktestResult(
+            trades=trades,
+            metrics=metrics,
+            equity_curve=equity_curve,
+            ledger=snapshots,
+        )
 
     # ------------------------------------------------------------------
-    # Per-ticker simulation
+    # Data and candidate generation
     # ------------------------------------------------------------------
+
+    def _load_price_maps(
+        self,
+        tickers: list[str],
+        data_client: DataClient,
+        start_date: str,
+        end_date: str,
+        holding_days: int,
+    ) -> dict[str, dict[str, float]]:
+        end_padded = (_parse_date(end_date) + timedelta(days=holding_days * 2 + 10)).isoformat()
+        end_padded = min(end_padded, date.today().isoformat())
+
+        price_maps: dict[str, dict[str, float]] = {}
+        for ticker in tickers:
+            prices = data_client.get_prices(ticker, start_date, end_padded)
+            if not prices:
+                continue
+            price_map = {
+                price.time[:10]: float(price.close)
+                for price in prices
+                if price.close is not None and float(price.close) > 0
+            }
+            if price_map:
+                price_maps[ticker] = price_map
+        return price_maps
 
     def _trade_ticker(
         self,
         model: AlphaModel,
         ticker: str,
         data_client: DataClient,
+        price_map: dict[str, float],
         start_date: str,
         end_date: str,
         *,
         threshold: float,
         holding_days: int,
-    ) -> list[Trade]:
-        """Walk one ticker's trading-day grid and open/close positions."""
-        # Fetch the price series once. Pad the end so exits beyond end_date
-        # still have a closing price to fill against.
-        end_padded = (_parse_date(end_date) + timedelta(days=holding_days * 2 + 10)).isoformat()
-        today = date.today().isoformat()
-        if end_padded > today:
-            end_padded = today
-
-        prices = data_client.get_prices(ticker, start_date, end_padded)
-        if not prices:
-            return []
-
-        price_map = {p.time[:10]: p.close for p in prices}
+    ) -> list[TradeIntent]:
+        """Walk one ticker's signal grid and emit unallocated trade intents."""
         all_days = sorted(price_map)
-        # Scan grid = trading days within [start_date, end_date]
-        grid = [d for d in all_days if start_date <= d <= end_date]
+        all_day_index = {day: index for index, day in enumerate(all_days)}
+        grid = [day for day in all_days if start_date <= day <= end_date]
+        grid_index = {day: index for index, day in enumerate(grid)}
 
-        trades: list[Trade] = []
-        armed = True  # edge-trigger: only open when re-armed (signal returned to flat)
+        intents: list[TradeIntent] = []
+        armed = True
         i = 0
         while i < len(grid):
-            d = grid[i]
-            signal = model.predict(ticker, d, data_client)
+            current_date = grid[i]
+            signal = model.predict(ticker, current_date, data_client)
 
             if armed and abs(signal.value) > threshold:
-                direction = "long" if signal.value > 0 else "short"
-                entry_idx = all_days.index(d)
+                entry_idx = all_day_index[current_date]
                 exit_idx = entry_idx + holding_days
                 if exit_idx >= len(all_days):
-                    break  # not enough future data to close the position
-                trade = self._build_trade(
-                    ticker, direction, d, all_days[exit_idx],
-                    price_map, holding_days, signal.reasoning, dict(signal.metadata),
+                    break
+                exit_date = all_days[exit_idx]
+                direction = "long" if signal.value > 0 else "short"
+                intents.append(
+                    TradeIntent(
+                        ticker=ticker,
+                        direction=direction,
+                        entry_date=current_date,
+                        exit_date=exit_date,
+                        entry_price=price_map[current_date],
+                        exit_price=price_map[exit_date],
+                        holding_days=holding_days,
+                        reasoning=signal.reasoning,
+                        metadata=dict(signal.metadata),
+                    )
                 )
-                if trade is not None:
-                    trades.append(trade)
                 armed = False
-                # Skip ahead past the holding period — no overlapping positions
-                i = grid.index(all_days[exit_idx]) if all_days[exit_idx] in grid else len(grid)
+                if exit_date not in grid_index:
+                    break
+                i = grid_index[exit_date]
                 continue
 
-            # Re-arm once the model goes back to "no view"
             if abs(signal.value) <= threshold:
                 armed = True
             i += 1
 
-        return trades
+        return intents
 
     # ------------------------------------------------------------------
-    # Signal -> Trade
+    # NAV curve and performance metrics
     # ------------------------------------------------------------------
 
-    def _build_trade(
-        self,
-        ticker: str,
-        direction: str,
-        entry_date: str,
-        exit_date: str,
-        price_map: dict[str, float],
-        holding_days: int,
-        reasoning: str | None,
-        metadata: dict,
-    ) -> Trade | None:
-        """Fill a position at entry/exit closes with equal-dollar sizing."""
-        entry_price = price_map.get(entry_date)
-        exit_price = price_map.get(exit_date)
-        if entry_price is None or exit_price is None or entry_price <= 0:
-            return None
-
-        shares = self._per_trade / entry_price
-
-        if direction == "long":
-            pnl = shares * (exit_price - entry_price)
-            return_pct = (exit_price - entry_price) / entry_price
-        else:
-            pnl = shares * (entry_price - exit_price)
-            return_pct = (entry_price - exit_price) / entry_price
-
-        return Trade(
-            ticker=ticker,
-            direction=direction,
-            entry_date=entry_date,
-            exit_date=exit_date,
-            entry_price=entry_price,
-            exit_price=exit_price,
-            shares=round(shares, 4),
-            pnl=round(pnl, 2),
-            return_pct=round(return_pct, 6),
-            holding_days=holding_days,
-            reasoning=reasoning,
-            metadata=metadata,
-        )
-
-    # ------------------------------------------------------------------
-    # Equity curve
-    # ------------------------------------------------------------------
-
-    def _build_equity_curve(self, trades: list[Trade]) -> list[float]:
-        """Track portfolio value after each trade settles.
-
-        Starts at initial capital (e.g. $100,000) and adds each trade's
-        dollar P&L in chronological order. The result is a list like:
-        [100000, 100500, 99800, 100200, ...] — one entry per trade plus
-        the starting value. This is what you'd plot to visualize the
-        strategy's performance and see drawdowns.
-        """
-        equity = self._capital
-        curve = [equity]
-        for t in trades:
-            equity += t.pnl
-            curve.append(round(equity, 2))
-        return curve
-
-    # ------------------------------------------------------------------
-    # Performance metrics
-    # ------------------------------------------------------------------
+    @staticmethod
+    def _build_equity_curve(ledger: list[PortfolioLedgerEntry]) -> list[float]:
+        """Return the end-of-day NAV series from portfolio ledger entries."""
+        return [snapshot.nav for snapshot in ledger]
 
     def _compute_metrics(
         self,
         trades: list[Trade],
-        equity_curve: list[float],
+        ledger: list[PortfolioLedgerEntry],
     ) -> PerformanceMetrics:
-        """Compute the three numbers that tell you if a strategy works.
+        """Compute performance from daily portfolio NAV, not per-trade returns."""
+        if not ledger:
+            raise ValueError("cannot compute metrics without portfolio ledger entries")
 
-        1. Total/annualized return — did it make money?
-        2. Sharpe ratio — is the return worth the risk? (return per unit
-           of volatility, annualized). Above 1.0 is decent, above 2.0
-           is strong. Our PEAD strategy hit 0.33 — not tradable yet.
-        3. Max drawdown — how bad did it get at the worst point?
-           (largest peak-to-trough drop in the equity curve)
+        nav = np.asarray([snapshot.nav for snapshot in ledger], dtype=float)
+        final_nav = float(nav[-1])
+        total_return_pct = (final_nav - self._capital) / self._capital
 
-        Also computes win rate and trade counts for context.
-        """
-        returns = [t.return_pct for t in trades]
-        n = len(returns)
+        first_date = _parse_date(ledger[0].date)
+        last_date = _parse_date(ledger[-1].date)
+        calendar_days = max((last_date - first_date).days, 1)
+        years = calendar_days / 365.25
+        if final_nav <= 0:
+            annualized_return = -1.0
+        else:
+            annualized_return = (final_nav / self._capital) ** (1 / years) - 1
 
-        # Total return: how much the portfolio gained or lost overall
-        final_equity = equity_curve[-1]
-        total_return_pct = (final_equity - self._capital) / self._capital
+        daily_returns = np.asarray(
+            [
+                nav[index] / nav[index - 1] - 1
+                for index in range(1, len(nav))
+                if nav[index - 1] > 0
+            ],
+            dtype=float,
+        )
+        if len(daily_returns) >= 2:
+            daily_std = float(daily_returns.std(ddof=1))
+            annualized_volatility = daily_std * np.sqrt(252)
+            sharpe = (
+                float(daily_returns.mean()) / daily_std * np.sqrt(252)
+                if daily_std > 1e-12
+                else 0.0
+            )
+        else:
+            annualized_volatility = 0.0
+            sharpe = 0.0
 
-        # Annualized return: what the total return would be per year
-        # if the strategy ran at the same rate continuously
-        first_entry = _parse_date(trades[0].entry_date)
-        last_exit = _parse_date(trades[-1].exit_date)
-        calendar_days = (last_exit - first_entry).days
-        years = max(calendar_days / 365.25, 0.01)
-        annualized = (1 + total_return_pct) ** (1 / years) - 1
+        running_peak = np.maximum.accumulate(nav)
+        drawdowns = np.divide(
+            running_peak - nav,
+            running_peak,
+            out=np.zeros_like(nav),
+            where=running_peak != 0,
+        )
+        max_drawdown = float(drawdowns.max()) if len(drawdowns) else 0.0
 
-        # Sharpe ratio: average return divided by volatility, scaled to
-        # annual terms. Higher = better risk-adjusted performance.
-        arr = np.array(returns)
-        avg = float(arr.mean())
-        std = float(arr.std(ddof=1)) if n > 1 else 1.0
-        trades_per_year = n / years if years > 0 else n
-        sharpe = (avg / std) * np.sqrt(trades_per_year) if std > 0 else 0.0
-
-        # Max drawdown: walk the equity curve tracking the peak. Whenever
-        # the value drops below the peak, measure how far it fell. The
-        # largest such drop is the max drawdown.
-        peak = equity_curve[0]
-        max_dd = 0.0
-        for val in equity_curve:
-            if val > peak:
-                peak = val
-            dd = (peak - val) / peak
-            if dd > max_dd:
-                max_dd = dd
-
-        # Win rate: fraction of trades that made money
-        wins = sum(1 for r in returns if r > 0)
+        trade_returns = [trade.return_pct for trade in trades]
+        n_trades = len(trades)
+        wins = sum(1 for value in trade_returns if value > 0)
+        average_trade_return = float(np.mean(trade_returns)) if trade_returns else 0.0
 
         return PerformanceMetrics(
             total_return_pct=round(total_return_pct, 6),
-            annualized_return_pct=round(annualized, 6),
+            annualized_return_pct=round(annualized_return, 6),
+            annualized_volatility=round(annualized_volatility, 6),
             sharpe_ratio=round(sharpe, 4),
-            max_drawdown_pct=round(max_dd, 6),
-            win_rate=round(wins / n, 4) if n > 0 else 0.0,
-            n_trades=n,
-            n_long=sum(1 for t in trades if t.direction == "long"),
-            n_short=sum(1 for t in trades if t.direction == "short"),
-            avg_return_pct=round(avg, 6),
-            avg_holding_days=round(sum(t.holding_days for t in trades) / n, 1),
+            max_drawdown_pct=round(max_drawdown, 6),
+            win_rate=round(wins / n_trades, 4) if n_trades else 0.0,
+            n_trades=n_trades,
+            n_long=sum(1 for trade in trades if trade.direction == "long"),
+            n_short=sum(1 for trade in trades if trade.direction == "short"),
+            avg_return_pct=round(average_trade_return, 6),
+            avg_holding_days=round(
+                sum(trade.holding_days for trade in trades) / n_trades, 1,
+            ) if n_trades else 0.0,
         )
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _parse_date(s: str) -> date:
-    return datetime.strptime(s[:10], "%Y-%m-%d").date()
+def _parse_date(value: str) -> date:
+    return datetime.strptime(value[:10], "%Y-%m-%d").date()
