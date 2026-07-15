@@ -204,7 +204,40 @@ FINNHUB_CALLS_PER_MIN=50              # global gate on all Finnhub calls (free t
 
 # End-of-day reports
 SCHEDULER_EOD_REPORTS=true            # daily/weekly/monthly/yearly reports after close
+
+# Risk governor (hard execution guardrails; reductions always pass)
+RISK_GOVERNOR_ENABLED=true
+RISK_MAX_TURNOVER_X=1.0               # daily submitted notional cap, x equity
+RISK_MAX_FILLS_PER_DAY=40             # risk-increasing orders per day
+RISK_SYMBOL_COOLDOWN_MIN=60           # no re-entry/resize of a symbol within N minutes
+RISK_MAX_OPEN_POSITIONS=15            # new names blocked above this count
+RISK_MAX_INTRADAY_DRAWDOWN_PCT=0.5    # below day-open equity => reductions only
+RISK_MIN_TRIGGERED_CONFIDENCE=70      # min conviction for triggered-heavy entries
 ```
+
+## Risk governor
+
+Every order passes through `integrations/alpaca/risk_governor.py` before
+submission (Alpaca broker only). Risk-reducing orders — selling an existing
+long or covering an existing short — are never vetoed. Risk-increasing orders
+are blocked when any of these trip:
+
+- **Turnover cap** — total submitted notional for the day would exceed
+  `RISK_MAX_TURNOVER_X` × equity.
+- **Fill cap** — more than `RISK_MAX_FILLS_PER_DAY` orders submitted today.
+- **Symbol cooldown** — the symbol traded within the last
+  `RISK_SYMBOL_COOLDOWN_MIN` minutes (stops same-day whipsaw round trips).
+- **Position count** — opening a *new* name when `RISK_MAX_OPEN_POSITIONS`
+  positions are already open (resizing held names still allowed).
+- **Drawdown breaker** — equity is `RISK_MAX_INTRADAY_DRAWDOWN_PCT`% below
+  the day's opening equity; only reductions pass until recovery.
+- **Conviction gate** — triggered-heavy entries below
+  `RISK_MIN_TRIGGERED_CONFIDENCE`% confidence are dropped.
+
+Vetoed orders appear in the console and ledger as
+`Risk governor: <reason>`. Budgets persist in
+`data/scheduler/risk-YYYY-MM-DD.json`, so daemon restarts and manual
+`alpaca-fund run` invocations share the same daily limits.
 
 Stop with `Ctrl+C`. Respect `TRADING_KILL_SWITCH` and `MAX_ORDER_NOTIONAL` as in single-run mode.
 

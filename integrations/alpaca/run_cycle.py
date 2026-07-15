@@ -148,12 +148,36 @@ def run_cycle(
 
     orders = decisions_to_orders(agent_result.get("decisions"))
     reference_prices = _extract_reference_prices(agent_result)
+
+    vetoed: list[OrderResult] = []
+    governor = None
+    if config is not None:  # live/paper Alpaca — enforce portfolio guardrails
+        from integrations.alpaca.risk_governor import RiskGovernor
+
+        governor = RiskGovernor()
+        orders, vetoed = governor.filter_orders(
+            orders,
+            positions=portfolio.get("positions", {}),
+            equity=portfolio.get("equity"),
+            prices=reference_prices,
+            cycle_kind=inputs.cycle_kind,
+            decisions=agent_result.get("decisions"),
+        )
+        for veto in vetoed:
+            print(
+                f"{Fore.YELLOW}Vetoed: {veto.order.ticker} {veto.order.action.upper()} "
+                f"{veto.order.quantity} — {veto.message}{Style.RESET_ALL}"
+            )
+
     execution_results = execute_orders(
         broker,
         orders,
         config=config,
         reference_prices=reference_prices,
     )
+    if governor is not None:
+        governor.record_submissions(execution_results, reference_prices)
+        execution_results = execution_results + vetoed
 
     _print_execution_summary(broker, execution_results)
 

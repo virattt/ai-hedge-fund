@@ -52,6 +52,11 @@ class PeriodReport:
     equity_curve: list[dict[str, Any]] = field(default_factory=list)
     trading_days: int = 1
     advisory: str = ""
+    # Churn diagnostics
+    fills_by_symbol: dict[str, int] = field(default_factory=dict)
+    round_trips: int = 0
+    avg_hold_minutes: float | None = None
+    orders_by_cycle: dict[str, int] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +124,49 @@ def compute_realized_pnl(fills: list[dict[str, Any]]) -> dict[str, float]:
     return dict(realized)
 
 
+def compute_round_trips(fills: list[dict[str, Any]]) -> tuple[int, float | None]:
+    """Count same-day round trips (position opened then fully closed) and
+    the average open-to-flat hold time in minutes."""
+    inventory: dict[str, float] = defaultdict(float)
+    opened_at: dict[str, datetime] = {}
+    holds: list[float] = []
+    trips = 0
+    for f in fills:
+        sym = f["symbol"]
+        sq = f["qty"] if f["side"] == "buy" else -f["qty"]
+        prev = inventory[sym]
+        inventory[sym] = prev + sq
+        try:
+            ts = datetime.fromisoformat(f["filled_at"])
+        except (TypeError, ValueError):
+            continue
+        if prev == 0 and inventory[sym] != 0:
+            opened_at[sym] = ts
+        elif prev != 0 and inventory[sym] == 0:
+            trips += 1
+            start = opened_at.pop(sym, None)
+            if start is not None:
+                holds.append((ts - start).total_seconds() / 60)
+    avg_hold = round(sum(holds) / len(holds), 1) if holds else None
+    return trips, avg_hold
+
+
+def _orders_by_cycle(day: date) -> dict[str, int]:
+    """Submitted order counts per cycle kind, from the day's ledgers."""
+    counts: dict[str, int] = defaultdict(int)
+    prefix = day.strftime("%Y%m%d")
+    for path in sorted(_LEDGER_DIR.glob(f"{prefix}T*_*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        kind = data.get("cycle_kind", "unknown")
+        for entry in data.get("execution", []):
+            if isinstance(entry, dict) and entry.get("submitted"):
+                counts[kind] += 1
+    return dict(counts)
+
+
 def _equity_curve_from_ledgers(day: date) -> list[dict[str, Any]]:
     """Per-cycle equity snapshots recorded in the day's ledger files."""
     points: list[dict[str, Any]] = []
@@ -184,6 +232,11 @@ def build_daily_report(day: date | None = None) -> PeriodReport:
     curve = _equity_curve_from_ledgers(day)
     pnl = equity_end - equity_start
 
+    fills_by_symbol: dict[str, int] = defaultdict(int)
+    for f in fills:
+        fills_by_symbol[f["symbol"]] += 1
+    round_trips, avg_hold = compute_round_trips(fills)
+
     return PeriodReport(
         period="daily",
         start_date=day.isoformat(),
@@ -204,6 +257,10 @@ def build_daily_report(day: date | None = None) -> PeriodReport:
         cycles=_cycle_counts(curve),
         equity_curve=curve,
         trading_days=1,
+        fills_by_symbol=dict(sorted(fills_by_symbol.items(), key=lambda kv: -kv[1])),
+        round_trips=round_trips,
+        avg_hold_minutes=avg_hold,
+        orders_by_cycle=_orders_by_cycle(day),
     )
 
 
@@ -267,6 +324,14 @@ def build_period_report(period: Period, end_day: date | None = None) -> PeriodRe
         for kind, count in d.get("cycles", {}).items():
             cycles[kind] += count
 
+    orders_by_cycle: dict[str, int] = defaultdict(int)
+    fills_by_symbol: dict[str, int] = defaultdict(int)
+    for d in dailies:
+        for kind, count in d.get("orders_by_cycle", {}).items():
+            orders_by_cycle[kind] += count
+        for sym, count in d.get("fills_by_symbol", {}).items():
+            fills_by_symbol[sym] += count
+
     return PeriodReport(
         period=period,
         start_date=dailies[0]["start_date"],
@@ -287,6 +352,10 @@ def build_period_report(period: Period, end_day: date | None = None) -> PeriodRe
         cycles=dict(cycles),
         equity_curve=[],  # per-cycle curves stay in the dailies
         trading_days=len(dailies),
+        fills_by_symbol=dict(sorted(fills_by_symbol.items(), key=lambda kv: -kv[1])),
+        round_trips=sum(d.get("round_trips", 0) for d in dailies),
+        avg_hold_minutes=None,  # only meaningful within a single day
+        orders_by_cycle=dict(orders_by_cycle),
     )
 
 
@@ -296,9 +365,13 @@ def build_period_report(period: Period, end_day: date | None = None) -> PeriodRe
 
 def _report_digest(report: PeriodReport) -> str:
     """Compact plain-text digest of the report for the advisory prompt."""
-    top = list(report.realized_by_symbol.items())
-    losers = ", ".join(f"{s} {v:+.0f}" for s, v in top[:5])
-    winners = ", ".join(f"{s} {v:+.0f}" for s, v in top[-5:][::-1])
+    # realized_by_symbol is sorted ascending, but slicing it blindly leaks
+    # positives into "losers" (and vice versa) when one side has <5 entries.
+    items = list(report.realized_by_symbol.items())
+    neg = [(s, v) for s, v in items if v < 0][:5]
+    pos = [(s, v) for s, v in sorted(items, key=lambda kv: -kv[1]) if v > 0][:5]
+    losers = ", ".join(f"{s} {v:+.0f}" for s, v in neg) or "none"
+    winners = ", ".join(f"{s} {v:+.0f}" for s, v in pos) or "none"
     lines = [
         f"Period: {report.period} {report.start_date}..{report.end_date} ({report.trading_days} trading days)",
         f"P&L: {report.pnl} ({report.pnl_pct}%) | equity {report.equity_start} -> {report.equity_end}",
@@ -308,6 +381,9 @@ def _report_digest(report: PeriodReport) -> str:
         f"Top winners: {winners}",
         f"Unrealized on open book: {report.unrealized_total} across {len(report.open_positions)} positions",
         f"Cycle counts: {report.cycles}",
+        f"Same-day round trips: {report.round_trips} | avg hold {report.avg_hold_minutes} min",
+        f"Submitted orders by cycle source: {report.orders_by_cycle}",
+        f"Most-traded symbols: {dict(list(report.fills_by_symbol.items())[:8])}",
     ]
     return "\n".join(lines)
 
@@ -319,7 +395,9 @@ def generate_advisory(report: PeriodReport, *, model_name: str, model_provider: 
         "You are the performance-review layer of an autonomous AI hedge fund. "
         "The trading system is a Python codebase (LangGraph analyst agents, an "
         "Alpaca execution daemon with heavy LLM cycles and light rule-based "
-        "cycles, and a factor-based universe selector). Below is the "
+        "cycles, a risk governor enforcing daily turnover/fill caps, symbol "
+        "cooldowns, position-count limits and an intraday drawdown breaker, "
+        "and a factor-based universe selector). Below is the "
         f"{report.period} trading report.\n\n{digest}\n\n"
         "Write EXACTLY two paragraphs, addressed to a coding assistant (Cursor) "
         "that maintains this codebase. Paragraph 1: diagnose the most costly "
@@ -385,6 +463,18 @@ def _to_markdown(report: PeriodReport) -> str:
         f"- **Realized:** {report.realized_total} ({report.winners} winners / {report.losers} losers)",
         f"- **Unrealized:** {report.unrealized_total} across {len(report.open_positions)} open positions",
         f"- **Cycles:** {report.cycles}",
+        "",
+        "## Churn diagnostics",
+        "",
+        f"- **Same-day round trips:** {report.round_trips}"
+        + (f" (avg hold {report.avg_hold_minutes} min)" if report.avg_hold_minutes is not None else ""),
+        f"- **Submitted orders by cycle source:** {report.orders_by_cycle}",
+        f"- **Most-traded symbols:** "
+        + (
+            ", ".join(f"{s} ({n})" for s, n in list(report.fills_by_symbol.items())[:10])
+            if report.fills_by_symbol
+            else "none"
+        ),
         "",
         "## Realized P&L by symbol",
         "",

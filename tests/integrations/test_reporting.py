@@ -127,6 +127,32 @@ class TestPeriodAggregation:
         assert "para one" in md_path.read_text(encoding="utf-8")
 
 
+class TestRoundTrips:
+    def test_counts_round_trips_and_hold_time(self) -> None:
+        from integrations.alpaca.reporting import compute_round_trips
+
+        fills = [
+            _fill("NVDA", "buy", 75, 210.0, "2026-07-13T15:04:00-04:00"),
+            _fill("NVDA", "sell", 75, 209.0, "2026-07-13T15:38:00-04:00"),
+            _fill("JPM", "buy", 60, 336.0, "2026-07-13T14:00:00-04:00"),  # still open
+        ]
+        trips, avg_hold = compute_round_trips(fills)
+
+        assert trips == 1
+        assert avg_hold == 34.0
+
+    def test_digest_never_mislabels_winners_as_losers(self) -> None:
+        from integrations.alpaca.reporting import _report_digest
+
+        report = _daily_report("2026-07-13", pnl=50.0, equity_start=99_000, equity_end=99_050)
+        report.realized_by_symbol = {"GOOGL": 14.0, "AAPL": 30.0}  # all positive
+
+        digest = _report_digest(report)
+
+        assert "Top losers: none" in digest
+        assert "GOOGL" not in digest.split("Top losers:")[1].split("\n")[0]
+
+
 class TestAdvisory:
     def test_fallback_advisory_is_two_paragraphs(self) -> None:
         report = _daily_report("2026-07-10", pnl=-262.0, equity_start=99_892, equity_end=99_630)
