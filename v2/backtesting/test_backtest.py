@@ -32,7 +32,7 @@ class FixedAlpha(AlphaModel):
     def name(self) -> str:
         return "fixed"
 
-    def predict(self, ticker, date, fd_client) -> Signal:
+    def predict(self, ticker, date, data_client) -> Signal:
         fires = self._fire_dates is None or date in self._fire_dates
         return Signal(
             model_name="fixed", ticker=ticker, date=date,

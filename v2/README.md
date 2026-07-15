@@ -1,45 +1,90 @@
-# v2 — Quantitative Trading Stack
+# v2 — AI Hedge Fund core
 
-> **Status: Work in Progress** — This module is under active development and is not yet integrated into the main application.
+> **Status: Work in progress.** A ground-up rebuild of the engine, developed
+> alongside the shipped v1 app (`src/`, `app/`) but not yet wired into it.
+> See [`../VISION.md`](../VISION.md) and [`../ROADMAP.md`](../ROADMAP.md) for
+> where this is headed.
 
-v2 is a ground-up rebuild of the AI hedge fund's core engine, replacing personality-based agents with a principled quantitative pipeline.
+v2 rebuilds the fund as a persistent, point-in-time-honest system. Its central
+abstraction is the **alpha model**: anything that forms a view on a ticker and
+returns a `Signal` (a conviction in `[-1, +1]` plus a written thesis). Two
+flavors share one interface —
+
+- **LLM investor agents** (e.g. Warren Buffett) that reason over fundamentals
+  in a persona's voice, and
+- **quant models** (e.g. post-earnings drift) that are pure math.
+
+Both plug into the same backtester and, eventually, the same live engine.
+
+## Quickstart
+
+```bash
+poetry install                          # dependencies
+
+# .env needs (at repo root):
+#   FINANCIAL_DATASETS_API_KEY=...      # market/fundamentals data
+#   ANTHROPIC_API_KEY=...               # only for LLM agents (Buffett)
+
+# Backtest demo — PEAD across 25 stocks, live terminal dashboard (~20s)
+poetry run python -m v2.demo.backtest
+poetry run python -m v2.demo.backtest --refresh   # rebuild the data cache
+
+# Ask an analyst for a point-in-time view on a ticker
+poetry run python -m v2.analyze NVDA
+poetry run python -m v2.analyze NVDA --date 2024-06-01   # as-of a past date
+poetry run python -m v2.analyze AAPL --agent pead
+
+# Tests
+poetry run pytest v2/
+```
+
+All API responses cache to disk (`.v2_cache/`, gitignored), so reruns are fast,
+free, and work offline once warmed.
 
 ## Architecture
 
 ```
-Data (FD API) → Signals → Features → Portfolio Construction → Risk Management → Execution
+Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → Ledger
 ```
 
-| Module | Description |
-|--------|-------------|
-| `data/` | Financial Datasets API client and caching layer |
-| `event_study/` | Event study framework — CARs, market model, significance testing |
-| `signals/` | Quantitative signal generation (`BaseSignal` ABC with `[-1, +1]` output) |
-| `features/` | Feature engineering — earnings surprise, KPI momentum, cross-sector lead-lag |
-| `validation/` | Combinatorial Purged Cross-Validation (CPCV), Probability of Backtest Overfitting (PBO) |
-| `backtesting/` | Vectorized backtester with point-in-time constraints and transaction cost modeling |
-| `portfolio/` | Portfolio optimization — mean-variance, Black-Litterman, risk parity, covariance cleaning |
-| `risk/` | Risk management — drawdown controls, position sizing, correlation monitoring, stress testing |
-| `pipeline/` | Execution simulation — market impact (Almgren-Chriss), fill probability, capacity analysis |
+| Module | What | Status |
+|--------|------|--------|
+| `data/` | `DataClient` protocol, Financial Datasets client, disk cache | ✅ |
+| `signals/` | `AlphaModel`/`QuantModel` interface, PEAD, `LLMAgent`, Buffett | ✅ |
+| `llm/` | LLM provider protocol, Anthropic client, prompt cache | ✅ |
+| `features/` | Point-in-time fundamentals snapshot (more features planned) | ◐ |
+| `backtesting/` | Backtest engine over an alpha model's views | ✅ |
+| `event_study/` | Market-model abnormal returns (CARs) | ✅ |
+| `demo/` | Presentation showcases over the real engine | ✅ |
+| `validation/` | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO) | ⬜ |
+| `portfolio/` | View blending → target weights | ⬜ |
+| `risk/` | Hard caps, position sizing, drawdown controls | ⬜ |
+| `pipeline/` | `run_cycle` — one code path for backtest/paper/live | ⬜ |
 
-## Key Design Decisions
+✅ built · ◐ partial · ⬜ planned
 
-- **Methodology over personality.** Agents are structured around quantitative methods (momentum, fundamental, risk), not famous investor personas.
-- **Costs from day one.** Every backtest includes a transaction cost model. No frictionless fantasies.
-- **Validation built in.** CPCV and PBO are first-class citizens, not afterthoughts. If a signal can't survive combinatorial purged validation, it doesn't ship.
-- **Point-in-time by construction.** The data layer enforces that no future information leaks into historical analysis.
-- **Daily frequency.** Built for daily-bar strategies on US equities using [Financial Datasets](https://financialdatasets.ai) as the sole data provider.
+## Principles (non-negotiable)
 
-## Data Models
+- **Point-in-time by construction.** On any simulated date, only data actually
+  filed by then is visible — the data layer filters on filing date, not report
+  period. No lookahead, ever.
+- **Fail loud.** Infrastructure failures raise; only genuine "no data" returns
+  empty. A silent empty would poison a backtest as a fake "no signal."
+- **The LLM never touches the trade.** Agents form *views* and *narrate*;
+  deterministic code sizes and places orders; risk limits are hard gates.
+- **One interface for every analyst.** Implement `AlphaModel.predict(ticker,
+  date, data_client) -> Signal` and it plugs into the engine unchanged.
 
-The core data contracts live in `models.py`:
+## Data contracts (`models.py`)
 
-- `SignalResult` — output of any quantitative signal (`value` in `[-1, +1]`)
-- `QuantSignals` — all signals for a ticker on a given date
-- `PortfolioTarget` — target portfolio weights from the optimizer
-- `TradeOrder` — a single trade instruction
-- `ExecutionResult` — batch of trades with estimated costs
+- `Signal` — an alpha model's output: `value` in `[-1, +1]`, plus `reasoning`,
+  `components`, and `metadata`.
+- `QuantSignals` — all signals for a ticker on a date.
 
 ## Contributing
 
-v2 is in early development. If you'd like to contribute, start by reading `signals/base.py` to understand the signal interface, then check open issues tagged `v2`.
+The highest-leverage contribution is a new analyst. Read `signals/base.py` for
+the `AlphaModel` interface, look at `signals/pead.py` (quant) or
+`signals/buffett.py` (LLM persona) as templates, add a test, and it runs in the
+backtester with no other changes. See [`../ROADMAP.md`](../ROADMAP.md) for the
+open list.

@@ -53,7 +53,7 @@ can be backtested and combined — is a great first contribution:
 
 | Agent | Status |
 |-------|--------|
-| Warren Buffett | ⬜ (next) |
+| Warren Buffett | ✅ |
 | Charlie Munger · Benjamin Graham · Peter Lynch · Stanley Druckenmiller | ⬜ |
 | Cathie Wood · Michael Burry · Bill Ackman · Aswath Damodaran | ⬜ |
 | Phil Fisher · Mohnish Pabrai · Nassim Taleb · Rakesh Jhunjhunwala | ⬜ |

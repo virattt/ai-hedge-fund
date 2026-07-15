@@ -40,7 +40,7 @@ class AlphaModel(ABC):
         self,
         ticker: str,
         date: str,
-        fd_client: DataClient,
+        data_client: DataClient,
     ) -> Signal:
         """Form a point-in-time view on *ticker* as of *date*.
 

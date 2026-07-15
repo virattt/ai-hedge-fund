@@ -54,7 +54,7 @@ class BacktestEngine:
         self,
         model: AlphaModel,
         tickers: list[str],
-        fd_client: DataClient,
+        data_client: DataClient,
         start_date: str,
         end_date: str,
         *,
@@ -70,7 +70,7 @@ class BacktestEngine:
         Args:
             model:        AlphaModel to backtest (e.g. PEADModel()).
             tickers:      Universe to trade.
-            fd_client:    Data client.
+            data_client:    Data client.
             start_date:   First date to evaluate signals (YYYY-MM-DD).
             end_date:     Last date to evaluate signals (YYYY-MM-DD).
             threshold:    Minimum |conviction| to act on (0.0 = any nonzero view).
@@ -79,7 +79,7 @@ class BacktestEngine:
         trades: list[Trade] = []
         for ticker in tickers:
             trades.extend(self._trade_ticker(
-                model, ticker, fd_client, start_date, end_date,
+                model, ticker, data_client, start_date, end_date,
                 threshold=threshold, holding_days=holding_days,
             ))
 
@@ -99,7 +99,7 @@ class BacktestEngine:
         self,
         model: AlphaModel,
         ticker: str,
-        fd_client: DataClient,
+        data_client: DataClient,
         start_date: str,
         end_date: str,
         *,
@@ -114,7 +114,7 @@ class BacktestEngine:
         if end_padded > today:
             end_padded = today
 
-        prices = fd_client.get_prices(ticker, start_date, end_padded)
+        prices = data_client.get_prices(ticker, start_date, end_padded)
         if not prices:
             return []
 
@@ -128,7 +128,7 @@ class BacktestEngine:
         i = 0
         while i < len(grid):
             d = grid[i]
-            signal = model.predict(ticker, d, fd_client)
+            signal = model.predict(ticker, d, data_client)
 
             if armed and abs(signal.value) > threshold:
                 direction = "long" if signal.value > 0 else "short"
