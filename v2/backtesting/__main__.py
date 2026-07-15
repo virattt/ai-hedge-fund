@@ -129,20 +129,16 @@ def main() -> None:
     engine = BacktestEngine(capital=CAPITAL, per_trade=PER_TRADE)
     model = PEADModel()
 
-    # Phase 1: Backtest the PEAD alpha model, ticker by ticker, with progress
+    # Phase 1: Backtest all tickers in one shared, cash-constrained portfolio.
     sys.stdout.write(f"  Backtesting PEAD alpha... [0/{n}]")
     sys.stdout.flush()
 
-    trades = []
     with FDClient() as fd:
-        for i, ticker in enumerate(TICKERS):
-            sys.stdout.write(f"\r  Backtesting PEAD alpha... [{i + 1}/{n}] {ticker:<6}")
-            sys.stdout.flush()
-            r = engine.run_alpha(
-                model, [ticker], fd, START_DATE, END_DATE, holding_days=HOLDING_DAYS,
-            )
-            trades.extend(r.trades)
+        result = engine.run_alpha(
+            model, TICKERS, fd, START_DATE, END_DATE, holding_days=HOLDING_DAYS,
+        )
 
+    trades = sorted(result.trades, key=lambda trade: (trade.exit_date, trade.ticker))
     sys.stdout.write(f"\r  Backtesting PEAD alpha... {len(trades)} trades" + " " * 20 + "\n")
     sys.stdout.flush()
     time.sleep(0.5)
@@ -151,25 +147,19 @@ def main() -> None:
         print("  No trades generated.")
         return
 
-    trades.sort(key=lambda t: t.entry_date)
-
-    # Phase 2: Replay trades one by one with running metrics
+    # Phase 2: Replay settlement dates against the daily marked-to-market NAV.
     clear()
-    equity = CAPITAL
-    displayed: list = []
+    for cutoff in sorted({trade.exit_date for trade in trades}):
+        displayed = [trade for trade in trades if trade.exit_date <= cutoff]
+        running_ledger = [entry for entry in result.ledger if entry.date <= cutoff]
 
-    for trade in trades:
-        equity += trade.pnl
-        displayed.append(trade)
-
-        # Rebuild display each trade (like v1's clear-and-reprint)
+        # Rebuild the display on each settlement date.
         clear()
 
-        # Compute running metrics over the trades shown so far
-        running_curve = engine._build_equity_curve(displayed)
-        running_metrics = engine._compute_metrics(displayed, running_curve)
+        # Compute risk metrics from the daily NAV path shown so far.
+        running_metrics = engine._compute_metrics(displayed, running_ledger)
 
-        print_header(running_metrics, equity)
+        print_header(running_metrics, running_ledger[-1].nav)
         print_table_header()
 
         # Print all trades so far (newest first)
@@ -179,8 +169,14 @@ def main() -> None:
         print()
         time.sleep(0.4)
 
-    # Final summary
+    # Final summary uses the complete requested backtest window.
     time.sleep(0.5)
+    clear()
+    print_header(result.metrics, result.equity_curve[-1])
+    print_table_header()
+    for trade in reversed(trades):
+        print_trade_row(trade)
+    print()
     print(f"  {BOLD}Done.{RESET} {len(trades)} trades executed.\n")
 
 

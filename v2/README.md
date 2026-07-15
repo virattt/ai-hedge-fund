@@ -53,7 +53,7 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | `signals/` | `AlphaModel`/`QuantModel` interface, PEAD, `LLMAgent`, Buffett | ✅ |
 | `llm/` | LLM provider protocol, Anthropic client, prompt cache | ✅ |
 | `features/` | Point-in-time fundamentals snapshot (more features planned) | ◐ |
-| `backtesting/` | Backtest engine over an alpha model's views | ✅ |
+| `backtesting/` | Cash-constrained backtester with a daily mark-to-market portfolio ledger | ✅ |
 | `event_study/` | Market-model abnormal returns (CARs) | ✅ |
 | `demo/` | Presentation showcases over the real engine | ✅ |
 | `validation/` | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO) | ⬜ |
