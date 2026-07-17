@@ -1,0 +1,19 @@
+# An example mandate. Specs are data: you write these today; the strategy
+# generator will emit the same format later. Run one cycle with:
+#
+#   poetry run python -m v2.cycle v2/funds/example.yaml --date 2024-06-03
+#
+name: example-fund
+universe: [AAPL, MSFT, NVDA, GOOGL, AMZN]
+analysts:
+  - name: buffett
+    weight: 1.0
+  - name: pead
+    weight: 1.0
+blend:
+  method: conviction_weighted
+  gross_target: 1.0
+risk:
+  max_position_pct: 0.25      # no single name above 25% of equity
+  max_gross_exposure: 1.0     # unlevered
+capital: 100000
