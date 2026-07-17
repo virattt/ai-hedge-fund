@@ -5,16 +5,22 @@
 > See [`../VISION.md`](../VISION.md) and [`../ROADMAP.md`](../ROADMAP.md) for
 > where this is headed.
 
-v2 rebuilds the fund as a persistent, point-in-time-honest system. Its central
-abstraction is the **alpha model**: anything that forms a view on a ticker and
-returns a `Signal` (a conviction in `[-1, +1]` plus a written thesis). Two
-flavors share one interface —
+v2 rebuilds the fund as a persistent, point-in-time-honest system, mirroring a
+real shop's hierarchy:
 
-- **LLM investor agents** (e.g. Warren Buffett) that reason over fundamentals
-  in a persona's voice, and
-- **quant models** (e.g. post-earnings drift) that are pure math.
+```
+FUND      =  capital slices over STRATEGIES   (master risk on the netted book)
+STRATEGY  =  a blend policy over MODELS       (a "pod")
+MODEL     =  an alpha model → a Signal        (conviction in [-1,+1] + thesis)
+```
 
-Both plug into the same backtester and, eventually, the same live engine.
+A fund runs two kinds of pods, like a real shop. **Discretionary** strategies
+are staffed by **agents** — LLM investor personas (Warren Buffett, Charlie
+Munger, Benjamin Graham, Peter Lynch, Stanley Druckenmiller) whose judgment
+is the edge; blend them long-biased or market-neutral. **Systematic**
+strategies are powered by quant models (post-earnings drift) — the model *is*
+the strategy, no persona attached. Both kinds implement one interface and
+plug into the same engine unchanged.
 
 ## Quickstart
 
@@ -34,7 +40,10 @@ poetry run python -m v2.analyze NVDA
 poetry run python -m v2.analyze NVDA --date 2024-06-01   # as-of a past date
 poetry run python -m v2.analyze AAPL --agent pead
 
-# Run one cycle of a fund from a YAML mandate (data → analysts → portfolio
+# Build a fund interactively: pick stocks, staff strategies, run a first cycle
+poetry run python -m v2.new
+
+# Run one cycle of a fund from a YAML mandate (data → strategies → netting
 # → risk → execution), printing the full CycleRecord as JSON
 poetry run python -m v2.cycle v2/funds/example.yaml --date 2025-06-03
 
@@ -54,11 +63,12 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | Module | What | Status |
 |--------|------|--------|
 | `data/` | `DataClient` protocol, Financial Datasets client, disk cache | ✅ |
-| `signals/` | `AlphaModel`/`QuantModel` interface, PEAD, `LLMAgent`, Buffett | ✅ |
+| `signals/` | `AlphaModel` interface, PEAD, `LLMAgent` + 5 investor personas | ✅ |
 | `llm/` | LLM provider protocol, Anthropic client, prompt cache | ✅ |
 | `features/` | Point-in-time fundamentals snapshot (more features planned) | ◐ |
-| `fund/` | `FundSpec` — a fund's mandate as YAML data — and the `Fund` object | ✅ |
-| `portfolio/` | View blending → target weights (conviction-weighted) | ✅ |
+| `fund/` | `FundSpec`/`StrategySpec` — mandates as YAML data — and the `Fund` object | ✅ |
+| `strategies/` | Strategy library (fundamental-ls, deep-value, inflections, earnings-drift) — add yours as a YAML | ✅ |
+| `portfolio/` | View blending → target weights (conviction-weighted, optional market-neutral) | ✅ |
 | `risk/` | Hard limits — per-position and gross-exposure clamps | ✅ |
 | `brokers/` | `Broker` protocol + `SimBroker` (paper/live brokers planned) | ◐ |
 | `pipeline/` | `run_cycle` — one code path for backtest/paper/live; `CycleRecord` | ✅ |
@@ -89,8 +99,12 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 
 ## Contributing
 
-The highest-leverage contribution is a new analyst. Read `signals/base.py` for
-the `AlphaModel` interface, look at `signals/pead.py` (quant) or
-`signals/buffett.py` (LLM persona) as templates, add a test, and it runs in the
-backtester with no other changes. See [`../ROADMAP.md`](../ROADMAP.md) for the
-open list.
+Two high-leverage contributions:
+
+- **A new agent or quant model** (code): read `signals/base.py` for the
+  `AlphaModel` interface, use `signals/buffett.py` (an agent is just a system
+  prompt) or `signals/pead.py` (quant) as a template, register it, add a test.
+- **A new strategy** (no code): drop a YAML in `strategies/` bundling existing
+  models with a blend policy — the fund builder picks it up automatically.
+
+See [`../ROADMAP.md`](../ROADMAP.md) for the open list.
