@@ -60,6 +60,13 @@ const LLM_API_KEYS: ApiKey[] = [
     placeholder: 'your-openai-api-key'
   },
   {
+    key: 'ATLASCLOUD_API_KEY',
+    label: 'Atlas Cloud API',
+    description: 'For Atlas Cloud OpenAI-compatible models',
+    url: 'https://www.atlascloud.ai/console/api-keys',
+    placeholder: 'your-atlascloud-api-key'
+  },
+  {
     key: 'MOONSHOT_API_KEY',
     label: 'Moonshot (Kimi) API',
     description: 'For Kimi / Moonshot models (kimi-k2, kimi-latest, moonshot-v1-*)',
@@ -316,4 +323,4 @@ export function ApiKeysSettings() {
       </Card>
     </div>
   );
-} 
+}

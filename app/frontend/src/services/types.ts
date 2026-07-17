@@ -2,6 +2,7 @@
 export enum ModelProvider {
   OPENAI = 'OpenAI',
   ANTHROPIC = 'Anthropic',
+  ATLASCLOUD = 'Atlas Cloud',
   GROQ = 'Groq',
   OLLAMA = 'Ollama',
 }
@@ -80,4 +81,4 @@ export interface BacktestPerformanceMetrics {
   long_short_ratio?: number;
   gross_exposure?: number;
   net_exposure?: number;
-} 
+}

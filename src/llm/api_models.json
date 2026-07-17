@@ -15,6 +15,16 @@
     "provider": "xAI"
   },
   {
+    "display_name": "Atlas Cloud DeepSeek V4 Pro",
+    "model_name": "deepseek-ai/deepseek-v4-pro",
+    "provider": "Atlas Cloud"
+  },
+  {
+    "display_name": "Atlas Cloud Qwen 3.5 Flash",
+    "model_name": "qwen/qwen3.5-flash",
+    "provider": "Atlas Cloud"
+  },
+  {
     "display_name": "DeepSeek V4 Pro",
     "model_name": "deepseek-v4-pro",
     "provider": "DeepSeek"
