@@ -37,7 +37,7 @@ from v2.data.protocol import DataClient
 from v2.fund.spec import Fund
 from v2.models import Signal
 from v2.pipeline.execution import build_orders
-from v2.pipeline.models import CycleRecord, TickerSkip
+from v2.pipeline.models import CycleRecord, StrategyRecord, TickerSkip
 from v2.portfolio.construction import blend_signals
 from v2.risk.limits import apply_limits
 
@@ -71,13 +71,34 @@ def run_cycle(
         )
 
     tradeable = [t for t in spec.universe if t in marks]
-    signals: list[Signal] = []
-    for ticker in tradeable:
-        for model in fund.analysts:
-            signals.append(model.predict(ticker, as_of, data_client))
 
-    blend = blend_signals(signals, fund.analyst_weights, spec.blend.gross_target)
-    risk = apply_limits(blend.weights, spec.risk)
+    # Each strategy runs its own analysts and blends its own sleeve; the fund
+    # nets the sleeves by capital slice. A persona staffed into two strategies
+    # is asked twice, but the second ask is a prompt-cache hit, not spend.
+    total_slice = sum(s.weight for s, _ in fund.strategies)
+    strategy_records: list[StrategyRecord] = []
+    netted: dict[str, float] = {t: 0.0 for t in tradeable}
+    for strategy, staff in fund.strategies:
+        signals: list[Signal] = []
+        for ticker in tradeable:
+            for model in staff:
+                signals.append(model.predict(ticker, as_of, data_client))
+        blend = blend_signals(
+            signals, strategy.model_weights, strategy.blend.gross_target,
+            market_neutral=strategy.blend.market_neutral,
+        )
+        slice_ = strategy.weight / total_slice
+        for ticker, weight in blend.weights.items():
+            netted[ticker] += slice_ * weight
+        strategy_records.append(StrategyRecord(
+            name=strategy.name,
+            slice=slice_,
+            signals=signals,
+            convictions=blend.convictions,
+            weights=blend.weights,
+        ))
+
+    risk = apply_limits(netted, spec.risk)
 
     orders = build_orders(risk.weights, held, marks, equity_before)
     fills: list[Fill] = [broker.place_order(o) for o in orders]
@@ -92,9 +113,8 @@ def run_cycle(
         spec=spec,
         marks=marks,
         skipped=skipped,
-        signals=signals,
-        convictions=blend.convictions,
-        target_weights=blend.weights,
+        strategies=strategy_records,
+        target_weights=netted,
         clamps=risk.clamps,
         final_weights=risk.weights,
         equity_before=equity_before,

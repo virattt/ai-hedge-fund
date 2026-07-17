@@ -50,9 +50,11 @@ def main() -> None:
 
     with FDClient() as raw:
         fd = CachedDataClient(raw)
+        n_analysts = sum(len(staff) for _, staff in fund.strategies)
         with console.status(
             f"[cyan]{spec.name}: running one cycle as of {args.date} — "
-            f"{len(spec.universe)} tickers x {len(fund.analysts)} analysts…",
+            f"{len(spec.universe)} tickers x {n_analysts} analysts "
+            f"across {len(fund.strategies)} strategies…",
             spinner="dots",
         ):
             record = run_cycle(fund, args.date, broker, fd)
@@ -61,10 +63,16 @@ def main() -> None:
     if args.out:
         Path(args.out).write_text(record.model_dump_json(indent=2))
 
-    voting = [s for s in record.signals if s.metadata.get("abstained") is not True]
+    for sr in record.strategies:
+        abstained = sum(1 for s in sr.signals if s.metadata.get("abstained") is True)
+        console.print(
+            f"[dim]  {sr.name} ({sr.slice:.0%} of capital): "
+            f"{len(sr.signals)} signals ({abstained} abstained)[/]"
+        )
+    n_signals = sum(len(sr.signals) for sr in record.strategies)
     console.print(
         f"[bold]{spec.name}[/] @ {record.as_of}  ·  "
-        f"{len(record.signals)} signals ({len(record.signals) - len(voting)} abstained)  ·  "
+        f"{len(record.strategies)} strategies  ·  {n_signals} signals  ·  "
         f"{len(record.clamps)} risk clamps  ·  "
         f"{len(record.orders)} orders  ·  NAV ${record.nav:,.2f}"
     )

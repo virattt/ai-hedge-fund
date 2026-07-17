@@ -28,35 +28,42 @@ class BlendResult(BaseModel):
 
 def blend_signals(
     signals: list[Signal],
-    analyst_weights: dict[str, float],
+    model_weights: dict[str, float],
     gross_target: float,
+    market_neutral: bool = False,
 ) -> BlendResult:
-    """Blend analyst signals into target weights.
+    """Blend model signals into target weights.
 
-    Per ticker, the conviction is a weighted mean over *voting* analysts:
+    Per ticker, the conviction is a weighted mean over *voting* models:
 
-        conviction_t = sum(w_a * value_at) / sum(w_a)
+        conviction_t = sum(w_m * value_mt) / sum(w_m)
 
     An abstained signal (metadata.abstained is True — LLM failure or
     insufficient data) is excluded from numerator AND denominator: "no
     opinion" must not masquerade as "opinion: neutral". A non-abstained 0.0
     (e.g. PEAD outside its window) is a real neutral vote and dilutes.
 
-    Cross-sectionally, weights are convictions normalized to the gross
-    target: weight_t = conviction_t / sum(|convictions|) * gross_target.
+    With market_neutral, convictions are demeaned cross-sectionally before
+    scaling — what a pod does with analyst rankings: long the names the desk
+    likes most *relative to the others*, short the least liked, sleeve sums
+    to zero dollars. Uniform convictions demean to a flat book.
+
+    Cross-sectionally, weights are (demeaned) convictions normalized to the
+    gross target: weight_t = conviction_t / sum(|convictions|) * gross_target.
     All-zero convictions produce an all-zero (flat) book.
 
     Args:
-        signals:         Every analyst's Signal for every ticker this cycle.
-        analyst_weights: model_name -> blend weight from the FundSpec.
-        gross_target:    Desired sum of |weights| when views exist.
+        signals:        Every model's Signal for every ticker this cycle.
+        model_weights:  model_name -> blend weight from the StrategySpec.
+        gross_target:   Desired sum of |weights| when views exist.
+        market_neutral: Demean convictions before scaling (dollar-neutral).
     """
     weighted_sum: dict[str, float] = {}
     weight_total: dict[str, float] = {}
     for signal in signals:
         if signal.metadata.get("abstained") is True:
             continue
-        w = analyst_weights[signal.model_name]
+        w = model_weights[signal.model_name]
         weighted_sum[signal.ticker] = weighted_sum.get(signal.ticker, 0.0) + w * signal.value
         weight_total[signal.ticker] = weight_total.get(signal.ticker, 0.0) + w
 
@@ -66,10 +73,17 @@ def blend_signals(
         for t in tickers
     }
 
-    gross = sum(abs(c) for c in convictions.values())
-    if gross == 0.0:
+    scaled = convictions
+    if market_neutral and tickers:
+        mean = sum(convictions.values()) / len(convictions)
+        scaled = {t: c - mean for t, c in convictions.items()}
+
+    # Threshold, not == 0: demeaning identical convictions leaves ~1e-16
+    # residue, and dividing by it would normalize noise into a full book.
+    gross = sum(abs(c) for c in scaled.values())
+    if gross < 1e-9:
         weights = {t: 0.0 for t in tickers}
     else:
-        weights = {t: c / gross * gross_target for t, c in convictions.items()}
+        weights = {t: c / gross * gross_target for t, c in scaled.items()}
 
     return BlendResult(convictions=convictions, weights=weights)
