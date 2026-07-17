@@ -2,6 +2,7 @@
 # Graham leads (double blend weight); Buffett and Munger keep quality in
 # the mix. Edge claimed: mispriced quality with a margin of safety.
 name: deep-value
+display_name: Deep Value
 models:
   - name: graham
     weight: 2.0

@@ -77,9 +77,17 @@ class StrategySpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
+    display_name: str | None = Field(
+        default=None, description="human-facing name, e.g. 'Deep Value'"
+    )
     weight: float = Field(default=1.0, gt=0)
     models: list[ModelSpec] = Field(min_length=1)
     blend: BlendPolicy = Field(default_factory=BlendPolicy)
+
+    @property
+    def title(self) -> str:
+        """Display name, falling back to a title-cased slug."""
+        return self.display_name or self.name.replace("-", " ").title()
 
     @property
     def model_weights(self) -> dict[str, float]:

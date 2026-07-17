@@ -4,6 +4,7 @@
 # Edge claimed: collective judgment ranks names better than the market
 # prices them.
 name: fundamental-ls
+display_name: Fundamental L/S
 models:
   - name: buffett
   - name: munger

@@ -2,6 +2,7 @@
 # Druckenmiller and Lynch hunt acceleration and deterioration before the
 # multiple reprices it.
 name: inflections
+display_name: Inflections
 models:
   - name: druckenmiller
   - name: lynch

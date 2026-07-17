@@ -1,8 +1,8 @@
-# An example mandate. Specs are data: the fund builder (python -m v2.new),
+# An example mandate. Specs are data: the fund builder (python -m v2.run),
 # a chat LLM, and the strategy generator all emit this same format. Run one
 # cycle with:
 #
-#   poetry run python -m v2.cycle v2/funds/example.yaml --date 2025-06-03
+#   poetry run python -m v2.run v2/funds/example.yaml --date 2025-06-03
 #
 name: example-fund
 universe: [AAPL, MSFT, NVDA, GOOGL, AMZN]

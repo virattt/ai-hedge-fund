@@ -31,21 +31,16 @@ poetry install                          # dependencies
 #   FINANCIAL_DATASETS_API_KEY=...      # market/fundamentals data
 #   ANTHROPIC_API_KEY=...               # only for LLM agents (Buffett)
 
+# THE command. No arguments: build a fund interactively — pick stocks, pick
+# strategies — and watch it run its first cycle, every thesis on screen.
+poetry run python -m v2.run
+
+# With a mandate: run one cycle non-interactively (data → strategies →
+# netting → risk → execution), full CycleRecord as JSON on stdout.
+poetry run python -m v2.run v2/funds/example.yaml --date 2025-06-03
+
 # Backtest demo — PEAD across 25 stocks, live terminal dashboard (~20s)
 poetry run python -m v2.demo.backtest
-poetry run python -m v2.demo.backtest --refresh   # rebuild the data cache
-
-# Ask an analyst for a point-in-time view on a ticker
-poetry run python -m v2.analyze NVDA
-poetry run python -m v2.analyze NVDA --date 2024-06-01   # as-of a past date
-poetry run python -m v2.analyze AAPL --agent pead
-
-# Build a fund interactively: pick stocks, staff strategies, run a first cycle
-poetry run python -m v2.new
-
-# Run one cycle of a fund from a YAML mandate (data → strategies → netting
-# → risk → execution), printing the full CycleRecord as JSON
-poetry run python -m v2.cycle v2/funds/example.yaml --date 2025-06-03
 
 # Tests
 poetry run pytest v2/
