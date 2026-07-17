@@ -19,6 +19,7 @@ class ModelProvider(str, Enum):
 
     ALIBABA = "Alibaba"
     ANTHROPIC = "Anthropic"
+    ATLASCLOUD = "Atlas Cloud"
     DEEPSEEK = "DeepSeek"
     GOOGLE = "Google"
     GROQ = "Groq"
@@ -164,6 +165,13 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
             # Print error to console
             print(f"API Key Error: Please make sure OPENAI_API_KEY is set in your .env file or provided via API keys.")
             raise ValueError("OpenAI API key not found.  Please make sure OPENAI_API_KEY is set in your .env file or provided via API keys.")
+        return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
+    elif model_provider == ModelProvider.ATLASCLOUD:
+        api_key = (api_keys or {}).get("ATLASCLOUD_API_KEY") or os.getenv("ATLASCLOUD_API_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure ATLASCLOUD_API_KEY is set in your .env file or provided via API keys.")
+            raise ValueError("Atlas Cloud API key not found. Please make sure ATLASCLOUD_API_KEY is set in your .env file or provided via API keys.")
+        base_url = os.getenv("ATLASCLOUD_API_BASE", "https://api.atlascloud.ai/v1")
         return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
     elif model_provider == ModelProvider.ANTHROPIC:
         api_key = (api_keys or {}).get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
