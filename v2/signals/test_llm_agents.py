@@ -194,6 +194,34 @@ def test_failed_parse_still_persists_response(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Registry
+# ---------------------------------------------------------------------------
+
+def test_registry_names_match_keys(tmp_path):
+    """Every registry entry instantiates and reports its own key as name."""
+    from v2.signals import ALPHA_MODEL_REGISTRY, LLMAgent
+
+    for key, cls in ALPHA_MODEL_REGISTRY.items():
+        if issubclass(cls, LLMAgent):
+            model = cls(llm=FakeLLM(), cache=PromptCache(tmp_path / "llm"))
+        else:
+            model = cls()
+        assert model.name == key
+
+
+def test_llm_personas_share_the_contract(tmp_path):
+    """Every persona prompt keeps the PIT rule and the JSON schema."""
+    from v2.signals import ALPHA_MODEL_REGISTRY, LLMAgent
+
+    for cls in ALPHA_MODEL_REGISTRY.values():
+        if not issubclass(cls, LLMAgent):
+            continue
+        prompt = cls(llm=FakeLLM(), cache=PromptCache(tmp_path / "llm")).get_system_prompt()
+        assert "most recent filing date" in prompt  # the point-in-time hard rule
+        assert '"signal"' in prompt and '"confidence"' in prompt  # the schema
+
+
+# ---------------------------------------------------------------------------
 # extract_json
 # ---------------------------------------------------------------------------
 
