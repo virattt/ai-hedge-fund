@@ -8,7 +8,9 @@ LLM reasons over facts instead of re-deriving arithmetic.
 
 The snapshot is pure data: build it once, hash it, feed it to any persona.
 `content_hash` is the cache key for LLM calls — an agent only re-reasons
-when a new filing changes its snapshot.
+when a new filing changes its snapshot. Both the hash and `render()` exclude
+`as_of`: two dates between filings see identical data, and identical data
+must produce an identical prompt (a cache hit), not two paid LLM calls.
 """
 
 from __future__ import annotations
@@ -66,17 +68,28 @@ class FundamentalsSnapshot(BaseModel):
 
     @property
     def content_hash(self) -> str:
-        """Stable hash of the snapshot's content — the LLM cache key."""
-        canonical = self.model_dump_json()
+        """Stable hash of the fundamentals content — the LLM cache key.
+
+        Excludes `as_of` so two dates between filings share one hash: an
+        unchanged snapshot must be free, not a fresh LLM call per date.
+        """
+        canonical = self.model_dump_json(exclude={"as_of"})
         return hashlib.sha256(canonical.encode()).hexdigest()[:24]
 
     def render(self) -> str:
-        """Compact text block for the LLM prompt."""
+        """Compact text block for the LLM prompt.
+
+        Deliberately date-free (no `as_of`): the prompt cache keys on exact
+        prompt text, so the same fundamentals must render identically on any
+        date. It also keeps the LLM from anchoring on a calendar date it
+        could associate with post-date world events.
+        """
         lines = [
             f"Company: {self.ticker}"
             + (f"  |  Sector: {self.sector}" if self.sector else "")
             + (f"  |  Industry: {self.industry}" if self.industry else ""),
-            f"As of: {self.as_of} (all data below was publicly filed by this date)",
+            "All figures below were publicly filed by their filing dates. "
+            "Treat the most recent filing shown as the present.",
             "",
             "Summary:",
             f"  Market cap (latest filed): {_fmt(self.market_cap_latest)}",

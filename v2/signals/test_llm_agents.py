@@ -140,6 +140,34 @@ def test_cache_hit_skips_llm_call(tmp_path):
     assert second.metadata["cached"] is True
 
 
+def test_new_as_of_same_data_hits_cache(tmp_path):
+    """A new date with unchanged fundamentals must be free: the snapshot
+    renders identically, so the prompt cache hits — no second LLM call."""
+    llm = FakeLLM(BULLISH)
+    client = MockDataClient(metrics=_history())
+    agent = _agent(tmp_path, llm)
+
+    first = agent.predict("TEST", "2025-01-15", client)
+    second = agent.predict("TEST", "2025-02-20", client)
+
+    assert llm.calls == 1
+    assert second.metadata["cached"] is True
+    assert second.date == "2025-02-20"  # Signal date is the predict arg, not the cache's
+    assert first.metadata["snapshot_hash"] == second.metadata["snapshot_hash"]
+
+
+def test_new_filing_forces_new_llm_call(tmp_path):
+    """A new filing changes the snapshot — the agent must re-reason."""
+    llm = FakeLLM(BULLISH)
+    agent = _agent(tmp_path, llm)
+
+    first = agent.predict("TEST", "2025-01-15", MockDataClient(metrics=_history(7)))
+    second = agent.predict("TEST", "2025-02-20", MockDataClient(metrics=_history(8)))
+
+    assert llm.calls == 2
+    assert first.metadata["snapshot_hash"] != second.metadata["snapshot_hash"]
+
+
 def test_prompt_and_response_persisted(tmp_path):
     agent = _agent(tmp_path, FakeLLM(BULLISH))
     agent.predict("TEST", "2025-01-15", MockDataClient(metrics=_history()))
