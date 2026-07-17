@@ -34,6 +34,10 @@ poetry run python -m v2.analyze NVDA
 poetry run python -m v2.analyze NVDA --date 2024-06-01   # as-of a past date
 poetry run python -m v2.analyze AAPL --agent pead
 
+# Run one cycle of a fund from a YAML mandate (data → analysts → portfolio
+# → risk → execution), printing the full CycleRecord as JSON
+poetry run python -m v2.cycle v2/funds/example.yaml --date 2025-06-03
+
 # Tests
 poetry run pytest v2/
 ```
@@ -53,13 +57,15 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | `signals/` | `AlphaModel`/`QuantModel` interface, PEAD, `LLMAgent`, Buffett | ✅ |
 | `llm/` | LLM provider protocol, Anthropic client, prompt cache | ✅ |
 | `features/` | Point-in-time fundamentals snapshot (more features planned) | ◐ |
-| `backtesting/` | Backtest engine over an alpha model's views | ✅ |
+| `fund/` | `FundSpec` — a fund's mandate as YAML data — and the `Fund` object | ✅ |
+| `portfolio/` | View blending → target weights (conviction-weighted) | ✅ |
+| `risk/` | Hard limits — per-position and gross-exposure clamps | ✅ |
+| `brokers/` | `Broker` protocol + `SimBroker` (paper/live brokers planned) | ◐ |
+| `pipeline/` | `run_cycle` — one code path for backtest/paper/live; `CycleRecord` | ✅ |
+| `backtesting/` | Backtest engine over an alpha model's views (to be rebuilt onto `run_cycle`) | ✅ |
 | `event_study/` | Market-model abnormal returns (CARs) | ✅ |
 | `demo/` | Presentation showcases over the real engine | ✅ |
 | `validation/` | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO) | ⬜ |
-| `portfolio/` | View blending → target weights | ⬜ |
-| `risk/` | Hard caps, position sizing, drawdown controls | ⬜ |
-| `pipeline/` | `run_cycle` — one code path for backtest/paper/live | ⬜ |
 
 ✅ built · ◐ partial · ⬜ planned
 

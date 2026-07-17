@@ -24,8 +24,8 @@ it in backtest, paper, or live mode (see [VISION.md](./VISION.md)).
 | `AlphaModel` / `Signal` interface — the contract every analyst implements | ✅ |
 | Backtesting engine — run an alpha model over history; report return / Sharpe / drawdown | ✅ (to be rebuilt onto `run_cycle`) |
 | Event-study engine — market-model abnormal returns (CARs) | ✅ |
-| `run_cycle` — one pipeline (data → analysts → portfolio → risk → execution → ledger), three modes | ⬜ |
-| Fund object — persistent mandate, staff, capital, books | ⬜ |
+| `run_cycle` — one pipeline (data → analysts → portfolio → risk → execution → ledger), three modes | 🚧 (single cycle ships; ledger + backtest/paper convergence next) |
+| Fund object — persistent mandate, staff, capital, books | 🚧 (`FundSpec` YAML mandates + `Fund` staffing ship; persistence/books next) |
 | Persistent ledger — positions, every decision + thesis, orders, fills, NAV history | ⬜ |
 | Point-in-time data correctness — as-of / filing-date queries, no lookahead | 🚧 |
 | Validation gate — CPCV, probability of backtest overfitting (PBO) | ⬜ |
@@ -64,7 +64,7 @@ can be backtested and combined — is a great first contribution:
 | Item | Status |
 |------|--------|
 | Strategy — bundle analysts + a portfolio policy + capital slice (a "pod") | ⬜ |
-| Portfolio construction — blend analyst views → target weights | ⬜ |
+| Portfolio construction — blend analyst views → target weights | ✅ (conviction-weighted v0) |
 | Multi-strategy fund — many pods running at once, netted into one book | ⬜ |
 | Allocator (CIO) — pluggable capital allocation across strategies | ⬜ |
 | ↳ Static (human-set dial) | ⬜ |
@@ -76,9 +76,9 @@ can be backtested and combined — is a great first contribution:
 
 | Item | Status |
 |------|--------|
-| Risk model — hard caps (pod-level budgets + fund-level limits) | ⬜ |
-| Broker protocol — pluggable, mirrors the `DataClient` pattern | ⬜ |
-| ↳ Simulated broker (backtest) | ⬜ |
+| Risk model — hard caps (pod-level budgets + fund-level limits) | 🚧 (fund-level position + gross caps ship; pod budgets with pods) |
+| Broker protocol — pluggable, mirrors the `DataClient` pattern | ✅ |
+| ↳ Simulated broker (backtest) | ✅ |
 | ↳ Paper broker | ⬜ |
 | ↳ Live broker (Interactive Brokers / Alpaca) — opt-in plugin, off by default | ⬜ |
 
