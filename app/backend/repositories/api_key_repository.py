@@ -1,9 +1,13 @@
+import logging
+
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
 from datetime import datetime
 
 from app.backend.database.models import ApiKey
+
+logger = logging.getLogger(__name__)
 
 
 class ApiKeyRepository:
@@ -17,7 +21,8 @@ class ApiKeyRepository:
         provider: str, 
         key_value: str, 
         description: str = None, 
-        is_active: bool = True
+        is_active: bool = True,
+        auto_commit: bool = True,
     ) -> ApiKey:
         """Create a new API key or update existing one"""
         # Check if API key already exists for this provider
@@ -29,8 +34,12 @@ class ApiKeyRepository:
             existing_key.description = description
             existing_key.is_active = is_active
             existing_key.updated_at = func.now()
-            self.db.commit()
-            self.db.refresh(existing_key)
+            if auto_commit:
+                self.db.commit()
+                self.db.refresh(existing_key)
+                logger.info("API key updated: provider=%s", provider)
+            else:
+                self.db.flush()
             return existing_key
         else:
             # Create new key
@@ -41,8 +50,12 @@ class ApiKeyRepository:
                 is_active=is_active
             )
             self.db.add(api_key)
-            self.db.commit()
-            self.db.refresh(api_key)
+            if auto_commit:
+                self.db.commit()
+                self.db.refresh(api_key)
+                logger.info("API key updated: provider=%s", provider)
+            else:
+                self.db.flush()
             return api_key
 
     def get_api_key_by_provider(self, provider: str) -> Optional[ApiKey]:
@@ -88,9 +101,10 @@ class ApiKeyRepository:
         api_key = self.db.query(ApiKey).filter(ApiKey.provider == provider).first()
         if not api_key:
             return False
-        
+
         self.db.delete(api_key)
         self.db.commit()
+        logger.info("API key deleted: provider=%s", provider)
         return True
 
     def deactivate_api_key(self, provider: str) -> bool:
@@ -120,12 +134,23 @@ class ApiKeyRepository:
     def bulk_create_or_update(self, api_keys_data: List[dict]) -> List[ApiKey]:
         """Bulk create or update multiple API keys"""
         results = []
-        for data in api_keys_data:
-            api_key = self.create_or_update_api_key(
-                provider=data['provider'],
-                key_value=data['key_value'],
-                description=data.get('description'),
-                is_active=data.get('is_active', True)
-            )
-            results.append(api_key)
-        return results 
+        try:
+            for data in api_keys_data:
+                api_key = self.create_or_update_api_key(
+                    provider=data['provider'],
+                    key_value=data['key_value'],
+                    description=data.get('description'),
+                    is_active=data.get('is_active', True),
+                    auto_commit=False,
+                )
+                results.append(api_key)
+
+            self.db.commit()
+            for api_key in results:
+                self.db.refresh(api_key)
+            logger.info("Bulk API key update: %d keys processed", len(results))
+        except Exception:
+            self.db.rollback()
+            raise
+
+        return results
