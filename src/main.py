@@ -7,6 +7,7 @@ from colorama import Fore, Style, init
 import questionary
 from src.agents.portfolio_manager import portfolio_management_agent
 from src.agents.risk_manager import risk_management_agent
+from src.agents.market_state_verifier import market_state_verification_agent
 from src.graph.state import AgentState
 from src.utils.display import print_trading_output
 from src.utils.analysts import ANALYST_ORDER, get_analyst_nodes
@@ -114,8 +115,9 @@ def create_workflow(selected_analysts=None):
         workflow.add_node(node_name, node_func)
         workflow.add_edge("start_node", node_name)
 
-    # Always add risk and portfolio management
+    # Always add risk, market state verification, and portfolio management
     workflow.add_node("risk_management_agent", risk_management_agent)
+    workflow.add_node("market_state_verifier", market_state_verification_agent)
     workflow.add_node("portfolio_manager", portfolio_management_agent)
 
     # Connect selected analysts to risk management
@@ -123,7 +125,11 @@ def create_workflow(selected_analysts=None):
         node_name = analyst_nodes[analyst_key][0]
         workflow.add_edge(node_name, "risk_management_agent")
 
-    workflow.add_edge("risk_management_agent", "portfolio_manager")
+    # Market state verification runs after risk analysis, before portfolio decisions.
+    # If any exchange is not OPEN, the verifier adds a warning that the portfolio
+    # manager will see — causing it to hold those tickers instead of trading.
+    workflow.add_edge("risk_management_agent", "market_state_verifier")
+    workflow.add_edge("market_state_verifier", "portfolio_manager")
     workflow.add_edge("portfolio_manager", END)
 
     workflow.set_entry_point("start_node")
