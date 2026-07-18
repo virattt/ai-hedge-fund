@@ -53,5 +53,15 @@
     "display_name": "Llama 3.3 (70B)",
     "model_name": "llama3.3:70b-instruct-q4_0",
     "provider": "Meta"
+  },
+  {
+    "display_name": "Gemma 4",
+    "model_name": "gemma4:latest",
+    "provider": "Google"
+  },
+  {
+    "display_name": "Nemotron 3 Nano (4B)",
+    "model_name": "nemotron-3-nano:4b",
+    "provider": "NVIDIA"
   }
 ] 

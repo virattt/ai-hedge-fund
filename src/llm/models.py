@@ -25,6 +25,7 @@ class ModelProvider(str, Enum):
     KIMI = "Kimi"
     META = "Meta"
     MISTRAL = "Mistral"
+    NVIDIA = "NVIDIA"
     OPENAI = "OpenAI"
     OLLAMA = "Ollama"
     OPENROUTER = "OpenRouter"

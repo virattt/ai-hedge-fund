@@ -111,10 +111,11 @@ def select_model(use_ollama: bool, model_flag: str | None = None) -> tuple[str, 
     if model_flag:
         model = find_model_by_name(model_flag)
         if model:
+            provider = ModelProvider.OLLAMA.value if use_ollama else model.provider.value
             print(
-                f"\nUsing specified model: {Fore.CYAN}{model.provider.value}{Style.RESET_ALL} - {Fore.GREEN + Style.BRIGHT}{model.model_name}{Style.RESET_ALL}\n"
+                f"\nUsing specified model: {Fore.CYAN}{provider}{Style.RESET_ALL} - {Fore.GREEN + Style.BRIGHT}{model.model_name}{Style.RESET_ALL}\n"
             )
-            return model.model_name, model.provider.value
+            return model.model_name, provider
         else:
             print(f"{Fore.RED}Model '{model_flag}' not found. Please select a model.{Style.RESET_ALL}")
 
