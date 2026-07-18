@@ -252,7 +252,12 @@ class BacktestEngine:
         last_exit = _parse_date(trades[-1].exit_date)
         calendar_days = (last_exit - first_entry).days
         years = max(calendar_days / 365.25, 0.01)
-        annualized = (1 + total_return_pct) ** (1 / years) - 1
+        # Shorts are unbounded, so the book can be wiped out (equity <= 0).
+        # A non-positive growth factor raised to a fractional power is a
+        # complex number, which breaks the metric. Losing everything is
+        # -100% annualized.
+        growth = 1 + total_return_pct
+        annualized = growth ** (1 / years) - 1 if growth > 0 else -1.0
 
         # Sharpe ratio: average return divided by volatility, scaled to
         # annual terms. Higher = better risk-adjusted performance.
