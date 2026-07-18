@@ -8,9 +8,11 @@ from .portfolio import Portfolio
 def calculate_portfolio_value(portfolio: Portfolio, current_prices: Mapping[str, float]) -> float:
     """Compute total portfolio value identical to Backtester.calculate_portfolio_value.
 
-    total_value = cash + market value of longs - market value of shorts
+    total_value = cash + escrowed short margin + market value of longs - market value of shorts
     """
-    total_value = portfolio.get_cash()
+    # Margin escrowed for shorts was deducted from cash but is still the
+    # investor's asset, so it must count toward total value.
+    total_value = portfolio.get_cash() + portfolio.get_margin_used()
     positions = portfolio.get_positions()
     for ticker, pos in positions.items():
         price = float(current_prices[ticker])

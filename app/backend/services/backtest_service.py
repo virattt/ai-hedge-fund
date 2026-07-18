@@ -206,7 +206,9 @@ class BacktestService:
 
     def calculate_portfolio_value(self, current_prices: Dict[str, float]) -> float:
         """Calculate total portfolio value."""
-        total_value = self.portfolio["cash"]
+        # Margin escrowed for shorts was deducted from cash but is still the
+        # investor's asset, so it must count toward total value.
+        total_value = self.portfolio["cash"] + self.portfolio["margin_used"]
 
         for ticker in self.tickers:
             position = self.portfolio["positions"][ticker]

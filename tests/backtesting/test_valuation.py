@@ -7,10 +7,26 @@ def test_calculate_portfolio_value(portfolio, prices):
     portfolio.apply_short_open("MSFT", 5, 200.0)
 
     value = calculate_portfolio_value(portfolio, prices)
-    # cash after trades
+    # cash after trades, plus margin escrowed for the short
     snap = portfolio.get_snapshot()
-    expected = snap["cash"] + 10 * 100.0 - 5 * 200.0
+    expected = snap["cash"] + snap["margin_used"] + 10 * 100.0 - 5 * 200.0
     assert value == expected
+
+
+def test_short_open_does_not_change_portfolio_value(portfolio, prices):
+    # Opening a short at the current price moves cash into margin escrow
+    # but creates no gain or loss, so total value must stay unchanged.
+    portfolio.apply_short_open("MSFT", 5, 200.0)
+    value = calculate_portfolio_value(portfolio, prices)
+    assert value == 100_000.0
+
+
+def test_short_open_and_cover_round_trip_restores_value(portfolio, prices):
+    portfolio.apply_short_open("MSFT", 5, 200.0)
+    portfolio.apply_short_cover("MSFT", 5, 200.0)
+    value = calculate_portfolio_value(portfolio, prices)
+    assert value == 100_000.0
+    assert portfolio.get_margin_used() == 0.0
 
 
 def test_compute_exposures(portfolio, prices):
