@@ -57,6 +57,16 @@ class BacktestService:
         self.request = request
         self.portfolio_values = []
 
+    def _available_cash(self) -> float:
+        short_sale_proceeds = sum(
+            position["short"] * position["short_cost_basis"]
+            for position in self.portfolio["positions"].values()
+        )
+        return max(
+            0.0,
+            self.portfolio["cash"] - self.portfolio["margin_used"] - short_sale_proceeds,
+        )
+
     def execute_trade(self, ticker: str, action: str, quantity: float, current_price: float) -> int:
         """
         Execute trades with support for both long and short positions.
@@ -70,7 +80,8 @@ class BacktestService:
 
         if action == "buy":
             cost = quantity * current_price
-            if cost <= self.portfolio["cash"]:
+            available_cash = self._available_cash()
+            if cost <= available_cash:
                 # Weighted average cost basis for the new total
                 old_shares = position["long"]
                 old_cost_basis = position["long_cost_basis"]
@@ -87,7 +98,7 @@ class BacktestService:
                 return quantity
             else:
                 # Calculate maximum affordable quantity
-                max_quantity = int(self.portfolio["cash"] / current_price)
+                max_quantity = int(available_cash / current_price)
                 if max_quantity > 0:
                     cost = max_quantity * current_price
                     old_shares = position["long"]
@@ -122,9 +133,7 @@ class BacktestService:
         elif action == "short":
             proceeds = current_price * quantity
             margin_required = proceeds * self.portfolio["margin_requirement"]
-            available_cash = max(
-                0.0, self.portfolio["cash"] - self.portfolio["margin_used"]
-            )
+            available_cash = self._available_cash()
             if margin_required <= available_cash:
                 # Weighted average short cost basis
                 old_short_shares = position["short"]
@@ -142,7 +151,6 @@ class BacktestService:
                 self.portfolio["margin_used"] += margin_required
 
                 self.portfolio["cash"] += proceeds
-                self.portfolio["cash"] -= margin_required
                 return quantity
             else:
                 margin_ratio = self.portfolio["margin_requirement"]
@@ -169,7 +177,6 @@ class BacktestService:
                     self.portfolio["margin_used"] += margin_required
 
                     self.portfolio["cash"] += proceeds
-                    self.portfolio["cash"] -= margin_required
                     return max_quantity
                 return 0
 
@@ -191,7 +198,6 @@ class BacktestService:
                 position["short_margin_used"] -= margin_to_release
                 self.portfolio["margin_used"] -= margin_to_release
 
-                self.portfolio["cash"] += margin_to_release
                 self.portfolio["cash"] -= cover_cost
 
                 self.portfolio["realized_gains"][ticker]["short"] += realized_gain
@@ -536,4 +542,4 @@ class BacktestService:
         # Calculate additional metrics
         performance_df["Daily Return"] = performance_df["Portfolio Value"].pct_change().fillna(0)
         
-        return performance_df 
+        return performance_df
