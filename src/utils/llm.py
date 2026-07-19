@@ -111,6 +111,8 @@ def extract_json_from_response(content) -> dict | None:
     try:
         # Reasoning models (e.g. Anthropic extended thinking) return content as a
         # list of blocks (thinking + text). Concatenate the text blocks.
+        # LangChain returns these as Pydantic objects (TextBlock / ThinkingBlock),
+        # not plain dicts, so we check both dict and attribute access.
         if isinstance(content, list):
             parts = []
             for block in content:
@@ -118,6 +120,8 @@ def extract_json_from_response(content) -> dict | None:
                     parts.append(block)
                 elif isinstance(block, dict) and block.get("type") == "text":
                     parts.append(block.get("text", ""))
+                elif getattr(block, "type", None) == "text":
+                    parts.append(getattr(block, "text", ""))
             content = "\n".join(parts)
         # 1. Try markdown code block with ```json
         json_start = content.find("```json")
