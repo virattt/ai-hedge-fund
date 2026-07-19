@@ -103,9 +103,20 @@ def test_content_hash_stable_and_sensitive():
     assert snap_c.content_hash != snap_a.content_hash  # new filing -> new key
 
 
+def test_same_data_different_as_of_same_render_and_hash():
+    """Between filings the snapshot is unchanged — the hash and the rendered
+    prompt must be identical on any as-of date, or the LLM cache never hits."""
+    snap_jan = build_snapshot("TEST", "2025-01-15", MockDataClient(metrics=_history()))
+    snap_feb = build_snapshot("TEST", "2025-02-15", MockDataClient(metrics=_history()))
+
+    assert snap_jan.as_of != snap_feb.as_of  # the field itself still differs
+    assert snap_jan.content_hash == snap_feb.content_hash
+    assert snap_jan.render() == snap_feb.render()
+
+
 def test_render_contains_the_facts():
     snap = build_snapshot("TEST", "2025-01-15", MockDataClient(metrics=_history()))
     text = snap.render()
-    assert "2025-01-15" in text
+    assert "2025-01-15" not in text  # as_of must never leak into the prompt
     assert "2024-12-31" in text
     assert "publicly filed" in text
