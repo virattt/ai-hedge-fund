@@ -11,7 +11,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.12"
 langchain = "^0.3.7"
 langchain-anthropic = "0.3.5"
 langchain-groq = "0.2.3"
@@ -39,6 +39,7 @@ langchain-gigachat = "^0.3.12"
 langchain-xai = "^0.2.5"
 scipy = "^1.11.0"
 pyyaml = "^6.0.3"
+moexalgo = "^2.5.10"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
@@ -52,7 +53,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 420
-target-version = ['py311']
+target-version = ['py312']
 include = '\.pyi?$'
 
 [tool.isort]
