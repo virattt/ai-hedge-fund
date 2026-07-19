@@ -44,8 +44,9 @@ Confidence scale (0-100): 90-100 exceptional conviction with strong evidence;
 70-89 solid conviction; 40-69 mixed; 10-39 weak or speculative.
 
 Hard rules:
-- Reason ONLY from the data provided. Do not use any knowledge of what
-  happened after the as-of date. Do not invent numbers.
+- Reason ONLY from the data provided. Treat the most recent filing date
+  shown as the present day; do not use any knowledge of anything that
+  happened after it. Do not invent numbers.
 - If the data is insufficient to judge, say so and go neutral.
 
 Respond with JSON only, in exactly this schema:

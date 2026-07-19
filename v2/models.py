@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -34,39 +34,3 @@ class QuantSignals(BaseModel):
     date: str
     signals: dict[str, Signal] = Field(default_factory=dict)
     composite_score: float | None = None
-
-
-# ---------------------------------------------------------------------------
-# Portfolio Construction Models
-# ---------------------------------------------------------------------------
-
-class PortfolioTarget(BaseModel):
-    """Output of the portfolio optimizer — target weights."""
-
-    weights: dict[str, float] = Field(
-        default_factory=dict, description="ticker -> target weight (-1 to +1)"
-    )
-    expected_return: float | None = None
-    expected_risk: float | None = None
-
-
-# ---------------------------------------------------------------------------
-# Execution Models
-# ---------------------------------------------------------------------------
-
-class TradeOrder(BaseModel):
-    """A single trade to execute."""
-
-    ticker: str
-    action: Literal["buy", "sell", "short", "cover"]
-    shares: int = 0
-    price: float = 0.0
-    estimated_cost: float = 0.0
-    reason: str = ""
-
-
-class ExecutionResult(BaseModel):
-    """Output of the execution layer."""
-
-    orders: list[TradeOrder] = Field(default_factory=list)
-    total_cost: float = 0.0

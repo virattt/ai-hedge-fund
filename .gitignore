@@ -69,3 +69,7 @@ outputs/
 app/backend/alembic/versions/__pycache__/
 .v2_cache/
 
+
+# User-created fund mandates (the wizard writes here); keep only the example
+v2/funds/*.yaml
+!v2/funds/example.yaml
