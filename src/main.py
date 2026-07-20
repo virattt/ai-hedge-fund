@@ -8,6 +8,7 @@ import questionary
 from src.agents.portfolio_manager import portfolio_management_agent
 from src.agents.risk_manager import risk_management_agent
 from src.graph.state import AgentState
+from src.llm.models import DEFAULT_MODEL_NAME
 from src.utils.display import print_trading_output
 from src.utils.analysts import ANALYST_ORDER, get_analyst_nodes
 from src.utils.progress import progress
@@ -50,7 +51,7 @@ def run_hedge_fund(
     portfolio: dict,
     show_reasoning: bool = False,
     selected_analysts: list[str] = [],
-    model_name: str = "gpt-4.1",
+    model_name: str = DEFAULT_MODEL_NAME,
     model_provider: str = "OpenAI",
 ):
     # Start progress tracking
