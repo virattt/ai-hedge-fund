@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import re
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
@@ -10,6 +11,9 @@ from src.agents.risk_manager import risk_management_agent
 from src.main import start
 from src.utils.analysts import ANALYST_CONFIG
 from src.graph.state import AgentState
+from src.utils.progress import progress
+
+logger = logging.getLogger(__name__)
 
 
 def extract_base_agent_key(unique_id: str) -> str:
@@ -32,6 +36,31 @@ def extract_base_agent_key(unique_id: str) -> str:
     return unique_id  # Return original if no suffix pattern found
 
 
+def _create_safe_agent(agent_func, agent_name):
+    """Wrap an agent function so that exceptions are caught and logged
+    instead of crashing the entire workflow. On failure the agent returns
+    an empty result and the remaining agents continue normally."""
+
+    def safe_wrapper(state: AgentState):
+        try:
+            return agent_func(state)
+        except Exception as e:
+            error_msg = f"{agent_name} failed: {e}"
+            logger.error(error_msg, exc_info=True)
+            progress.update_status(agent_name, None, f"Error: {e}")
+            return {
+                "messages": [
+                    HumanMessage(
+                        content=json.dumps({}),
+                        name=agent_name,
+                    )
+                ],
+                "data": state["data"],
+            }
+
+    return safe_wrapper
+
+
 # Helper function to create the agent graph
 def create_graph(graph_nodes: list, graph_edges: list) -> StateGraph:
     """Create the workflow based on the React Flow graph structure."""
@@ -51,19 +80,19 @@ def create_graph(graph_nodes: list, graph_edges: list) -> StateGraph:
     # Add agent nodes
     for unique_agent_id in agent_ids:
         base_agent_key = extract_base_agent_key(unique_agent_id)
-        
+
         # Track portfolio manager nodes for special handling (before ANALYST_CONFIG check)
         if base_agent_key == "portfolio_manager":
             portfolio_manager_nodes.add(unique_agent_id)
             continue
-            
+
         # Skip if the base agent key is not in our analyst configuration
         if base_agent_key not in ANALYST_CONFIG:
             continue
-            
+
         node_name, node_func = analyst_nodes[base_agent_key]
         agent_function = create_agent_function(node_func, unique_agent_id)
-        graph.add_node(unique_agent_id, agent_function)
+        graph.add_node(unique_agent_id, _create_safe_agent(agent_function, unique_agent_id))
     
     # Add portfolio manager nodes and their corresponding risk managers
     risk_manager_nodes = {}  # Map portfolio manager ID to risk manager ID
