@@ -1,45 +1,105 @@
-# v2 — Quantitative Trading Stack
+# v2 — AI Hedge Fund core
 
-> **Status: Work in Progress** — This module is under active development and is not yet integrated into the main application.
+> **Status: Work in progress.** A ground-up rebuild of the engine, developed
+> alongside the shipped v1 app (`src/`, `app/`) but not yet wired into it.
+> See [`../VISION.md`](../VISION.md) and [`../ROADMAP.md`](../ROADMAP.md) for
+> where this is headed.
 
-v2 is a ground-up rebuild of the AI hedge fund's core engine, replacing personality-based agents with a principled quantitative pipeline.
+v2 rebuilds the fund as a persistent, point-in-time-honest system, mirroring a
+real shop's hierarchy:
+
+```
+FUND      =  capital slices over STRATEGIES   (master risk on the netted book)
+STRATEGY  =  a blend policy over MODELS       (a "pod")
+MODEL     =  an alpha model → a Signal        (conviction in [-1,+1] + thesis)
+```
+
+A fund runs two kinds of pods, like a real shop. **Discretionary** strategies
+are staffed by **agents** — LLM investor personas (Warren Buffett, Charlie
+Munger, Benjamin Graham, Peter Lynch, Stanley Druckenmiller) whose judgment
+is the edge; blend them long-biased or market-neutral. **Systematic**
+strategies are powered by quant models (post-earnings drift) — the model *is*
+the strategy, no persona attached. Both kinds implement one interface and
+plug into the same engine unchanged.
+
+## Quickstart
+
+```bash
+poetry install                          # dependencies
+
+# .env needs (at repo root):
+#   FINANCIAL_DATASETS_API_KEY=...      # market/fundamentals data
+#   ANTHROPIC_API_KEY=...               # only for LLM agents (Buffett)
+
+# THE command. No arguments: build a fund interactively — pick stocks, pick
+# strategies — and watch it run its first cycle, every thesis on screen.
+poetry run python -m v2.run
+
+# With a mandate: run one cycle non-interactively (data → strategies →
+# netting → risk → execution), full CycleRecord as JSON on stdout.
+poetry run python -m v2.run v2/funds/example.yaml --date 2025-06-03
+
+# Backtest demo — PEAD across 25 stocks, live terminal dashboard (~20s)
+poetry run python -m v2.demo.backtest
+
+# Tests
+poetry run pytest v2/
+```
+
+All API responses cache to disk (`.v2_cache/`, gitignored), so reruns are fast,
+free, and work offline once warmed.
 
 ## Architecture
 
 ```
-Data (FD API) → Signals → Features → Portfolio Construction → Risk Management → Execution
+Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → Ledger
 ```
 
-| Module | Description |
-|--------|-------------|
-| `data/` | Financial Datasets API client and caching layer |
-| `event_study/` | Event study framework — CARs, market model, significance testing |
-| `signals/` | Quantitative signal generation (`BaseSignal` ABC with `[-1, +1]` output) |
-| `features/` | Feature engineering — earnings surprise, KPI momentum, cross-sector lead-lag |
-| `validation/` | Combinatorial Purged Cross-Validation (CPCV), Probability of Backtest Overfitting (PBO) |
-| `backtesting/` | Vectorized backtester with point-in-time constraints and transaction cost modeling |
-| `portfolio/` | Portfolio optimization — mean-variance, Black-Litterman, risk parity, covariance cleaning |
-| `risk/` | Risk management — drawdown controls, position sizing, correlation monitoring, stress testing |
-| `pipeline/` | Execution simulation — market impact (Almgren-Chriss), fill probability, capacity analysis |
+| Module | What | Status |
+|--------|------|--------|
+| `data/` | `DataClient` protocol, Financial Datasets client, disk cache | ✅ |
+| `signals/` | `AlphaModel` interface, PEAD, `LLMAgent` + 5 investor personas | ✅ |
+| `llm/` | LLM provider protocol, Anthropic client, prompt cache | ✅ |
+| `features/` | Point-in-time fundamentals snapshot (more features planned) | ◐ |
+| `fund/` | `FundSpec`/`StrategySpec` — mandates as YAML data — and the `Fund` object | ✅ |
+| `strategies/` | Strategy library (fundamental-ls, deep-value, inflections, earnings-drift) — add yours as a YAML | ✅ |
+| `portfolio/` | View blending → target weights (conviction-weighted, optional market-neutral) | ✅ |
+| `risk/` | Hard limits — per-position and gross-exposure clamps | ✅ |
+| `brokers/` | `Broker` protocol + `SimBroker` (paper/live brokers planned) | ◐ |
+| `pipeline/` | `run_cycle` — one code path for backtest/paper/live; `CycleRecord` | ✅ |
+| `backtesting/` | Backtest engine over an alpha model's views (to be rebuilt onto `run_cycle`) | ✅ |
+| `event_study/` | Market-model abnormal returns (CARs) | ✅ |
+| `demo/` | Presentation showcases over the real engine | ✅ |
+| `validation/` | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO) | ⬜ |
 
-## Key Design Decisions
+✅ built · ◐ partial · ⬜ planned
 
-- **Methodology over personality.** Agents are structured around quantitative methods (momentum, fundamental, risk), not famous investor personas.
-- **Costs from day one.** Every backtest includes a transaction cost model. No frictionless fantasies.
-- **Validation built in.** CPCV and PBO are first-class citizens, not afterthoughts. If a signal can't survive combinatorial purged validation, it doesn't ship.
-- **Point-in-time by construction.** The data layer enforces that no future information leaks into historical analysis.
-- **Daily frequency.** Built for daily-bar strategies on US equities using [Financial Datasets](https://financialdatasets.ai) as the sole data provider.
+## Principles (non-negotiable)
 
-## Data Models
+- **Point-in-time by construction.** On any simulated date, only data actually
+  filed by then is visible — the data layer filters on filing date, not report
+  period. No lookahead, ever.
+- **Fail loud.** Infrastructure failures raise; only genuine "no data" returns
+  empty. A silent empty would poison a backtest as a fake "no signal."
+- **The LLM never touches the trade.** Agents form *views* and *narrate*;
+  deterministic code sizes and places orders; risk limits are hard gates.
+- **One interface for every analyst.** Implement `AlphaModel.predict(ticker,
+  date, data_client) -> Signal` and it plugs into the engine unchanged.
 
-The core data contracts live in `models.py`:
+## Data contracts (`models.py`)
 
-- `SignalResult` — output of any quantitative signal (`value` in `[-1, +1]`)
-- `QuantSignals` — all signals for a ticker on a given date
-- `PortfolioTarget` — target portfolio weights from the optimizer
-- `TradeOrder` — a single trade instruction
-- `ExecutionResult` — batch of trades with estimated costs
+- `Signal` — an alpha model's output: `value` in `[-1, +1]`, plus `reasoning`,
+  `components`, and `metadata`.
+- `QuantSignals` — all signals for a ticker on a date.
 
 ## Contributing
 
-v2 is in early development. If you'd like to contribute, start by reading `signals/base.py` to understand the signal interface, then check open issues tagged `v2`.
+Two high-leverage contributions:
+
+- **A new agent or quant model** (code): read `signals/base.py` for the
+  `AlphaModel` interface, use `signals/buffett.py` (an agent is just a system
+  prompt) or `signals/pead.py` (quant) as a template, register it, add a test.
+- **A new strategy** (no code): drop a YAML in `strategies/` bundling existing
+  models with a blend policy — the fund builder picks it up automatically.
+
+See [`../ROADMAP.md`](../ROADMAP.md) for the open list.

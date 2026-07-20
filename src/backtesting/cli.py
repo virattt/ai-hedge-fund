@@ -17,7 +17,7 @@ from src.utils.ollama import ensure_ollama_and_model
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run backtesting engine (modular)")
-    parser.add_argument("--tickers", type=str, required=False, help="Comma-separated tickers")
+    parser.add_argument("--tickers", "--ticker", dest="tickers", type=str, required=False, help="Comma-separated tickers")
     parser.add_argument(
         "--end-date",
         type=str,

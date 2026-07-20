@@ -1,0 +1,17 @@
+# Fundamental long/short — the flagship discretionary pod.
+# All five agents rank the universe; the sleeve is market-neutral: long the
+# names the desk likes most relative to the rest, short the least liked.
+# Edge claimed: collective judgment ranks names better than the market
+# prices them.
+name: fundamental-ls
+display_name: Fundamental L/S
+models:
+  - name: buffett
+  - name: munger
+  - name: graham
+  - name: lynch
+  - name: druckenmiller
+blend:
+  method: conviction_weighted
+  gross_target: 1.0
+  market_neutral: true

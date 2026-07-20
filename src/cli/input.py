@@ -22,6 +22,8 @@ def add_common_args(
 ) -> argparse.ArgumentParser:
     parser.add_argument(
         "--tickers",
+        "--ticker",
+        dest="tickers",
         type=str,
         required=require_tickers,
         help="Comma-separated list of stock ticker symbols (e.g., AAPL,MSFT,GOOGL)",
