@@ -14,6 +14,8 @@ set SHOW_REASONING=
 set COMMAND=
 set MODEL_NAME=
 
+goto :parse_args
+
 :: Help function
 :show_help
 echo AI Hedge Fund Docker Runner
@@ -407,7 +409,4 @@ echo Running: !CMD!
 
 :: Exit
 exit /b 0
-
-:: Start script execution
-call :parse_args %* 
 
