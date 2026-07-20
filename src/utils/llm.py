@@ -1,7 +1,9 @@
 """Helper functions for LLM"""
 
 import json
+import os
 from pydantic import BaseModel
+from langchain_core.messages import HumanMessage, SystemMessage
 from src.llm.models import get_model, get_model_info
 from src.utils.progress import progress
 from src.graph.state import AgentState
@@ -54,6 +56,15 @@ def call_llm(
             pydantic_model,
             method="json_mode",
         )
+
+    # Apply the output-language directive (configurable via the --language CLI
+    # flag, state metadata, or OUTPUT_LANGUAGE env var). Only free-text
+    # reasoning is translated — JSON keys, numeric values, and the signal
+    # literals ("bullish"/"bearish"/"neutral") stay in English so structured
+    # parsing is unaffected.
+    output_language = _get_output_language(state)
+    if output_language:
+        prompt = _inject_language_directive(prompt, output_language)
 
     # Call the LLM with retries
     for attempt in range(max_retries):
@@ -193,3 +204,56 @@ def get_agent_model_config(state, agent_name):
         model_provider = model_provider.value
     
     return model_name, model_provider
+
+
+# ---------------------------------------------------------------------------
+# Output-language control
+# ---------------------------------------------------------------------------
+def _get_output_language(state) -> str:
+    """Resolve the desired output language.
+
+    Priority: ``state.metadata.output_language`` (set from the ``--language``
+    CLI flag) → ``OUTPUT_LANGUAGE`` env var → ``""`` (no translation).
+
+    English / unset values normalize to ``""`` so the prompt is left untouched.
+    Accepts full names ("Chinese", "Spanish"), native names ("中文", "Español"),
+    and ISO codes ("zh", "es").
+    """
+    lang = None
+    if state:
+        lang = state.get("metadata", {}).get("output_language")
+    if not lang:
+        lang = os.getenv("OUTPUT_LANGUAGE", "").strip()
+    if not lang:
+        return ""
+    if lang.lower() in {"en", "english", "default", "default"}:
+        return ""
+    return lang.strip()
+
+
+def _inject_language_directive(prompt, language: str):
+    """Append a system message instructing the model to write free-text in ``language``.
+
+    Only human-readable text (notably the ``reasoning`` field) is translated;
+    the JSON structure, field keys, numerics, and the ``signal`` literals stay
+    in English so downstream parsing remains stable. Handles the three prompt
+    shapes LangChain models accept: a PromptValue (``.to_messages()``), a list
+    of messages, or a plain string.
+    """
+    directive = SystemMessage(
+        content=(
+            f"LANGUAGE REQUIREMENT: Write all free-text output — in particular the "
+            f"'reasoning' field — in {language}. "
+            f"Do NOT translate or alter the JSON structure, field keys, numeric "
+            f'values, or the signal literals ("bullish", "bearish", "neutral") — '
+            f"those must remain exactly as specified. Only the human-readable text "
+            f"content should be in {language}."
+        )
+    )
+    if hasattr(prompt, "to_messages"):
+        return [*prompt.to_messages(), directive]
+    if isinstance(prompt, list):
+        return [*prompt, directive]
+    if isinstance(prompt, str):
+        return [HumanMessage(content=prompt), directive]
+    return prompt

@@ -1,3 +1,4 @@
+import os
 import sys
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
@@ -223,6 +224,7 @@ class CLIInputs:
     margin_requirement: float
     show_reasoning: bool = False
     show_agent_graph: bool = False
+    output_language: str = ""
     raw_args: Optional[argparse.Namespace] = None
 
 
@@ -262,6 +264,18 @@ def parse_cli_inputs(
     if include_graph_flag:
         parser.add_argument("--show-agent-graph", action="store_true", help="Show the agent graph")
 
+    parser.add_argument(
+        "--language",
+        dest="language",
+        type=str,
+        default="",
+        help=(
+            "Output language for analyst reasoning text (e.g. 'Chinese', '中文', 'es'). "
+            "JSON keys and signal values stay in English. "
+            "Defaults to the OUTPUT_LANGUAGE env var, or English if unset."
+        ),
+    )
+
     args = parser.parse_args()
 
     # Normalize parsed values
@@ -284,6 +298,10 @@ def parse_cli_inputs(
         margin_requirement=getattr(args, "margin_requirement", 0.0),
         show_reasoning=getattr(args, "show_reasoning", False),
         show_agent_graph=getattr(args, "show_agent_graph", False),
+        output_language=(
+            getattr(args, "language", "").strip()
+            or os.getenv("OUTPUT_LANGUAGE", "").strip()
+        ),
         raw_args=args,
     )
 
