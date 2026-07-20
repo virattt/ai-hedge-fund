@@ -7,20 +7,6 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-class TradeSignal(BaseModel):
-    """A strategy's instruction to enter a position.
-
-    The strategy decides ticker, direction, timing, and holding period.
-    The engine handles position sizing, price lookup, and P&L.
-    """
-
-    ticker: str
-    direction: str                    # "long" or "short"
-    entry_date: str                   # YYYY-MM-DD — desired entry, engine snaps to next trading day
-    holding_days: int                 # trading days to hold
-    metadata: dict[str, Any] = Field(default_factory=dict)  # strategy-specific context
-
-
 class Trade(BaseModel):
     """A single completed trade — one entry and one exit."""
 
@@ -34,7 +20,8 @@ class Trade(BaseModel):
     pnl: float                        # dollar profit/loss
     return_pct: float                 # percentage return (signed)
     holding_days: int                 # trading days held
-    metadata: dict[str, Any] = Field(default_factory=dict)  # strategy-specific context
+    reasoning: str | None = None      # why the alpha model opened this (from the Signal)
+    metadata: dict[str, Any] = Field(default_factory=dict)  # alpha-model context
 
 
 class PerformanceMetrics(BaseModel):

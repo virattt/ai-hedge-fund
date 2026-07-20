@@ -1,0 +1,24 @@
+# An example mandate. Specs are data: the fund builder (python -m v2.run),
+# a chat LLM, and the strategy generator all emit this same format. Run one
+# cycle with:
+#
+#   poetry run python -m v2.run v2/funds/example.yaml --date 2025-06-03
+#
+name: example-fund
+universe: [AAPL, MSFT, NVDA, GOOGL, AMZN]
+strategies:
+  - name: deep-value          # discretionary pod: Graham-led, long-biased
+    weight: 0.6               # capital slice, relative to sibling strategies
+    models:
+      - name: graham
+        weight: 2.0
+      - name: buffett
+      - name: munger
+  - name: earnings-drift      # systematic pod: post-earnings drift
+    weight: 0.4
+    models:
+      - name: pead
+risk:
+  max_position_pct: 0.25      # master risk: no single name above 25% of equity
+  max_gross_exposure: 1.0     # unlevered, across the netted book
+capital: 100000

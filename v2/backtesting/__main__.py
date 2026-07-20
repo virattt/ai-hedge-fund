@@ -8,9 +8,11 @@ from __future__ import annotations
 import os
 import sys
 import time
+from datetime import date
 
 from v2.data import FDClient
-from v2.backtesting import BacktestEngine, PEADStrategy
+from v2.backtesting import BacktestEngine
+from v2.signals import PEADModel
 
 TICKERS = [
     # Tech (21)
@@ -38,6 +40,8 @@ TICKERS = [
 HOLDING_DAYS = 5
 CAPITAL = 100_000.0
 PER_TRADE = 10_000.0
+START_DATE = "2024-06-01"
+END_DATE = date.today().isoformat()
 
 # Colors
 GREEN = "\033[32m"
@@ -122,50 +126,48 @@ def main() -> None:
     logging.getLogger("v2.data.client").setLevel(logging.ERROR)
 
     n = len(TICKERS)
+    engine = BacktestEngine(capital=CAPITAL, per_trade=PER_TRADE)
+    model = PEADModel()
 
-    # Phase 1: Generate signals with progress
-    sys.stdout.write(f"  Scanning earnings... [0/{n}]")
+    # Phase 1: Backtest the PEAD alpha model, ticker by ticker, with progress
+    sys.stdout.write(f"  Backtesting PEAD alpha... [0/{n}]")
     sys.stdout.flush()
 
+    trades = []
     with FDClient() as fd:
-        strategy = PEADStrategy(holding_days=HOLDING_DAYS)
-        signals = []
         for i, ticker in enumerate(TICKERS):
-            sys.stdout.write(f"\r  Scanning earnings... [{i + 1}/{n}] {ticker:<6}")
+            sys.stdout.write(f"\r  Backtesting PEAD alpha... [{i + 1}/{n}] {ticker:<6}")
             sys.stdout.flush()
-            ticker_signals = strategy.generate_signals([ticker], fd)
-            signals.extend(ticker_signals)
+            r = engine.run_alpha(
+                model, [ticker], fd, START_DATE, END_DATE, holding_days=HOLDING_DAYS,
+            )
+            trades.extend(r.trades)
 
-        sys.stdout.write(f"\r  Scanning earnings... {len(signals)} signals found" + " " * 20 + "\n")
-        sys.stdout.flush()
-        time.sleep(0.5)
+    sys.stdout.write(f"\r  Backtesting PEAD alpha... {len(trades)} trades" + " " * 20 + "\n")
+    sys.stdout.flush()
+    time.sleep(0.5)
 
-        # Phase 2: Execute trades with live display
-        engine = BacktestEngine(capital=CAPITAL, per_trade=PER_TRADE)
-        result = engine.run_signals(signals, fd)
-
-    if not result.trades or not result.metrics:
+    if not trades:
         print("  No trades generated.")
         return
 
-    # Phase 3: Display trades one by one with running metrics
+    trades.sort(key=lambda t: t.entry_date)
+
+    # Phase 2: Replay trades one by one with running metrics
     clear()
-    trades = result.trades
     equity = CAPITAL
     displayed: list = []
 
-    for i, trade in enumerate(trades):
+    for trade in trades:
         equity += trade.pnl
         displayed.append(trade)
 
         # Rebuild display each trade (like v1's clear-and-reprint)
         clear()
 
-        # Compute running metrics for display
-        from v2.backtesting.engine import BacktestEngine as _E
-        running_engine = _E(capital=CAPITAL, per_trade=PER_TRADE)
-        running_curve = running_engine._build_equity_curve(displayed)
-        running_metrics = running_engine._compute_metrics(displayed, running_curve)
+        # Compute running metrics over the trades shown so far
+        running_curve = engine._build_equity_curve(displayed)
+        running_metrics = engine._compute_metrics(displayed, running_curve)
 
         print_header(running_metrics, equity)
         print_table_header()
