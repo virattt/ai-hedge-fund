@@ -44,6 +44,11 @@ This project is for **educational and research purposes only**.
 
 By using this software, you agree to use it solely for learning purposes.
 
+For extensions that experiment with execution workflows, see the
+[pre-trade governance checklist](docs/risk/pre-trade-governance-checklist.md)
+for a vendor-neutral review gate pattern between risk management and order
+routing.
+
 ## Table of Contents
 - [How to Install](#how-to-install)
 - [How to Run](#how-to-run)
