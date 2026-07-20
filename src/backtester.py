@@ -1,13 +1,20 @@
 import sys
+from pathlib import Path
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from colorama import Fore, Style
 
+from src._entrypoint import ensure_project_root_on_path
 from src.main import run_hedge_fund
 from src.backtesting.engine import BacktestEngine
 from src.backtesting.types import PerformanceMetrics
 from src.cli.input import (
     parse_cli_inputs,
 )
+
+ensure_project_root_on_path(__file__)
 
 
 def run_backtest(backtester: BacktestEngine) -> PerformanceMetrics | None:
