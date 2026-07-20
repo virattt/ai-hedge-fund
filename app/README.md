@@ -147,6 +147,7 @@ poetry run uvicorn main:app --reload
 ```bash
 # In another terminal, from the frontend directory
 cd app/frontend
+npm install
 npm run dev
 ```
 
