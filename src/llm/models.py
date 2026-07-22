@@ -20,6 +20,7 @@ class ModelProvider(str, Enum):
     ALIBABA = "Alibaba"
     ANTHROPIC = "Anthropic"
     DEEPSEEK = "DeepSeek"
+    EDENAI = "EdenAI"
     GOOGLE = "Google"
     GROQ = "Groq"
     KIMI = "Kimi"
@@ -213,6 +214,15 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
                 }
             }
         )
+    elif model_provider == ModelProvider.EDENAI:
+        api_key = (api_keys or {}).get("EDENAI_API_KEY") or os.getenv("EDENAI_API_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure EDENAI_API_KEY is set in your .env file or provided via API keys.")
+            raise ValueError("Eden AI API key not found. Please make sure EDENAI_API_KEY is set in your .env file or provided via API keys.")
+        # Eden AI exposes an OpenAI-compatible endpoint that routes to many providers
+        # behind a single key. Models are addressed as "<provider>/<model>", e.g. "openai/gpt-5.5".
+        base_url = os.getenv("EDENAI_BASE_URL") or "https://api.edenai.run/v3"
+        return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
     elif model_provider == ModelProvider.KIMI:
         api_key = (api_keys or {}).get("MOONSHOT_API_KEY") or os.getenv("MOONSHOT_API_KEY") \
             or (api_keys or {}).get("KIMI_API_KEY") or os.getenv("KIMI_API_KEY")
