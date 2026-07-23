@@ -107,10 +107,38 @@ class CompanyNews(BaseModel):
     date: str
     url: str
     sentiment: str | None = None
+    # Set when the item comes from Newsflash (see get_newsflash_news); None for other providers.
+    corroboration: int | None = None  # number of independent sources reporting the same event
+    confidence: float | None = None  # min(1, corroboration / 3): 0.33 = single-outlet rumor, 1.0 = wire-wide story
 
 
 class CompanyNewsResponse(BaseModel):
     news: list[CompanyNews]
+
+
+class NewsflashEvent(BaseModel):
+    """A deduplicated news event from Newsflash (https://newsflash.sh).
+
+    One event represents one real-world happening, with the outlets that
+    corroborate it collapsed into `sources` / `corroboration` / `confidence`.
+    """
+
+    id: int
+    canonical_title: str
+    summary: str | None = None
+    category: str | None = None
+    first_seen_at: str
+    last_seen_at: str | None = None
+    sources: list[str] = []
+    corroboration: int = 1
+    confidence: float = 0.0
+
+    # The API may add fields (e.g. `relevance` on semantic search); don't fail on them
+    model_config = {"extra": "allow"}
+
+
+class NewsflashEventsResponse(BaseModel):
+    events: list[NewsflashEvent]
 
 
 class CompanyFacts(BaseModel):

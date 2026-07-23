@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import requests
 import time
+import urllib.parse
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ from src.data.models import (
     InsiderTrade,
     InsiderTradeResponse,
     CompanyFactsResponse,
+    NewsflashEventsResponse,
 )
 
 # Global cache instance
@@ -310,6 +312,93 @@ def get_company_news(
     # Cache the results using the comprehensive cache key
     _cache.set_company_news(cache_key, [news.model_dump() for news in all_news])
     return all_news
+
+
+def get_newsflash_news(
+    query: str,
+    end_date: str | None = None,
+    start_date: str | None = None,
+    limit: int = 100,
+    semantic: bool = False,
+    min_confidence: float = 0.0,
+    api_key: str = None,
+) -> list[CompanyNews]:
+    """Fetch corroborated news events from Newsflash (https://newsflash.sh).
+
+    Additive alternative to `get_company_news` — financialdatasets.ai remains the
+    default news provider. Newsflash crawls many outlets and dedupes coverage into
+    *events*: one real-world happening carrying a `corroboration` count (how many
+    independent sources reported it) and a `confidence` score in [0, 1]
+    (min(1, corroboration / 3)). Use these as a signal-quality gate: a story from a
+    single outlet is a 0.33-confidence rumor, while one on every wire scores 1.0.
+    Pass `min_confidence` (e.g. 0.66) to drop weakly-corroborated events before
+    they reach sentiment/LLM analysis.
+
+    Works keyless out of the box (50 requests/day). Set NEWSFLASH_API_KEY (or pass
+    `api_key`) for higher rate limits and deeper history — the archive spans ~5
+    years for backtests, with lookback depth gated by tier. `semantic=True`
+    switches from keyword to meaning-based search (useful for topics like
+    "chip export controls" rather than a ticker).
+
+    `query` can be a company name, ticker, or topic; it is echoed back as the
+    `ticker` field on the returned CompanyNews items. Each event maps to one item
+    whose `url` points at the event detail endpoint (/api/events/{id}), which
+    lists the underlying articles with their original URLs.
+    """
+    # Create a cache key that includes all parameters to ensure exact matches
+    cache_key = f"newsflash_{query}_{start_date or 'none'}_{end_date or 'none'}_{limit}_{int(semantic)}"
+
+    # Check cache first - simple exact match (min_confidence is applied after, so the unfiltered result is reusable)
+    if cached_data := _cache.get_company_news(cache_key):
+        return [news for news in (CompanyNews(**item) for item in cached_data) if (news.confidence or 0.0) >= min_confidence]
+
+    # If not in cache, fetch from API
+    headers = {}
+    newsflash_api_key = api_key or os.environ.get("NEWSFLASH_API_KEY")
+    if newsflash_api_key:
+        headers["Authorization"] = f"Bearer {newsflash_api_key}"
+
+    url = f"https://newsflash.sh/api/events?q={urllib.parse.quote(query)}&limit={limit}"
+    if start_date:
+        url += f"&from={start_date}"
+    if end_date:
+        url += f"&to={end_date}"
+    if semantic:
+        url += "&semantic=1"
+
+    response = _make_api_request(url, headers)
+    if response.status_code != 200:
+        return []
+
+    # Parse response with Pydantic model
+    try:
+        events_response = NewsflashEventsResponse(**response.json())
+        events = events_response.events
+    except Exception as e:
+        logger.warning("Failed to parse Newsflash events response for %s: %s", query, e)
+        return []
+
+    if not events:
+        return []
+
+    all_news = [
+        CompanyNews(
+            ticker=query,
+            title=event.canonical_title,
+            author=None,
+            source=", ".join(event.sources) if event.sources else "newsflash",
+            date=event.first_seen_at,
+            url=f"https://newsflash.sh/api/events/{event.id}",
+            sentiment=None,
+            corroboration=event.corroboration,
+            confidence=event.confidence,
+        )
+        for event in events
+    ]
+
+    # Cache the unfiltered results using the comprehensive cache key
+    _cache.set_company_news(cache_key, [news.model_dump() for news in all_news])
+    return [news for news in all_news if (news.confidence or 0.0) >= min_confidence]
 
 
 def get_market_cap(
