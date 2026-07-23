@@ -83,6 +83,16 @@ FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 
 **Important**: You must set at least one LLM API key (e.g. `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY`) for the hedge fund to work. 
 
+You can also set a default LLM in `.env` so CLI runs do not need a `--model` argument:
+
+```bash
+AI_HEDGE_FUND_LLM_PROVIDER=OpenRouter
+AI_HEDGE_FUND_LLM_MODEL=z-ai/glm-5.2
+OPENROUTER_API_KEY=your-openrouter-api-key
+```
+
+The `--model` argument still takes precedence when provided.
+
 ## How to Run
 
 ### ⌨️ Command Line Interface
@@ -106,6 +116,14 @@ poetry install
 #### Run the AI Hedge Fund
 ```bash
 poetry run python src/main.py --ticker AAPL,MSFT,NVDA
+```
+
+For non-interactive runs, pass analysts explicitly:
+
+```bash
+poetry run python -m src.main --ticker AAPL --analysts ben_graham
+poetry run python -m src.main --ticker AAPL,MSFT,NVDA --analysts ben_graham,warren_buffett
+poetry run python -m src.main --ticker AAPL --analysts-all
 ```
 
 You can also specify a `--ollama` flag to run the AI hedge fund using local LLMs.
