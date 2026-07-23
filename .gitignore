@@ -73,5 +73,5 @@ app/backend/alembic/versions/__pycache__/
 # User-created fund mandates (the wizard writes here); keep only the example
 v2/funds/*.yaml
 !v2/funds/example.yaml
-# Local backtest receipts (each run writes <fund>-backtest.json here)
-v2/funds/*-backtest.json
+# Local backtest receipts (each run writes <fund>-backtest-<timestamp>.json here)
+v2/funds/*-backtest*.json

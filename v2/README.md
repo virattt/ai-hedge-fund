@@ -45,9 +45,6 @@ poetry run python -m v2.run v2/funds/example.yaml
 # mandate's rebalance cadence, full result JSON (every CycleRecord) on stdout.
 poetry run python -m v2.run v2/funds/example.yaml --backtest
 
-# Backtest demo — PEAD across 25 stocks, live terminal dashboard (~20s)
-poetry run python -m v2.demo.backtest
-
 # Tests
 poetry run pytest v2/
 ```
@@ -75,7 +72,6 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | `pipeline/` | `run_cycle` — one code path for backtest/paper/live; `CycleRecord` | ✅ |
 | `backtesting/` | `backtest_fund` — the whole fund over history on `run_cycle` — plus the per-model engine | ✅ |
 | `event_study/` | Market-model abnormal returns (CARs) | ✅ |
-| `demo/` | Presentation showcases over the real engine | ✅ |
 | `validation/` | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO) | ⬜ |
 
 ✅ built · ◐ partial · ⬜ planned

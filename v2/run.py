@@ -28,6 +28,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date as _date
+from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
 
@@ -664,12 +665,11 @@ def _run_backtest(console: Console, spec: FundSpec, start: str, end: str) -> Non
     _print_backtest(console, result)
 
     FUNDS_DIR.mkdir(exist_ok=True)
-    path = FUNDS_DIR / f"{spec.name}-backtest.json"
+    # Stamp each run so reruns of the same fund don't clobber older receipts.
+    stamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+    path = FUNDS_DIR / f"{spec.name}-backtest-{stamp}.json"
     path.write_text(result.model_dump_json(indent=2))
-    console.print(f"  [green]✓[/] Saved backtest record to [bold]{path}[/]")
-    console.print(
-        "  [dim]Point-in-time: every cycle saw only data filed by its date.[/]\n"
-    )
+    console.print(f"  [green]✓[/] Saved backtest record to [bold]{path}[/]\n")
 
 
 _WARM_CHUNK = 10  # dates per warm task — small enough that one stock still fans out
@@ -704,7 +704,7 @@ def _warm_market_data(console: Console, spec: FundSpec, grid: list[str]) -> None
     )
     task = progress.add_task(
         f"Loading market data · {len(spec.universe)} stocks × {len(grid)} "
-        f"{spec.rebalance} cycles · financialdatasets.ai",
+        f"{spec.rebalance} cycles",
         total=len(spec.universe) * len(grid),
     )
 
