@@ -22,6 +22,12 @@ strategies are powered by quant models (post-earnings drift) — the model *is*
 the strategy, no persona attached. Both kinds implement one interface and
 plug into the same engine unchanged.
 
+Run a fund two ways: **one cycle** (today's data → today's target book) or a
+**backtest** — the same cycle looped over history at the mandate's rebalance
+cadence, producing an equity curve against your benchmark and a full
+`CycleRecord` for every tick. Same code path, so a backtest is honest by
+construction: it's the fund, replayed, not a separate simulator.
+
 ## Quickstart
 
 ```bash
