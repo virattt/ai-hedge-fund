@@ -9,7 +9,7 @@ from colorama import Fore, Style, init
 import questionary
 
 from .engine import BacktestEngine
-from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider
+from src.llm.models import LLM_ORDER, OLLAMA_LLM_ORDER, get_model_info, ModelProvider, get_dynamic_llm_order
 from src.utils.analysts import ANALYST_ORDER
 from src.main import run_hedge_fund
 from src.utils.ollama import ensure_ollama_and_model
@@ -102,9 +102,14 @@ def main() -> int:
             f"\nSelected {Fore.CYAN}Ollama{Style.RESET_ALL} model: {Fore.GREEN + Style.BRIGHT}{model_name}{Style.RESET_ALL}\n"
         )
     else:
+        dynamic = get_dynamic_llm_order()
+        static_names = {name for _, name, _ in LLM_ORDER}
+        extra = [(display, name, provider) for display, name, provider in dynamic if name not in static_names]
+        combined_order = LLM_ORDER + extra
+
         model_choice = questionary.select(
             "Select your LLM model:",
-            choices=[questionary.Choice(display, value=(name, provider)) for display, name, provider in LLM_ORDER],
+            choices=[questionary.Choice(display, value=(name, provider)) for display, name, provider in combined_order],
             style=questionary.Style(
                 [
                     ("selected", "fg:green bold"),

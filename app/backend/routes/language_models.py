@@ -3,6 +3,7 @@ from typing import List, Dict, Any
 
 from app.backend.models.schemas import ErrorResponse
 from app.backend.services.ollama_service import OllamaService
+from app.backend.services.openai_compatible_service import get_dynamic_models
 from src.llm.models import get_models_list
 
 router = APIRouter(prefix="/language-models")
@@ -20,9 +21,19 @@ ollama_service = OllamaService()
 async def get_language_models():
     """Get the list of available cloud-based and Ollama language models."""
     try:
-        # Start with cloud models
+        # Start with statically configured cloud models
         models = get_models_list()
-        
+
+        # Dynamically discover models from OpenAI-compatible endpoints
+        # (e.g. Alibaba DashScope, custom OPENAI_API_BASE, etc.)
+        dynamic_models = await get_dynamic_models()
+
+        # Avoid duplicates — skip any dynamic model already present in the static list
+        static_keys = {(m["model_name"], m["provider"]) for m in models}
+        for m in dynamic_models:
+            if (m["model_name"], m["provider"]) not in static_keys:
+                models.append(m)
+
         # Add available Ollama models (handles all checking internally)
         ollama_models = await ollama_service.get_available_models()
         models.extend(ollama_models)
