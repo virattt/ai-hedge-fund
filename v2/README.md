@@ -31,13 +31,19 @@ poetry install                          # dependencies
 #   FINANCIAL_DATASETS_API_KEY=...      # market/fundamentals data
 #   ANTHROPIC_API_KEY=...               # only for LLM agents (Buffett)
 
-# THE command. No arguments: build a fund interactively — pick stocks, pick
-# strategies — and watch it run its first cycle, every thesis on screen.
+# THE command. No arguments: build a fund interactively — pick stocks,
+# strategies, rebalance cadence — and watch it run its first cycle; or
+# backtest a saved fund through the last 18 months, equity curve vs its
+# benchmark.
 poetry run python -m v2.run
 
 # With a mandate: run one cycle non-interactively (data → strategies →
 # netting → risk → execution), full CycleRecord as JSON on stdout.
-poetry run python -m v2.run v2/funds/example.yaml --date 2025-06-03
+poetry run python -m v2.run v2/funds/example.yaml
+
+# Backtest a mandate: the same run_cycle looped over history at the
+# mandate's rebalance cadence, full result JSON (every CycleRecord) on stdout.
+poetry run python -m v2.run v2/funds/example.yaml --backtest
 
 # Backtest demo — PEAD across 25 stocks, live terminal dashboard (~20s)
 poetry run python -m v2.demo.backtest
@@ -67,7 +73,7 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | `risk/` | Hard limits — per-position and gross-exposure clamps | ✅ |
 | `brokers/` | `Broker` protocol + `SimBroker` (paper/live brokers planned) | ◐ |
 | `pipeline/` | `run_cycle` — one code path for backtest/paper/live; `CycleRecord` | ✅ |
-| `backtesting/` | Backtest engine over an alpha model's views (to be rebuilt onto `run_cycle`) | ✅ |
+| `backtesting/` | `backtest_fund` — the whole fund over history on `run_cycle` — plus the per-model engine | ✅ |
 | `event_study/` | Market-model abnormal returns (CARs) | ✅ |
 | `demo/` | Presentation showcases over the real engine | ✅ |
 | `validation/` | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO) | ⬜ |

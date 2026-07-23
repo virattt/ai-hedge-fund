@@ -22,9 +22,9 @@ it in backtest, paper, or live mode (see [VISION.md](./VISION.md)).
 | Item | Status |
 |------|--------|
 | `AlphaModel` / `Signal` interface — the contract every analyst implements | ✅ |
-| Backtesting engine — run an alpha model over history; report return / Sharpe / drawdown | ✅ (to be rebuilt onto `run_cycle`) |
+| Backtesting engine — `backtest_fund`: the whole fund over history on `run_cycle`, equity curve vs the mandate's benchmark (plus the per-model harness) | ✅ |
 | Event-study engine — market-model abnormal returns (CARs) | ✅ |
-| `run_cycle` — one pipeline (data → analysts → portfolio → risk → execution → ledger), three modes | 🚧 (single cycle ships; ledger + backtest/paper convergence next) |
+| `run_cycle` — one pipeline (data → analysts → portfolio → risk → execution → ledger), three modes | 🚧 (single cycle + backtest loop ship; ledger + paper next) |
 | Fund object — persistent mandate, staff, capital, books | 🚧 (`FundSpec` YAML mandates + `Fund` staffing ship; persistence/books next) |
 | Persistent ledger — positions, every decision + thesis, orders, fills, NAV history | ⬜ |
 | Point-in-time data correctness — as-of / filing-date queries, no lookahead | 🚧 |

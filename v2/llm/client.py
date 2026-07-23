@@ -45,7 +45,7 @@ class AnthropicLLM:
         self,
         model: str | None = None,
         timeout: float = 60.0,
-        max_tokens: int = 1024,
+        max_tokens: int = 4096,
     ) -> None:
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:

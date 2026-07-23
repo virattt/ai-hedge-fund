@@ -1,8 +1,8 @@
 # An example mandate. Specs are data: the fund builder (python -m v2.run),
-# a chat LLM, and the strategy generator all emit this same format. Run one
-# cycle with:
+# a chat LLM, and the strategy generator all emit this same format.
 #
-#   poetry run python -m v2.run v2/funds/example.yaml --date 2025-06-03
+#   poetry run python -m v2.run v2/funds/example.yaml              # one cycle
+#   poetry run python -m v2.run v2/funds/example.yaml --backtest   # 18 months
 #
 name: example-fund
 universe: [AAPL, MSFT, NVDA, GOOGL, AMZN]
@@ -22,3 +22,5 @@ risk:
   max_position_pct: 0.25      # master risk: no single name above 25% of equity
   max_gross_exposure: 1.0     # unlevered, across the netted book
 capital: 100000
+rebalance: weekly             # daily | weekly | monthly — how often the fund trades
+benchmark: SPY                # measured against; also the backtest's trading-day grid

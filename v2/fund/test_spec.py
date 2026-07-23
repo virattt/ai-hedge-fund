@@ -57,6 +57,18 @@ def test_defaults_applied():
     assert spec.strategies[0].blend.gross_target == 1.0
     assert spec.strategies[0].weight == 1.0
     assert spec.capital == 100_000.0
+    assert spec.rebalance == "weekly"
+    assert spec.benchmark == "SPY"
+
+
+def test_rebalance_cadence_validated():
+    assert FundSpec(**{**MINIMAL, "rebalance": "daily"}).rebalance == "daily"
+    with pytest.raises(ValidationError):
+        FundSpec(**{**MINIMAL, "rebalance": "hourly"})
+
+
+def test_benchmark_uppercased():
+    assert FundSpec(**{**MINIMAL, "benchmark": "qqq"}).benchmark == "QQQ"
 
 
 def test_typo_key_rejected():

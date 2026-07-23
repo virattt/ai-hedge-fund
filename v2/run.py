@@ -4,7 +4,9 @@ Usage::
 
     poetry run python -m v2.run
         No arguments: the interactive experience. Build a fund — pick stocks,
-        pick strategies, set capital — then watch it run its first cycle.
+        pick strategies, set capital — and watch it run its first cycle; or
+        backtest a saved fund and watch its equity curve draw against its
+        benchmark.
 
     poetry run python -m v2.run v2/funds/example.yaml --date 2025-06-03
         With a mandate: run one cycle non-interactively. The full CycleRecord
@@ -26,6 +28,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date as _date
+from datetime import timedelta
 from pathlib import Path
 
 import warnings
@@ -41,16 +44,19 @@ import yaml
 from dotenv import load_dotenv
 from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
 from rich import box
-from rich.console import Console
+from rich.console import Console, Group
 from rich.live import Live
 from rich.panel import Panel
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 from rich.text import Text
 
+from v2.backtesting import FundBacktestResult, backtest_fund, rebalance_grid
 from v2.brokers import SimBroker
 from v2.data import CachedDataClient, FDClient
 from v2.fund import Fund, FundSpec, StrategySpec, load_spec, load_strategy
 from v2.pipeline import CycleRecord, run_cycle
+from v2.pipeline.run_cycle import _MARK_LOOKBACK_DAYS
 from v2.signals import ALPHA_MODEL_REGISTRY, LLMAgent
 
 STRATEGY_DIR = Path(__file__).parent / "strategies"
@@ -72,9 +78,10 @@ VERSION = "2.0.0"  # keep in sync with pyproject.toml
 
 DEFAULT_RISK = {"max_position_pct": 0.25, "max_gross_exposure": 1.0}
 DEFAULT_CAPITAL = 100_000.0
-DEFAULT_DATE = "2025-06-03"
+_BACKTEST_WEEKS = 78  # ~18 months of history for the one-command backtest
 _REVEAL_DELAY = 0.7   # seconds between theses in the first-cycle reveal
 _ROSTER_DWELL = 0.5  # min seconds a roster row lingers on a ticker (readable on warm cache)
+_CYCLE_DWELL = 0.08  # min seconds per backtest tick, so the curve draws visibly
 
 # Sentinel returned by a prompt when the user presses Esc to step back.
 _BACK = object()
@@ -115,7 +122,17 @@ def main() -> None:
         help="as-of date YYYY-MM-DD (default: today); models only see data "
         "filed by this date",
     )
-    parser.add_argument("--out", help="also write the CycleRecord JSON to this file")
+    parser.add_argument(
+        "--backtest", action="store_true",
+        help="backtest the mandate instead of running one cycle: one run_cycle "
+        "per rebalance date from --start to --date, full result JSON on stdout",
+    )
+    parser.add_argument(
+        "--start",
+        help=f"backtest start date YYYY-MM-DD (default: {_BACKTEST_WEEKS} weeks "
+        "before --date)",
+    )
+    parser.add_argument("--out", help="also write the record JSON to this file")
     args = parser.parse_args()
 
     if args.mandate is None:
@@ -125,6 +142,31 @@ def main() -> None:
     console = Console(stderr=True)  # status + summary on stderr; stdout stays pure JSON
     spec = load_spec(args.mandate)
     fund = Fund(spec)
+
+    if args.backtest:
+        start = args.start or (
+            _date.fromisoformat(args.date) - timedelta(weeks=_BACKTEST_WEEKS)
+        ).isoformat()
+        with FDClient() as raw:
+            fd = CachedDataClient(raw)
+            with console.status(
+                f"[cyan]{spec.name}: backtesting {start} → {args.date} "
+                f"({spec.rebalance} rebalance vs {spec.benchmark})…",
+                spinner="dots",
+            ):
+                result = backtest_fund(fund, start, args.date, fd)
+        print(result.model_dump_json(indent=2))
+        if args.out:
+            Path(args.out).write_text(result.model_dump_json(indent=2))
+        m = result.metrics
+        console.print(
+            f"[bold]{spec.name}[/] {result.start} → {result.end}  ·  "
+            f"{m.n_cycles} cycles  ·  return {m.total_return_pct:+.1%} "
+            f"vs {spec.benchmark} {m.benchmark_return_pct:+.1%}  ·  "
+            f"sharpe {m.sharpe_ratio:.2f}  ·  max drawdown {m.max_drawdown_pct:.1%}"
+        )
+        return
+
     broker = SimBroker(cash=spec.capital)
 
     with FDClient() as raw:
@@ -165,20 +207,38 @@ def main() -> None:
 
 def _interactive() -> None:
     console = Console()
-
-    library = sorted(
-        (load_strategy(p) for p in STRATEGY_DIR.glob("*.yaml")),
-        key=lambda s: (_strategy_kind(s) == "systematic", s.name),
-    )
     console.print(Panel(
         f"[bold white]AI HEDGE FUND[/] · {VERSION}",
         border_style="cyan",
     ))
 
+    # Two verbs, one fund: production and the research lab, side by side
+    # (VISION.md). Esc at the menu leaves; Esc inside a flow returns here.
+    while True:
+        action = _ask(questionary.select(
+            "What do you want to do?",
+            choices=["Build a fund", "Backtest a fund"],
+        ))
+        if action is None or action is _BACK:
+            return
+        if action == "Build a fund":
+            _build_fund(console)
+            return
+        if _backtest_saved_fund(console) is not _BACK:
+            return
+
+
+def _build_fund(console: Console) -> None:
+    library = sorted(
+        (load_strategy(p) for p in STRATEGY_DIR.glob("*.yaml")),
+        key=lambda s: (_strategy_kind(s) == "systematic", s.name),
+    )
+
     # The builder is a small state machine: each step reads/writes `state` and
     # returns _BACK when the user presses Esc, so we can rewind one step.
     state: dict = {}
-    steps = [_step_name, _step_tickers, _step_strategies(library), _step_capital]
+    steps = [_step_name, _step_tickers, _step_strategies(library), _step_capital,
+             _step_cadence]
     i = 0
     while i < len(steps):
         result = steps[i](console, state)
@@ -194,6 +254,7 @@ def _interactive() -> None:
         strategies=[s.model_dump() for s in state["strategies"]],
         risk=DEFAULT_RISK,
         capital=state["capital"],
+        rebalance=state["rebalance"],
     )
 
     FUNDS_DIR.mkdir(exist_ok=True)
@@ -210,8 +271,112 @@ def _interactive() -> None:
         console.print(f"\n  Later: [bold]poetry run python -m v2.run {path}[/]")
         return
 
-    record = _run_with_roster(console, spec, DEFAULT_DATE)
+    record = _run_with_roster(console, spec, _date.today().isoformat())
     _print_cycle(console, record)
+
+
+def _backtest_saved_fund(console: Console):
+    """The research lab's front door: pick a saved fund, choose the tickers to
+    run (pre-filled from its universe, editable per run), pick a window, and
+    backtest it. Same step machine as the builder — Esc rewinds one step, and
+    Esc at the picker returns _BACK (back to the menu).
+    """
+    paths = sorted(FUNDS_DIR.glob("*.yaml"))
+    if not paths:
+        console.print(
+            f"\n  No funds in [bold]{FUNDS_DIR}[/] yet — build one first.\n"
+        )
+        return _BACK
+    specs = [load_spec(p) for p in paths]
+
+    state: dict = {}
+    steps = [_step_pick_fund(specs), _step_tickers,
+             _step_backtest_start, _step_backtest_end]
+    i = 0
+    while i < len(steps):
+        result = steps[i](console, state)
+        if result is _BACK:
+            if i == 0:
+                return _BACK
+            i -= 1
+            continue
+        i += 1
+
+    # Backtest the picked fund with the tickers chosen for this run; the saved
+    # YAML is untouched (model_copy is a shallow, unvalidated override and the
+    # ticker step already upper-cased and de-duped the universe).
+    spec = state["fund"].model_copy(update={"universe": state["universe"]})
+    _run_backtest(console, spec, state["start"], state["end"])
+
+
+def _step_pick_fund(specs):
+    """Returns a step closure bound to the loaded fund specs."""
+    def step(console: Console, state: dict):
+        choice = _ask(questionary.select(
+            "Which fund?",
+            choices=[questionary.Choice(_fund_label(s), value=s) for s in specs],
+        ))
+        if choice is None:
+            sys.exit(1)  # ctrl-c
+        if choice is _BACK:
+            return _BACK
+        state["fund"] = choice
+        # Seed the ticker step with the saved universe; the user can trim or
+        # extend it for this run without editing the fund's YAML.
+        state["universe"] = list(choice.universe)
+    return step
+
+
+def _step_backtest_start(console: Console, state: dict):
+    default = state.get(
+        "start", (_date.today() - timedelta(weeks=_BACKTEST_WEEKS)).isoformat()
+    )
+    raw = _ask(questionary.text(
+        "Backtest from (YYYY-MM-DD):", default=default, validate=_valid_date,
+    ))
+    if raw is None:
+        sys.exit(1)
+    if raw is _BACK:
+        return _BACK
+    state["start"] = raw.strip()
+
+
+def _step_backtest_end(console: Console, state: dict):
+    def validate(text: str):
+        ok = _valid_date(text)
+        if ok is not True:
+            return ok
+        if text.strip() <= state["start"]:
+            return f"Must be after {state['start']}."
+        return True
+
+    raw = _ask(questionary.text(
+        "Backtest to (YYYY-MM-DD):",
+        default=state.get("end", _date.today().isoformat()),
+        validate=validate,
+    ))
+    if raw is None:
+        sys.exit(1)
+    if raw is _BACK:
+        return _BACK
+    state["end"] = raw.strip()
+    console.print(f"\nWindow: [green]{state['start']} → {state['end']}[/]\n")
+
+
+def _valid_date(text: str):
+    try:
+        _date.fromisoformat(text.strip())
+        return True
+    except ValueError:
+        return "Use YYYY-MM-DD."
+
+
+def _fund_label(spec: FundSpec) -> str:
+    """One aligned line per fund: name, universe, cadence."""
+    universe = ", ".join(spec.universe[:4])
+    if len(spec.universe) > 4:
+        universe += ", …"
+    return f"{spec.name:<18} {universe} · {spec.rebalance}"
 
 
 # ---------------------------------------------------------------------------
@@ -336,6 +501,20 @@ def _step_capital(console: Console, state: dict):
     console.print(f"\nCapital: [green]${state['capital']:,.0f}[/]\n")
 
 
+def _step_cadence(console: Console, state: dict):
+    cadence = _ask(questionary.select(
+        "Rebalance cadence:",
+        choices=["daily", "weekly", "monthly"],
+        default=state.get("rebalance", "weekly"),
+    ))
+    if cadence is None:
+        sys.exit(1)
+    if cadence is _BACK:
+        return _BACK
+    state["rebalance"] = cadence
+    console.print(f"\nRebalance: [green]{cadence}[/]\n")
+
+
 # ---------------------------------------------------------------------------
 # The running UI — v1's parallel roster
 # ---------------------------------------------------------------------------
@@ -348,11 +527,7 @@ def _run_with_roster(console: Console, spec: FundSpec, as_of: str) -> CycleRecor
     `run_cycle` afterward reads those caches: instant, sequential, and the
     single source of truth (fail-loud errors surface there, not here).
     """
-    agent_names: list[str] = []
-    for strategy in spec.strategies:
-        for m in strategy.models:
-            if m.name not in agent_names:
-                agent_names.append(m.name)
+    agent_names = _agent_names(spec)
     display = {n: DISPLAY_NAMES.get(n, n) for n in agent_names}
 
     roster = _Roster(console, [display[n] for n in agent_names])
@@ -431,7 +606,15 @@ class _Roster:
             elif status == "working":
                 row.append("⋯ ", style="yellow")
                 row.append(f"{name:<24}", style="bold")
-                row.append(f"[{ticker}] ", style="cyan")
+                # In the backtest warm phase the label is "TICKER · date";
+                # tint the date red so the point-in-time cursor stands out.
+                symbol, _, as_of = ticker.partition(" · ")
+                row.append("[", style="cyan")
+                row.append(symbol, style="cyan")
+                if as_of:
+                    row.append(" · ", style="cyan")
+                    row.append(as_of, style="red")
+                row.append("] ", style="cyan")
                 row.append("Analyzing", style="yellow")
             else:
                 row.append("⋯ ", style="dim")
@@ -439,6 +622,338 @@ class _Roster:
                 row.append("queued", style="dim")
             table.add_row(row)
         return table
+
+
+# ---------------------------------------------------------------------------
+# The backtest — time-travel the fund through history
+# ---------------------------------------------------------------------------
+
+def _run_backtest(console: Console, spec: FundSpec, start: str, end: str) -> None:
+    """Warm the caches across history (visible work), then replay the fund
+    tick by tick off the warm cache while the equity curve draws itself.
+
+    Warm-then-replay, same contract as _run_with_roster: threads only warm
+    disk caches; the sequential backtest_fund afterward is the source of
+    truth (determinism and fail-loud live in the engine, not the UI).
+    """
+    with FDClient() as raw:
+        bars = CachedDataClient(raw).get_prices(spec.benchmark, start, end)
+    closes = {b.time[:10]: b.close for b in bars if start <= b.time[:10] <= end}
+    if not closes:
+        raise ValueError(
+            f"no {spec.benchmark} bars in [{start}, {end}] — "
+            "cannot build the trading grid"
+        )
+    grid = rebalance_grid(sorted(closes), spec.rebalance)
+
+    console.print(
+        f"\n[bold white]BACKTEST:[/] {start} → {end}"
+        f"  [dim]{len(grid)} {spec.rebalance} cycles · vs {spec.benchmark}[/]\n"
+    )
+
+    _warm_market_data(console, spec, grid)
+    _warm_agents(console, spec, grid)
+
+    fund = Fund(spec)
+    board = _BacktestBoard(console, spec, closes, len(grid))
+    with FDClient() as raw:
+        with board:
+            result = backtest_fund(fund, start, end, CachedDataClient(raw),
+                                   on_cycle=board.tick)
+
+    _print_backtest(console, result)
+
+    FUNDS_DIR.mkdir(exist_ok=True)
+    path = FUNDS_DIR / f"{spec.name}-backtest.json"
+    path.write_text(result.model_dump_json(indent=2))
+    console.print(f"  [green]✓[/] Saved backtest record to [bold]{path}[/]")
+    console.print(
+        "  [dim]Point-in-time: every cycle saw only data filed by its date.[/]\n"
+    )
+
+
+_WARM_CHUNK = 10  # dates per warm task — small enough that one stock still fans out
+
+
+def _warm_market_data(console: Console, spec: FundSpec, grid: list[str]) -> None:
+    """Prefetch exactly the requests the engine will make (the disk cache
+    keys on exact request params, so warming must mirror them per date).
+    Doing this first also keeps the agent threads from racing duplicate
+    fetches of the shared snapshot data.
+
+    Work is split into (ticker, chunk-of-dates) tasks rather than one task
+    per ticker: parallelism comes from the window, so a one-stock fund
+    still saturates the pool instead of fetching 78 weeks on one thread.
+    """
+    has_agents = any(
+        issubclass(ALPHA_MODEL_REGISTRY[m.name], LLMAgent)
+        for s in spec.strategies for m in s.models
+    )
+    chunks = [
+        (ticker, grid[j:j + _WARM_CHUNK])
+        for ticker in spec.universe
+        for j in range(0, len(grid), _WARM_CHUNK)
+    ]
+
+    progress = Progress(
+        SpinnerColumn(style="cyan"),
+        TextColumn("[bold]{task.description}"),
+        BarColumn(bar_width=40, complete_style="cyan"),
+        TextColumn("{task.completed}/{task.total}"),
+        console=console,
+    )
+    task = progress.add_task(
+        f"Loading market data · {len(spec.universe)} stocks × {len(grid)} "
+        f"{spec.rebalance} cycles · financialdatasets.ai",
+        total=len(spec.universe) * len(grid),
+    )
+
+    def prefetch(ticker: str, dates: list[str]) -> None:
+        with FDClient() as raw:  # own client per task (requests isn't shared-safe)
+            fd = CachedDataClient(raw)
+            if has_agents:
+                fd.get_company_facts(ticker)  # disk-cached after the first task
+            for as_of in dates:
+                lookback = (
+                    _date.fromisoformat(as_of) - timedelta(days=_MARK_LOOKBACK_DAYS)
+                ).isoformat()
+                fd.get_prices(ticker, lookback, as_of)  # run_cycle's marks
+                if has_agents:
+                    # build_snapshot's exact request (periods default = 20)
+                    fd.get_financial_metrics(ticker, as_of, period="ttm", limit=20)
+                progress.advance(task)  # rich Progress is thread-safe
+
+    with progress:
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = [pool.submit(prefetch, t, ds) for t, ds in chunks]
+            for future in as_completed(futures):
+                future.result()  # fail loud — bad data here poisons every cycle
+
+
+def _warm_agents(console: Console, spec: FundSpec, grid: list[str]) -> None:
+    """The roster, across history: every agent replays the whole window,
+    warming prompt caches (and model-specific data, e.g. PEAD's earnings).
+    No dwell — an unchanged snapshot is an instant cache hit, and the LLM
+    calls on new filings pace the roster naturally."""
+    agent_names = _agent_names(spec)
+    display = {n: DISPLAY_NAMES.get(n, n) for n in agent_names}
+    roster = _Roster(console, [display[n] for n in agent_names])
+
+    def warm(agent_name: str) -> None:
+        who = display[agent_name]
+        model = ALPHA_MODEL_REGISTRY[agent_name]()  # own instance per thread
+        with FDClient() as raw:
+            fd = CachedDataClient(raw)
+            for as_of in grid:
+                for ticker in spec.universe:
+                    roster.working(who, f"{ticker} · {as_of}")
+                    try:
+                        model.predict(ticker, as_of, fd)
+                    except Exception:
+                        pass  # best-effort warm; backtest_fund is the source of truth
+        roster.done(who)
+
+    with roster:
+        with ThreadPoolExecutor(max_workers=min(8, len(agent_names))) as pool:
+            for future in as_completed([pool.submit(warm, n) for n in agent_names]):
+                future.result()
+
+
+def _agent_names(spec: FundSpec) -> list[str]:
+    """Unique model names across strategies, in first-appearance order."""
+    names: list[str] = []
+    for strategy in spec.strategies:
+        for m in strategy.models:
+            if m.name not in names:
+                names.append(m.name)
+    return names
+
+
+_CHART_HEIGHT = 8
+
+
+class _BacktestBoard:
+    """Live dashboard while the backtest replays: running stats over a
+    unicode equity curve, green above starting capital and red below."""
+
+    def __init__(self, console: Console, spec: FundSpec,
+                 benchmark_closes: dict[str, float], n_cycles: int) -> None:
+        self._spec = spec
+        self._closes = benchmark_closes
+        self._n = n_cycles
+        self._dates: list[str] = []
+        self._nav: list[float] = []
+        self._width = max(20, min(console.width - 8, 90))
+        self._live = Live(console=console, refresh_per_second=12)
+
+    def __enter__(self) -> _BacktestBoard:
+        self._live.start()
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._live.stop()
+
+    def tick(self, i: int, n: int, record: CycleRecord) -> None:
+        started = time.time()
+        self._dates.append(record.as_of)
+        self._nav.append(record.nav)
+        self._live.update(self._render())
+        dwell = _CYCLE_DWELL - (time.time() - started)
+        if dwell > 0:
+            time.sleep(dwell)
+
+    def _render(self) -> Group:
+        capital = self._spec.capital
+        nav = self._nav[-1]
+        fund_return = nav / capital - 1
+        benchmark_return = (
+            self._closes[self._dates[-1]] / self._closes[self._dates[0]] - 1
+        )
+        curve = [capital] + self._nav
+        peak = curve[0]
+        max_dd = 0.0
+        for value in curve:
+            if value > peak:
+                peak = value
+            max_dd = max(max_dd, (peak - value) / peak)
+
+        def cell(label: str, value: str, style: str) -> Text:
+            t = Text(justify="center")
+            t.append(f"{label}\n", style="dim")
+            t.append(value, style=f"bold {style}")
+            return t
+
+        stats = Table.grid(expand=True)
+        for _ in range(4):
+            stats.add_column(justify="center")
+        stats.add_row(
+            cell("PORTFOLIO", f"${nav:,.0f}", "white"),
+            cell("RETURN", f"{fund_return:+.2%}",
+                 "green" if fund_return >= 0 else "red"),
+            cell(self._spec.benchmark, f"{benchmark_return:+.2%}",
+                 "green" if benchmark_return >= 0 else "red"),
+            cell("MAX DRAWDOWN", f"{max_dd:.2%}", "red"),
+        )
+
+        benchmark_curve = [capital] + [
+            capital * self._closes[d] / self._closes[self._dates[0]]
+            for d in self._dates
+        ]
+        fund_color = "green" if fund_return >= 0 else "red"
+        footer = Text(
+            f"cycle {len(self._nav)}/{self._n} · {self._dates[-1]}", style="dim"
+        )
+        return Group(
+            Panel(stats, border_style="dim"),
+            Panel(
+                Group(*_render_chart(curve, benchmark_curve, capital, self._width)),
+                border_style="dim", title="[dim]equity curve", title_align="left",
+                subtitle=f"[bold {fund_color}]──[/] fund   "
+                         f"[cyan]──[/] {self._spec.benchmark}",
+                subtitle_align="right",
+            ),
+            footer,
+        )
+
+
+def _render_chart(
+    fund: list[float],
+    benchmark: list[float],
+    baseline: float,
+    width: int,
+) -> list[Text]:
+    """Two-series unicode line chart, tearsheet-style: the fund against its
+    benchmark on one set of axes, dollar labels in a left gutter. Lines are
+    box-drawing polylines (asciichart-style), not filled areas — the gap
+    between the two lines is the point. The fund draws last, so where the
+    lines collide the fund wins the cell.
+    """
+    lo = min(min(fund), min(benchmark))
+    hi = max(max(fund), max(benchmark))
+    span = (hi - lo) or 1.0
+
+    labels = {
+        _CHART_HEIGHT - 1: _money(hi),
+        _CHART_HEIGHT // 2: _money(lo + span * (_CHART_HEIGHT // 2) / (_CHART_HEIGHT - 1)),
+        0: _money(lo),
+    }
+    gutter = max(len(label) for label in labels.values())
+    plot_width = max(20, width - gutter - 1)
+
+    def resample(values: list[float]) -> list[float]:
+        if len(values) == 1:
+            return values * plot_width
+        step = (len(values) - 1) / (plot_width - 1)
+        return [values[round(i * step)] for i in range(plot_width)]
+
+    # grid[row][col] = (char, style); row 0 is the top
+    grid = [[(" ", "") for _ in range(plot_width)] for _ in range(_CHART_HEIGHT)]
+
+    def draw(values: list[float], style_of) -> None:
+        cols = resample(values)
+        level = [round((v - lo) / span * (_CHART_HEIGHT - 1)) for v in cols]
+        for x in range(plot_width - 1):
+            y0, y1 = level[x], level[x + 1]
+            if y0 == y1:
+                grid[_CHART_HEIGHT - 1 - y0][x] = ("─", style_of(cols[x]))
+            else:
+                # Rising: turn up (╯) at the low level, arrive (╭) at the high.
+                # Falling: turn down (╮) at the high, arrive (╰) at the low.
+                grid[_CHART_HEIGHT - 1 - y0][x] = (
+                    "╯" if y1 > y0 else "╮", style_of(cols[x]))
+                grid[_CHART_HEIGHT - 1 - y1][x] = (
+                    "╭" if y1 > y0 else "╰", style_of(cols[x]))
+                for y in range(min(y0, y1) + 1, max(y0, y1)):
+                    grid[_CHART_HEIGHT - 1 - y][x] = ("│", style_of(cols[x]))
+        grid[_CHART_HEIGHT - 1 - level[-1]][-1] = ("─", style_of(cols[-1]))
+
+    draw(benchmark, lambda v: "cyan")
+    draw(fund, lambda v: "bold green" if v >= baseline else "bold red")
+
+    rows: list[Text] = []
+    for row in range(_CHART_HEIGHT):
+        level = _CHART_HEIGHT - 1 - row
+        line = Text()
+        if level in labels:
+            line.append(f"{labels[level]:>{gutter}}┤", style="dim")
+        else:
+            line.append(f"{'':>{gutter}}│", style="dim")
+        for char, style in grid[row]:
+            line.append(char, style=style)
+        rows.append(line)
+    return rows
+
+
+def _money(value: float) -> str:
+    if abs(value) >= 10_000:
+        return f"${value / 1000:,.0f}k"
+    return f"${value:,.0f}"
+
+
+def _print_backtest(console: Console, result: FundBacktestResult) -> None:
+    m = result.metrics
+    console.print(
+        f"\n[bold white]BACKTEST RESULTS:[/] [bold cyan]{result.fund}[/]"
+        f"  [dim]({result.start} → {result.end} · {result.rebalance} rebalance"
+        f" · {m.n_cycles} cycles · {m.n_orders} orders)[/]"
+    )
+    table = Table(box=box.SQUARE, header_style="bold")
+    for header in ("Total Return", "Annualized", "Sharpe", "Max Drawdown",
+                   f"{result.benchmark} Return", "Excess"):
+        table.add_column(header, justify="right")
+    total_tone = "bold green" if m.total_return_pct >= 0 else "bold red"
+    sharpe_tone = ("green" if m.sharpe_ratio > 1
+                   else "yellow" if m.sharpe_ratio > 0 else "red")
+    excess_tone = "bold green" if m.excess_return_pct >= 0 else "bold red"
+    table.add_row(
+        Text(f"{m.total_return_pct:+.1%}", style=total_tone),
+        f"{m.annualized_return_pct:+.1%}",
+        Text(f"{m.sharpe_ratio:.2f}", style=sharpe_tone),
+        Text(f"{m.max_drawdown_pct:.1%}", style="red"),
+        f"{m.benchmark_return_pct:+.1%}",
+        Text(f"{m.excess_return_pct:+.1%}", style=excess_tone),
+    )
+    console.print(table)
 
 
 def _build_custom_strategy(console: Console):

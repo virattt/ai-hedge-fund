@@ -107,6 +107,23 @@ class FundSpec(BaseModel):
     strategies: list[StrategySpec] = Field(min_length=1)
     risk: RiskLimits
     capital: float = Field(default=100_000.0, gt=0)
+    rebalance: Literal["daily", "weekly", "monthly"] = Field(
+        default="weekly",
+        description="how often the fund re-runs its cycle — a mandate choice, "
+        "not an engine constant: a fundamentals fund trades weekly, a "
+        "news-driven fund daily. The backtester (and the future daemon) obey "
+        "it; run_cycle itself never sees it.",
+    )
+    benchmark: str = Field(
+        default="SPY",
+        description="what the fund measures itself against; also the source "
+        "of the backtest's trading-day grid",
+    )
+
+    @field_validator("benchmark")
+    @classmethod
+    def _uppercase_benchmark(cls, ticker: str) -> str:
+        return ticker.upper()
 
     @field_validator("universe")
     @classmethod
