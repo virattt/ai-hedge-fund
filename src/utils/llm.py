@@ -36,7 +36,7 @@ def call_llm(
     else:
         # Use system defaults when no state or agent_name is provided
         model_name = "gpt-4.1"
-        model_provider = "OPENAI"
+        model_provider = "OpenAI"
 
     # Extract API keys from state if available
     api_keys = None
@@ -45,8 +45,9 @@ def call_llm(
         if request and hasattr(request, 'api_keys'):
             api_keys = request.api_keys
 
+    effort = state.get("metadata", {}).get("effort") if state else None
     model_info = get_model_info(model_name, model_provider)
-    llm = get_model(model_name, model_provider, api_keys)
+    llm = get_model(model_name, model_provider, api_keys, effort=effort)
 
     # For non-JSON support models, we can use structured output
     if not (model_info and not model_info.has_json_mode()):

@@ -43,6 +43,23 @@ def add_common_args(
     if include_ollama:
         parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
     parser.add_argument("--model", type=str, required=False, help="Model name to use (e.g., gpt-4o)")
+    parser.add_argument(
+        "--effort",
+        type=str,
+        required=False,
+        choices=["low", "medium", "high", "xhigh", "max"],
+        help="Thinking effort level for Claude Code CLI models (low/medium/high/xhigh/max)",
+    )
+    parser.add_argument(
+        "--no-snapshot",
+        action="store_true",
+        help="Skip the structured ticker snapshot (price/fundamental/technical/analyst tables) that runs before the LangGraph pipeline.",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress the rich-console snapshot output. The HTML dashboard is still written to ./reports/<TICKER>_snapshot_<date>.html. The recommended UX is `poetry run snapshot-ui` which opens a browser dashboard.",
+    )
     return parser
 
 
@@ -223,6 +240,7 @@ class CLIInputs:
     margin_requirement: float
     show_reasoning: bool = False
     show_agent_graph: bool = False
+    effort: Optional[str] = None
     raw_args: Optional[argparse.Namespace] = None
 
 
@@ -284,6 +302,7 @@ def parse_cli_inputs(
         margin_requirement=getattr(args, "margin_requirement", 0.0),
         show_reasoning=getattr(args, "show_reasoning", False),
         show_agent_graph=getattr(args, "show_agent_graph", False),
+        effort=getattr(args, "effort", None),
         raw_args=args,
     )
 
