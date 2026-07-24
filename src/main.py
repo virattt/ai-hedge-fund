@@ -7,11 +7,17 @@ from colorama import Fore, Style, init
 import questionary
 from src.agents.portfolio_manager import portfolio_management_agent
 from src.agents.risk_manager import risk_management_agent
+from src.agents.fyi_market_context import fyi_market_context_agent
+from src.agents.fyi_deep_technical import fyi_deep_technical_agent
+from src.agents.fyi_deep_fundamental import fyi_deep_fundamental_agent
 from src.graph.state import AgentState
 from src.utils.display import print_trading_output
 from src.utils.analysts import ANALYST_ORDER, get_analyst_nodes
 from src.utils.progress import progress
 from src.utils.visualize import save_graph_as_png
+from src.utils.stock_snapshot import build_and_print_snapshots
+from src.utils.validator import validate_analysis
+from src.analysis import generate_snapshot, render_console, render_html
 from src.cli.input import (
     parse_cli_inputs,
 )
@@ -52,6 +58,7 @@ def run_hedge_fund(
     selected_analysts: list[str] = [],
     model_name: str = "gpt-4.1",
     model_provider: str = "OpenAI",
+    effort: str | None = None,
 ):
     # Start progress tracking
     progress.start()
@@ -79,6 +86,7 @@ def run_hedge_fund(
                     "show_reasoning": show_reasoning,
                     "model_name": model_name,
                     "model_provider": model_provider,
+                    "effort": effort,
                 },
             },
         )
@@ -97,31 +105,42 @@ def start(state: AgentState):
     return state
 
 
+_FYI_AGENTS = {
+    "fyi_market_context_agent": fyi_market_context_agent,
+    "fyi_deep_technical_agent": fyi_deep_technical_agent,
+    "fyi_deep_fundamental_agent": fyi_deep_fundamental_agent,
+}
+
+
 def create_workflow(selected_analysts=None):
-    """Create the workflow with selected analysts."""
+    """Create the workflow with selected analysts plus always-on FYI agents."""
     workflow = StateGraph(AgentState)
     workflow.add_node("start_node", start)
 
-    # Get analyst nodes from the configuration
     analyst_nodes = get_analyst_nodes()
 
-    # Default to all analysts if none selected
     if selected_analysts is None:
         selected_analysts = list(analyst_nodes.keys())
-    # Add selected analyst nodes
+
     for analyst_key in selected_analysts:
         node_name, node_func = analyst_nodes[analyst_key]
         workflow.add_node(node_name, node_func)
         workflow.add_edge("start_node", node_name)
 
-    # Always add risk and portfolio management
+    # Always-on FYI agents (parallel with decision analysts, excluded from PM)
+    for fyi_id, fyi_func in _FYI_AGENTS.items():
+        workflow.add_node(fyi_id, fyi_func)
+        workflow.add_edge("start_node", fyi_id)
+
     workflow.add_node("risk_management_agent", risk_management_agent)
     workflow.add_node("portfolio_manager", portfolio_management_agent)
 
-    # Connect selected analysts to risk management
     for analyst_key in selected_analysts:
         node_name = analyst_nodes[analyst_key][0]
         workflow.add_edge(node_name, "risk_management_agent")
+
+    for fyi_id in _FYI_AGENTS:
+        workflow.add_edge(fyi_id, "risk_management_agent")
 
     workflow.add_edge("risk_management_agent", "portfolio_manager")
     workflow.add_edge("portfolio_manager", END)
@@ -141,6 +160,29 @@ if __name__ == "__main__":
 
     tickers = inputs.tickers
     selected_analysts = inputs.selected_analysts
+
+    # ===== Pre-run: structured ticker snapshot (price + fundamental + technical + analyst) =====
+    # This runs BEFORE the LangGraph pipeline. Output goes to the console as rich tables
+    # and to ./reports/<TICKER>_snapshot_<date>.html as a single-file HTML dashboard.
+    # Self-contained — uses yfinance, no API keys required, no LLM calls.
+    if not getattr(inputs, "no_snapshot", False):
+        from pathlib import Path as _Path
+        from datetime import date as _date
+
+        reports_dir = _Path("reports")
+        reports_dir.mkdir(exist_ok=True)
+        _today = _date.today().strftime("%Y-%m-%d")
+        _quiet = getattr(inputs, "quiet", False)
+        for _t in tickers:
+            try:
+                _report = generate_snapshot(_t)
+                if not _quiet:
+                    render_console(_report)
+                _out = reports_dir / f"{_t}_snapshot_{_today}.html"
+                render_html(_report, _out)
+                print(f"{Fore.CYAN}Saved snapshot HTML → {_out}{Style.RESET_ALL}")
+            except Exception as _e:
+                print(f"{Fore.YELLOW}Snapshot failed for {_t}: {_e}{Style.RESET_ALL}")
 
     # Construct portfolio here
     portfolio = {
@@ -175,5 +217,29 @@ if __name__ == "__main__":
         selected_analysts=inputs.selected_analysts,
         model_name=inputs.model_name,
         model_provider=inputs.model_provider,
+        effort=inputs.effort,
     )
     print_trading_output(result)
+
+    # Live stock snapshot (always runs)
+    # Build a minimal state so the snapshot's LLM call uses the same model as the run
+    snapshot_state = {
+        "messages": [],
+        "data": {},
+        "metadata": {
+            "model_name": inputs.model_name,
+            "model_provider": inputs.model_provider,
+            "effort": inputs.effort,
+            "show_reasoning": False,
+        },
+    }
+    snapshots = build_and_print_snapshots(
+        tickers=tickers,
+        result=result,
+        start_date=inputs.start_date,
+        end_date=inputs.end_date,
+        state=snapshot_state,
+    )
+
+    # GPT-5.5 validation pass (runs if OPENAI_API_KEY is set)
+    validate_analysis(result, snapshots)

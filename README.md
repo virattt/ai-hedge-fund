@@ -81,7 +81,9 @@ OPENAI_API_KEY=your-openai-api-key
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 
-**Important**: You must set at least one LLM API key (e.g. `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY`) for the hedge fund to work. 
+**Important**: You must set at least one LLM API key (e.g. `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY`) for the hedge fund to work.
+
+**Claude Code subscription fallback**: If you don't set `ANTHROPIC_API_KEY` but are logged into the [Claude Code](https://docs.claude.com/en/docs/claude-code) CLI locally, Anthropic models will route through your Claude Code subscription via the `claude-agent-sdk` package — no API key required. 
 
 ## How to Run
 

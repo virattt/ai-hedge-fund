@@ -56,7 +56,9 @@ def portfolio_management_agent(state: AgentState, agent_id: str = "portfolio_man
         # Compress analyst signals to {sig, conf}
         ticker_signals = {}
         for agent, signals in analyst_signals.items():
-            if not agent.startswith("risk_management_agent") and ticker in signals:
+            if (not agent.startswith("risk_management_agent")
+                    and not agent.startswith("fyi_")
+                    and ticker in signals):
                 sig = signals[ticker].get("signal")
                 conf = signals[ticker].get("confidence")
                 if sig is not None and conf is not None:

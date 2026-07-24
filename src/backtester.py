@@ -49,6 +49,26 @@ if __name__ == "__main__":
         include_reasoning_flag=False,
     )
 
+    # Pre-run structured snapshots (once per ticker, before the backtest loop).
+    # Skippable via --no-snapshot.
+    if inputs.tickers and not getattr(inputs, "no_snapshot", False):
+        from pathlib import Path as _Path
+        from datetime import date as _date
+        from src.analysis import generate_snapshot, render_console, render_html
+
+        reports_dir = _Path("reports")
+        reports_dir.mkdir(exist_ok=True)
+        _today = _date.today().strftime("%Y-%m-%d")
+        for _t in inputs.tickers:
+            try:
+                _report = generate_snapshot(_t)
+                render_console(_report)
+                _out = reports_dir / f"{_t}_snapshot_{_today}.html"
+                render_html(_report, _out)
+                print(f"{Fore.CYAN}Saved snapshot HTML → {_out}{Style.RESET_ALL}")
+            except Exception as _e:
+                print(f"{Fore.YELLOW}Snapshot failed for {_t}: {_e}{Style.RESET_ALL}")
+
     # Create and run the backtester
     backtester = BacktestEngine(
         agent=run_hedge_fund,
