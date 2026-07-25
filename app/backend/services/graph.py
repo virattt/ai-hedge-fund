@@ -40,54 +40,67 @@ def create_graph(graph_nodes: list, graph_edges: list) -> StateGraph:
 
     # Get analyst nodes from the configuration
     analyst_nodes = {key: (f"{key}_agent", config["agent_func"]) for key, config in ANALYST_CONFIG.items()}
-    
+
     # Extract agent IDs from graph structure
     agent_ids = [node.id for node in graph_nodes]
-    agent_ids_set = set(agent_ids)
-    
+
     # Track which nodes are portfolio managers for special handling
     portfolio_manager_nodes = set()
-    
+
+    # Track nodes actually registered with the StateGraph so edges are only
+    # added between nodes that exist.  The frontend may send nodes whose
+    # base key is not in ANALYST_CONFIG (e.g. a visual "stock-analyzer" node);
+    # those are silently skipped during add_node, but their IDs still appear
+    # in agent_ids.  Using agent_ids_set for the edge filter therefore causes
+    # graph.add_edge to reference an unknown node and raises a ValueError.
+    registered_nodes = {"start_node"}
+
     # Add agent nodes
     for unique_agent_id in agent_ids:
         base_agent_key = extract_base_agent_key(unique_agent_id)
-        
+
         # Track portfolio manager nodes for special handling (before ANALYST_CONFIG check)
         if base_agent_key == "portfolio_manager":
             portfolio_manager_nodes.add(unique_agent_id)
             continue
-            
+
         # Skip if the base agent key is not in our analyst configuration
         if base_agent_key not in ANALYST_CONFIG:
             continue
-            
+
         node_name, node_func = analyst_nodes[base_agent_key]
         agent_function = create_agent_function(node_func, unique_agent_id)
         graph.add_node(unique_agent_id, agent_function)
-    
+        registered_nodes.add(unique_agent_id)
+
     # Add portfolio manager nodes and their corresponding risk managers
     risk_manager_nodes = {}  # Map portfolio manager ID to risk manager ID
     for portfolio_manager_id in portfolio_manager_nodes:
         portfolio_manager_function = create_agent_function(portfolio_management_agent, portfolio_manager_id)
         graph.add_node(portfolio_manager_id, portfolio_manager_function)
-        
+        registered_nodes.add(portfolio_manager_id)
+
         # Create unique risk manager for this portfolio manager
         suffix = portfolio_manager_id.split('_')[-1]
         risk_manager_id = f"risk_management_agent_{suffix}"
         risk_manager_nodes[portfolio_manager_id] = risk_manager_id
-        
+
         # Add the risk manager node
         risk_manager_function = create_agent_function(risk_management_agent, risk_manager_id)
         graph.add_node(risk_manager_id, risk_manager_function)
+        registered_nodes.add(risk_manager_id)
 
     # Build connections based on React Flow graph structure
     nodes_with_incoming_edges = set()
     nodes_with_outgoing_edges = set()
     direct_to_portfolio_managers = {}  # Map analyst ID to portfolio manager ID for direct connections
-    
+
     for edge in graph_edges:
-        # Only consider edges between agent nodes (not from stock tickers)
-        if edge.source in agent_ids_set and edge.target in agent_ids_set:
+        # Only wire edges between nodes that were actually added to the graph.
+        # Frontend payloads may include visual-only nodes (e.g. stock-analyzer)
+        # whose base keys are not in ANALYST_CONFIG; those nodes are skipped
+        # above, so referencing them in add_edge would raise "Unknown node".
+        if edge.source in registered_nodes and edge.target in registered_nodes:
             source_base_key = extract_base_agent_key(edge.source)
             target_base_key = extract_base_agent_key(edge.target)
             
