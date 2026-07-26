@@ -105,7 +105,11 @@ def compute_allowed_actions(
     positions = portfolio.get("positions", {}) or {}
     margin_requirement = float(portfolio.get("margin_requirement", 0.5))
     margin_used = float(portfolio.get("margin_used", 0.0))
-    equity = float(portfolio.get("equity", cash))
+    short_sale_proceeds = sum(
+        float(position.get("short", 0) or 0) * float(position.get("short_cost_basis", 0.0) or 0.0)
+        for position in positions.values()
+    )
+    available_cash = max(0.0, cash - margin_used - short_sale_proceeds)
 
     for ticker in tickers:
         price = float(current_prices.get(ticker, 0.0))
@@ -123,8 +127,8 @@ def compute_allowed_actions(
         # Long side
         if long_shares > 0:
             actions["sell"] = long_shares
-        if cash > 0 and price > 0:
-            max_buy_cash = int(cash // price)
+        if available_cash > 0 and price > 0:
+            max_buy_cash = int(available_cash // price)
             max_buy = max(0, min(max_qty, max_buy_cash))
             if max_buy > 0:
                 actions["buy"] = max_buy
@@ -137,8 +141,7 @@ def compute_allowed_actions(
                 # If margin requirement is zero or unset, only cap by max_qty
                 max_short = max_qty
             else:
-                available_margin = max(0.0, (equity / margin_requirement) - margin_used)
-                max_short_margin = int(available_margin // price)
+                max_short_margin = int(available_cash // (price * margin_requirement))
                 max_short = max(0, min(max_qty, max_short_margin))
             if max_short > 0:
                 actions["short"] = max_short

@@ -56,8 +56,8 @@ def test_apply_short_open_basic(portfolio: Portfolio) -> None:
     assert pos["short_cost_basis"] == pytest.approx(30.0)
     assert pos["short_margin_used"] == pytest.approx(1_500.0)
     assert snap["margin_used"] == pytest.approx(1_500.0)
-    # Cash increases net by proceeds - margin = 3,000 - 1,500 = 1,500
-    assert snap["cash"] == pytest.approx(101_500.0)
+    # Cash includes short-sale proceeds; margin remains tracked separately.
+    assert snap["cash"] == pytest.approx(103_000.0)
 
 
 def test_apply_short_open_partial_when_insufficient_margin_cash() -> None:
@@ -70,26 +70,35 @@ def test_apply_short_open_partial_when_insufficient_margin_cash() -> None:
     pos = snap["positions"]["AAPL"]
     assert pos["short"] == 4
     assert pos["short_margin_used"] == pytest.approx(200.0)
-    # cash: + proceeds (400) - margin (200) = +200 → 400 total
-    assert snap["cash"] == pytest.approx(400.0)
+    # Cash includes short-sale proceeds; the initial margin is reserved separately.
+    assert snap["cash"] == pytest.approx(600.0)
 
 
-def test_apply_short_open_uses_available_cash_not_total_cash() -> None:
+def test_apply_short_open_does_not_reuse_restricted_short_proceeds() -> None:
     p = Portfolio(tickers=["AAPL"], initial_cash=1_000.0, margin_requirement=0.5)
 
-    # First short consumes all free margin but increases total cash with proceeds.
+    # The first short leaves $500 available for additional initial margin.
     first = p.apply_short_open("AAPL", 10, 100.0)
     assert first == 10
 
-    # Available cash should still be 1,000 (cash 1,500 - margin_used 500),
-    # so max additional quantity at $100 with 50% margin is 20 shares.
+    # Existing short proceeds and collateral stay restricted, leaving room for
+    # only 10 additional shares at the same price and margin requirement.
     second = p.apply_short_open("AAPL", 30, 100.0)
-    assert second == 20
+    assert second == 10
 
     snap = p.get_snapshot()
     pos = snap["positions"]["AAPL"]
-    assert pos["short"] == 30
-    assert snap["margin_used"] == pytest.approx(1_500.0)
+    assert pos["short"] == 20
+    assert snap["margin_used"] == pytest.approx(1_000.0)
+    assert p.get_available_cash() == pytest.approx(0.0)
+
+
+def test_apply_long_buy_does_not_spend_restricted_short_proceeds() -> None:
+    p = Portfolio(tickers=["AAPL"], initial_cash=1_000.0, margin_requirement=0.5)
+    p.apply_short_open("AAPL", 10, 100.0)
+
+    assert p.apply_long_buy("AAPL", 20, 100.0) == 5
+    assert p.get_available_cash() == pytest.approx(0.0)
 
 
 def test_apply_short_cover_realized_gain_and_margin_release(portfolio: Portfolio) -> None:
@@ -105,8 +114,8 @@ def test_apply_short_cover_realized_gain_and_margin_release(portfolio: Portfolio
     # Proportional margin released: 40/100 of pre short_margin_used
     released = (40 / 100.0) * pre_margin_used
     assert pos["short_margin_used"] == pytest.approx(pre_margin_used - released)
-    # Cash delta = +released - cover_cost(40*40=1600)
-    expected_cash = pre["cash"] + released - 1_600.0
+    # Covering spends cash; released collateral remains tracked in margin_used.
+    expected_cash = pre["cash"] - 1_600.0
     assert snap["cash"] == pytest.approx(expected_cash)
 
 

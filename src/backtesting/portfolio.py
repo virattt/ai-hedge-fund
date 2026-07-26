@@ -73,6 +73,17 @@ class Portfolio:
     def get_margin_requirement(self) -> float:
         return float(self._portfolio["margin_requirement"])
 
+    def get_available_cash(self) -> float:
+        """Return cash that is not reserved for existing short positions."""
+        short_sale_proceeds = sum(
+            position["short"] * position["short_cost_basis"]
+            for position in self._portfolio["positions"].values()
+        )
+        return max(
+            0.0,
+            self._portfolio["cash"] - self._portfolio["margin_used"] - short_sale_proceeds,
+        )
+
     def get_positions(self) -> Mapping[str, PositionState]:
         return MappingProxyType(self._portfolio["positions"])  # type: ignore[arg-type]
 
@@ -85,7 +96,8 @@ class Portfolio:
         quantity = int(quantity)
         position = self._portfolio["positions"][ticker]
         cost = quantity * price
-        if cost <= self._portfolio["cash"]:
+        available_cash = self.get_available_cash()
+        if cost <= available_cash:
             old_shares = position["long"]
             old_cost_basis = position["long_cost_basis"]
             total_shares = old_shares + quantity
@@ -96,7 +108,7 @@ class Portfolio:
             position["long"] = old_shares + quantity
             self._portfolio["cash"] -= cost
             return quantity
-        max_quantity = int(self._portfolio["cash"] / price) if price > 0 else 0
+        max_quantity = int(available_cash / price) if price > 0 else 0
         if max_quantity > 0:
             cost = max_quantity * price
             old_shares = position["long"]
@@ -133,9 +145,7 @@ class Portfolio:
         proceeds = price * quantity
         margin_ratio = self._portfolio["margin_requirement"]
         margin_required = proceeds * margin_ratio
-        available_cash = max(
-            0.0, self._portfolio["cash"] - self._portfolio["margin_used"]
-        )
+        available_cash = self.get_available_cash()
         if margin_required <= available_cash:
             old_short_shares = position["short"]
             old_cost_basis = position["short_cost_basis"]
@@ -148,7 +158,6 @@ class Portfolio:
             position["short_margin_used"] += margin_required
             self._portfolio["margin_used"] += margin_required
             self._portfolio["cash"] += proceeds
-            self._portfolio["cash"] -= margin_required
             return quantity
         max_quantity = int(available_cash / (price * margin_ratio)) if margin_ratio > 0 and price > 0 else 0
         if max_quantity > 0:
@@ -165,7 +174,6 @@ class Portfolio:
             position["short_margin_used"] += margin_required
             self._portfolio["margin_used"] += margin_required
             self._portfolio["cash"] += proceeds
-            self._portfolio["cash"] -= margin_required
             return max_quantity
         return 0
 
@@ -185,7 +193,6 @@ class Portfolio:
         position["short"] -= quantity
         position["short_margin_used"] -= margin_to_release
         self._portfolio["margin_used"] -= margin_to_release
-        self._portfolio["cash"] += margin_to_release
         self._portfolio["cash"] -= cover_cost
         self._portfolio["realized_gains"][ticker]["short"] += realized_gain
         if position["short"] == 0:
