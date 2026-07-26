@@ -37,11 +37,10 @@ poetry install                          # dependencies
 #   FINANCIAL_DATASETS_API_KEY=...      # market/fundamentals data
 #   ANTHROPIC_API_KEY=...               # only for LLM agents (Buffett)
 
-# THE command. No arguments: build a fund interactively — pick stocks,
-# strategies, rebalance cadence — and watch it run its first cycle; or
-# backtest a saved fund through the last 18 months, equity curve vs its
-# benchmark.
-poetry run python -m v2.run
+# THE command. No arguments: launch the interactive app (a Textual TUI).
+# Build a fund — pick stocks, strategies, rebalance cadence — or backtest a
+# saved fund and watch its equity curve draw against its benchmark.
+poetry run python -m v2.run       # or, equivalently: python -m v2.tui
 
 # With a mandate: run one cycle non-interactively (data → strategies →
 # netting → risk → execution), full CycleRecord as JSON on stdout.
@@ -79,6 +78,7 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | `backtesting/` | `backtest_fund` — the whole fund over history on `run_cycle` — plus the per-model engine | ✅ |
 | `event_study/` | Market-model abnormal returns (CARs) | ✅ |
 | `validation/` | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO) | ⬜ |
+| `tui/` | The interactive app (Textual): fund builder + live backtest board | ✅ |
 
 ✅ built · ◐ partial · ⬜ planned
 

@@ -1,0 +1,243 @@
+/* ============================================================
+   v2 TUI — the design system.
+   One accent: green marks what you chose and what you made.
+   Cyan is reserved for data (tickers, the benchmark). Red is
+   losses and drawdown only. Everything else stays quiet.
+   ============================================================ */
+
+Screen {
+    background: #0b100e;
+    color: #d9e6e0;
+}
+
+Footer {
+    background: #0e1512;
+    color: #5f7268;
+}
+
+FooterKey {
+    background: #0e1512;
+    color: #8aa79b;
+}
+
+FooterKey > .footer-key--key {
+    color: #2bd97c;
+    background: #0e1512;
+}
+
+FooterKey > .footer-key--description {
+    color: #8aa79b;
+    background: #0e1512;
+}
+
+Toast {
+    background: #14201b;
+}
+
+/* ---------------- shared ---------------- */
+
+.pane {
+    padding: 2 4;
+}
+
+.q {
+    text-style: bold;
+    color: #f2f7f4;
+    margin-bottom: 1;
+}
+
+.hint {
+    color: #5f7268;
+    margin-top: 1;
+}
+
+.hidden {
+    display: none;
+}
+
+Input {
+    width: 64;
+    background: #101613;
+    border: round #223028;
+}
+
+Input:focus {
+    border: round #2bd97c;
+}
+
+Input > .input--cursor {
+    background: #2bd97c;
+    color: #0b100e;
+}
+
+Input > .input--selection {
+    background: #1e4d36;
+}
+
+OptionList {
+    background: transparent;
+    border: none;
+    height: auto;
+    max-height: 16;
+    padding: 0;
+}
+
+OptionList:focus {
+    border: none;
+    background: transparent;
+}
+
+OptionList > .option-list--option-highlighted {
+    background: #14201b;
+    color: #2bd97c;
+    text-style: bold;
+}
+
+SelectionList {
+    background: transparent;
+    border: none;
+    height: auto;
+    max-height: 16;
+    padding: 0;
+}
+
+SelectionList:focus {
+    border: none;
+    background: transparent;
+}
+
+SelectionList > .selection-list--button {
+    color: #3a4741;
+    background: #14201b;
+}
+
+SelectionList > .selection-list--button-highlighted {
+    color: #3a4741;
+    background: #14201b;
+}
+
+SelectionList > .selection-list--button-selected {
+    color: #2bd97c;
+    background: #14201b;
+}
+
+SelectionList > .selection-list--button-selected-highlighted {
+    color: #2bd97c;
+    background: #14201b;
+}
+
+Bar > .bar--bar {
+    color: #2bd97c;
+    background: #1a231f;
+}
+
+Bar > .bar--complete {
+    color: #2bd97c;
+}
+
+/* ---------------- home ---------------- */
+
+#home {
+    align: center middle;
+}
+
+#home > Static {
+    width: auto;
+    text-align: center;
+}
+
+#wordmark {
+    text-style: bold;
+    color: #f2f7f4;
+}
+
+#rule {
+    color: #2bd97c;
+}
+
+#tagline {
+    color: #5f7268;
+    margin-top: 1;
+}
+
+#home-menu {
+    width: 56;
+    margin-top: 2;
+}
+
+#model-line {
+    margin-top: 2;
+    color: #5f7268;
+}
+
+/* ---------------- builder ---------------- */
+
+#rail {
+    width: 34;
+    padding: 2 3;
+    border-right: solid #1a231f;
+}
+
+.rail-title {
+    color: #5f7268;
+    margin-bottom: 2;
+}
+
+.rail-step {
+    margin-bottom: 1;
+    height: 2;
+}
+
+#panes {
+    width: 1fr;
+}
+
+#stocks-preview {
+    margin-top: 1;
+}
+
+/* ---------------- backtest ---------------- */
+
+#phase-line {
+    margin-bottom: 1;
+}
+
+#warm-progress {
+    margin-bottom: 1;
+}
+
+#roster {
+    margin-bottom: 1;
+}
+
+#stats {
+    height: auto;
+    margin-bottom: 1;
+}
+
+#stats > Static {
+    width: 1fr;
+    height: auto;
+    border: round #1f2b25;
+    padding: 1 0;
+    margin-right: 1;
+    text-align: center;
+    content-align: center middle;
+}
+
+#curve-box {
+    border: round #1f2b25;
+    padding: 0 1;
+    height: auto;
+    border-title-color: #5f7268;
+    border-subtitle-color: #5f7268;
+}
+
+#cycle-line {
+    color: #5f7268;
+    margin-top: 1;
+}
+
+#result-summary {
+    margin-bottom: 1;
+}
