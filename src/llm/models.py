@@ -45,7 +45,7 @@ class LLMModel(BaseModel):
         return (self.display_name, self.model_name, self.provider.value)
 
     def is_custom(self) -> bool:
-        """Check if the model is a Gemini model"""
+        """Check if the model is a custom/placeholder model"""
         return self.model_name == "-"
 
     def has_json_mode(self) -> bool:
@@ -127,7 +127,7 @@ OLLAMA_LLM_ORDER = [model.to_choice_tuple() for model in OLLAMA_MODELS]
 def get_model_info(model_name: str, model_provider: str) -> LLMModel | None:
     """Get model information by model_name"""
     all_models = AVAILABLE_MODELS + OLLAMA_MODELS
-    return next((model for model in all_models if model.model_name == model_name and model.provider == model_provider), None)
+    return next((model for model in all_models if model.model_name == model_name and model.provider.value == model_provider), None)
 
 
 def find_model_by_name(model_name: str) -> LLMModel | None:
