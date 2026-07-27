@@ -1,0 +1,81 @@
+# ------------------------------------------------
+#           EXAMPLE DEPLOYMENT CONFIG
+# ------------------------------------------------
+
+# -- MAINNET -------------------------------------
+
+[mainnet]
+endpoint_url = "${MAINNET_RPC}"
+
+[mainnet.bool]
+is_live = true
+bool_array = [true, false]
+
+[mainnet.address]
+weth = "${WETH_MAINNET}"
+deps = [
+    "0x0000000000000000000000000000000000000000",
+    "0x1111111111111111111111111111111111111111",
+]
+
+[mainnet.uint]
+number = 1234
+number_array = [5678, 9999]
+
+[mainnet.int]
+signed_number = -1234
+signed_number_array = [-5678, 9999]
+
+[mainnet.bytes32]
+word = "0x00000000000000000000000000000000000000000000000000000000000004d2" # 1234
+word_array = [
+    "0x000000000000000000000000000000000000000000000000000000000000162e", # 5678
+    "0x000000000000000000000000000000000000000000000000000000000000270f", # 9999
+]
+
+[mainnet.bytes]
+b = "0xabcd"
+b_array = ["0xdead", "0xbeef"]
+
+[mainnet.string]
+str = "foo"
+str_array = ["bar", "baz"]
+
+# -- OPTIMISM ------------------------------------
+
+[optimism]
+endpoint_url = "${OPTIMISM_RPC}"
+
+[optimism.bool]
+is_live = false
+bool_array = [false, true]
+
+[optimism.address]
+weth = "${WETH_OPTIMISM}"
+deps = [
+    "0x2222222222222222222222222222222222222222",
+    "0x3333333333333333333333333333333333333333",
+]
+
+[optimism.uint]
+number = 9999
+number_array = [1234, 5678]
+
+[optimism.int]
+signed_number = 9999
+signed_number_array = [-1234, -5678]
+
+[optimism.bytes32]
+word = "0x000000000000000000000000000000000000000000000000000000000000270f" # 9999
+word_array = [
+    "0x00000000000000000000000000000000000000000000000000000000000004d2", # 1234
+    "0x000000000000000000000000000000000000000000000000000000000000162e", # 5678
+]
+
+[optimism.bytes]
+b = "0xdcba"
+b_array = ["0xc0ffee", "0xbabe"]
+
+[optimism.string]
+str = "alice"
+str_array = ["bob", "charlie"]
