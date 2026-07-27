@@ -59,7 +59,7 @@ export function PortfolioManagerNode({
           getDefaultModel()
         ]);
         setAvailableModels(models);
-        
+
         // Set default model if no model is currently selected
         if (!selectedModel && defaultModel) {
           setSelectedModel(defaultModel);
@@ -71,6 +71,11 @@ export function PortfolioManagerNode({
     };
 
     loadModels();
+
+    // Re-fetch models whenever Ollama is started or a model is downloaded
+    // so newly available Ollama models appear in the selector immediately.
+    window.addEventListener('models-updated', loadModels);
+    return () => window.removeEventListener('models-updated', loadModels);
   }, [setAvailableModels, selectedModel, setSelectedModel]);
 
   // Update the node context when the model changes

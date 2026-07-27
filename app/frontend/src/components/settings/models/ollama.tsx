@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { clearModelsCache } from '@/data/models';
 import { cn } from '@/lib/utils';
 import { AlertTriangle, Brain, CheckCircle, Download, Play, RefreshCw, Server, Square, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -102,6 +103,8 @@ export function OllamaSettings() {
       });
       if (response.ok) {
         await fetchOllamaStatus();
+        // Invalidate the models cache so the portfolio manager picks up Ollama models
+        clearModelsCache();
       } else {
         const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
         setError(`Failed to start server: ${errorData.detail}`);
@@ -200,6 +203,8 @@ export function OllamaSettings() {
                         delete newProgress[modelName];
                         return newProgress;
                       });
+                      // Invalidate the models cache so the portfolio manager discovers the new model
+                      clearModelsCache();
                       // Refresh status to show the new model with retry logic
                       const refreshWithRetry = async (attempts = 0) => {
                         try {
@@ -436,6 +441,8 @@ export function OllamaSettings() {
                 delete newProgress[modelName];
                 return newProgress;
               });
+              // Invalidate the models cache so the portfolio manager discovers the new model
+              clearModelsCache();
               // Refresh status to show the new model with retry logic
               const refreshWithRetry = async (attempts = 0) => {
                 try {
@@ -444,7 +451,7 @@ export function OllamaSettings() {
                     const status = await response.json();
                     setOllamaStatus(status);
                     setError(null);
-                    
+
                     // Check if the model is now in the available models list
                     if (attempts < 5 && status && !status.available_models.includes(modelName)) {
                       // Wait a bit longer and try again

@@ -3,11 +3,22 @@ import { api } from '@/services/api';
 export interface LanguageModel {
   display_name: string;
   model_name: string;
-  provider: "Anthropic" | "DeepSeek" | "Google" | "Groq" | "OpenAI";
+  provider: "Anthropic" | "DeepSeek" | "Google" | "Groq" | "Ollama" | "OpenAI";
 }
 
 // Cache for models to avoid repeated API calls
 let languageModels: LanguageModel[] | null = null;
+
+/**
+ * Clear the models cache so the next call to getModels() fetches fresh data.
+ * Also dispatches a "models-updated" event so mounted components can reload.
+ * Call this after Ollama is started or a new Ollama model is downloaded so
+ * the portfolio manager model selector reflects the updated list.
+ */
+export const clearModelsCache = (): void => {
+  languageModels = null;
+  window.dispatchEvent(new CustomEvent('models-updated'));
+};
 
 /**
  * Get the list of models from the backend API
@@ -17,7 +28,7 @@ export const getModels = async (): Promise<LanguageModel[]> => {
   if (languageModels) {
     return languageModels;
   }
-  
+
   try {
     languageModels = await api.getLanguageModels();
     return languageModels;
