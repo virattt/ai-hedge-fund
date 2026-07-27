@@ -2,6 +2,7 @@
 
 from v2.data.cached import CachedDataClient
 from v2.data.client import FDClient, FDClientError
+from v2.data.fxmacrodata import FXMacroDataClient, FXMacroDataClientError
 from v2.data.models import (
     CompanyFacts,
     CompanyNews,
@@ -26,6 +27,8 @@ __all__ = [
     "FDClient",
     "FDClientError",
     "Filing",
+    "FXMacroDataClient",
+    "FXMacroDataClientError",
     "FinancialMetrics",
     "InsiderTrade",
     "Price",
