@@ -1,12 +1,17 @@
 [
   {
-    "display_name": "Fable 5",
-    "model_name": "claude-fable-5",
+    "display_name": "Opus 5",
+    "model_name": "claude-opus-5",
     "provider": "Anthropic"
   },
   {
-    "display_name": "Opus 4.8",
-    "model_name": "claude-opus-4-8",
+    "display_name": "Sonnet 5",
+    "model_name": "claude-sonnet-5",
+    "provider": "Anthropic"
+  },
+  {
+    "display_name": "Fable 5",
+    "model_name": "claude-fable-5",
     "provider": "Anthropic"
   },
   {

@@ -8,6 +8,7 @@ rich renderables (which Textual Statics render natively).
 
 from __future__ import annotations
 
+import json
 from datetime import date as _date
 from pathlib import Path
 
@@ -49,11 +50,38 @@ _SHORT_NAMES = {
 # var steers every agent instance — the warm roster AND the Fund — with no
 # threading. Quant models (PEAD) carry no LLM and ignore it. Ordered
 # most→least capable.
-_MODELS = [
-    ("Opus 5", "claude-opus-5"),
-    ("Sonnet 5", "claude-sonnet-5"),
-]
 _DEFAULT_MODEL_LABEL = "Opus 5"
+
+# The repo's one model registry lives in v1 (src/llm/api_models.json). v2 reads
+# it rather than keeping a second list, so the two UIs cannot drift.
+API_MODELS_PATH = (Path(__file__).resolve().parents[2]
+                   / "src" / "llm" / "api_models.json")
+
+# ...but v2/llm ships only AnthropicLLM, so every other provider in that file
+# is listed and NOT selectable: picking one would set V2_LLM_MODEL to an id
+# ChatAnthropic rejects, and the run would die partway through.
+REACHABLE_PROVIDERS = {"Anthropic"}
+
+
+def load_api_models() -> list[tuple[str, str, str]]:
+    """The registry as (display name, model id, provider), file order kept.
+
+    Falls back to the built-in default alone if the file is missing or
+    malformed — a broken registry should cost you the picker, not the app.
+    """
+    try:
+        with open(API_MODELS_PATH) as f:
+            entries = json.load(f)
+        models = [(e["display_name"], e["model_name"], e["provider"])
+                  for e in entries]
+    except (OSError, ValueError, KeyError, TypeError):
+        return [(_DEFAULT_MODEL_LABEL, "claude-opus-5", "Anthropic")]
+    return models or [(_DEFAULT_MODEL_LABEL, "claude-opus-5", "Anthropic")]
+
+
+def is_reachable(provider: str) -> bool:
+    """Can v2 actually talk to this provider today?"""
+    return provider in REACHABLE_PROVIDERS
 
 DEFAULT_RISK = {"max_position_pct": 0.25, "max_gross_exposure": 1.0}
 DEFAULT_CAPITAL = 100_000.0
