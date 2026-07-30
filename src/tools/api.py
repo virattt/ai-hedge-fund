@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import requests
 import time
+from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
@@ -250,66 +251,60 @@ def get_company_news(
     ticker: str,
     end_date: str,
     start_date: str | None = None,
-    limit: int = 1000,
+    limit: int = 10,
     api_key: str = None,
 ) -> list[CompanyNews]:
-    """Fetch company news from cache or API."""
-    # Create a cache key that includes all parameters to ensure exact matches
-    cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
-    
-    # Check cache first - simple exact match
+    """Fetch the latest company news without using it as historical data.
+
+    Financial Datasets' news endpoint currently supports only ``ticker`` and
+    ``limit`` (1-10). It cannot answer an as-of-date request, so returning the
+    latest articles for an earlier ``end_date`` would introduce lookahead bias
+    into backtests. Historical requests therefore return no news.
+
+    ``start_date`` remains in the signature for compatibility with existing
+    callers, but the upstream endpoint does not support it.
+    """
+    today = datetime.date.today().isoformat()
+    if end_date != today:
+        logger.warning(
+            "Skipping company news for %s as of %s: the news endpoint only "
+            "provides latest articles and cannot satisfy historical requests",
+            ticker,
+            end_date,
+        )
+        return []
+
+    effective_limit = max(1, min(limit, 10))
+    cache_key = f"{ticker}_{today}_{effective_limit}"
+
     if cached_data := _cache.get_company_news(cache_key):
         return [CompanyNews(**news) for news in cached_data]
 
-    # If not in cache, fetch from API
     headers = {}
     financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
     if financial_api_key:
         headers["X-API-KEY"] = financial_api_key
 
-    all_news = []
-    current_end_date = end_date
-
-    while True:
-        url = f"https://api.financialdatasets.ai/news/?ticker={ticker}&end_date={current_end_date}"
-        if start_date:
-            url += f"&start_date={start_date}"
-        url += f"&limit={limit}"
-
-        response = _make_api_request(url, headers)
-        if response.status_code != 200:
-            break
-
-        try:
-            data = response.json()
-            response_model = CompanyNewsResponse(**data)
-            company_news = response_model.news
-        except Exception as e:
-            logger.warning("Failed to parse company news response for %s: %s", ticker, e)
-            break
-
-        if not company_news:
-            break
-
-        all_news.extend(company_news)
-
-        # Only continue pagination if we have a start_date and got a full page
-        if not start_date or len(company_news) < limit:
-            break
-
-        # Update end_date to the oldest date from current batch for next iteration
-        current_end_date = min(news.date for news in company_news).split("T")[0]
-
-        # If we've reached or passed the start_date, we can stop
-        if current_end_date <= start_date:
-            break
-
-    if not all_news:
+    query = urlencode({"ticker": ticker, "limit": effective_limit})
+    response = _make_api_request(
+        f"https://api.financialdatasets.ai/news?{query}",
+        headers,
+    )
+    if response.status_code != 200:
         return []
 
-    # Cache the results using the comprehensive cache key
-    _cache.set_company_news(cache_key, [news.model_dump() for news in all_news])
-    return all_news
+    try:
+        response_model = CompanyNewsResponse(**response.json())
+        company_news = response_model.news[:effective_limit]
+    except Exception as e:
+        logger.warning("Failed to parse company news response for %s: %s", ticker, e)
+        return []
+
+    if not company_news:
+        return []
+
+    _cache.set_company_news(cache_key, [news.model_dump() for news in company_news])
+    return company_news
 
 
 def get_market_cap(

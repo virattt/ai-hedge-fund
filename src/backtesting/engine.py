@@ -16,7 +16,6 @@ from .output import OutputBuilder
 from .benchmarks import BenchmarkCalculator
 
 from src.tools.api import (
-    get_company_news,
     get_price_data,
     get_prices,
     get_financial_metrics,
@@ -87,8 +86,7 @@ class BacktestEngine:
             get_prices(ticker, start_date_str, self._end_date)
             get_financial_metrics(ticker, self._end_date, limit=10)
             get_insider_trades(ticker, self._end_date, start_date=self._start_date, limit=1000)
-            get_company_news(ticker, self._end_date, start_date=self._start_date, limit=1000)
-        
+
         # Preload data for SPY for benchmark comparison
         get_prices("SPY", self._start_date, self._end_date)
 
@@ -190,5 +188,3 @@ class BacktestEngine:
 
     def get_portfolio_values(self) -> Sequence[PortfolioValuePoint]:
         return list(self._portfolio_values)
-
-

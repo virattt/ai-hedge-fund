@@ -6,7 +6,6 @@ from typing import Callable, Dict, List, Optional, Any
 import asyncio
 
 from src.tools.api import (
-    get_company_news,
     get_price_data,
     get_prices,
     get_financial_metrics,
@@ -233,7 +232,6 @@ class BacktestService:
             get_prices(ticker, start_date_str, self.end_date, api_key=api_key)
             get_financial_metrics(ticker, self.end_date, limit=10, api_key=api_key)
             get_insider_trades(ticker, self.end_date, start_date=self.start_date, limit=1000, api_key=api_key)
-            get_company_news(ticker, self.end_date, start_date=self.start_date, limit=1000, api_key=api_key)
 
     def _update_performance_metrics(self, performance_metrics: Dict[str, Any]):
         """Update performance metrics using daily returns."""
@@ -535,5 +533,5 @@ class BacktestService:
 
         # Calculate additional metrics
         performance_df["Daily Return"] = performance_df["Portfolio Value"].pct_change().fillna(0)
-        
-        return performance_df 
+
+        return performance_df

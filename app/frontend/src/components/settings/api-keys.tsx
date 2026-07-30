@@ -20,6 +20,13 @@ const FINANCIAL_API_KEYS: ApiKey[] = [
     description: 'For getting financial data to power the hedge fund',
     url: 'https://financialdatasets.ai/',
     placeholder: 'your-financial-datasets-api-key'
+  },
+  {
+    key: 'FIRECRAWL_API_KEY',
+    label: 'Firecrawl API',
+    description: 'For scraping the full text of news articles (optional)',
+    url: 'https://firecrawl.dev/',
+    placeholder: 'your-firecrawl-api-key'
   }
 ];
 
