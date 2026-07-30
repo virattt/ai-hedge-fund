@@ -29,7 +29,7 @@ from pydantic import BaseModel
 
 from v2.brokers.sim import SimBroker
 from v2.data.protocol import DataClient
-from v2.fund.spec import Fund
+from v2.fund.spec import Fund, normalize_universe
 from v2.pipeline.models import CycleRecord
 from v2.pipeline.run_cycle import run_cycle
 
@@ -59,6 +59,7 @@ class FundBacktestResult(BaseModel):
     end: str                          # last grid date actually traded
     rebalance: str
     benchmark: str
+    universe: list[str]               # the tickers this backtest was run over
     capital: float
     dates: list[str]
     nav: list[float]                  # NAV after each cycle, one per date
@@ -72,19 +73,23 @@ def backtest_fund(
     start: str,
     end: str,
     data_client: DataClient,
+    universe: list[str],
     *,
     on_cycle: Callable[[int, int, CycleRecord], None] | None = None,
 ) -> FundBacktestResult:
-    """Run *fund* through history from *start* to *end* (YYYY-MM-DD).
+    """Run *fund* over *universe* through history from *start* to *end*.
 
     One run_cycle per grid date against a persistent SimBroker — positions
     and cash carry across ticks, so the fund rebalances rather than
     restarts. `on_cycle(i, n, record)` fires after each tick (progress UIs).
+    The universe is the study's input, not the mandate's: the same fund can
+    be backtested over different names.
 
     Fail loud: no benchmark bars in the window raises — a backtest with no
     trading grid is an infrastructure problem, not an empty result.
     """
     spec = fund.spec
+    universe = normalize_universe(universe)
     bars = data_client.get_prices(spec.benchmark, start, end)
     closes = {b.time[:10]: b.close for b in bars if start <= b.time[:10] <= end}
     if not closes:
@@ -100,7 +105,7 @@ def backtest_fund(
     benchmark_nav: list[float] = []
     base_close = closes[grid[0]]
     for i, as_of in enumerate(grid):
-        record = run_cycle(fund, as_of, broker, data_client)
+        record = run_cycle(fund, as_of, broker, data_client, universe)
         records.append(record)
         nav.append(record.nav)
         benchmark_nav.append(spec.capital * closes[as_of] / base_close)
@@ -113,6 +118,7 @@ def backtest_fund(
         end=grid[-1],
         rebalance=spec.rebalance,
         benchmark=spec.benchmark,
+        universe=universe,
         capital=spec.capital,
         dates=grid,
         nav=nav,

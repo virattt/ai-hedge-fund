@@ -34,7 +34,7 @@ from datetime import timedelta
 from v2.brokers.models import Fill
 from v2.brokers.protocol import Broker
 from v2.data.protocol import DataClient
-from v2.fund.spec import Fund
+from v2.fund.spec import Fund, normalize_universe
 from v2.models import Signal
 from v2.pipeline.execution import build_orders
 from v2.pipeline.models import CycleRecord, StrategyRecord, TickerSkip
@@ -51,13 +51,20 @@ def run_cycle(
     as_of: str,
     broker: Broker,
     data_client: DataClient,
+    universe: list[str],
 ) -> CycleRecord:
-    """Run one tick of *fund* as of *as_of* (YYYY-MM-DD) and return the record."""
+    """Run one tick of *fund* over *universe* as of *as_of* (YYYY-MM-DD).
+
+    The universe is an argument, not a mandate field: a fund is its desk —
+    strategies, staff, risk, capital — and can be pointed at any names. What
+    it was asked to trade this tick is recorded on the returned CycleRecord.
+    """
     spec = fund.spec
+    universe = normalize_universe(universe)
     held = broker.positions()
 
     marks, skipped = _mark_prices(
-        sorted(set(spec.universe) | set(held)), as_of, held, data_client,
+        sorted(set(universe) | set(held)), as_of, held, data_client,
     )
 
     cash_before = broker.cash()
@@ -70,7 +77,7 @@ def run_cycle(
             "cannot size positions against a non-positive book"
         )
 
-    tradeable = [t for t in spec.universe if t in marks]
+    tradeable = [t for t in universe if t in marks]
 
     # Each strategy runs its own analysts and blends its own sleeve; the fund
     # nets the sleeves by capital slice. A persona staffed into two strategies
@@ -111,6 +118,7 @@ def run_cycle(
         fund=spec.name,
         as_of=as_of,
         spec=spec,
+        universe=universe,
         marks=marks,
         skipped=skipped,
         strategies=strategy_records,

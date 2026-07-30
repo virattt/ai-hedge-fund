@@ -47,7 +47,6 @@ class FakeAnalyst:
 def _spec(**overrides):
     base = dict(
         name="test-fund",
-        universe=["AAPL"],
         strategies=[{"name": "solo", "models": [{"name": "a"}]}],
         risk={"max_position_pct": 1.0, "max_gross_exposure": 1.0},
         capital=100_000.0,
@@ -78,7 +77,7 @@ def _run(series=SERIES, spec=None):
     spec = spec or _spec()
     fund = Fund(spec, models={"solo": [FakeAnalyst("a", views={"AAPL": 1.0})]})
     return backtest_fund(fund, "2024-06-03", "2024-06-21",
-                         FakeDataClient(series))
+                         FakeDataClient(series), ["AAPL"])
 
 
 # ---------------------------------------------------------------------------
@@ -154,8 +153,16 @@ def test_on_cycle_fires_per_tick_in_order():
     spec = _spec()
     fund = Fund(spec, models={"solo": [FakeAnalyst("a", views={"AAPL": 1.0})]})
     backtest_fund(fund, "2024-06-03", "2024-06-21", FakeDataClient(SERIES),
+                  ["AAPL"],
                   on_cycle=lambda i, n, record: seen.append((i, n, record.as_of)))
     assert seen == [(0, 3, FRIDAYS[0]), (1, 3, FRIDAYS[1]), (2, 3, FRIDAYS[2])]
+
+
+def test_universe_round_trips_onto_the_result():
+    """The study's tickers are recorded — the mandate never held them."""
+    result = _run()
+    assert result.universe == ["AAPL"]
+    assert all(r.universe == ["AAPL"] for r in result.records)
 
 
 def test_missing_benchmark_raises():

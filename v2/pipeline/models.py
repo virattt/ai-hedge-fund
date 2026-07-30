@@ -17,7 +17,7 @@ from v2.risk.limits import ClampEvent
 
 
 class TickerSkip(BaseModel):
-    """A universe name that could not be traded this cycle, and why."""
+    """A requested name that could not be traded this cycle, and why."""
 
     ticker: str
     reason: str
@@ -41,6 +41,7 @@ class CycleRecord(BaseModel):
     fund: str
     as_of: str
     spec: FundSpec                      # self-contained audit copy
+    universe: list[str]                 # the tickers this cycle was asked to trade
     marks: dict[str, float]             # ticker -> close used for sizing and NAV
     skipped: list[TickerSkip]
     strategies: list[StrategyRecord]    # every sleeve, incl. each thesis

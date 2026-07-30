@@ -98,12 +98,17 @@ class StrategySpec(BaseModel):
 class FundSpec(BaseModel):
     """A fund's complete mandate. `extra='forbid'` everywhere: YAML typos
     fail loud at load time, not silently at trade time. `risk` is MASTER
-    risk — applied to the netted book after all strategies are combined."""
+    risk — applied to the netted book after all strategies are combined.
+
+    Deliberately ticker-free: a mandate is the DESK — its strategies, staff,
+    risk limits, capital, and cadence — not a watchlist. Which names to trade
+    is a run-time input (see `normalize_universe` and `run_cycle`), exactly as
+    a real fund's mandate outlives any particular position.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    universe: list[str] = Field(min_length=1)
     strategies: list[StrategySpec] = Field(min_length=1)
     risk: RiskLimits
     capital: float = Field(default=100_000.0, gt=0)
@@ -125,15 +130,6 @@ class FundSpec(BaseModel):
     def _uppercase_benchmark(cls, ticker: str) -> str:
         return ticker.upper()
 
-    @field_validator("universe")
-    @classmethod
-    def _uppercase_unique(cls, tickers: list[str]) -> list[str]:
-        upper = [t.upper() for t in tickers]
-        duplicates = {t for t in upper if upper.count(t) > 1}
-        if duplicates:
-            raise ValueError(f"duplicate tickers in universe: {sorted(duplicates)}")
-        return upper
-
     @field_validator("strategies")
     @classmethod
     def _unique_strategy_names(cls, strategies: list[StrategySpec]) -> list[StrategySpec]:
@@ -144,10 +140,31 @@ class FundSpec(BaseModel):
         return strategies
 
 
+def normalize_universe(tickers: list[str]) -> list[str]:
+    """Clean a run's ticker list: upper-cased, de-duped, order preserved.
+
+    The single normalizer for every entry point (CLI flag, TUI input, a future
+    API), so what the engine trades can't drift by caller. Empty raises: a
+    cycle with nothing to trade is a caller mistake, not an empty result.
+    """
+    universe: list[str] = []
+    for ticker in tickers:
+        upper = ticker.strip().upper()
+        if upper and upper not in universe:
+            universe.append(upper)
+    if not universe:
+        raise ValueError("universe is empty — a run needs at least one ticker")
+    return universe
+
+
 def load_spec(path: str | Path) -> FundSpec:
     """Load a mandate from YAML. Validation errors carry the pydantic detail."""
     with open(path) as f:
         data = yaml.safe_load(f)
+    # Mandates used to carry a `universe`. Tickers are a run-time input now
+    # (see FundSpec), so drop the legacy key rather than fail extra='forbid'
+    # on funds saved by an older build.
+    data.pop("universe", None)
     return FundSpec(**data)
 
 

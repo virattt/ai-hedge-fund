@@ -3,11 +3,17 @@
 import pytest
 from pydantic import ValidationError
 
-from v2.fund.spec import Fund, FundSpec, StrategySpec, load_spec, load_strategy
+from v2.fund.spec import (
+    Fund,
+    FundSpec,
+    StrategySpec,
+    load_spec,
+    load_strategy,
+    normalize_universe,
+)
 
 MINIMAL = {
     "name": "test-fund",
-    "universe": ["AAPL", "MSFT"],
     "strategies": [{"name": "event", "models": [{"name": "pead"}]}],
     "risk": {"max_position_pct": 0.25, "max_gross_exposure": 1.0},
 }
@@ -17,7 +23,6 @@ def test_yaml_load_happy_path(tmp_path):
     path = tmp_path / "fund.yaml"
     path.write_text(
         "name: yaml-fund\n"
-        "universe: [AAPL, msft]\n"
         "strategies:\n"
         "  - name: event\n"
         "    weight: 2.0\n"
@@ -31,7 +36,6 @@ def test_yaml_load_happy_path(tmp_path):
     )
     spec = load_spec(path)
     assert spec.name == "yaml-fund"
-    assert spec.universe == ["AAPL", "MSFT"]  # uppercased
     assert spec.strategies[0].weight == 2.0
     assert spec.strategies[0].models[0].weight == 3.0
     assert spec.capital == 50000
@@ -73,17 +77,41 @@ def test_benchmark_uppercased():
 
 def test_typo_key_rejected():
     with pytest.raises(ValidationError):
-        FundSpec(**{**MINIMAL, "universee": ["AAPL"]})
+        FundSpec(**{**MINIMAL, "capitol": 1000})
 
 
-def test_empty_universe_rejected():
+def test_mandate_carries_no_tickers():
+    """A fund is the desk, not a watchlist — `universe` is not a spec field."""
+    assert not hasattr(FundSpec(**MINIMAL), "universe")
     with pytest.raises(ValidationError):
-        FundSpec(**{**MINIMAL, "universe": []})
+        FundSpec(**{**MINIMAL, "universe": ["AAPL"]})
 
 
-def test_duplicate_ticker_rejected():
-    with pytest.raises(ValidationError, match="duplicate"):
-        FundSpec(**{**MINIMAL, "universe": ["AAPL", "aapl"]})
+def test_legacy_universe_key_is_dropped_on_load(tmp_path):
+    """Funds saved before tickers moved to run time must still load."""
+    path = tmp_path / "old.yaml"
+    path.write_text(
+        "name: old-fund\n"
+        "universe: [AAPL, MSFT]\n"
+        "strategies:\n"
+        "  - name: event\n"
+        "    models:\n"
+        "      - name: pead\n"
+        "risk:\n"
+        "  max_position_pct: 0.25\n"
+        "  max_gross_exposure: 1.0\n"
+    )
+    spec = load_spec(path)
+    assert spec.name == "old-fund"
+    assert not hasattr(spec, "universe")
+
+
+def test_normalize_universe():
+    assert normalize_universe(["aapl", " msft ", "AAPL"]) == ["AAPL", "MSFT"]
+    with pytest.raises(ValueError, match="universe is empty"):
+        normalize_universe([])
+    with pytest.raises(ValueError, match="universe is empty"):
+        normalize_universe(["  "])
 
 
 def test_duplicate_strategy_name_rejected():

@@ -8,6 +8,7 @@ from v2.fund.spec import (
     StrategySpec,
     load_spec,
     load_strategy,
+    normalize_universe,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "StrategySpec",
     "load_spec",
     "load_strategy",
+    "normalize_universe",
 ]
