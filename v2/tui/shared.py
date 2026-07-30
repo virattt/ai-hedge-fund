@@ -73,11 +73,11 @@ def _valid_date(text: str):
 
 
 def _fund_label(spec: FundSpec) -> str:
-    """One aligned line per fund: name, universe, cadence."""
-    universe = ", ".join(spec.universe[:4])
-    if len(spec.universe) > 4:
-        universe += ", …"
-    return f"{spec.name:<18} {universe} · {spec.rebalance}"
+    """One aligned line per fund: name, staff, cadence."""
+    staff = ", ".join(s.title for s in spec.strategies[:3])
+    if len(spec.strategies) > 3:
+        staff += ", …"
+    return f"{spec.name:<18} {staff} · {spec.rebalance}"
 
 
 def _agent_names(spec: FundSpec) -> list[str]:

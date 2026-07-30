@@ -1,11 +1,14 @@
 # An example mandate. Specs are data: the fund builder (python -m v2.run),
 # a chat LLM, and the strategy generator all emit this same format.
 #
-#   poetry run python -m v2.run v2/funds/example.yaml              # one cycle
-#   poetry run python -m v2.run v2/funds/example.yaml --backtest   # 18 months
+# Note there are no tickers here. A mandate is the DESK — its strategies,
+# staff, risk, capital, and cadence — and can be pointed at any names; what
+# to trade is a run-time input (--tickers).
+#
+#   poetry run python -m v2.run v2/funds/example.yaml --tickers AAPL,MSFT
+#   poetry run python -m v2.run v2/funds/example.yaml --tickers AAPL,MSFT --backtest
 #
 name: example-fund
-universe: [AAPL, MSFT, NVDA, GOOGL, AMZN]
 strategies:
   - name: deep-value          # discretionary pod: Graham-led, long-biased
     weight: 0.6               # capital slice, relative to sibling strategies

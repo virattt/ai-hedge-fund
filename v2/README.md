@@ -14,6 +14,11 @@ STRATEGY  =  a blend policy over MODELS       (a "pod")
 MODEL     =  an alpha model → a Signal        (conviction in [-1,+1] + thesis)
 ```
 
+A fund is the **desk**, not a watchlist: the mandate names no tickers. Which
+names to trade is supplied per run (`--tickers`, or the app's ticker prompt)
+and recorded on every `CycleRecord` — so one fund can be pointed at anything,
+and every run remembers what it traded.
+
 A fund runs two kinds of pods, like a real shop. **Discretionary** strategies
 are staffed by **agents** — LLM investor personas (Warren Buffett, Charlie
 Munger, Benjamin Graham, Peter Lynch, Stanley Druckenmiller) whose judgment
@@ -43,12 +48,13 @@ poetry install                          # dependencies
 poetry run python -m v2.run       # or, equivalently: python -m v2.tui
 
 # With a mandate: run one cycle non-interactively (data → strategies →
-# netting → risk → execution), full CycleRecord as JSON on stdout.
-poetry run python -m v2.run v2/funds/example.yaml
+# netting → risk → execution), full CycleRecord as JSON on stdout. A mandate
+# carries no tickers — --tickers says what to point the fund at this run.
+poetry run python -m v2.run v2/funds/example.yaml --tickers AAPL,MSFT,NVDA
 
 # Backtest a mandate: the same run_cycle looped over history at the
 # mandate's rebalance cadence, full result JSON (every CycleRecord) on stdout.
-poetry run python -m v2.run v2/funds/example.yaml --backtest
+poetry run python -m v2.run v2/funds/example.yaml --tickers AAPL,MSFT --backtest
 
 # Tests
 poetry run pytest v2/

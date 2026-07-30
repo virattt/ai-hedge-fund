@@ -8,14 +8,17 @@ Usage::
         cadence — or backtest a saved fund and watch its equity curve draw
         against its benchmark.
 
-    poetry run python -m v2.run v2/funds/example.yaml --date 2025-06-03
+    poetry run python -m v2.run v2/funds/example.yaml --tickers AAPL,MSFT
         With a mandate: run one cycle non-interactively. The full CycleRecord
         prints to stdout as JSON (pipe it anywhere); a short human summary
         goes to stderr. Add --out record.json to also write it to a file.
 
-    poetry run python -m v2.run v2/funds/example.yaml --backtest
+    poetry run python -m v2.run v2/funds/example.yaml --tickers AAPL,MSFT --backtest
         Backtest the mandate: run_cycle looped over history at the mandate's
         rebalance cadence; the full result JSON prints to stdout.
+
+A mandate is the desk — strategies, staff, risk, capital, cadence — and never
+names tickers; --tickers says what to point it at for this run.
 
 Both paths run the same engine underneath. The interactive app is a thin
 client: it only *composes a FundSpec* — the same machine-facing YAML this
@@ -36,7 +39,7 @@ from rich.console import Console
 from v2.backtesting import backtest_fund
 from v2.brokers import SimBroker
 from v2.data import CachedDataClient, FDClient
-from v2.fund import Fund, load_spec
+from v2.fund import Fund, load_spec, normalize_universe
 from v2.pipeline import run_cycle
 from v2.tui.shared import _BACKTEST_WEEKS
 
@@ -52,6 +55,12 @@ def main() -> None:
     parser.add_argument("mandate", nargs="?",
                         help="path to a fund spec YAML, e.g. v2/funds/example.yaml "
                         "(omit to launch the interactive app)")
+    parser.add_argument(
+        "--tickers",
+        help="what to trade this run, comma or space separated, e.g. "
+        "AAPL,MSFT,NVDA — required with a mandate (a fund carries no "
+        "watchlist; the universe is a run-time input)",
+    )
     parser.add_argument(
         "--date",
         default=_date.today().isoformat(),
@@ -88,6 +97,10 @@ def main() -> None:
         HedgeFundApp().run()
         return
 
+    if not args.tickers:
+        parser.error("--tickers is required with a mandate, e.g. --tickers AAPL,MSFT")
+    universe = normalize_universe(args.tickers.replace(",", " ").split())
+
     console = Console(stderr=True)  # status + summary on stderr; stdout stays pure JSON
     spec = load_spec(args.mandate)
     fund = Fund(spec)
@@ -100,10 +113,11 @@ def main() -> None:
             fd = CachedDataClient(raw)
             with console.status(
                 f"[cyan]{spec.name}: backtesting {start} → {args.date} "
-                f"({spec.rebalance} rebalance vs {spec.benchmark})…",
+                f"({spec.rebalance} rebalance vs {spec.benchmark}) "
+                f"over {', '.join(universe)}…",
                 spinner="dots",
             ):
-                result = backtest_fund(fund, start, args.date, fd)
+                result = backtest_fund(fund, start, args.date, fd, universe)
         print(result.model_dump_json(indent=2))
         if args.out:
             Path(args.out).write_text(result.model_dump_json(indent=2))
@@ -123,11 +137,11 @@ def main() -> None:
         n_models = sum(len(staff) for _, staff in fund.strategies)
         with console.status(
             f"[cyan]{spec.name}: running one cycle as of {args.date} — "
-            f"{len(spec.universe)} tickers x {n_models} models "
+            f"{len(universe)} tickers x {n_models} models "
             f"across {len(fund.strategies)} strategies…",
             spinner="dots",
         ):
-            record = run_cycle(fund, args.date, broker, fd)
+            record = run_cycle(fund, args.date, broker, fd, universe)
 
     print(record.model_dump_json(indent=2))
     if args.out:
