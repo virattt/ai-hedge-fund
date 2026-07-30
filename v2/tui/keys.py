@@ -25,24 +25,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# The provider names here are the ones in src/llm/api_models.json, so a model
-# picked in the UI maps straight to the key it needs.
-PROVIDER_ENV_VARS = {
-    "Anthropic": "ANTHROPIC_API_KEY",
-    "OpenAI": "OPENAI_API_KEY",
-    "xAI": "XAI_API_KEY",
-    "DeepSeek": "DEEPSEEK_API_KEY",
-    "Google": "GOOGLE_API_KEY",
-    "Kimi": "KIMI_API_KEY",
-}
+from v2.llm import PROVIDER_ENV_VARS, env_var_for  # noqa: F401  (re-export)
+
 
 # v2/tui/keys.py -> v2/tui -> v2 -> repo root.
 ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
-
-
-def env_var_for(provider: str) -> str | None:
-    """The environment variable a provider's key is read from."""
-    return PROVIDER_ENV_VARS.get(provider)
 
 
 def apply_credentials() -> None:

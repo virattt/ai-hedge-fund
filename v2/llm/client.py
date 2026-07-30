@@ -1,4 +1,4 @@
-"""LLM provider protocol + the Anthropic implementation.
+"""LLM provider protocol + the concrete clients.
 
 Mirrors the DataClient pattern (v2/data/protocol.py): agents depend on the
 `LLMClient` protocol, never a concrete provider. Any class with a
@@ -15,6 +15,13 @@ import json
 import os
 import re
 from typing import Protocol, runtime_checkable
+
+from v2.llm.registry import (
+    SUPPORTED_PROVIDERS,
+    env_var_for,
+    is_supported,
+    provider_for,
+)
 
 DEFAULT_MODEL = "claude-sonnet-5"
 
@@ -37,42 +44,121 @@ class LLMClient(Protocol):
     def complete(self, system: str, user: str) -> str: ...
 
 
-class AnthropicLLM:
-    """Anthropic provider via the existing langchain-anthropic dependency
-    (transport only — no structured-output magic)."""
+class ChatLLM:
+    """A langchain chat model behind the LLMClient protocol.
 
-    def __init__(
-        self,
-        model: str | None = None,
-        timeout: float = 60.0,
-        max_tokens: int = 4096,
-    ) -> None:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            raise ValueError(
-                "ANTHROPIC_API_KEY not found. Set it in your .env to use LLM agents."
-            )
-        from langchain_anthropic import ChatAnthropic
+    Every provider we support ends up here — only *constructing* the chat
+    model differs, and that lives in make_llm(). The response handling is
+    identical across providers, so it is written once.
+    """
 
-        self.model = model or os.getenv("V2_LLM_MODEL", DEFAULT_MODEL)
-        self._chat = ChatAnthropic(
-            model=self.model,
-            api_key=api_key,
-            timeout=timeout,
-            max_retries=1,
-            max_tokens=max_tokens,
-        )
+    def __init__(self, model: str, chat) -> None:
+        self.model = model
+        self._chat = chat
 
     def complete(self, system: str, user: str) -> str:
         result = self._chat.invoke([("system", system), ("human", user)])
-        content = result.content
-        # Anthropic reasoning models return a list of content blocks.
-        if isinstance(content, list):
-            content = "".join(
-                block.get("text", "") if isinstance(block, dict) else str(block)
-                for block in content
-            )
+        return _flatten(result.content)
+
+
+def make_llm(
+    model: str | None = None,
+    timeout: float = 60.0,
+    max_tokens: int = 4096,
+) -> ChatLLM:
+    """Build the client for a model id, routed by the registry's provider.
+
+    The id comes from the caller, else V2_LLM_MODEL, else DEFAULT_MODEL — the
+    same seam the TUI's picker writes to. Raises with the name of the missing
+    environment variable, because that is the only thing the user can act on.
+    """
+    model = model or os.environ.get("V2_LLM_MODEL") or DEFAULT_MODEL
+    provider = provider_for(model)
+    if provider is None:
+        # Unlisted ids still work: a model newer than the registry should not
+        # need a code change. Anthropic is the default transport.
+        provider = "Anthropic"
+    if not is_supported(provider):
+        raise ValueError(
+            f"No v2 client for {provider} (model {model}). "
+            f"Supported: {', '.join(sorted(SUPPORTED_PROVIDERS))}."
+        )
+
+    api_key = _require_key(provider)
+
+    if provider == "Anthropic":
+        from langchain_anthropic import ChatAnthropic
+        chat = ChatAnthropic(model=model, api_key=api_key, timeout=timeout,
+                             max_retries=1, max_tokens=max_tokens)
+    elif provider == "OpenAI":
+        from langchain_openai import ChatOpenAI
+        chat = ChatOpenAI(model=model, api_key=api_key, timeout=timeout,
+                          max_retries=1, base_url=os.getenv("OPENAI_API_BASE"))
+    elif provider == "DeepSeek":
+        from langchain_deepseek import ChatDeepSeek
+        chat = ChatDeepSeek(model=model, api_key=api_key, timeout=timeout,
+                            max_retries=1)
+    elif provider == "Google":
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        chat = ChatGoogleGenerativeAI(model=model, api_key=api_key,
+                                      timeout=timeout, max_retries=1)
+    elif provider == "xAI":
+        from langchain_xai import ChatXAI
+        chat = ChatXAI(model=model, api_key=api_key, timeout=timeout,
+                       max_retries=1)
+    elif provider == "Kimi":
+        # Moonshot speaks the OpenAI wire format. Default to the international
+        # host; mainland users override with MOONSHOT_BASE_URL (v1 does the same).
+        from langchain_openai import ChatOpenAI
+        chat = ChatOpenAI(
+            model=model, api_key=api_key, timeout=timeout, max_retries=1,
+            base_url=(os.getenv("MOONSHOT_BASE_URL")
+                      or "https://api.moonshot.ai/v1"))
+    else:  # pragma: no cover - SUPPORTED_PROVIDERS is checked above
+        raise ValueError(f"Unhandled provider {provider}")
+
+    return ChatLLM(model, chat)
+
+
+def AnthropicLLM(model: str | None = None, **kwargs) -> ChatLLM:  # noqa: N802
+    """Back-compat shim: v2 was Anthropic-only, and this name is exported.
+    Prefer make_llm(), which honours whichever model is selected."""
+    return make_llm(model or DEFAULT_MODEL, **kwargs)
+
+
+def _flatten(content) -> str:
+    """One provider's response as plain text.
+
+    Reasoning models (Anthropic extended thinking, and Gemini/DeepSeek in
+    their thinking modes) return a LIST of blocks rather than a string. Only
+    the text blocks are the answer — a thinking block stringified into the
+    payload is prose in front of the JSON, which is exactly what breaks the
+    parse. Mirrors v1's extract_json_from_response (src/utils/llm.py:109).
+    """
+    if isinstance(content, str):
         return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+        return "\n".join(parts)
+    return "" if content is None else str(content)
+
+
+def _require_key(provider: str) -> str:
+    """The provider's API key, or a failure that names the variable to set."""
+    env_var = env_var_for(provider)
+    # Kimi accepts either name; v1 reads MOONSHOT_API_KEY first.
+    key = (os.getenv("MOONSHOT_API_KEY") if provider == "Kimi" else None)
+    key = key or (os.getenv(env_var) if env_var else None)
+    if not key:
+        raise ValueError(
+            f"{env_var} not found. Set it in your .env to use {provider} models."
+        )
+    return key
 
 
 def extract_json(text: str) -> dict:

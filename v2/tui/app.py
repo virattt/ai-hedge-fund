@@ -84,9 +84,10 @@ from v2.tui.shared import (
     _render_chart,
     _strategy_kind,
     _valid_date,
-    is_reachable,
+    is_supported,
     load_api_models,
 )
+from v2.llm import provider_for
 from v2.tui.keys import (
     ENV_PATH,
     PROVIDER_ENV_VARS,
@@ -171,7 +172,7 @@ class HomeScreen(Screen):
     def action_set_key(self) -> None:
         """Set the key for the selected model's provider, before a run needs
         it. Replacing a key that already works is allowed on purpose."""
-        provider = _provider_for(self._model_id)
+        provider = provider_for(self._model_id)
         if provider is None:
             self.notify("Model is not in the registry — set its key by hand.",
                         severity="warning")
@@ -282,7 +283,7 @@ class ModelPickerScreen(ModalScreen[str | None]):
     def _options(self) -> list[Option | None]:
         options: list[Option | None] = []
         for provider, models in self._by_provider().items():
-            reachable = is_reachable(provider)
+            reachable = is_supported(provider)
             head = Text(provider.upper(), style=f"bold {BRIGHT}")
             if not reachable:
                 head.append("   no client in v2 yet", style=MUTED)
@@ -306,7 +307,7 @@ class ModelPickerScreen(ModalScreen[str | None]):
         for entry in load_api_models():
             groups.setdefault(entry[2], []).append(entry)
         return dict(sorted(groups.items(),
-                           key=lambda kv: not is_reachable(kv[0])))
+                           key=lambda kv: not is_supported(kv[0])))
 
     def on_mount(self) -> None:
         picker = self.query_one("#picker-list", OptionList)
@@ -435,13 +436,6 @@ class FundSelectScreen(Screen):
                     out.append(summ)
         out.sort(key=lambda s: s["mtime"], reverse=True)
         return out
-
-
-def _provider_for(model_id: str) -> str | None:
-    """Which provider serves a model id, per the registry. None if the id is
-    not listed — a hand-exported V2_LLM_MODEL should not be second-guessed."""
-    return next((prov for _, mid, prov in load_api_models() if mid == model_id),
-                None)
 
 
 def _saved_funds() -> list[tuple[Path, FundSpec]]:
@@ -999,7 +993,7 @@ class RunScreen(Screen):
     def _demand_key(self) -> bool:
         """True if the run can proceed now. Otherwise open the key prompt and
         resume the run from its callback."""
-        provider = _provider_for(os.environ.get("V2_LLM_MODEL", ""))
+        provider = provider_for(os.environ.get("V2_LLM_MODEL", ""))
         env_var = missing_key(provider) if provider else None
         if env_var is None:
             return True

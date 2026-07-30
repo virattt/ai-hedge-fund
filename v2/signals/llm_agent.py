@@ -26,7 +26,7 @@ import logging
 
 from v2.data.protocol import DataClient
 from v2.features.snapshot import FundamentalsSnapshot, InsufficientData, build_snapshot
-from v2.llm import AnthropicLLM, LLMClient, PromptCache, extract_json, prompt_key
+from v2.llm import LLMClient, PromptCache, extract_json, make_llm, prompt_key
 from v2.models import Signal
 from v2.signals.base import AlphaModel
 
@@ -44,7 +44,7 @@ class LLMAgent(AlphaModel):
         llm: LLMClient | None = None,
         cache: PromptCache | None = None,
     ) -> None:
-        self._llm = llm if llm is not None else AnthropicLLM()
+        self._llm = llm if llm is not None else make_llm()
         self._cache = cache if cache is not None else PromptCache()
 
     # ------------------------------------------------------------------
