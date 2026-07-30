@@ -83,6 +83,8 @@ FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 
 **Important**: You must set at least one LLM API key (e.g. `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY`) for the hedge fund to work. 
 
+**Optional**: Set `FIRECRAWL_API_KEY` to let the News Sentiment Agent read the full text of each article instead of just the headline. Grab a key at [firecrawl.dev](https://firecrawl.dev/) ([docs](https://docs.firecrawl.dev)); without it, the agent falls back to headline-only analysis.
+
 ## How to Run
 
 ### ⌨️ Command Line Interface

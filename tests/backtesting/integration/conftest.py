@@ -7,7 +7,6 @@ import pytest
 
 PRICES_ROOT = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "api" / "prices"
 FM_ROOT = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "api" / "financial_metrics"
-NEWS_ROOT = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "api" / "news"
 INSIDER_ROOT = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "api" / "insider_trades"
 
 
@@ -71,24 +70,6 @@ def _load_financial_metrics_from_fixture(ticker: str, end: str, limit: int) -> l
     return items[:limit]
 
 
-def _load_news_from_fixture(ticker: str, start: str | None, end: str, limit: int) -> list[dict]:
-    # Expect exact match filename {TICKER}_{START}_{END}.json
-    start_key = start or "none"
-    fixture_path = NEWS_ROOT / f"{ticker}_{start or 'none'}_{end}.json"
-    if not fixture_path.exists():
-        # Fallback: any file that covers end
-        candidates = sorted(NEWS_ROOT.glob(f"{ticker}_*.json"))
-        for p in candidates:
-            parts = p.stem.split("_")
-            if len(parts) >= 3 and parts[1] <= end <= parts[2]:
-                fixture_path = p
-                break
-    with fixture_path.open("r") as f:
-        data = json.load(f)
-    items = data.get("news", [])
-    return items[:limit]
-
-
 def _load_insider_from_fixture(ticker: str, start: str | None, end: str, limit: int) -> list[dict]:
     fixture_path = INSIDER_ROOT / f"{ticker}_{start or 'none'}_{end}.json"
     if not fixture_path.exists():
@@ -108,15 +89,16 @@ def _load_insider_from_fixture(ticker: str, start: str | None, end: str, limit: 
 def patch_engine_prices(monkeypatch):
     # No-op non-price endpoints
     monkeypatch.setattr("src.backtesting.engine.get_prices", lambda *a, **k: None)
+
     def _fake_get_financial_metrics(ticker: str, end_date: str, period: str = "ttm", limit: int = 10, api_key: str | None = None):
         return _load_financial_metrics_from_fixture(ticker, end_date, limit)
+
     monkeypatch.setattr("src.backtesting.engine.get_financial_metrics", _fake_get_financial_metrics)
+
     def _fake_get_insider_trades(ticker: str, end_date: str, start_date: str | None = None, limit: int = 1000, api_key: str | None = None):
         return _load_insider_from_fixture(ticker, start_date, end_date, limit)
-    def _fake_get_company_news(ticker: str, end_date: str, start_date: str | None = None, limit: int = 1000, api_key: str | None = None):
-        return _load_news_from_fixture(ticker, start_date, end_date, limit)
+
     monkeypatch.setattr("src.backtesting.engine.get_insider_trades", _fake_get_insider_trades)
-    monkeypatch.setattr("src.backtesting.engine.get_company_news", _fake_get_company_news)
 
     # Patch price data loader to use fixtures
     def _fake_get_price_data(ticker: str, start_date: str, end_date: str, api_key: str | None = None):
@@ -124,5 +106,3 @@ def patch_engine_prices(monkeypatch):
 
     monkeypatch.setattr("src.backtesting.engine.get_price_data", _fake_get_price_data)
     yield
-
-
