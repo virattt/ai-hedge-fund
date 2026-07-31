@@ -39,6 +39,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen, Screen
+from textual.timer import Timer
 from textual.widgets import (
     ContentSwitcher,
     Footer,
@@ -75,6 +76,7 @@ from v2.tui.shared import (
     UNIVERSE_PRESETS,
     VERSION,
     _BACKTEST_WEEKS,
+    _BOARD_REFRESH,
     _CYCLE_DWELL,
     _DEFAULT_MODEL_LABEL,
     _SHORT_NAMES,
@@ -87,7 +89,7 @@ from v2.tui.shared import (
     is_supported,
     load_api_models,
 )
-from v2.llm import provider_for
+from v2.llm import ThesisStream, make_llm, provider_for
 from v2.tui.keys import (
     ENV_PATH,
     PROVIDER_ENV_VARS,
@@ -728,16 +730,137 @@ def _roster_table(order: list[str], state: dict[str, tuple[str, str | None]]) ->
     return table
 
 
+# One glyph and one colour per call, in one place: the live board knows only
+# the word the stream has decoded, the report has a whole Signal, and they must
+# never disagree about what bearish looks like.
+_VERDICT_STYLE = {
+    "bullish": ("▲", GREEN),
+    "bearish": ("▼", RED),
+    "neutral": ("–", "yellow"),
+    "abstain": ("·", MUTED),
+}
+
+
 def _verdict(signal: Signal) -> tuple[str, str, str]:
     """A signal's verdict as (glyph, word, colour) — one vocabulary, used by
     both the browser's list and its detail pane."""
     if signal.metadata.get("abstained") is True:
-        return ("·", "ABSTAIN", MUTED)
-    if signal.value > 0:
-        return ("▲", "BULLISH", GREEN)
-    if signal.value < 0:
-        return ("▼", "BEARISH", RED)
-    return ("–", "NEUTRAL", "yellow")
+        word = "abstain"
+    elif signal.value > 0:
+        word = "bullish"
+    elif signal.value < 0:
+        word = "bearish"
+    else:
+        word = "neutral"
+    glyph, colour = _VERDICT_STYLE[word]
+    return (glyph, word.upper(), colour)
+
+
+class _Desk:
+    """One analyst's live state on the run board.
+
+    Written by that analyst's own worker thread, read by the repaint timer.
+    Every write is a single attribute assignment, so the worst a frame can show
+    is the previous ticker's line — never a torn one. That is why the worker
+    does not marshal each token onto the UI thread: at token rate it would
+    flood the message pump, and the timer already paints faster than an eye.
+    """
+
+    def __init__(self, who: str) -> None:
+        self.who = who
+        self.status = "queued"
+        self.ticker: str | None = None
+        self.stream: ThesisStream | None = None
+        self.signal: Signal | None = None
+
+    def begin(self, ticker: str) -> None:
+        self.status = "working"
+        self.ticker = ticker
+        self.signal = None
+        self.stream = ThesisStream()
+
+    def feed(self, text: str) -> None:
+        if self.stream is not None:
+            self.stream.feed(text)
+
+    def settle(self, signal: Signal) -> None:
+        """The real Signal, once predict() has returned. It supersedes the
+        streamed reading — and it is the *only* thing a cache hit produces,
+        since a cached answer never goes to the provider and streams nothing.
+        """
+        self.signal = signal
+
+    def finish(self) -> None:
+        self.status = "done"
+        self.ticker = None
+        self.stream = None
+        self.signal = None
+
+
+def _desk_table(desks: list[_Desk]) -> Table:
+    """The live run board: one row per analyst, thesis typing itself out.
+
+    The call arrives before the prose does — agents answer signal and
+    confidence first — so a row shows its verdict the moment it is decodable
+    and fills the reasoning in after. Rows move in parallel, which is the point
+    of the view: two analysts reaching opposite calls on the same name, at once.
+    """
+    table = Table(show_header=False, box=None, padding=(0, 1),
+                  expand=True, pad_edge=False)
+    # Only the thesis flexes. `ratio` is what makes that true: given plain
+    # widths and expand=True, rich shrinks every column proportionally when the
+    # terminal is narrow, and the verdict degrades to "▲…" — which is the one
+    # cell that must always be legible.
+    table.add_column(width=1)                                     # status glyph
+    table.add_column(width=20, no_wrap=True)                      # analyst
+    table.add_column(width=5, no_wrap=True)                       # ticker
+    table.add_column(width=14, no_wrap=True)                      # verdict
+    table.add_column(ratio=1, overflow="ellipsis", no_wrap=True)  # thesis, live
+
+    for desk in desks:
+        if desk.status == "done":
+            table.add_row(Text("✓", f"bold {GREEN}"), Text(desk.who, "bold"),
+                          Text(""), Text("Done", GREEN), Text(""))
+        elif desk.status == "queued":
+            table.add_row(Text("⋯", MUTED), Text(desk.who, MUTED), Text(""),
+                          Text(""), Text("queued", MUTED))
+        else:
+            table.add_row(
+                Text("⋯", "yellow"),
+                Text(desk.who, "bold"),
+                Text(desk.ticker or "", CYAN),
+                _live_verdict(desk),
+                _live_thesis(desk),
+            )
+    return table
+
+
+def _live_verdict(desk: _Desk) -> Text:
+    """The call: from the finished Signal when predict() has returned, else
+    from the stream as far as it has decoded, else nothing yet."""
+    if desk.signal is not None:
+        glyph, word, colour = _verdict(desk.signal)
+        confidence = desk.signal.metadata.get("confidence")
+        label = f"{word} {confidence:.0f}%" if isinstance(confidence, float) else word
+        return Text.assemble((f"{glyph} ", colour), (label, f"bold {colour}"))
+    stream = desk.stream
+    if stream is None or stream.signal is None:
+        return Text("thinking", MUTED)
+    glyph, colour = _VERDICT_STYLE.get(stream.signal, ("·", MUTED))
+    return Text.assemble((f"{glyph} ", colour),
+                         (stream.verdict() or "", f"bold {colour}"))
+
+
+def _live_thesis(desk: _Desk) -> Text:
+    """The reasoning so far, on one line. Whitespace is collapsed because the
+    row is a single line and a newline inside the thesis would eat it."""
+    if desk.signal is not None:
+        text = desk.signal.reasoning
+    elif desk.stream is not None:
+        text = desk.stream.thesis
+    else:
+        text = ""
+    return Text(" ".join(text.split()), style=TEXT)
 
 
 def _report_nav(record: CycleRecord) -> list[Option]:
@@ -918,8 +1041,8 @@ class RunScreen(Screen):
         self._phase = "ready"
         self._universe: list[str] = []
         self._record: CycleRecord | None = None
-        self._roster_order: list[str] = []
-        self._roster_state: dict[str, tuple[str, str | None]] = {}
+        self._desks: list[_Desk] = []
+        self._painter: Timer | None = None
 
     def compose(self) -> ComposeResult:
         with ContentSwitcher(initial="run-ready", id="run-panes"):
@@ -1011,11 +1134,16 @@ class RunScreen(Screen):
             (self._as_of, f"bold {RED}"),
             ("  ·  today's data → today's target book", MUTED),
         ))
-        self._roster_order = [DISPLAY_NAMES.get(n, n) for n in _agent_names(self._spec)]
-        self._roster_state = {n: ("pending", None) for n in self._roster_order}
-        self.query_one("#run-roster", Static).update(
-            _roster_table(self._roster_order, self._roster_state))
+        self._desks = [_Desk(DISPLAY_NAMES.get(n, n))
+                       for n in _agent_names(self._spec)]
+        self._paint_board()
+        # The worker threads mutate their own desk; this redraws all of them on
+        # one clock, so token rate never sets frame rate.
+        self._painter = self.set_interval(_BOARD_REFRESH, self._paint_board)
         self._run()
+
+    def _paint_board(self) -> None:
+        self.query_one("#run-roster", Static).update(_desk_table(self._desks))
 
     @on(OptionList.OptionHighlighted, "#report-nav")
     def _browse(self, event: OptionList.OptionHighlighted) -> None:
@@ -1040,22 +1168,26 @@ class RunScreen(Screen):
         as_of = self._as_of
         universe = self._universe
         try:
-            display = {n: DISPLAY_NAMES.get(n, n) for n in _agent_names(spec)}
+            desks = dict(zip(_agent_names(spec), self._desks, strict=True))
 
             def warm(agent_name: str) -> None:
-                who = display[agent_name]
-                model = ALPHA_MODEL_REGISTRY[agent_name]()  # own instance per thread
+                desk = desks[agent_name]
+                cls = ALPHA_MODEL_REGISTRY[agent_name]  # own instance per thread
+                # Only LLM agents have anything to stream; a quant model carries
+                # no client and simply runs.
+                model = (cls(llm=make_llm(on_token=desk.feed))
+                         if issubclass(cls, LLMAgent) else cls())
                 with FDClient() as raw:
                     fd = CachedDataClient(raw)
                     for ticker in universe:
-                        app.call_from_thread(self._roster, who, "working", ticker)
+                        desk.begin(ticker)
                         try:
-                            model.predict(ticker, as_of, fd)
+                            desk.settle(model.predict(ticker, as_of, fd))
                         except Exception:
                             pass  # best-effort warm; run_cycle is the source of truth
-                app.call_from_thread(self._roster, who, "done", None)
+                desk.finish()
 
-            names = list(display)
+            names = list(desks)
             with ThreadPoolExecutor(max_workers=min(8, len(names))) as pool:
                 for future in as_completed([pool.submit(warm, n) for n in names]):
                     future.result()
@@ -1076,12 +1208,16 @@ class RunScreen(Screen):
         except Exception as exc:  # fail loud, in the UI
             app.call_from_thread(self._fail, exc)
 
-    def _roster(self, who: str, status: str, label: str | None) -> None:
-        self._roster_state[who] = (status, label)
-        self.query_one("#run-roster", Static).update(
-            _roster_table(self._roster_order, self._roster_state))
+    def _stop_painting(self) -> None:
+        """The board is only live while the analysts are. Leave the last frame
+        on screen — it is the finished roster."""
+        if self._painter is not None:
+            self._painter.stop()
+            self._painter = None
+        self._paint_board()
 
     def _show_report(self, record: CycleRecord, path: Path) -> None:
+        self._stop_painting()
         self._phase = "done"
         self._record = record
         n_signals = sum(len(sr.signals) for sr in record.strategies)
@@ -1104,6 +1240,7 @@ class RunScreen(Screen):
         nav.focus()
 
     def _fail(self, exc: Exception) -> None:
+        self._stop_painting()
         self._phase = "failed"
         self.query_one("#run-phase", Static).update(Text.assemble(
             ("✗ ", f"bold {RED}"), (f"{type(exc).__name__}: {exc}", RED)))

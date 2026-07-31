@@ -18,6 +18,7 @@ from v2.llm.registry import (
     load_api_models,
     provider_for,
 )
+from v2.llm.watch import ThesisStream
 
 __all__ = [
     "AnthropicLLM",
@@ -28,6 +29,7 @@ __all__ = [
     "PROVIDER_ENV_VARS",
     "PromptCache",
     "SUPPORTED_PROVIDERS",
+    "ThesisStream",
     "env_var_for",
     "extract_json",
     "is_supported",

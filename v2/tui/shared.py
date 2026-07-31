@@ -60,6 +60,7 @@ DEFAULT_RISK = {"max_position_pct": 0.25, "max_gross_exposure": 1.0}
 DEFAULT_CAPITAL = 100_000.0
 _BACKTEST_WEEKS = 78  # ~18 months of history for the default backtest window
 _CYCLE_DWELL = 0.08   # min seconds per backtest tick, so the curve draws visibly
+_BOARD_REFRESH = 1 / 12  # seconds between run-board repaints — smooth, not frantic
 _WARM_CHUNK = 10      # dates per warm task — small enough that one stock still fans out
 
 _CHART_HEIGHT = 8

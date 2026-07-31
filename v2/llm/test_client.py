@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from v2.llm import SUPPORTED_PROVIDERS, load_api_models, make_llm, provider_for
+from v2.llm import ChatLLM, SUPPORTED_PROVIDERS, load_api_models, make_llm, provider_for
 from v2.llm.client import _flatten
 from v2.llm.registry import PROVIDER_ENV_VARS
 
@@ -75,6 +75,72 @@ def test_provider_for_reads_the_registry():
     assert provider_for("claude-opus-5") == "Anthropic"
     assert provider_for("gpt-5.5") == "OpenAI"
     assert provider_for("not-a-model") is None
+
+
+class FakeChunk:
+    def __init__(self, content) -> None:
+        self.content = content
+
+
+class FakeChat:
+    """Records which path was taken, so a test can prove streaming happened."""
+
+    def __init__(self, chunks: list) -> None:
+        self._chunks = chunks
+        self.streamed = False
+        self.invoked = False
+
+    def invoke(self, messages):
+        self.invoked = True
+        return FakeChunk("".join(
+            c.content if isinstance(c.content, str) else "" for c in self._chunks))
+
+    def stream(self, messages):
+        self.streamed = True
+        yield from self._chunks
+
+
+class TestStreaming:
+    """A listener changes how the text arrives, never what comes back — the
+    prompt cache and the parse must not be able to tell the difference.
+    """
+
+    def test_no_listener_does_not_stream(self):
+        chat = FakeChat([FakeChunk("done")])
+        assert ChatLLM("m", chat).complete("s", "u") == "done"
+        assert chat.invoked and not chat.streamed
+
+    def test_listener_sees_every_piece_and_the_return_is_whole(self):
+        chat = FakeChat([FakeChunk('{"sig'), FakeChunk('nal": '), FakeChunk('"buy"}')])
+        seen: list[str] = []
+        result = ChatLLM("m", chat, seen.append).complete("s", "u")
+        assert chat.streamed
+        assert seen == ['{"sig', 'nal": ', '"buy"}']
+        assert result == '{"signal": "buy"}'
+
+    def test_chunk_blocks_join_without_a_separator(self):
+        """Whole-message blocks join on a newline; stream blocks are fragments
+        of one continuing string, and a newline would land mid-word."""
+        chat = FakeChat([FakeChunk([{"type": "text", "text": "mo"},
+                                    {"type": "text", "text": "at"}])])
+        assert ChatLLM("m", chat, lambda _: None).complete("s", "u") == "moat"
+
+    def test_thinking_chunks_reach_neither_the_listener_nor_the_result(self):
+        chat = FakeChat([
+            FakeChunk([{"type": "thinking", "thinking": "weighing margins"}]),
+            FakeChunk([{"type": "text", "text": "verdict"}]),
+        ])
+        seen: list[str] = []
+        assert ChatLLM("m", chat, seen.append).complete("s", "u") == "verdict"
+        assert seen == ["verdict"]
+
+    def test_make_llm_passes_the_listener_through(self, keyed):
+        """The TUI builds its agents with make_llm(on_token=...), so the
+        listener has to survive the factory."""
+        def listener(text: str) -> None:
+            pass
+
+        assert make_llm("claude-opus-5", on_token=listener)._on_token is listener
 
 
 class TestFlatten:
