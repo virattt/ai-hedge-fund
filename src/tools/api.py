@@ -4,8 +4,13 @@ import os
 import pandas as pd
 import requests
 import time
+from requests.adapters import HTTPAdapter
 
 logger = logging.getLogger(__name__)
+
+_session = requests.Session()
+_session.mount("https://", HTTPAdapter(pool_maxsize=10, pool_connections=5))
+_session.mount("http://", HTTPAdapter(pool_maxsize=10, pool_connections=5))
 
 from src.data.cache import get_cache
 from src.data.models import (
@@ -45,9 +50,9 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
     """
     for attempt in range(max_retries + 1):  # +1 for initial attempt
         if method.upper() == "POST":
-            response = requests.post(url, headers=headers, json=json_data)
+            response = _session.post(url, headers=headers, json=json_data, timeout=(5, 30))
         else:
-            response = requests.get(url, headers=headers)
+            response = _session.get(url, headers=headers, timeout=(5, 30))
         
         if response.status_code == 429 and attempt < max_retries:
             # Linear backoff: 60s, 90s, 120s, 150s...

@@ -1,3 +1,5 @@
+import logging
+import copy
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import pandas as pd
@@ -14,6 +16,8 @@ from src.tools.api import (
 )
 from app.backend.services.graph import run_graph_async, parse_hedge_fund_response
 from app.backend.services.portfolio import create_portfolio
+
+logger = logging.getLogger(__name__)
 
 class BacktestService:
     """
@@ -299,6 +303,8 @@ class BacktestService:
             "gross_exposure": 0.0,
             "net_exposure": 0.0,
         }
+        skipped_days = []
+        error_count = 0
 
         # Initialize portfolio values
         if len(dates) > 0:
@@ -339,28 +345,34 @@ class BacktestService:
                         price_data = get_price_data(ticker, previous_date_str, current_date_str)
                         if price_data.empty:
                             missing_data = True
+                            skipped_days.append({"date": str(current_date), "reason": "price_data_missing"})
+                            error_count += 1
                             break
                         current_prices[ticker] = price_data.iloc[-1]["close"]
-                    except Exception as e:
+                    except Exception:
                         missing_data = True
+                        skipped_days.append({"date": str(current_date), "reason": "price_data_missing"})
+                        error_count += 1
                         break
 
                 if missing_data:
                     continue
 
             except Exception:
+                skipped_days.append({"date": str(current_date), "reason": "price_data_missing"})
+                error_count += 1
                 continue
 
             # Create portfolio for this iteration
-            portfolio_for_graph = create_portfolio(
-                initial_cash=self.portfolio["cash"],
-                margin_requirement=self.portfolio["margin_requirement"],
+            portfolio_for_graph = copy.deepcopy(self.portfolio)
+            portfolio_defaults = create_portfolio(
+                initial_cash=portfolio_for_graph["cash"],
+                margin_requirement=portfolio_for_graph["margin_requirement"],
                 tickers=self.tickers,
-                portfolio_positions=[]  # We'll handle positions manually
+                portfolio_positions=[],
             )
-            
-            # Copy current portfolio state to the graph portfolio
-            portfolio_for_graph.update(self.portfolio)
+            portfolio_defaults.update(portfolio_for_graph)
+            portfolio_for_graph = portfolio_defaults
 
             # Execute graph-based agent decisions
             try:
@@ -384,7 +396,9 @@ class BacktestService:
                     analyst_signals = {}
                     
             except Exception as e:
-                print(f"Error running graph for {current_date_str}: {e}")
+                logger.error("Graph execution failed for %s: %s", current_date_str, e)
+                skipped_days.append({"date": str(current_date), "reason": f"graph_error: {str(e)}"})
+                error_count += 1
                 decisions = {}
                 analyst_signals = {}
 
@@ -501,6 +515,9 @@ class BacktestService:
             performance_metrics["net_exposure"] = final_result["net_exposure"]
             performance_metrics["long_short_ratio"] = final_result["long_short_ratio"]
 
+        if len(dates) > 0 and error_count > len(dates) * 0.2:
+            logger.warning("Backtest encountered %s errors across %s trading days", error_count, len(dates))
+
         # Store final performance metrics
         self.performance_metrics = performance_metrics
 
@@ -509,6 +526,9 @@ class BacktestService:
             "performance_metrics": performance_metrics,
             "portfolio_values": self.portfolio_values,
             "final_portfolio": self.portfolio,
+            "skipped_days": skipped_days,
+            "error_count": error_count,
+            "total_days": len(dates),
         }
 
     def run_backtest_sync(self) -> Dict[str, Any]:

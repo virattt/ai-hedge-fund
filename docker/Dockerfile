@@ -18,5 +18,9 @@ RUN poetry config virtualenvs.create false \
 # Copy rest of the source code
 COPY . /app/
 
+# Run as non-root user
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
 # Default command (will be overridden by Docker Compose)
-CMD ["python", "src/main.py"] 
+CMD ["python", "src/main.py"]

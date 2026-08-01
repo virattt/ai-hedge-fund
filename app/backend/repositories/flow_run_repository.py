@@ -1,9 +1,13 @@
+import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
+from sqlalchemy.exc import IntegrityError
 from app.backend.database.models import HedgeFundFlowRun
 from app.backend.models.schemas import FlowRunStatus
+
+logger = logging.getLogger(__name__)
 
 
 class FlowRunRepository:
@@ -14,19 +18,28 @@ class FlowRunRepository:
     
     def create_flow_run(self, flow_id: int, request_data: Dict[str, Any] = None) -> HedgeFundFlowRun:
         """Create a new flow run"""
-        # Get the next run number for this flow
-        run_number = self._get_next_run_number(flow_id)
-        
-        flow_run = HedgeFundFlowRun(
-            flow_id=flow_id,
-            request_data=request_data,
-            run_number=run_number,
-            status=FlowRunStatus.IDLE.value
-        )
-        self.db.add(flow_run)
-        self.db.commit()
-        self.db.refresh(flow_run)
-        return flow_run
+        for attempt in range(3):
+            run_number = self._get_next_run_number(flow_id)
+            flow_run = HedgeFundFlowRun(
+                flow_id=flow_id,
+                request_data=request_data,
+                run_number=run_number,
+                status=FlowRunStatus.IDLE.value
+            )
+            self.db.add(flow_run)
+            try:
+                self.db.commit()
+                self.db.refresh(flow_run)
+                logger.info("Flow run created: flow_id=%d, run_number=%d", flow_id, flow_run.run_number)
+                return flow_run
+            except IntegrityError:
+                self.db.rollback()
+                if attempt < 2:
+                    logger.warning("Flow run number conflict, retrying: flow_id=%d, attempt=%d", flow_id, attempt + 1)
+                if attempt == 2:
+                    raise
+
+        raise RuntimeError(f"Failed to create flow run for flow_id={flow_id}")
     
     def get_flow_run_by_id(self, run_id: int) -> Optional[HedgeFundFlowRun]:
         """Get a flow run by its ID"""
