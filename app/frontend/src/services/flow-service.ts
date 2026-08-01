@@ -1,6 +1,6 @@
 import { Flow } from '@/types/flow';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://ai-hedge-fund-af1e.onrender.com';
 
 export interface CreateFlowRequest {
   name: string;
