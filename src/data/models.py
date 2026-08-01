@@ -113,6 +113,17 @@ class CompanyNewsResponse(BaseModel):
     news: list[CompanyNews]
 
 
+class AdanosSentiment(BaseModel):
+    source: str
+    found: bool = False
+    buzz_score: float | None = None
+    sentiment_score: float | None = None
+    bullish_pct: int | None = None
+    bearish_pct: int | None = None
+    trend: str | None = None
+    activity_count: int | None = None
+
+
 class CompanyFacts(BaseModel):
     ticker: str
     name: str

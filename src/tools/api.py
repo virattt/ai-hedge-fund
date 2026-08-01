@@ -4,11 +4,13 @@ import os
 import pandas as pd
 import requests
 import time
+from urllib.parse import quote, urlencode
 
 logger = logging.getLogger(__name__)
 
 from src.data.cache import get_cache
 from src.data.models import (
+    AdanosSentiment,
     CompanyNews,
     CompanyNewsResponse,
     FinancialMetrics,
@@ -24,6 +26,16 @@ from src.data.models import (
 
 # Global cache instance
 _cache = get_cache()
+
+ADANOS_BASE_URL = "https://api.adanos.org"
+ADANOS_STOCK_SOURCES = {
+    "reddit": "/reddit/stocks/v1/stock/{ticker}",
+    "x": "/x/stocks/v1/stock/{ticker}",
+    "news": "/news/stocks/v1/stock/{ticker}",
+    "polymarket": "/polymarket/stocks/v1/stock/{ticker}",
+}
+ADANOS_SOURCE_TIMEOUT_SECONDS = 5
+ADANOS_TOTAL_TIMEOUT_SECONDS = 12
 
 
 def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: dict = None, max_retries: int = 3) -> requests.Response:
@@ -58,6 +70,94 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
         
         # Return the response (whether success, other errors, or final 429)
         return response
+
+
+def _extract_adanos_activity_count(source: str, data: dict) -> int | None:
+    if source == "polymarket":
+        return data.get("trade_count")
+    return data.get("mentions")
+
+
+def _build_adanos_url(source: str, ticker: str, start_date: str | None, end_date: str | None) -> str:
+    path = ADANOS_STOCK_SOURCES[source].format(ticker=quote(ticker, safe=""))
+    params = {}
+    if start_date:
+        params["from"] = start_date
+    if end_date:
+        params["to"] = end_date
+    query = urlencode(params)
+    return f"{ADANOS_BASE_URL}{path}?{query}" if query else f"{ADANOS_BASE_URL}{path}"
+
+
+def get_adanos_market_sentiment(
+    ticker: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    api_key: str = None,
+) -> list[AdanosSentiment]:
+    """Fetch optional Adanos market sentiment by stock ticker.
+
+    Returns an empty list when ADANOS_API_KEY is not configured or when the
+    upstream service has no usable data, keeping the sentiment agent fail-open.
+    """
+    adanos_api_key = api_key or os.environ.get("ADANOS_API_KEY")
+    if not adanos_api_key:
+        return []
+
+    cache_key = f"{ticker}_{start_date or 'none'}_{end_date or 'none'}"
+    cached_data = _cache.get_adanos_sentiment(cache_key)
+    if cached_data is not None:
+        return [AdanosSentiment(**item) for item in cached_data]
+
+    headers = {"X-API-Key": adanos_api_key}
+    source_results: list[AdanosSentiment] = []
+    all_sources_successful = True
+    started_at = time.monotonic()
+
+    for source in ADANOS_STOCK_SOURCES:
+        remaining_seconds = ADANOS_TOTAL_TIMEOUT_SECONDS - (time.monotonic() - started_at)
+        if remaining_seconds <= 0:
+            all_sources_successful = False
+            break
+
+        url = _build_adanos_url(source, ticker, start_date, end_date)
+        try:
+            response = requests.get(url, headers=headers, timeout=min(ADANOS_SOURCE_TIMEOUT_SECONDS, remaining_seconds))
+            if response.status_code == 404:
+                continue
+            if response.status_code != 200:
+                all_sources_successful = False
+                continue
+            data = response.json()
+
+            if not isinstance(data, dict):
+                all_sources_successful = False
+                continue
+
+            if not data.get("found", False):
+                continue
+
+            source_results.append(
+                AdanosSentiment(
+                    source=source,
+                    found=True,
+                    buzz_score=data.get("buzz_score"),
+                    sentiment_score=data.get("sentiment_score"),
+                    bullish_pct=data.get("bullish_pct"),
+                    bearish_pct=data.get("bearish_pct"),
+                    trend=data.get("trend"),
+                    activity_count=_extract_adanos_activity_count(source, data),
+                )
+            )
+        except Exception as e:
+            all_sources_successful = False
+            logger.warning("Failed to fetch Adanos %s sentiment for %s: %s", source, ticker, e)
+            continue
+
+    if all_sources_successful:
+        _cache.set_adanos_sentiment(cache_key, [source.model_dump() for source in source_results])
+
+    return source_results
 
 
 def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> list[Price]:
