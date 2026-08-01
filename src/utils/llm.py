@@ -1,10 +1,30 @@
 """Helper functions for LLM"""
 
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 import json
 from pydantic import BaseModel
 from src.llm.models import get_model, get_model_info
 from src.utils.progress import progress
 from src.graph.state import AgentState
+
+
+DEFAULT_LLM_TIMEOUT_SECONDS = 120
+
+
+def invoke_with_timeout(llm, prompt: any, timeout: float | None):
+    """Invoke an LLM with a bounded wait so retry/fallback logic can run."""
+    if timeout is None or timeout <= 0:
+        return llm.invoke(prompt)
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(llm.invoke, prompt)
+    try:
+        return future.result(timeout=timeout)
+    except FutureTimeoutError as exc:
+        future.cancel()
+        raise TimeoutError(f"LLM call timed out after {timeout} seconds") from exc
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def call_llm(
@@ -14,6 +34,7 @@ def call_llm(
     state: AgentState | None = None,
     max_retries: int = 3,
     default_factory=None,
+    timeout: float | None = DEFAULT_LLM_TIMEOUT_SECONDS,
 ) -> BaseModel:
     """
     Makes an LLM call with retry logic, handling both JSON supported and non-JSON supported models.
@@ -25,6 +46,7 @@ def call_llm(
         state: Optional state object to extract agent-specific model configuration
         max_retries: Maximum number of retries (default: 3)
         default_factory: Optional factory function to create default response on failure
+        timeout: Maximum seconds to wait for each LLM invocation before retrying (default: 120)
 
     Returns:
         An instance of the specified Pydantic model
@@ -58,8 +80,9 @@ def call_llm(
     # Call the LLM with retries
     for attempt in range(max_retries):
         try:
-            # Call the LLM
-            result = llm.invoke(prompt)
+            # Call the LLM with a bounded wait so existing retry/fallback paths
+            # can recover when a provider hangs instead of returning an error.
+            result = invoke_with_timeout(llm, prompt, timeout)
 
             # For non-JSON support models, we need to extract and parse the JSON manually
             if model_info and not model_info.has_json_mode():
