@@ -90,5 +90,42 @@ services:
     tty: true
     stdin_open: true
 
+  web-backend:
+    profiles:
+      - web
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: ai-hedge-fund
+    volumes:
+      - ../.env:/app/.env
+      - web_data:/app/data
+    command: >
+      sh -c "ln -sfn /app/data/hedge_fund.db /app/app/backend/hedge_fund.db &&
+             exec uvicorn app.backend.main:app --host 0.0.0.0 --port 8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      PYTHONPATH: /app
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  web-frontend:
+    profiles:
+      - web
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    image: ai-hedge-fund-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - web-backend
+    restart: unless-stopped
+
 volumes:
-  ollama_data: 
+  ollama_data:
+  web_data:
