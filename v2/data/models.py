@@ -219,14 +219,26 @@ class EarningsData(BaseModel):
 
 
 class Earnings(BaseModel):
-    """Earnings data from /earnings (single-ticker, latest-period mode)."""
+    """Latest earnings filing data from /earnings.
+
+    The endpoint returns filing metadata along with the quarterly and annual
+    earnings payloads.  Keep the metadata on the latest-period convenience
+    model so callers do not lose the filing context when using
+    ``FDClient.get_earnings()``.
+    """
 
     model_config = _IGNORE
 
     ticker: str
     report_period: str
+    source_type: str | None = None
+    filing_date: str | None = None
+    filing_datetime: str | None = None
+    filing_window: str | None = None
     fiscal_period: str | None = None
     currency: str | None = None
+    filing_url: str | None = None
+    accession_number: str | None = None
     quarterly: EarningsData | None = None
     annual: EarningsData | None = None
 
