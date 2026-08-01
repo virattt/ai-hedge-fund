@@ -74,6 +74,13 @@ const LLM_API_KEYS: ApiKey[] = [
     placeholder: 'your-openrouter-api-key'
   },
   {
+    key: 'EDENAI_API_KEY',
+    label: 'Eden AI API',
+    description: 'For Eden AI models (openai/gpt-5.5, mistral/mistral-large-latest, etc.)',
+    url: 'https://www.edenai.co/',
+    placeholder: 'your-edenai-api-key'
+  },
+  {
     key: 'GIGACHAT_API_KEY',
     label: 'GigaChat API',
     description: 'For GigaChat models (GigaChat-2-Max, etc.)',
