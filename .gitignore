@@ -50,30 +50,17 @@ Thumbs.db
 # PDF files
 *.pdf
 
-# Frontend
-node_modules
-
 # Outputs
 outputs/
 /scratchpad/
 
-# Database files (users will have their own local databases)
-*.db
-*.db-journal
-*.db-wal
-*.db-shm
-*.sqlite
-*.sqlite3
-
-# Alembic (keep migration files, but ignore generated/cache files)
-app/backend/alembic/versions/__pycache__/
-.v2_cache/
-
+# API/LLM response cache
+.hedge_fund_cache/
 
 # User-created fund mandates (the wizard writes here); keep only the example
-v2/funds/*.yaml
-!v2/funds/example.yaml
+mandates/*.yaml
+!mandates/example.yaml
 # Local receipts: a backtest writes <fund>-backtest-<stamp>.json, a run-today
 # writes <fund>-run-<stamp>.json. Both are personal trading history, not code.
-v2/funds/*-backtest*.json
-v2/funds/*-run-*.json
+mandates/*-backtest*.json
+mandates/*-run-*.json
