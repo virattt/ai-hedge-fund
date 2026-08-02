@@ -419,7 +419,13 @@ def calculate_enhanced_dcf_value(
     
     # Stage 3: Terminal (steady state)
     terminal_growth = min(0.03, high_growth * 0.6)
-    
+
+    # Ensure a minimum spread between WACC and terminal growth so the
+    # Gordon Growth denominator never approaches zero.
+    min_spread = 0.02
+    if wacc - terminal_growth < min_spread:
+        terminal_growth = max(wacc - min_spread, 0.0)
+
     # Project FCF with stages
     pv = 0
     base_fcf = max(fcf_current, fcf_avg_3yr * 0.85)  # Conservative base
@@ -429,16 +435,15 @@ def calculate_enhanced_dcf_value(
         fcf_projected = base_fcf * (1 + high_growth) ** year
         pv += fcf_projected / (1 + wacc) ** year
     
-    # Transition stage
+    # Transition stage -- compound sequentially with declining growth rates
+    fcf_running = base_fcf * (1 + high_growth) ** 3
     for year in range(4, 8):
         transition_rate = transition_growth * (8 - year) / 4  # Declining
-        fcf_projected = base_fcf * (1 + high_growth) ** 3 * (1 + transition_rate) ** (year - 3)
-        pv += fcf_projected / (1 + wacc) ** year
-    
-    # Terminal value
-    final_fcf = base_fcf * (1 + high_growth) ** 3 * (1 + transition_growth) ** 4
-    if wacc <= terminal_growth:
-        terminal_growth = wacc * 0.8  # Adjust if invalid
+        fcf_running = fcf_running * (1 + transition_rate)
+        pv += fcf_running / (1 + wacc) ** year
+
+    # Terminal value using the actual end-of-transition FCF
+    final_fcf = fcf_running
     terminal_value = (final_fcf * (1 + terminal_growth)) / (wacc - terminal_growth)
     pv_terminal = terminal_value / (1 + wacc) ** 7
     
@@ -464,8 +469,8 @@ def calculate_dcf_scenarios(
     }
     
     results = {}
-    base_revenue_growth = revenue_growth or 0.05
-    
+    base_revenue_growth = min(revenue_growth or 0.05, 0.50)
+
     for scenario, adjustments in scenarios.items():
         adjusted_revenue_growth = base_revenue_growth * adjustments['growth_adj']
         adjusted_wacc = wacc * adjustments['wacc_adj']
