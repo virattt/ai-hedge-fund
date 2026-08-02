@@ -203,6 +203,7 @@ def get_insider_trades(
 
     all_trades = []
     current_end_date = end_date
+    previous_end_date = None
 
     while True:
         url = f"https://api.financialdatasets.ai/insider-trades/?ticker={ticker}&filing_date_lte={current_end_date}"
@@ -238,6 +239,11 @@ def get_insider_trades(
         if current_end_date <= start_date:
             break
 
+        # Prevent infinite loop when all items share the same date
+        if current_end_date == previous_end_date:
+            break
+        previous_end_date = current_end_date
+
     if not all_trades:
         return []
 
@@ -269,6 +275,7 @@ def get_company_news(
 
     all_news = []
     current_end_date = end_date
+    previous_end_date = None
 
     while True:
         url = f"https://api.financialdatasets.ai/news/?ticker={ticker}&end_date={current_end_date}"
@@ -303,6 +310,11 @@ def get_company_news(
         # If we've reached or passed the start_date, we can stop
         if current_end_date <= start_date:
             break
+
+        # Prevent infinite loop when all items share the same date
+        if current_end_date == previous_end_date:
+            break
+        previous_end_date = current_end_date
 
     if not all_news:
         return []
