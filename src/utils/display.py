@@ -3,6 +3,9 @@ from tabulate import tabulate
 from .analysts import ANALYST_ORDER
 import os
 import json
+import re
+
+_ANSI_ESCAPE = re.compile(r'\x1b\[[0-9;]*m')
 
 
 def sort_agent_signals(signals):
@@ -11,7 +14,8 @@ def sort_agent_signals(signals):
     analyst_order = {display: idx for idx, (display, _) in enumerate(ANALYST_ORDER)}
     analyst_order["Risk Management"] = len(ANALYST_ORDER)  # Add Risk Management at the end
 
-    return sorted(signals, key=lambda x: analyst_order.get(x[0], 999))
+    # Strip ANSI color codes before lookup since x[0] may contain escape sequences
+    return sorted(signals, key=lambda x: analyst_order.get(_ANSI_ESCAPE.sub('', x[0]), 999))
 
 
 def print_trading_output(result: dict) -> None:
