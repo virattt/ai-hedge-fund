@@ -80,8 +80,12 @@ class BacktestEngine:
 
     def _prefetch_data(self) -> None:
         end_date_dt = datetime.strptime(self._end_date, "%Y-%m-%d")
-        start_date_dt = end_date_dt - relativedelta(years=1)
-        start_date_str = start_date_dt.strftime("%Y-%m-%d")
+        one_year_ago = (end_date_dt - relativedelta(years=1)).strftime("%Y-%m-%d")
+        # Use whichever date is earlier so the prefetch covers the full backtest window.
+        # Without this, backtests longer than 1 year silently bypass the cache for
+        # dates before (end_date - 1yr), causing uncached API calls on every loop
+        # iteration for those trading days. (Fixes #572)
+        start_date_str = min(self._start_date, one_year_ago)
 
         for ticker in self._tickers:
             get_prices(ticker, start_date_str, self._end_date)
