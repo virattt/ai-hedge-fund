@@ -121,6 +121,27 @@ class TestRetrospectiveFilter:
         assert len(result) == 1
         assert result[0].report_period == "2026-03-31"
 
+    def test_keeps_annual_filings_beyond_quarterly_cutoff(self):
+        from v2.data.models import EarningsRecord
+        from v2.event_study.engine import _filter_retrospective
+
+        annual_10k = EarningsRecord(
+            ticker="GS", report_period="2025-12-31", source_type="10-K",
+            filing_date="2026-03-15",
+        )
+        annual_20f = EarningsRecord(
+            ticker="BABA", report_period="2025-12-31", source_type="20-F",
+            filing_date="2026-04-30",
+        )
+        stale_quarterly = EarningsRecord(
+            ticker="GS", report_period="2025-12-31", source_type="10-Q",
+            filing_date="2026-04-13",
+        )
+
+        result = _filter_retrospective([annual_10k, annual_20f, stale_quarterly])
+
+        assert {record.source_type for record in result} == {"10-K", "20-F"}
+
 
 # ---------------------------------------------------------------------------
 # Unit tests — plot (smoke test, no visual assertion)
