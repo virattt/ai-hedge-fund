@@ -22,68 +22,60 @@ By using this software, you agree to use it solely for learning purposes.
 
 ## How to Install
 
-### 1. Clone the repository
-
 ```bash
-git clone https://github.com/virattt/ai-hedge-fund.git
-cd ai-hedge-fund
+pipx install hedge-fund
 ```
 
-### 2. Install dependencies
+(or `uv tool install hedge-fund`, or `pip install hedge-fund` into an environment of your choice)
 
-Install Poetry (if not already installed):
+Then run it from anywhere:
+
 ```bash
-curl -sSL https://install.python-poetry.org | python3 -
+hf
 ```
 
-Then install dependencies:
-```bash
-poetry install
-```
+### API keys
 
-### 3. Set up API keys
+The app asks for keys the first time it needs them and saves them to `~/.hedge-fund/.env` — nothing to configure up front. It needs:
 
-Create a `.env` file in the root directory:
-```bash
-# For financial data (prices, fundamentals, earnings)
-FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
+- A [Financial Datasets](https://financialdatasets.ai) API key, for prices, fundamentals, and earnings.
+- One LLM API key for the LLM-powered alpha models. Supported providers: Anthropic, OpenAI, DeepSeek, Google, xAI, Kimi.
 
-# At least one LLM API key, for the LLM-powered alpha models
-ANTHROPIC_API_KEY=your-anthropic-api-key
-OPENAI_API_KEY=your-openai-api-key
-```
-
-Financial data comes from [Financial Datasets](https://financialdatasets.ai). Supported LLM providers: Anthropic, OpenAI, DeepSeek, Google, xAI, Kimi.
+Keys exported in your shell always win over the saved file.
 
 ## How to Run
 
 ### Interactive app
 
 ```bash
-poetry run hf
+hf
 ```
 
-With no arguments, this launches the interactive terminal app. Build a fund — pick stocks, strategies, rebalance cadence — or backtest a saved fund and watch its equity curve draw against its benchmark.
+With no arguments, this launches the interactive terminal app. Build a fund — pick stocks, strategies, rebalance cadence — or backtest a saved fund and watch its equity curve draw against its benchmark. Funds you build are saved as mandate files in `~/.hedge-fund/mandates/`.
 
 ### Non-interactive
 
 Run one fund cycle from a mandate file. The full cycle record prints to stdout as JSON; a short human summary goes to stderr:
 
 ```bash
-poetry run hf mandates/example.yaml --tickers AAPL,MSFT
+hf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
 ```
 
 Backtest the mandate over history at its rebalance cadence:
 
 ```bash
-poetry run hf mandates/example.yaml --tickers AAPL,MSFT --backtest
+hf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
 ```
 
 A mandate is the desk — strategies, staff, risk, capital, cadence — and never names tickers; `--tickers` says what to point it at for this run.
 
-## Running the Tests
+## Development
 
 ```bash
+git clone https://github.com/virattt/ai-hedge-fund.git
+cd ai-hedge-fund
+poetry install
+poetry run hf
 poetry run pytest hedge_fund
 ```
 

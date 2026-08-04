@@ -10,22 +10,26 @@ from __future__ import annotations
 
 import json
 from datetime import date as _date
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _version
 from pathlib import Path
 
 from rich.text import Text
 
 from hedge_fund.fund import FundSpec, StrategySpec
 from hedge_fund.llm import is_supported, load_api_models  # noqa: F401  (re-export)
+from hedge_fund.paths import MANDATES_DIR, ensure_mandates_dir  # noqa: F401  (re-export)
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent
 
-VERSION = "2.0.0"  # keep in sync with pyproject.toml
+try:
+    VERSION = _version("hedge-fund")
+except PackageNotFoundError:  # running from source without an install
+    VERSION = "dev"
 
 # Strategy libraries live in hedge_fund/strategies/ (code, inside the package).
-# Mandates the app writes are user data, so they live in mandates/ at the repo
-# root — outside the package. This module is hedge_fund/tui/shared.py, so the
-# repo root is three up.
+# Mandates the app writes are user data and live in ~/.hedge-fund/ (see paths.py).
 STRATEGY_DIR = Path(__file__).resolve().parent.parent / "strategies"
-FUNDS_DIR = Path(__file__).resolve().parents[2] / "mandates"
+FUNDS_DIR = MANDATES_DIR
 
 UNIVERSE_PRESETS = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN",
                     "META", "TSLA", "JPM", "UNH", "XOM"]

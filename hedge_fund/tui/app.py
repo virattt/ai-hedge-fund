@@ -86,6 +86,7 @@ from hedge_fund.tui.shared import (
     _render_chart,
     _strategy_kind,
     _valid_date,
+    ensure_mandates_dir,
     is_supported,
     load_api_models,
 )
@@ -229,11 +230,11 @@ class KeyPromptScreen(ModalScreen[bool]):
                 (f"{self._provider} API key needed", f"bold {BRIGHT}")),
                 id="key-q")
             yield Static(Text.assemble(
-                ("The agents cannot reason without it. Paste it below and it "
+                ("The fund cannot run without it. Paste it below and it "
                  "is saved to\n", MUTED),
                 (str(ENV_PATH), TEXT),
-                ("\nwhich is gitignored, owner-read-only, and already how this "
-                 "repo stores keys.", MUTED)),
+                ("\nwhich is owner-read-only and loaded automatically on "
+                 "every start.", MUTED)),
                 id="key-blurb")
             yield Input(password=True, placeholder=self._env_var, id="key-input")
             yield Static(Text.assemble(
@@ -257,6 +258,28 @@ class KeyPromptScreen(ModalScreen[bool]):
 
     def action_cancel(self) -> None:
         self.dismiss(False)
+
+
+def _demand_run_keys(app, resume) -> bool:
+    """True if every key a run needs is in the environment: the data key
+    first, then the selected model's LLM key. Otherwise open the prompt for
+    the first missing one; each save calls ``resume``, which should re-enter
+    this gate so the next missing key is asked for in turn. Ask here, not
+    deep inside a worker thread: a run that dies on a missing credential has
+    already spent minutes of warming."""
+    if not os.environ.get("FINANCIAL_DATASETS_API_KEY"):
+        app.push_screen(
+            KeyPromptScreen("Financial Datasets",
+                            "FINANCIAL_DATASETS_API_KEY"),
+            lambda saved: resume() if saved else None)
+        return False
+    provider = provider_for(os.environ.get("HEDGE_FUND_LLM_MODEL", ""))
+    env_var = missing_key(provider) if provider else None
+    if env_var is None:
+        return True
+    app.push_screen(KeyPromptScreen(provider, env_var),
+                    lambda saved: resume() if saved else None)
+    return False
 
 
 class ModelPickerScreen(ModalScreen[str | None]):
@@ -1107,24 +1130,10 @@ class RunScreen(Screen):
         except ValueError:
             self.notify("Enter at least one ticker.", severity="error")
             return
-        # Ask for the key here, not deep inside a worker thread: a run that
-        # dies on a missing credential has already spent minutes of warming.
-        if not self._demand_key():
-            return
-        self._begin()
-
-    def _demand_key(self) -> bool:
-        """True if the run can proceed now. Otherwise open the key prompt and
-        resume the run from its callback."""
-        provider = provider_for(os.environ.get("HEDGE_FUND_LLM_MODEL", ""))
-        env_var = missing_key(provider) if provider else None
-        if env_var is None:
-            return True
-        self.app.push_screen(
-            KeyPromptScreen(provider, env_var),
-            lambda saved: self._begin() if saved else None,
-        )
-        return False
+        def resume() -> None:
+            if _demand_run_keys(self.app, resume):
+                self._begin()
+        resume()
 
     def _begin(self) -> None:
         self._phase = "running"
@@ -1683,6 +1692,14 @@ class BacktestScreen(Screen):
             self.query_one("#bt-tickers", Input).focus()
             return
         assert self._spec is not None
+
+        def resume() -> None:
+            if _demand_run_keys(self.app, resume):
+                self._begin(start, end, universe)
+        resume()
+
+    def _begin(self, start: str, end: str, universe: list[str]) -> None:
+        assert self._spec is not None
         self._phase = "run"
         self.query_one("#bt-panes", ContentSwitcher).current = "bt-run"
         self.query_one("#phase-line", Static).update(
@@ -2004,4 +2021,5 @@ class HedgeFundApp(App):
         # Saved keys become environment variables before any screen builds an
         # agent. Anything already exported wins — see hedge_fund/tui/keys.py.
         apply_credentials()
+        ensure_mandates_dir()
         self.push_screen(HomeScreen())

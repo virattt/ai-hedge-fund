@@ -1,6 +1,6 @@
 """Disk-cached DataClient wrapper.
 
-Wraps any DataClient with a JSON file cache under .hedge_fund_cache/data/. A warm
+Wraps any DataClient with a JSON file cache under ~/.hedge-fund/cache/data/. A warm
 cache makes backtest reruns instant, free, and network-independent — the
 same (endpoint, params) request never hits the API twice.
 
@@ -30,8 +30,9 @@ from hedge_fund.data.models import (
     Price,
 )
 from hedge_fund.data.protocol import DataClient
+from hedge_fund.paths import CACHE_DIR
 
-DEFAULT_CACHE_DIR = Path(".hedge_fund_cache/data")
+DEFAULT_CACHE_DIR = CACHE_DIR / "data"
 
 
 class CachedDataClient:

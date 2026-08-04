@@ -6,7 +6,7 @@ This is deliberately three things at once (a locked design decision):
    for replay and audit;
 3. the debug trail: failed parses keep the raw response on disk.
 
-Files live under .hedge_fund_cache/llm/ (gitignored), keyed by a hash of
+Files live under ~/.hedge-fund/cache/llm/, keyed by a hash of
 (agent, model, prompt).
 """
 
@@ -17,7 +17,9 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-DEFAULT_CACHE_DIR = Path(".hedge_fund_cache/llm")
+from hedge_fund.paths import CACHE_DIR
+
+DEFAULT_CACHE_DIR = CACHE_DIR / "llm"
 
 
 def prompt_key(agent: str, model: str, system: str, user: str) -> str:

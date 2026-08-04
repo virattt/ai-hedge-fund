@@ -1,11 +1,19 @@
 [tool.poetry]
-name = "ai-hedge-fund"
-version = "2.0.2"
-description = "An AI-powered hedge fund that uses multiple agents to make trading decisions"
-authors = ["Your Name <your.email@example.com>"]
+name = "hedge-fund"
+version = "2.1.0"
+description = "An AI-powered hedge fund: LLM investor agents and quant alpha models you can build, backtest, and run from your terminal"
+authors = ["Virat Singh <virat.dot@gmail.com>"]
+license = "MIT"
 readme = "README.md"
+homepage = "https://github.com/virattt/ai-hedge-fund"
+repository = "https://github.com/virattt/ai-hedge-fund"
+keywords = ["ai", "hedge-fund", "trading", "llm", "backtesting", "agents"]
 packages = [
     { include = "hedge_fund", from = "." }
+]
+exclude = [
+    "hedge_fund/**/test_*.py",
+    "hedge_fund/conftest.py",
 ]
 
 [tool.poetry.dependencies]

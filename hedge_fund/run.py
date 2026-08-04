@@ -2,18 +2,18 @@
 
 Usage::
 
-    poetry run hf
+    hf
         No arguments: the interactive app — a Textual TUI (the same app as
-        `python -m hedge_fund.tui`). Build a fund — pick stocks, strategies, rebalance
+        `hf` with no arguments). Build a fund — pick stocks, strategies, rebalance
         cadence — or backtest a saved fund and watch its equity curve draw
         against its benchmark.
 
-    poetry run hf mandates/example.yaml --tickers AAPL,MSFT
+    hf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
         With a mandate: run one cycle non-interactively. The full CycleRecord
         prints to stdout as JSON (pipe it anywhere); a short human summary
         goes to stderr. Add --out record.json to also write it to a file.
 
-    poetry run hf mandates/example.yaml --tickers AAPL,MSFT --backtest
+    hf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
         Backtest the mandate: run_cycle looped over history at the mandate's
         rebalance cadence; the full result JSON prints to stdout.
 
@@ -33,19 +33,21 @@ from datetime import date as _date
 from datetime import timedelta
 from pathlib import Path
 
-from dotenv import load_dotenv
 from rich.console import Console
 
 from hedge_fund.backtesting import backtest_fund
 from hedge_fund.brokers import SimBroker
 from hedge_fund.data import CachedDataClient, FDClient
 from hedge_fund.fund import Fund, load_spec, normalize_universe
+from hedge_fund.paths import ensure_mandates_dir
 from hedge_fund.pipeline import run_cycle
+from hedge_fund.tui.keys import apply_credentials
 from hedge_fund.tui.shared import _BACKTEST_WEEKS
 
 
 def main() -> None:
-    load_dotenv()
+    apply_credentials()
+    ensure_mandates_dir()
     parser = argparse.ArgumentParser(
         prog="hf",
         description="Run the AI hedge fund. No arguments: launch the "
@@ -53,7 +55,8 @@ def main() -> None:
         "record.",
     )
     parser.add_argument("mandate", nargs="?",
-                        help="path to a fund spec YAML, e.g. mandates/example.yaml "
+                        help="path to a fund spec YAML, e.g. "
+                        "~/.hedge-fund/mandates/example.yaml "
                         "(omit to launch the interactive app)")
     parser.add_argument(
         "--tickers",

@@ -50,17 +50,17 @@ poetry run hf       # or, equivalently: python -m hedge_fund.tui
 # With a mandate: run one cycle non-interactively (data → strategies →
 # netting → risk → execution), full CycleRecord as JSON on stdout. A mandate
 # carries no tickers — --tickers says what to point the fund at this run.
-poetry run hf mandates/example.yaml --tickers AAPL,MSFT,NVDA
+poetry run hf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT,NVDA
 
 # Backtest a mandate: the same run_cycle looped over history at the
 # mandate's rebalance cadence, full result JSON (every CycleRecord) on stdout.
-poetry run hf mandates/example.yaml --tickers AAPL,MSFT --backtest
+poetry run hf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
 
 # Tests
 poetry run pytest hedge_fund/
 ```
 
-All API responses cache to disk (`.hedge_fund_cache/`, gitignored), so reruns are fast,
+All API responses cache to disk (`~/.hedge-fund/cache/`), so reruns are fast,
 free, and work offline once warmed.
 
 ## Architecture

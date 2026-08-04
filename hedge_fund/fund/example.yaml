@@ -1,12 +1,12 @@
-# An example mandate. Specs are data: the fund builder (python -m hedge_fund.run),
+# An example mandate. Specs are data: the fund builder (hf),
 # a chat LLM, and the strategy generator all emit this same format.
 #
 # Note there are no tickers here. A mandate is the DESK — its strategies,
 # staff, risk, capital, and cadence — and can be pointed at any names; what
 # to trade is a run-time input (--tickers).
 #
-#   poetry run python -m hedge_fund.run hedge_fund/funds/example.yaml --tickers AAPL,MSFT
-#   poetry run python -m hedge_fund.run hedge_fund/funds/example.yaml --tickers AAPL,MSFT --backtest
+#   hf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
+#   hf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
 #
 name: example-fund
 strategies:

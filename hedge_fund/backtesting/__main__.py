@@ -185,6 +185,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    from dotenv import load_dotenv
-    load_dotenv()
+    from hedge_fund.tui.keys import apply_credentials
+    apply_credentials()
     main()

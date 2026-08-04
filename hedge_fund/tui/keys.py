@@ -1,6 +1,6 @@
 """Where API keys live, and how they get there.
 
-The repo already keeps secrets in a gitignored ``.env`` at its root, loaded by
+Secrets live in ``~/.hedge-fund/.env`` (see paths.py), loaded by
 ``python-dotenv`` at every entry point — this module writes to that same file
 rather than inventing a second store. Two rules follow from it:
 
@@ -26,15 +26,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from hedge_fund.llm import PROVIDER_ENV_VARS, env_var_for  # noqa: F401  (re-export)
-
-
-# hedge_fund/tui/keys.py -> hedge_fund/tui -> v2 -> repo root.
-ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+from hedge_fund.paths import ENV_PATH
 
 
 def apply_credentials() -> None:
-    """Load .env into the environment without overriding what is already set.
-    Call once at startup, before anything builds an agent."""
+    """Load .env files into the environment without overriding what is already
+    set. Call once at startup, before anything builds an agent. A ``.env`` in
+    the current directory (a checkout) wins over the user-level file."""
+    load_dotenv(override=False)
     load_dotenv(ENV_PATH, override=False)
 
 

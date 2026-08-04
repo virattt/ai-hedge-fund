@@ -53,14 +53,3 @@ Thumbs.db
 # Outputs
 outputs/
 /scratchpad/
-
-# API/LLM response cache
-.hedge_fund_cache/
-
-# User-created fund mandates (the wizard writes here); keep only the example
-mandates/*.yaml
-!mandates/example.yaml
-# Local receipts: a backtest writes <fund>-backtest-<stamp>.json, a run-today
-# writes <fund>-run-<stamp>.json. Both are personal trading history, not code.
-mandates/*-backtest*.json
-mandates/*-run-*.json
