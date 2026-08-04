@@ -1,0 +1,14 @@
+# Medium-term price momentum with a short-term reversal skip.
+name: momentum
+display_name: Momentum
+models:
+  - name: momentum
+    params:
+      horizons: [21, 63, 126]
+      weights: [1.0, 1.0, 1.0]
+      skip_days: 5
+      signal_scale: 4.0
+blend:
+  method: conviction_weighted
+  gross_target: 1.0
+  market_neutral: true
