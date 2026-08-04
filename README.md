@@ -31,7 +31,7 @@ pipx install hedge-fund
 Then run it from anywhere:
 
 ```bash
-hf
+aihf
 ```
 
 ### API keys
@@ -48,7 +48,7 @@ Keys exported in your shell always win over the saved file.
 ### Interactive app
 
 ```bash
-hf
+aihf
 ```
 
 With no arguments, this launches the interactive terminal app. Build a fund — pick stocks, strategies, rebalance cadence — or backtest a saved fund and watch its equity curve draw against its benchmark. Funds you build are saved as mandate files in `~/.hedge-fund/mandates/`.
@@ -58,13 +58,13 @@ With no arguments, this launches the interactive terminal app. Build a fund — 
 Run one fund cycle from a mandate file. The full cycle record prints to stdout as JSON; a short human summary goes to stderr:
 
 ```bash
-hf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
+aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
 ```
 
 Backtest the mandate over history at its rebalance cadence:
 
 ```bash
-hf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
+aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
 ```
 
 A mandate is the desk — strategies, staff, risk, capital, cadence — and never names tickers; `--tickers` says what to point it at for this run.
@@ -75,7 +75,7 @@ A mandate is the desk — strategies, staff, risk, capital, cadence — and neve
 git clone https://github.com/virattt/ai-hedge-fund.git
 cd ai-hedge-fund
 poetry install
-poetry run hf
+poetry run aihf
 poetry run pytest hedge_fund
 ```
 

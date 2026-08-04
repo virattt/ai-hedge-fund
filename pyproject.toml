@@ -35,7 +35,7 @@ pyyaml = "^6.0.3"
 textual = "^8.2.8"
 
 [tool.poetry.scripts]
-hf = "hedge_fund.run:main"
+aihf = "hedge_fund.run:main"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"

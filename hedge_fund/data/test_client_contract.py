@@ -118,6 +118,75 @@ def test_financial_metrics_filters_on_filing_date(client):
     assert "report_period_lte" not in params
 
 
+# ---------------------------------------------------------------------------
+# Pagination contract
+# ---------------------------------------------------------------------------
+
+def _price_row(day):
+    return {
+        "open": 1.0, "close": 2.0, "high": 2.0, "low": 1.0,
+        "volume": 100, "time": f"2024-01-{day:02d}",
+    }
+
+
+def test_follows_next_page_url_to_the_end(client):
+    """The API caps list responses at a fixed page size; the client must
+    reassemble the full result by following next_page_url until absent."""
+    calls = _stub(client, [
+        _FakeResponse(200, {
+            "prices": [_price_row(1), _price_row(2)],
+            "next_page_url": "https://api.financialdatasets.ai/prices/?cursor=page2",
+        }),
+        _FakeResponse(200, {
+            "prices": [_price_row(3), _price_row(4)],
+            "next_page_url": "https://api.financialdatasets.ai/prices/?cursor=page3",
+        }),
+        _FakeResponse(200, {"prices": [_price_row(5)]}),
+    ])
+
+    prices = client.get_prices("AAPL", "2024-01-01", "2024-12-31")
+
+    assert [p.time for p in prices] == [f"2024-01-0{d}" for d in (1, 2, 3, 4, 5)]
+    # Pages 2+ request the next_page_url verbatim — no re-derived params.
+    assert calls[1]["url"] == "https://api.financialdatasets.ai/prices/?cursor=page2"
+    assert calls[2]["url"] == "https://api.financialdatasets.ai/prices/?cursor=page3"
+    assert "params" not in calls[1]
+
+
+def test_no_next_page_url_means_single_request(client):
+    calls = _stub(client, [_FakeResponse(200, {"prices": [_price_row(1)]})])
+    prices = client.get_prices("AAPL", "2024-01-01", "2024-12-31")
+    assert len(prices) == 1
+    assert len(calls) == 1
+
+
+def test_mid_walk_404_keeps_accumulated_rows(client):
+    """A 404 on page 2+ ends the stream; rows already fetched are kept."""
+    _stub(client, [
+        _FakeResponse(200, {
+            "prices": [_price_row(1)],
+            "next_page_url": "https://api.financialdatasets.ai/prices/?cursor=page2",
+        }),
+        _FakeResponse(404),
+    ])
+    prices = client.get_prices("AAPL", "2024-01-01", "2024-12-31")
+    assert len(prices) == 1
+
+
+def test_mid_walk_500_still_fails_loud(client):
+    """The fail-loud contract survives pagination: a real failure on any
+    page raises instead of silently returning a partial series."""
+    _stub(client, [
+        _FakeResponse(200, {
+            "prices": [_price_row(1)],
+            "next_page_url": "https://api.financialdatasets.ai/prices/?cursor=page2",
+        }),
+        _FakeResponse(500, text="internal error"),
+    ])
+    with pytest.raises(FDClientError):
+        client.get_prices("AAPL", "2024-01-01", "2024-12-31")
+
+
 def test_financial_metrics_parses_filing_metadata(client):
     _stub(client, [_FakeResponse(200, {"financial_metrics": [{
         "ticker": "AAPL",

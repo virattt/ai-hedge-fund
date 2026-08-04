@@ -1,12 +1,12 @@
-# An example mandate. Specs are data: the fund builder (hf),
+# An example mandate. Specs are data: the fund builder (aihf),
 # a chat LLM, and the strategy generator all emit this same format.
 #
 # Note there are no tickers here. A mandate is the DESK — its strategies,
 # staff, risk, capital, and cadence — and can be pointed at any names; what
 # to trade is a run-time input (--tickers).
 #
-#   hf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
-#   hf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
+#   aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
+#   aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
 #
 name: example-fund
 strategies:

@@ -2,18 +2,18 @@
 
 Usage::
 
-    hf
+    aihf
         No arguments: the interactive app — a Textual TUI (the same app as
-        `hf` with no arguments). Build a fund — pick stocks, strategies, rebalance
+        `aihf` with no arguments). Build a fund — pick stocks, strategies, rebalance
         cadence — or backtest a saved fund and watch its equity curve draw
         against its benchmark.
 
-    hf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
+    aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
         With a mandate: run one cycle non-interactively. The full CycleRecord
         prints to stdout as JSON (pipe it anywhere); a short human summary
         goes to stderr. Add --out record.json to also write it to a file.
 
-    hf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
+    aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
         Backtest the mandate: run_cycle looped over history at the mandate's
         rebalance cadence; the full result JSON prints to stdout.
 
@@ -49,7 +49,7 @@ def main() -> None:
     apply_credentials()
     ensure_mandates_dir()
     parser = argparse.ArgumentParser(
-        prog="hf",
+        prog="aihf",
         description="Run the AI hedge fund. No arguments: launch the "
         "interactive app. With a mandate YAML: run one cycle and print the "
         "record.",

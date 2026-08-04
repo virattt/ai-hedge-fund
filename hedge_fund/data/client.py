@@ -172,8 +172,12 @@ class FDClient:
     # ------------------------------------------------------------------
 
     def get_earnings(self, ticker: str) -> Earnings | None:
-        """Fetch latest earnings for a single ticker."""
-        data = self._get("/earnings/", {"ticker": ticker}, response_key="earnings")
+        """Fetch latest earnings for a single ticker.
+
+        limit=1 (one report period) — only [0] is used, and without a limit
+        the pagination loop in _get would walk the ticker's entire feed.
+        """
+        data = self._get("/earnings/", {"ticker": ticker, "limit": 1}, response_key="earnings")
         if not data:
             return None
         row = data[0] if isinstance(data, list) else data
@@ -220,11 +224,31 @@ class FDClient:
         params: dict,
         response_key: str,
     ) -> list[dict] | None:
-        """GET and extract *response_key* from the JSON payload."""
+        """GET and extract *response_key*, following pagination to the end.
+
+        The API caps every list response at a fixed page size and links the
+        remainder via ``next_page_url`` (absolute, self-contained — request
+        it verbatim, no params). This loop reassembles the full result the
+        caller asked for, so everything above it — including the disk cache,
+        which memoizes the *merged* list — never sees a truncated page.
+
+        A mid-walk 404 ends the stream and keeps the rows accumulated so
+        far; any other failure raises via _request's fail-loud contract.
+        """
         resp = self._request("GET", path, params=params)
         if resp is None:
             return None
-        return resp.json().get(response_key)
+        body = resp.json()
+        rows = body.get(response_key)
+        next_page_url = body.get("next_page_url")
+        while next_page_url and isinstance(rows, list):
+            resp = self._request("GET", next_page_url)
+            if resp is None:
+                break
+            body = resp.json()
+            rows.extend(body.get(response_key) or [])
+            next_page_url = body.get("next_page_url")
+        return rows
 
     def _request(
         self,
@@ -239,8 +263,11 @@ class FDClient:
         404 — "this data doesn't exist" is a data fact, not a failure.
         Silently returning empty on real failures poisons backtests
         (missing data reads as "no signal").
+
+        *path* may be an absolute URL (a ``next_page_url`` from a previous
+        response), which is requested verbatim.
         """
-        url = self.BASE_URL + path
+        url = path if path.startswith("http") else self.BASE_URL + path
         for attempt, delay in enumerate((*self._RETRY_DELAYS, None)):
             try:
                 resp = self._session.request(

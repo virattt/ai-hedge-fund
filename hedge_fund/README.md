@@ -45,16 +45,16 @@ poetry install                          # dependencies
 # THE command. No arguments: launch the interactive app (a Textual TUI).
 # Build a fund — pick stocks, strategies, rebalance cadence — or backtest a
 # saved fund and watch its equity curve draw against its benchmark.
-poetry run hf       # or, equivalently: python -m hedge_fund.tui
+poetry run aihf       # or, equivalently: python -m hedge_fund.tui
 
 # With a mandate: run one cycle non-interactively (data → strategies →
 # netting → risk → execution), full CycleRecord as JSON on stdout. A mandate
 # carries no tickers — --tickers says what to point the fund at this run.
-poetry run hf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT,NVDA
+poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT,NVDA
 
 # Backtest a mandate: the same run_cycle looped over history at the
 # mandate's rebalance cadence, full result JSON (every CycleRecord) on stdout.
-poetry run hf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
+poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
 
 # Tests
 poetry run pytest hedge_fund/
