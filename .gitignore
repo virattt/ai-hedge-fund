@@ -53,3 +53,6 @@ Thumbs.db
 # Outputs
 outputs/
 /scratchpad/
+
+# Local-only release tooling
+scripts/release.sh
