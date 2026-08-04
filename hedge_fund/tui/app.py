@@ -23,6 +23,8 @@ from __future__ import annotations
 import json
 import os
 import time
+from math import sqrt
+from statistics import mean, stdev
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date as _date
 from datetime import datetime, timedelta
@@ -54,7 +56,8 @@ from textual.widgets.option_list import Option
 from textual.widgets.selection_list import Selection
 
 from hedge_fund.backtesting import FundBacktestResult, backtest_fund, rebalance_grid
-from hedge_fund.brokers import SimBroker
+from hedge_fund.backtesting.fund import _PERIODS_PER_YEAR
+from hedge_fund.brokers import Fill, SimBroker
 from hedge_fund.data import CachedDataClient, FDClient
 from hedge_fund.fund import (
     Fund,
@@ -83,7 +86,7 @@ from hedge_fund.tui.shared import (
     _WARM_CHUNK,
     _agent_names,
     _fund_label,
-    _render_chart,
+    _render_area_chart,
     _strategy_kind,
     _valid_date,
     ensure_mandates_dir,
@@ -1044,10 +1047,46 @@ def _book_summary(record: CycleRecord) -> Text:
     return summary
 
 
+_TAPE_ROWS = 12
+
+
+def _tape_table(tape: list[tuple[str, Fill, int]]) -> Table:
+    """The running trade tape: every fill of the replay so far, newest first.
+    Each row is one execution — date, ticker, side, size, price, notional —
+    and the book it left behind (LONG/SHORT/FLAT that ticker)."""
+    table = Table.grid(expand=True, padding=(0, 1))
+    for justify in ("left", "left", "left", "right", "right", "right", "left"):
+        table.add_column(justify=justify)
+
+    if not tape:
+        table.add_row(Text("no trades yet", style=MUTED))
+        return table
+
+    for as_of, fill, shares in list(reversed(tape))[:_TAPE_ROWS]:
+        side = (Text("BUY ", style=f"bold {GREEN}") if fill.side == "buy"
+                else Text("SELL", style=f"bold {RED}"))
+        book = (Text(f"→ long {shares}", style=GREEN) if shares > 0
+                else Text(f"→ short {-shares}", style=RED) if shares < 0
+                else Text("→ flat", style=MUTED))
+        table.add_row(
+            Text(as_of, style=MUTED),
+            Text(fill.ticker, style=f"bold {CYAN}"),
+            side,
+            f"{fill.quantity:,}",
+            f"@ ${fill.price:,.2f}",
+            Text(f"${fill.quantity * fill.price:,.0f}", style=TEXT),
+            book,
+        )
+    if len(tape) > _TAPE_ROWS:
+        table.add_row(Text(f"… {len(tape) - _TAPE_ROWS} earlier", style=MUTED))
+    return table
+
+
 class RunScreen(Screen):
     """Run a fund as of today — the primary verb. Warm the roster, run one
     cycle on today's data, then reveal the fund's thinking: signals, risk
-    clamps, orders, and the target book. Backtest is the side option (press b).
+    clamps, orders, and the target book. Backtest is the side option (ctrl+b),
+    offered before a run and again from the finished report.
     """
 
     # ctrl+b, not plain b: the ticker Input owns letter keys (BABA, BRK.B),
@@ -1109,11 +1148,12 @@ class RunScreen(Screen):
         tickers.focus()
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
-        # No leaving or switching mid-run; backtest is only offered from ready.
+        # No leaving or switching mid-run; backtest is offered from ready
+        # ("backtest instead") and from the finished report ("backtest it").
         if self._phase == "running":
             return action not in ("back", "backtest")
         if action == "backtest":
-            return self._phase == "ready"
+            return self._phase in ("ready", "done")
         return True
 
     def action_back(self) -> None:
@@ -1239,7 +1279,11 @@ class RunScreen(Screen):
             _book_summary(record),
             Text.assemble(("✓ ", f"bold {GREEN}"), ("Saved run to ", MUTED),
                           (str(path), MUTED)),
+            Text.assemble(("▶ ", f"bold {GREEN}"),
+                          ("Backtest this fund over history", f"bold {GREEN}"),
+                          ("  ·  ctrl+b", MUTED)),
         ))
+        self.refresh_bindings()  # phase changed: ctrl+b is offered again
         nav = self.query_one("#report-nav", OptionList)
         nav.clear_options()
         nav.add_options(_report_nav(record))
@@ -1570,6 +1614,7 @@ class BacktestScreen(Screen):
         self._dates: list[str] = []
         self._nav: list[float] = []
         self._n_cycles = 0
+        self._tape: list[tuple[str, Fill, int]] = []  # (as_of, fill, shares after)
 
     def compose(self) -> ComposeResult:
         with ContentSwitcher(initial="bt-pick", id="bt-panes"):
@@ -1597,15 +1642,19 @@ class BacktestScreen(Screen):
                     yield Static("", id="stat-nav")
                     yield Static("", id="stat-return")
                     yield Static("", id="stat-bench")
+                    yield Static("", id="stat-excess")
+                    yield Static("", id="stat-sharpe")
                     yield Static("", id="stat-dd")
                 with Vertical(id="curve-box", classes="hidden"):
                     yield Static("", id="curve")
+                with Vertical(id="tape-box", classes="hidden"):
+                    yield Static("", id="tape")
                 yield Static("", id="cycle-line")
-            with Vertical(id="bt-done", classes="pane"):
-                yield Static("", id="result-summary")
+                yield Static("", id="result-summary", classes="hidden")
                 yield OptionList(
                     Option("Back to home", id="bt-home"),
                     id="bt-done-menu",
+                    classes="hidden",
                 )
         yield Footer()
 
@@ -1709,7 +1758,10 @@ class BacktestScreen(Screen):
 
     @on(OptionList.OptionSelected, "#bt-done-menu")
     def _after_done(self, event: OptionList.OptionSelected) -> None:
-        self.app.pop_screen()
+        # "Back to home" means home: a ctrl+b backtest sits on top of the run
+        # screen, so popping once would land on its stale ticker input.
+        while not isinstance(self.app.screen, HomeScreen):
+            self.app.pop_screen()
 
     # ---- the worker (everything below the UI runs off-thread) -------------
 
@@ -1862,6 +1914,7 @@ class BacktestScreen(Screen):
         self._dates = []
         self._nav = []
         self._n_cycles = n_cycles
+        self._tape = []
         self.query_one("#phase-line", Static).update(Text.assemble(
             ("Replaying the fund", f"bold {BRIGHT}"),
             ("  ·  one run_cycle per rebalance date, off the warm cache",
@@ -1870,10 +1923,13 @@ class BacktestScreen(Screen):
         box_widget = self.query_one("#curve-box", Vertical)
         box_widget.border_title = "equity curve"
         box_widget.border_subtitle = (
-            f"[{GREEN}]──[/] fund   [{CYAN}]──[/] {spec.benchmark}"
+            f"[{GREEN}]██[/] fund   [{CYAN}]──[/] {spec.benchmark}"
         )
+        tape_box = self.query_one("#tape-box", Vertical)
+        tape_box.border_title = "trades (newest first)"
         self.query_one("#stats", Horizontal).remove_class("hidden")
         box_widget.remove_class("hidden")
+        tape_box.remove_class("hidden")
 
     def _board_tick(self, record: CycleRecord) -> None:
         """One cycle landed: update the stat tiles, redraw the curve.
@@ -1896,22 +1952,16 @@ class BacktestScreen(Screen):
                 peak = value
             max_dd = max(max_dd, (peak - value) / peak)
 
-        def tile(label: str, value: str, style: str) -> Text:
-            return Text.assemble(
-                (f"{label}\n", MUTED), (value, f"bold {style}"),
-                justify="center",
-            )
-
-        self.query_one("#stat-nav", Static).update(
-            tile("PORTFOLIO", f"${nav:,.0f}", BRIGHT))
-        self.query_one("#stat-return", Static).update(
-            tile("RETURN", f"{fund_return:+.2%}",
-                 GREEN if fund_return >= 0 else RED))
-        self.query_one("#stat-bench", Static).update(
-            tile(self._spec.benchmark, f"{benchmark_return:+.2%}",
-                 GREEN if benchmark_return >= 0 else RED))
-        self.query_one("#stat-dd", Static).update(
-            tile("MAX DRAWDOWN", f"{max_dd:.2%}", RED))
+        # Running Sharpe, same math as the engine's final _metrics: per-cycle
+        # returns over the curve, sample stdev, annualized by cadence.
+        returns = [b / a - 1 for a, b in zip(curve, curve[1:])]
+        if len(returns) > 1 and stdev(returns) > 0:
+            sharpe = (mean(returns) / stdev(returns)
+                      * sqrt(_PERIODS_PER_YEAR[self._spec.rebalance]))
+        else:
+            sharpe = 0.0
+        self._update_stats(nav, fund_return, benchmark_return,
+                           fund_return - benchmark_return, sharpe, max_dd)
 
         benchmark_curve = [capital] + [
             capital * self._closes[d] / self._closes[self._dates[0]]
@@ -1920,50 +1970,74 @@ class BacktestScreen(Screen):
         curve_widget = self.query_one("#curve", Static)
         width = curve_widget.content_size.width or 80
         curve_widget.update(Group(
-            *_render_chart(curve, benchmark_curve, capital, min(width, 100))
+            *_render_area_chart(curve, benchmark_curve, capital, min(width, 100))
         ))
+        for fill in record.fills:
+            self._tape.append(
+                (record.as_of, fill, record.positions.get(fill.ticker, 0)))
+        self.query_one("#tape", Static).update(_tape_table(self._tape))
         self.query_one("#cycle-line", Static).update(Text(
             f"cycle {len(self._nav)}/{self._n_cycles} · {self._dates[-1]}",
             style=MUTED,
         ))
 
+    def _update_stats(self, nav: float, fund_return: float,
+                      benchmark_return: float, excess: float,
+                      sharpe: float, max_dd: float) -> None:
+        """One row of running tallies, live during the replay and refreshed
+        with the engine's authoritative numbers at the end."""
+        def tile(label: str, value: str, style: str) -> Text:
+            return Text.assemble(
+                (f"{label}\n", MUTED), (value, f"bold {style}"),
+                justify="center",
+            )
+
+        assert self._spec is not None
+        self.query_one("#stat-nav", Static).update(
+            tile("PORTFOLIO", f"${nav:,.0f}", BRIGHT))
+        self.query_one("#stat-return", Static).update(
+            tile("RETURN", f"{fund_return:+.2%}",
+                 GREEN if fund_return >= 0 else RED))
+        self.query_one("#stat-bench", Static).update(
+            tile(self._spec.benchmark, f"{benchmark_return:+.2%}",
+                 GREEN if benchmark_return >= 0 else RED))
+        self.query_one("#stat-excess", Static).update(
+            tile("EXCESS", f"{excess:+.2%}",
+                 GREEN if excess >= 0 else RED))
+        self.query_one("#stat-sharpe", Static).update(
+            tile("SHARPE", f"{sharpe:.2f}",
+                 GREEN if sharpe > 1 else "yellow" if sharpe > 0 else RED))
+        self.query_one("#stat-dd", Static).update(
+            tile("MAX DRAWDOWN", f"{max_dd:.2%}", RED))
+
     def _finish(self, result: FundBacktestResult, path: Path) -> None:
         self._phase = "done"
         m = result.metrics
-        table = Table(box=box.SQUARE, header_style="bold",
-                      border_style="#1f2b25")
-        for header in ("Total Return", "Annualized", "Sharpe", "Max Drawdown",
-                       f"{result.benchmark} Return", "Excess"):
-            table.add_column(header, justify="right")
-        total_tone = f"bold {GREEN}" if m.total_return_pct >= 0 else f"bold {RED}"
-        sharpe_tone = (GREEN if m.sharpe_ratio > 1
-                       else "yellow" if m.sharpe_ratio > 0 else RED)
-        excess_tone = f"bold {GREEN}" if m.excess_return_pct >= 0 else f"bold {RED}"
-        table.add_row(
-            Text(f"{m.total_return_pct:+.1%}", style=total_tone),
-            f"{m.annualized_return_pct:+.1%}",
-            Text(f"{m.sharpe_ratio:.2f}", style=sharpe_tone),
-            Text(f"{m.max_drawdown_pct:.1%}", style=RED),
-            f"{m.benchmark_return_pct:+.1%}",
-            Text(f"{m.excess_return_pct:+.1%}", style=excess_tone),
+        # The graph is the trophy: stay on the run pane, land the header and
+        # receipt around it, and let the stat tiles carry the final numbers.
+        self.query_one("#warm-progress", ProgressBar).add_class("hidden")
+        self.query_one("#roster", Static).add_class("hidden")
+        self.query_one("#phase-line", Static).update(Text.assemble(
+            ("BACKTEST RESULTS  ", f"bold {BRIGHT}"),
+            (result.fund, f"bold {CYAN}"),
+            (f"  {result.start} → {result.end} · {result.rebalance} "
+             f"rebalance · {m.n_cycles} cycles · {m.n_orders} orders · "
+             f"{m.annualized_return_pct:+.1%} annualized",
+             MUTED),
+        ))
+        self._update_stats(
+            self._nav[-1] if self._nav else self._spec.capital,
+            m.total_return_pct, m.benchmark_return_pct,
+            m.excess_return_pct, m.sharpe_ratio, m.max_drawdown_pct,
         )
-        self.query_one("#result-summary", Static).update(Group(
-            Text.assemble(
-                ("BACKTEST RESULTS  ", f"bold {BRIGHT}"),
-                (result.fund, f"bold {CYAN}"),
-                (f"  {result.start} → {result.end} · {result.rebalance} "
-                 f"rebalance · {m.n_cycles} cycles · {m.n_orders} orders",
-                 MUTED),
-            ),
-            Text(""),
-            table,
-            Text(""),
+        self.query_one("#result-summary", Static).update(
             Text.assemble(("✓ ", f"bold {GREEN}"),
                           ("Saved backtest record to ", TEXT),
-                          (str(path), f"bold {BRIGHT}")),
-        ))
-        self.query_one("#bt-panes", ContentSwitcher).current = "bt-done"
-        self.query_one("#bt-done-menu", OptionList).focus()
+                          (str(path), f"bold {BRIGHT}")))
+        self.query_one("#result-summary", Static).remove_class("hidden")
+        menu = self.query_one("#bt-done-menu", OptionList)
+        menu.remove_class("hidden")
+        menu.focus()
 
     def _fail(self, exc: Exception) -> None:
         self._phase = "failed"

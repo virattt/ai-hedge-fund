@@ -408,10 +408,18 @@ ConfirmDeleteScreen {
 
 #curve-box {
     border: round #1f2b25;
-    padding: 0 1;
+    padding: 0 1 1 1;  /* bottom row of air between the fill and the legend */
     height: auto;
     border-title-color: #5f7268;
     border-subtitle-color: #5f7268;
+}
+
+#tape-box {
+    border: round #1f2b25;
+    padding: 0 1;
+    height: auto;
+    margin-top: 1;
+    border-title-color: #5f7268;
 }
 
 #cycle-line {
@@ -420,5 +428,10 @@ ConfirmDeleteScreen {
 }
 
 #result-summary {
+    margin-top: 1;
     margin-bottom: 1;
+}
+
+#bt-done-menu {
+    height: auto;
 }

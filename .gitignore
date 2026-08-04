@@ -54,5 +54,10 @@ Thumbs.db
 outputs/
 /scratchpad/
 
+# Personal fund mandates and caches (live in ~/.hedge-fund/ now; stale
+# sessions running pre-2.1 code may still write here)
+/mandates/
+.hedge_fund_cache/
+
 # Local-only release tooling
 scripts/release.sh
