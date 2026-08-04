@@ -23,8 +23,10 @@ This system employs several agents working together:
 15. Sentiment Agent - Analyzes market sentiment and generates trading signals
 16. Fundamentals Agent - Analyzes fundamental data and generates trading signals
 17. Technicals Agent - Analyzes technical indicators and generates trading signals
-18. Risk Manager - Calculates risk metrics and sets position limits
-19. Portfolio Manager - Makes final trading decisions and generates orders
+18. Growth Analyst - Analyzes growth trends and valuation to identify growth opportunities
+19. News Sentiment Analyst - Analyzes company news sentiment to generate trading signals
+20. Risk Manager - Calculates risk metrics and sets position limits
+21. Portfolio Manager - Makes final trading decisions and generates orders
 
 <img width="1042" alt="Screenshot 2025-03-22 at 6 19 07 PM" src="https://github.com/user-attachments/assets/cbae3dcf-b571-490d-b0ad-3f0f035ac0d4" />
 
