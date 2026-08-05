@@ -1,0 +1,11 @@
+# Inflections — discretionary long/short on fundamentals rate-of-change.
+# Druckenmiller and Lynch hunt acceleration and deterioration before the
+# multiple reprices it.
+name: inflections
+display_name: Inflections
+models:
+  - name: druckenmiller
+  - name: lynch
+blend:
+  method: conviction_weighted
+  gross_target: 1.0

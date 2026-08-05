@@ -1,0 +1,13 @@
+# Deep value — discretionary, long-biased, quarterly horizon.
+# Graham leads (double blend weight); Buffett and Munger keep quality in
+# the mix. Edge claimed: mispriced quality with a margin of safety.
+name: deep-value
+display_name: Deep Value
+models:
+  - name: graham
+    weight: 2.0
+  - name: buffett
+  - name: munger
+blend:
+  method: conviction_weighted
+  gross_target: 1.0

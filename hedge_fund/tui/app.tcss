@@ -1,0 +1,437 @@
+/* ============================================================
+   v2 TUI — the design system.
+   One accent: green marks what you chose and what you made.
+   Cyan is reserved for data (tickers, the benchmark). Red is
+   losses and drawdown only. Everything else stays quiet.
+   ============================================================ */
+
+Screen {
+    background: #0b100e;
+    color: #d9e6e0;
+}
+
+/* Textual's default scrollbars are bright blue — off-palette everywhere. */
+* {
+    scrollbar-background: #0b100e;
+    scrollbar-background-hover: #0b100e;
+    scrollbar-background-active: #0b100e;
+    scrollbar-color: #1f2b25;
+    scrollbar-color-hover: #2b3a32;
+    scrollbar-color-active: #2bd97c;
+    scrollbar-size-vertical: 1;
+}
+
+Footer {
+    background: #0e1512;
+    color: #5f7268;
+}
+
+FooterKey {
+    background: #0e1512;
+    color: #8aa79b;
+}
+
+FooterKey > .footer-key--key {
+    color: #2bd97c;
+    background: #0e1512;
+}
+
+FooterKey > .footer-key--description {
+    color: #8aa79b;
+    background: #0e1512;
+}
+
+Toast {
+    background: #14201b;
+}
+
+/* ---------------- shared ---------------- */
+
+.pane {
+    padding: 2 4;
+}
+
+.q {
+    text-style: bold;
+    color: #f2f7f4;
+    margin-bottom: 1;
+}
+
+.hint {
+    color: #5f7268;
+    margin-top: 1;
+}
+
+.hidden {
+    display: none;
+}
+
+/* Fills its pane but never grows past a comfortable reading width. A fixed
+   width overflows the narrow builder pane and the right border falls off. */
+Input {
+    width: 1fr;
+    max-width: 64;
+    background: #101613;
+    border: round #223028;
+}
+
+Input:focus {
+    border: round #2bd97c;
+}
+
+Input > .input--cursor {
+    background: #2bd97c;
+    color: #0b100e;
+}
+
+Input > .input--selection {
+    background: #1e4d36;
+}
+
+OptionList {
+    background: transparent;
+    border: none;
+    height: auto;
+    max-height: 16;
+    padding: 0;
+}
+
+OptionList:focus {
+    border: none;
+    background: transparent;
+}
+
+OptionList > .option-list--option-highlighted {
+    background: #14201b;
+    color: #2bd97c;
+    text-style: bold;
+}
+
+SelectionList {
+    background: transparent;
+    border: none;
+    height: auto;
+    max-height: 16;
+    padding: 0;
+}
+
+SelectionList:focus {
+    border: none;
+    background: transparent;
+}
+
+SelectionList > .selection-list--button {
+    color: #3a4741;
+    background: #14201b;
+}
+
+SelectionList > .selection-list--button-highlighted {
+    color: #3a4741;
+    background: #14201b;
+}
+
+SelectionList > .selection-list--button-selected {
+    color: #2bd97c;
+    background: #14201b;
+}
+
+SelectionList > .selection-list--button-selected-highlighted {
+    color: #2bd97c;
+    background: #14201b;
+}
+
+Bar > .bar--bar {
+    color: #2bd97c;
+    background: #1a231f;
+}
+
+Bar > .bar--complete {
+    color: #2bd97c;
+}
+
+/* ---------------- home ---------------- */
+
+#home {
+    align: center middle;
+}
+
+#home > Static {
+    width: auto;
+    text-align: center;
+}
+
+#wordmark {
+    text-style: bold;
+    color: #f2f7f4;
+}
+
+#rule {
+    color: #2bd97c;
+}
+
+#tagline {
+    color: #5f7268;
+    margin-top: 1;
+}
+
+#home-menu {
+    width: 56;
+    margin-top: 2;
+}
+
+#model-line {
+    margin-top: 2;
+    color: #5f7268;
+}
+
+/* ---------------- fund select (run an existing fund) ---------------- */
+
+/* Sized to the widest slot card (~30 cells), not to half the window — every
+   column it takes comes straight out of the stats pane on its right. */
+#select-rail {
+    width: 40;
+    max-width: 42%;
+    padding: 2 2;
+    border-right: solid #1a231f;
+}
+
+#select-menu {
+    background: transparent;
+    height: auto;
+}
+
+/* The selected fund reads as selected: a green band, and the name goes green
+   with it. _slot_card leaves the name uncoloured so this rule can reach it —
+   an explicit colour in the renderable would win over the component style. */
+#select-menu > .option-list--option-highlighted {
+    background: #0f2e1e;
+    color: #2bd97c;
+    text-style: bold;
+}
+
+#select-detail {
+    width: 1fr;
+    padding: 2 2;
+}
+
+/* ---------------- api key prompt ---------------- */
+
+KeyPromptScreen {
+    align: center middle;
+    background: #0b100e 70%;
+}
+
+#keyprompt {
+    width: 72;
+    max-width: 92%;
+    height: auto;
+    padding: 1 3;
+    background: #101613;
+    border: round #2bd97c;
+}
+
+#key-q {
+    margin-bottom: 1;
+}
+
+#key-blurb {
+    margin-bottom: 1;
+}
+
+/* ---------------- model picker ---------------- */
+
+ModelPickerScreen {
+    align: center middle;
+    background: #0b100e 70%;
+}
+
+#picker {
+    width: 64;
+    max-width: 90%;
+    height: auto;
+    padding: 1 3;
+    background: #101613;
+    border: round #1f2b25;
+}
+
+#picker-q {
+    margin-bottom: 1;
+}
+
+#picker-list {
+    max-height: 20;
+}
+
+/* ---------------- confirm delete ---------------- */
+
+/* Red border, and only here: this is the one screen where something is
+   destroyed. The dimmed backdrop keeps the fund list visible behind it. */
+ConfirmDeleteScreen {
+    align: center middle;
+    background: #0b100e 70%;
+}
+
+#confirm {
+    width: 62;
+    max-width: 90%;
+    height: auto;
+    padding: 1 3;
+    background: #101613;
+    border: round #f87171;
+}
+
+#confirm-q {
+    margin-bottom: 1;
+}
+
+#confirm-files {
+    margin-bottom: 1;
+}
+
+/* ---------------- run today ---------------- */
+
+#run-ready {
+    align: center middle;
+}
+
+#run-hero {
+    width: auto;
+    margin-bottom: 3;
+}
+
+#run-menu {
+    width: 40;
+}
+
+#run-menu .hint {
+    text-align: center;
+}
+
+#run-phase {
+    margin-bottom: 1;
+}
+
+#run-roster {
+    margin-bottom: 1;
+}
+
+#run-report {
+    padding: 1 2;
+}
+
+#report-head {
+    margin-bottom: 1;
+}
+
+/* The signal browser: a scannable rail of one-line verdicts on the left,
+   the highlighted analyst's full thesis on the right. */
+#report-panes {
+    height: 1fr;
+}
+
+#report-rail {
+    width: 38;
+    border-right: solid #1a231f;
+    padding-right: 1;
+}
+
+#report-nav {
+    height: 1fr;
+    max-height: 100%;
+}
+
+#report-detail {
+    width: 1fr;
+    padding: 0 2;
+}
+
+#report-foot {
+    margin-top: 1;
+    border-top: solid #1a231f;
+    padding-top: 1;
+}
+
+/* ---------------- builder ---------------- */
+
+#rail {
+    width: 34;
+    padding: 2 3;
+    border-right: solid #1a231f;
+}
+
+.rail-title {
+    color: #5f7268;
+    margin-bottom: 2;
+}
+
+.rail-step {
+    margin-bottom: 1;
+    height: 2;
+}
+
+#panes {
+    width: 1fr;
+}
+
+#stocks-preview {
+    margin-top: 1;
+}
+
+/* ---------------- backtest ---------------- */
+
+#phase-line {
+    margin-bottom: 1;
+}
+
+#warm-progress {
+    margin-bottom: 1;
+}
+
+#roster {
+    margin-bottom: 1;
+}
+
+#stats {
+    height: auto;
+    margin-bottom: 1;
+}
+
+#stats > Static {
+    width: 1fr;
+    height: auto;
+    border: round #1f2b25;
+    padding: 1 0;
+    margin-right: 1;
+    text-align: center;
+    content-align: center middle;
+}
+
+#curve-box {
+    border: round #1f2b25;
+    padding: 0 1 1 1;  /* bottom row of air between the fill and the legend */
+    height: auto;
+    border-title-color: #5f7268;
+    border-subtitle-color: #5f7268;
+}
+
+#tape-box {
+    border: round #1f2b25;
+    padding: 0 1;
+    height: auto;
+    margin-top: 1;
+    border-title-color: #5f7268;
+}
+
+#cycle-line {
+    color: #5f7268;
+    margin-top: 1;
+}
+
+#result-summary {
+    margin-top: 1;
+    margin-bottom: 1;
+}
+
+#bt-done-menu {
+    height: auto;
+}

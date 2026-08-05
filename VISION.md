@@ -85,9 +85,14 @@ clock and the broker:**
 ```
 
 Because it's **one code path by design**, what you backtest is what trades — no
-separate "research" implementation that quietly diverges from production. (Today the
-backtester is a separate harness; converging it onto `run_cycle` is a core roadmap
-item.)
+separate "research" implementation that quietly diverges from production. (Two of
+the three modes exist today: the backtester is `run_cycle` looped over history with
+a simulated broker, and "run it as of today" is the same `run_cycle` as a single
+live-clock tick — so PIT, fail-loud, and master risk hold for every tick by
+construction. What separates run-today from true paper mode is the ledger's read
+half: today each run starts from the mandate's cash instead of carrying the book
+forward, so NAV has no memory yet. An older per-model harness remains for
+single-model studies.)
 
 ### One cycle
 
