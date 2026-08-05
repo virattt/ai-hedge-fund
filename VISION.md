@@ -20,20 +20,32 @@ for what's built today versus planned.)
 The org chart is unchanged from a real fund. We just swapped the humans for AI.
 
 ```
- FUND  "Alpha One"                    capital · mandate · always-on
- │
- ├─ CIO  →  capital allocator         decides how much each strategy gets
- │
- ├── STRATEGY: Value                  a "pod" — its own team + capital slice
- │     analysts → portfolio manager → value sleeve
- │
- ├── STRATEGY: Event                  another pod
- │     analysts → portfolio manager → event sleeve
- │
- └── STRATEGY: Macro ...
-            │
-   all sleeves net together ▼
-   MASTER RISK  →  EXECUTION (broker)  →  THE BOOKS (persistent ledger)
+                  INVESTORS
+                     |
+                     ↓
+              FUND "Alpha One"
+                     |
+                     ↓
+              CIO allocates capital
+                     |
+        ┌────────────┼────────────┐
+        ↓            ↓            ↓
+    Value Pod    Event Pod    Macro Pod
+        |            |            |
+       PM           PM           PM
+        |            |            |
+    positions   positions   positions
+        └────────────┼────────────┘
+                     ↓
+             MASTER PORTFOLIO
+                     ↓
+              MASTER RISK
+                     ↓
+              EXECUTION
+                     ↓
+             BROKER / MARKET
+                     ↓
+              THE BOOKS
 ```
 
 | Real fund | Here |
