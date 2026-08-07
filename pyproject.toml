@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "aihf"
-version = "2.1.0"
+version = "2.2.0"
 description = "An AI-powered hedge fund: LLM investor agents and quant alpha models you can build, backtest, and run from your terminal"
 authors = ["Virat Singh <virat.dot@gmail.com>"]
 license = "MIT"
