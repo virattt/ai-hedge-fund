@@ -23,10 +23,10 @@ By using this software, you agree to use it solely for learning purposes.
 ## How to Install
 
 ```bash
-pipx install hedge-fund
+pipx install aihf
 ```
 
-(or `uv tool install hedge-fund`, or `pip install hedge-fund` into an environment of your choice)
+(or `uv tool install aihf`, or `pip install aihf` into an environment of your choice)
 
 Then run it from anywhere:
 

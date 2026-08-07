@@ -22,7 +22,7 @@ from hedge_fund.paths import MANDATES_DIR, ensure_mandates_dir  # noqa: F401  (r
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent
 
 try:
-    VERSION = _version("hedge-fund")
+    VERSION = _version("aihf")
 except PackageNotFoundError:  # running from source without an install
     VERSION = "dev"
 
