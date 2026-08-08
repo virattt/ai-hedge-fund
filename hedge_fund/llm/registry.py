@@ -19,6 +19,7 @@ API_MODELS_PATH = Path(__file__).resolve().parent / "api_models.json"
 # Provider names are the strings used in api_models.json.
 PROVIDER_ENV_VARS = {
     "Anthropic": "ANTHROPIC_API_KEY",
+    "Atlas Cloud": "ATLASCLOUD_API_KEY",
     "OpenAI": "OPENAI_API_KEY",
     "xAI": "XAI_API_KEY",
     "DeepSeek": "DEEPSEEK_API_KEY",

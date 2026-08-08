@@ -117,6 +117,12 @@ def make_llm(
         from langchain_openai import ChatOpenAI
         chat = ChatOpenAI(model=model, api_key=api_key, timeout=timeout,
                           max_retries=1, base_url=os.getenv("OPENAI_API_BASE"))
+    elif provider == "Atlas Cloud":
+        from langchain_openai import ChatOpenAI
+        chat = ChatOpenAI(
+            model=model, api_key=api_key, timeout=timeout, max_retries=1,
+            base_url=(os.getenv("ATLASCLOUD_API_BASE")
+                      or "https://api.atlascloud.ai/v1"))
     elif provider == "DeepSeek":
         from langchain_deepseek import ChatDeepSeek
         chat = ChatDeepSeek(model=model, api_key=api_key, timeout=timeout,
