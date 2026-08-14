@@ -28,5 +28,7 @@ def ensure_mandates_dir() -> Path:
     """Create the mandates dir on first use, seeded with the example."""
     if not MANDATES_DIR.exists():
         MANDATES_DIR.mkdir(parents=True)
-        shutil.copy(EXAMPLE_MANDATE, MANDATES_DIR / "example.yaml")
+    example_copy = MANDATES_DIR / "example.yaml"
+    if not example_copy.exists():
+        shutil.copy(EXAMPLE_MANDATE, example_copy)
     return MANDATES_DIR
