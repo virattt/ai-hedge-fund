@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from hedge_fund import paths
 
 
@@ -32,3 +34,13 @@ def test_ensure_mandates_dir_does_not_overwrite_existing_example(tmp_path, monke
     paths.ensure_mandates_dir()
 
     assert existing_example.read_text(encoding="utf-8") == "name: customized\n"
+
+
+def test_ensure_mandates_dir_rejects_existing_file(tmp_path, monkeypatch):
+    mandate_path = tmp_path / "mandates"
+    mandate_path.write_text("not a directory", encoding="utf-8")
+
+    monkeypatch.setattr(paths, "MANDATES_DIR", mandate_path)
+
+    with pytest.raises(NotADirectoryError, match="not a directory"):
+        paths.ensure_mandates_dir()
