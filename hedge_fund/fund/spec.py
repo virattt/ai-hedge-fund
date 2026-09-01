@@ -159,7 +159,7 @@ def normalize_universe(tickers: list[str]) -> list[str]:
 
 def load_spec(path: str | Path) -> FundSpec:
     """Load a mandate from YAML. Validation errors carry the pydantic detail."""
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
     # Mandates used to carry a `universe`. Tickers are a run-time input now
     # (see FundSpec), so drop the legacy key rather than fail extra='forbid'
@@ -170,7 +170,7 @@ def load_spec(path: str | Path) -> FundSpec:
 
 def load_strategy(path: str | Path) -> StrategySpec:
     """Load one strategy (a library file under hedge_fund/strategies/) from YAML."""
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
     return StrategySpec(**data)
 
