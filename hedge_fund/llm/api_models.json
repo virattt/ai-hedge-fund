@@ -35,6 +35,11 @@
     "provider": "OpenAI"
   },
   {
+    "display_name": "GLM-5.2",
+    "model_name": "z-ai/glm-5.2",
+    "provider": "OpenRouter"
+  },
+  {
     "display_name": "Kimi K2.6",
     "model_name": "kimi-k2.6",
     "provider": "Kimi"

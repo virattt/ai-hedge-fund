@@ -16,6 +16,7 @@ from hedge_fund.llm.registry import (
     env_var_for,
     is_supported,
     load_api_models,
+    normalize_provider,
     provider_for,
 )
 from hedge_fund.llm.watch import ThesisStream
@@ -35,6 +36,7 @@ __all__ = [
     "is_supported",
     "load_api_models",
     "make_llm",
+    "normalize_provider",
     "prompt_key",
     "provider_for",
 ]

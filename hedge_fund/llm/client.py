@@ -21,6 +21,7 @@ from hedge_fund.llm.registry import (
     SUPPORTED_PROVIDERS,
     env_var_for,
     is_supported,
+    normalize_provider,
     provider_for,
 )
 
@@ -91,12 +92,13 @@ def make_llm(
 ) -> ChatLLM:
     """Build the client for a model id, routed by the registry's provider.
 
-    The id comes from the caller, else HEDGE_FUND_LLM_MODEL, else DEFAULT_MODEL — the
-    same seam the TUI's picker writes to. Raises with the name of the missing
-    environment variable, because that is the only thing the user can act on.
+    The id comes from the caller, else HEDGE_FUND_LLM_MODEL, else DEFAULT_MODEL.
+    HEDGE_FUND_LLM_PROVIDER overrides registry-based provider inference, which
+    allows unlisted model ids to use an explicitly selected transport.
     """
     model = model or os.environ.get("HEDGE_FUND_LLM_MODEL") or DEFAULT_MODEL
-    provider = provider_for(model)
+    provider_override = os.environ.get("HEDGE_FUND_LLM_PROVIDER")
+    provider = normalize_provider(provider_override) if provider_override else provider_for(model)
     if provider is None:
         # Unlisted ids still work: a model newer than the registry should not
         # need a code change. Anthropic is the default transport.
@@ -117,6 +119,15 @@ def make_llm(
         from langchain_openai import ChatOpenAI
         chat = ChatOpenAI(model=model, api_key=api_key, timeout=timeout,
                           max_retries=1, base_url=os.getenv("OPENAI_API_BASE"))
+    elif provider == "OpenRouter":
+        from langchain_openai import ChatOpenAI
+        chat = ChatOpenAI(
+            model=model,
+            api_key=api_key,
+            timeout=timeout,
+            max_retries=1,
+            base_url="https://openrouter.ai/api/v1",
+        )
     elif provider == "DeepSeek":
         from langchain_deepseek import ChatDeepSeek
         chat = ChatDeepSeek(model=model, api_key=api_key, timeout=timeout,

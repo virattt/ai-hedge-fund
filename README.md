@@ -69,6 +69,20 @@ aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
 
 A mandate is the desk — strategies, staff, risk, capital, cadence — and never names tickers; `--tickers` says what to point it at for this run.
 
+Select a registered model with `--model`, or configure non-interactive defaults
+in your shell, project `.env`, or `~/.hedge-fund/.env`:
+
+```bash
+HEDGE_FUND_LLM_MODEL=z-ai/glm-5.2
+HEDGE_FUND_LLM_PROVIDER=OpenRouter
+OPENROUTER_API_KEY=your-openrouter-api-key
+```
+
+An explicit `--model` takes precedence over `HEDGE_FUND_LLM_MODEL`.
+`HEDGE_FUND_LLM_PROVIDER` overrides provider inference and accepts
+case-insensitive display or enum-style names, such as `OpenRouter` or
+`OPENROUTER`.
+
 ## Development
 
 ```bash

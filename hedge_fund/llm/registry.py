@@ -20,6 +20,7 @@ API_MODELS_PATH = Path(__file__).resolve().parent / "api_models.json"
 PROVIDER_ENV_VARS = {
     "Anthropic": "ANTHROPIC_API_KEY",
     "OpenAI": "OPENAI_API_KEY",
+    "OpenRouter": "OPENROUTER_API_KEY",
     "xAI": "XAI_API_KEY",
     "DeepSeek": "DEEPSEEK_API_KEY",
     "Google": "GOOGLE_API_KEY",
@@ -54,6 +55,19 @@ def provider_for(model_id: str) -> str | None:
     a hand-exported HEDGE_FUND_LLM_MODEL should not be second-guessed."""
     return next((prov for _, mid, prov in load_api_models() if mid == model_id),
                 None)
+
+
+def normalize_provider(provider: str) -> str:
+    """Normalize display or enum-style provider names from the environment."""
+    normalized = "".join(char for char in provider if char.isalnum()).casefold()
+    for canonical in PROVIDER_ENV_VARS:
+        candidate = "".join(char for char in canonical if char.isalnum()).casefold()
+        if normalized == candidate:
+            return canonical
+    raise ValueError(
+        f"Unsupported HEDGE_FUND_LLM_PROVIDER {provider!r}. "
+        f"Supported: {', '.join(sorted(SUPPORTED_PROVIDERS))}."
+    )
 
 
 def env_var_for(provider: str) -> str | None:

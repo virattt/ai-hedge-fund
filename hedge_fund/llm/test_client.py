@@ -25,6 +25,7 @@ def keyed(monkeypatch):
     for env_var in PROVIDER_ENV_VARS.values():
         monkeypatch.setenv(env_var, "test-key-not-real")
     monkeypatch.delenv("HEDGE_FUND_LLM_MODEL", raising=False)
+    monkeypatch.delenv("HEDGE_FUND_LLM_PROVIDER", raising=False)
     monkeypatch.delenv("OPENAI_API_BASE", raising=False)
 
 
@@ -61,6 +62,23 @@ def test_unlisted_model_falls_back_to_anthropic(keyed):
     code change first."""
     llm = make_llm("claude-something-unreleased")
     assert llm.model == "claude-something-unreleased"
+
+
+@pytest.mark.parametrize("provider", ["OpenRouter", "openrouter", "OPENROUTER"])
+def test_provider_env_overrides_registry(provider, monkeypatch, keyed):
+    monkeypatch.setenv("HEDGE_FUND_LLM_PROVIDER", provider)
+
+    llm = make_llm("gpt-5.5")
+
+    assert llm.model == "gpt-5.5"
+    assert str(llm._chat.openai_api_base).rstrip("/") == "https://openrouter.ai/api/v1"
+
+
+def test_invalid_provider_env_lists_supported_values(monkeypatch, keyed):
+    monkeypatch.setenv("HEDGE_FUND_LLM_PROVIDER", "not-a-provider")
+
+    with pytest.raises(ValueError, match="Unsupported HEDGE_FUND_LLM_PROVIDER"):
+        make_llm("custom-model")
 
 
 def test_kimi_accepts_moonshot_key(monkeypatch):
