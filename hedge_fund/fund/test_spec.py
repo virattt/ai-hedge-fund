@@ -1,6 +1,7 @@
 """FundSpec + StrategySpec + Fund tests — YAML loading, validation, staffing."""
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from hedge_fund.fund.spec import (
@@ -53,6 +54,31 @@ def test_load_strategy(tmp_path):
     assert strategy.name == "value"
     assert strategy.weight == 1.0  # slices are a fund-assembly concern
     assert strategy.model_weights == {"buffett": 1.0, "pead": 1.0}
+
+
+@pytest.mark.parametrize(
+    ("loader", "data"),
+    [
+        (load_spec, {**MINIMAL, "name": "fund\u2014test"}),
+        (load_strategy, {"name": "strategy\u2014test", "models": [{"name": "pead"}]}),
+    ],
+)
+def test_yaml_loaders_use_utf8_with_non_utf8_system_default(
+    tmp_path, monkeypatch, loader, data
+):
+    path = tmp_path / "spec.yaml"
+    document = yaml.safe_dump(data, allow_unicode=True)
+    path.write_bytes(document.encode("utf-8"))
+
+    system_open = open
+
+    def non_utf8_default_open(file, mode="r", *args, **kwargs):
+        kwargs.setdefault("encoding", "ascii")
+        return system_open(file, mode, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", non_utf8_default_open)
+
+    assert loader(path).name.endswith("\u2014test")
 
 
 def test_defaults_applied():
