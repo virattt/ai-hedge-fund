@@ -26,7 +26,12 @@ EXAMPLE_MANDATE = Path(__file__).resolve().parent / "fund" / "example.yaml"
 
 def ensure_mandates_dir() -> Path:
     """Create the mandates dir on first use, seeded with the example."""
-    if not MANDATES_DIR.exists():
-        MANDATES_DIR.mkdir(parents=True)
-        shutil.copy(EXAMPLE_MANDATE, MANDATES_DIR / "example.yaml")
+    if MANDATES_DIR.exists() and not MANDATES_DIR.is_dir():
+        raise NotADirectoryError(
+            f"Mandates path exists and is not a directory: {MANDATES_DIR}"
+        )
+    MANDATES_DIR.mkdir(parents=True, exist_ok=True)
+    example_copy = MANDATES_DIR / "example.yaml"
+    if not example_copy.exists():
+        shutil.copy(EXAMPLE_MANDATE, example_copy)
     return MANDATES_DIR
