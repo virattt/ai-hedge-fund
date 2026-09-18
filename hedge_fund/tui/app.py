@@ -772,6 +772,8 @@ def _verdict(signal: Signal) -> tuple[str, str, str]:
     both the browser's list and its detail pane."""
     if signal.metadata.get("abstained") is True:
         word = "abstain"
+    elif signal.metadata.get("signal") in ("bullish", "bearish", "neutral"):
+        word = signal.metadata["signal"]
     elif signal.value > 0:
         word = "bullish"
     elif signal.value < 0:
@@ -881,7 +883,7 @@ def _live_thesis(desk: _Desk) -> Text:
     """The reasoning so far, on one line. Whitespace is collapsed because the
     row is a single line and a newline inside the thesis would eat it."""
     if desk.signal is not None:
-        text = desk.signal.reasoning
+        text = desk.signal.reasoning or ""
     elif desk.stream is not None:
         text = desk.stream.thesis
     else:
@@ -941,6 +943,7 @@ def _signal_detail(record: CycleRecord, si: int, sj: int) -> Group:
     signal = sr.signals[sj]
     _, word, tone = _verdict(signal)
     confidence = signal.metadata.get("confidence")
+    jev = signal.metadata.get("provider_metadata", {}).get("jev")
     header = Text()
     header.append(signal.ticker, style=f"bold {CYAN}")
     header.append("  ·  ", style=MUTED)
@@ -949,7 +952,8 @@ def _signal_detail(record: CycleRecord, si: int, sj: int) -> Group:
     facts = Text()
     facts.append(word, style=f"bold {tone}")
     if confidence is not None:
-        facts.append(f"  ·  {confidence:.0f}% confidence", style=MUTED)
+        label = "investment conviction" if jev else "confidence"
+        facts.append(f"  ·  {confidence:.0f}% {label}", style=MUTED)
     facts.append(f"  ·  conviction {signal.value:+.2f}", style=MUTED)
     facts.append(f"  ·  {sr.name}", style=MUTED)
     return Group(
@@ -958,7 +962,28 @@ def _signal_detail(record: CycleRecord, si: int, sj: int) -> Group:
         Text(""),
         Text(signal.reasoning or "no thesis recorded",
              style=TEXT if signal.reasoning else MUTED),
+        *([Text(""), _jev_details(jev)] if jev else []),
     )
+
+
+def _jev_details(metadata: dict) -> Text:
+    """Explain saved typed answers in the existing detail pane."""
+    answers = metadata["response"]["answers"]
+    probabilities = answers["direction"]["probabilities"]
+    details = Text("Jev answer-option probabilities\n", style=MUTED)
+    details.append("  ·  ".join(
+        f"{direction.capitalize()} {probabilities[direction]:.1%}"
+        for direction in ("bullish", "bearish", "neutral")), style=TEXT)
+    details.append("\nThese describe the supplied answer options, not investment returns.\n\n")
+    details.append("Jev native answer confidence\n")
+    details.append("\n".join(
+        f"{label}: {answers[name]['confidence']:.1%}"
+        for name, label in (
+            ("direction", "Direction"),
+            ("bullish_strength", "Bullish strength"),
+            ("bearish_strength", "Bearish strength"),
+        )), style=TEXT)
+    return details
 
 
 def _risk_detail(record: CycleRecord) -> Group:

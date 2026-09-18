@@ -24,6 +24,7 @@ PROVIDER_ENV_VARS = {
     "DeepSeek": "DEEPSEEK_API_KEY",
     "Google": "GOOGLE_API_KEY",
     "Kimi": "KIMI_API_KEY",
+    "TypeSafe": "TYPESAFE_API_KEY",
 }
 
 # Providers v2 has a client for (see client.py:make_llm). Anything in the

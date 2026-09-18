@@ -39,7 +39,7 @@ aihf
 The app asks for keys the first time it needs them and saves them to `~/.hedge-fund/.env` — nothing to configure up front. It needs:
 
 - A [Financial Datasets](https://financialdatasets.ai) API key, for prices, fundamentals, and earnings.
-- One LLM API key for the LLM-powered alpha models. Supported providers: Anthropic, OpenAI, DeepSeek, Google, xAI, Kimi.
+- One model API key for the investor agents. Supported providers: Anthropic, OpenAI, DeepSeek, Google, xAI, Kimi, TypeSafe (Jev).
 
 Keys exported in your shell always win over the saved file.
 
@@ -59,6 +59,12 @@ Run one fund cycle from a mandate file. The full cycle record prints to stdout a
 
 ```bash
 aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
+```
+
+Run the same mandate with Jev after configuring `TYPESAFE_API_KEY`:
+
+```bash
+aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --model jev-1.13.0
 ```
 
 Backtest the mandate over history at its rebalance cadence:

@@ -207,6 +207,100 @@ class TestFlatten:
 API_KEY = "test-typesafe-secret-key"
 
 
+@pytest.mark.parametrize("use_environment", [False, True])
+def test_factory_routes_jev_with_only_its_key(use_environment, monkeypatch, http):
+    for variable in (*PROVIDER_ENV_VARS.values(), "MOONSHOT_API_KEY", "HEDGE_FUND_LLM_MODEL"):
+        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.setenv("TYPESAFE_API_KEY", API_KEY)
+    # If routing regresses, fail at chat construction rather than making a call.
+    import langchain_anthropic
+    import langchain_openai
+    monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", Mock(side_effect=AssertionError("chat construction")))
+    monkeypatch.setattr(langchain_openai, "ChatOpenAI", Mock(side_effect=AssertionError("chat construction")))
+    if use_environment:
+        monkeypatch.setenv("HEDGE_FUND_LLM_MODEL", "jev-1.13.0")
+    listener = Mock()
+    llm = make_llm(None if use_environment else "jev-1.13.0", timeout=17, max_tokens=1, on_token=listener)
+    assert isinstance(llm, JevLLM)
+    assert provider_for(llm.model) == "TypeSafe"
+    assert ("Jev — TypeSafe", "jev-1.13.0", "TypeSafe") in load_api_models()
+    _serve(http, _http_response())
+    llm.complete("investor", "snapshot")
+    assert http[0].call_args.kwargs["timeout"] == 17
+    assert "max_tokens" not in http[0].call_args.kwargs["json"]
+    listener.assert_not_called()
+
+
+def test_factory_missing_jev_key_names_variable(monkeypatch):
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="TYPESAFE_API_KEY"):
+        make_llm("jev-1.13.0")
+
+
+def test_cli_jev_cycle_and_saved_replay(tmp_path, monkeypatch, http, capsys):
+    import sys
+    from hedge_fund import run
+    from hedge_fund.data.models import Price
+    from hedge_fund.pipeline.models import CycleRecord
+    from hedge_fund.signals import llm_agent
+    from hedge_fund.tui import keys
+
+    class FinancialFixtures(MockDataClient):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def get_prices(self, ticker, start_date, end_date, **kwargs):
+            return [Price(open=100, high=100, low=100, close=100,
+                          volume=1000, time=f"{end_date}T00:00:00Z")]
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(keys, "ENV_PATH", tmp_path / "saved.env")
+    for variable in (*PROVIDER_ENV_VARS.values(), "MOONSHOT_API_KEY"):
+        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.setenv("TYPESAFE_API_KEY", API_KEY)
+    monkeypatch.setenv("HEDGE_FUND_LLM_MODEL", "claude-opus-5")
+    monkeypatch.setattr(run, "ensure_mandates_dir", lambda: tmp_path)
+    monkeypatch.setattr(run, "FDClient", lambda: FinancialFixtures(metrics=_history()))
+    monkeypatch.setattr(run, "CachedDataClient", lambda raw: raw)
+    monkeypatch.setattr(llm_agent, "PromptCache", lambda: PromptCache(tmp_path / "llm"))
+    mandate = tmp_path / "fund.yaml"
+    mandate.write_text("""name: jev-test
+strategies:
+  - name: value
+    models:
+      - name: buffett
+risk:
+  max_position_pct: 0.25
+  max_gross_exposure: 1.0
+capital: 100000
+""")
+    output = tmp_path / "record.json"
+    monkeypatch.setattr(sys, "argv", ["aihf", str(mandate), "--tickers", "AAPL,MSFT",
+                                     "--date", "2025-01-15", "--model", "jev-1.13.0", "--out", str(output)])
+    _serve(http, _http_response(), _http_response(_response("bearish")))
+    run.main()
+    first = CycleRecord.model_validate_json(output.read_text())
+    assert CycleRecord.model_validate_json(capsys.readouterr().out) == first
+    assert first.strategies[0].convictions == {"AAPL": 0.8, "MSFT": -0.4}
+    assert first.positions["AAPL"] > 0 > first.positions["MSFT"]
+    assert first.orders and first.fills and first.clamps
+    assert all(abs(weight) <= 0.25 for weight in first.final_weights.values())
+    assert http[0].call_count == 2
+    run.main()
+    second = CycleRecord.model_validate_json(output.read_text())
+    capsys.readouterr()
+    assert second.final_weights == first.final_weights
+    assert second.positions == first.positions
+    for before, after in zip(first.strategies[0].signals, second.strategies[0].signals):
+        assert after.metadata["cached"] is True
+        assert before.metadata["provider_metadata"] == after.metadata["provider_metadata"]
+        assert after.metadata["provider_metadata"]["jev"]["response"]["answers"]
+    assert http[0].call_count == 2
+
+
 def _http_response(body=None, status=200, raw=None, retry_after=None):
     response = requests.Response()
     response.status_code = status

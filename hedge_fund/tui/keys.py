@@ -33,7 +33,7 @@ def apply_credentials() -> None:
     """Load .env files into the environment without overriding what is already
     set. Call once at startup, before anything builds an agent. A ``.env`` in
     the current directory (a checkout) wins over the user-level file."""
-    load_dotenv(override=False)
+    load_dotenv(Path.cwd() / ".env", override=False)
     load_dotenv(ENV_PATH, override=False)
 
 
