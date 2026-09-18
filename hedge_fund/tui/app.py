@@ -320,7 +320,7 @@ class ModelPickerScreen(ModalScreen[str | None]):
                 row = Text()
                 row.append(" ✓ " if model_id == self._current else "   ",
                            style=f"bold {GREEN}")
-                row.append(f"{name:<18}", style=TEXT if reachable else MUTED)
+                row.append(f"{name:<18}", style=None if reachable else MUTED)
                 row.append(model_id, style=MUTED)
                 options.append(Option(
                     row, id=model_id if reachable else None,

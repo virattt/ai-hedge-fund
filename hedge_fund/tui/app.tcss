@@ -260,6 +260,7 @@ ModelPickerScreen {
 
 #picker-list {
     max-height: 20;
+    color: #d9e6e0;
 }
 
 /* ---------------- confirm delete ---------------- */
