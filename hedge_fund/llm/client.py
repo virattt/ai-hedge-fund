@@ -33,7 +33,7 @@ from hedge_fund.llm.registry import (
     SUPPORTED_PROVIDERS,
 )
 
-DEFAULT_MODEL = "claude-sonnet-5"
+DEFAULT_MODEL = "claude-opus-5"
 
 # Called with each piece of text as it arrives. None means don't stream.
 TokenListener = Callable[[str], None] | None

@@ -5,24 +5,9 @@
     "provider": "Anthropic"
   },
   {
-    "display_name": "Sonnet 5",
-    "model_name": "claude-sonnet-5",
-    "provider": "Anthropic"
-  },
-  {
     "display_name": "Fable 5.1",
     "model_name": "claude-fable-5-1",
     "provider": "Anthropic"
-  },
-  {
-    "display_name": "Grok 4.3",
-    "model_name": "grok-4.3",
-    "provider": "xAI"
-  },
-  {
-    "display_name": "DeepSeek V4 Pro",
-    "model_name": "deepseek-v4-pro",
-    "provider": "DeepSeek"
   },
   {
     "display_name": "GPT-5.6",
@@ -35,14 +20,24 @@
     "provider": "OpenAI"
   },
   {
-    "display_name": "Kimi K2.6",
-    "model_name": "kimi-k2.6",
-    "provider": "Kimi"
-  },
-  {
     "display_name": "Jev",
     "model_name": "jev-1.13.0",
     "provider": "TypeSafe"
+  },
+  {
+    "display_name": "Grok 4.3",
+    "model_name": "grok-4.3",
+    "provider": "xAI"
+  },
+  {
+    "display_name": "DeepSeek V4 Pro",
+    "model_name": "deepseek-v4-pro",
+    "provider": "DeepSeek"
+  },
+  {
+    "display_name": "Kimi K2.6",
+    "model_name": "kimi-k2.6",
+    "provider": "Kimi"
   },
   {
     "display_name": "Gemini 3.1 Pro",
