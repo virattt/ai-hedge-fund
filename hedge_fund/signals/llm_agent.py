@@ -26,7 +26,7 @@ import logging
 
 from hedge_fund.data.protocol import DataClient
 from hedge_fund.features.snapshot import FundamentalsSnapshot, InsufficientData, build_snapshot
-from hedge_fund.llm import LLMClient, PromptCache, extract_json, make_llm, prompt_key
+from hedge_fund.llm import LLMCallError, LLMClient, PromptCache, extract_json, make_llm, prompt_key
 from hedge_fund.models import Signal
 from hedge_fund.signals.base import AlphaModel
 
@@ -60,17 +60,13 @@ class LLMAgent(AlphaModel):
 
         system = self.get_system_prompt()
         user = self.build_user_prompt(snapshot)
-        key = prompt_key(self.name, self._llm.model, system, user)
+        cache_key = getattr(self._llm, "cache_key", None)
+        key = (cache_key(self.name, system, user) if callable(cache_key)
+               else prompt_key(self.name, self._llm.model, system, user))
 
         cached = self._cache.get(key)
         if cached is not None and "parsed" in cached:
             return self._to_signal(ticker, date, cached["parsed"], key, snapshot, cached=True)
-
-        try:
-            response = self._llm.complete(system, user)
-        except Exception as exc:
-            logger.warning("%s LLM call failed for %s@%s: %s", self.name, ticker, date, exc)
-            return self._abstain(ticker, date, f"LLM call failed: {exc}")
 
         record = {
             "agent": self.name,
@@ -80,9 +76,22 @@ class LLMAgent(AlphaModel):
             "snapshot_hash": snapshot.content_hash,
             "system": system,
             "user": user,
-            "response": response,
         }
 
+        try:
+            response = self._llm.complete(system, user)
+        except Exception as exc:
+            if isinstance(exc, LLMCallError) and exc.diagnostic_record is not None:
+                self._cache.put(key, {**record, "call_error": str(exc),
+                                      "diagnostics": exc.diagnostic_record})
+                signal = self._abstain(ticker, date, f"LLM call failed: {exc}")
+                signal.metadata["prompt_key"] = key
+            else:
+                signal = self._abstain(ticker, date, f"LLM call failed: {exc}")
+            logger.warning("%s LLM call failed for %s@%s: %s", self.name, ticker, date, exc)
+            return signal
+
+        record["response"] = response
         try:
             parsed = self._parse(response)
         except Exception as exc:
@@ -128,11 +137,16 @@ class LLMAgent(AlphaModel):
         confidence = float(data.get("confidence", 0))
         if not 0 <= confidence <= 100:
             raise ValueError(f"confidence out of range: {confidence}")
-        return {
+        parsed = {
             "signal": signal,
             "confidence": confidence,
             "reasoning": str(data.get("reasoning", "")),
         }
+        if "provider_metadata" in data:
+            if not isinstance(data["provider_metadata"], dict):
+                raise ValueError("provider_metadata must be an object")
+            parsed["provider_metadata"] = data["provider_metadata"]
+        return parsed
 
     def _to_signal(
         self,
@@ -158,6 +172,8 @@ class LLMAgent(AlphaModel):
                 "snapshot_hash": snapshot.content_hash,
                 "cached": cached,
                 "abstained": False,
+                **({"provider_metadata": parsed["provider_metadata"]}
+                   if "provider_metadata" in parsed else {}),
             },
         )
 

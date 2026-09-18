@@ -6,22 +6,31 @@ Mirrors the DataClient pattern (hedge_fund/data/protocol.py): agents depend on t
 
 We deliberately do NOT use langchain's structured-output machinery: its
 forced-tool mode breaks on Anthropic reasoning models (v1 carries the same
-workaround). We ask for JSON in the prompt and parse it ourselves.
+workaround). For chat providers, we ask for JSON in the prompt and parse it
+ourselves; Jev adapts native typed answers into the same JSON contract.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import os
 import re
+import time
 from collections.abc import Callable
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Protocol, runtime_checkable
 
+import requests
+
+from hedge_fund.llm import contract
 from hedge_fund.llm.registry import (
-    SUPPORTED_PROVIDERS,
     env_var_for,
     is_supported,
     provider_for,
+    SUPPORTED_PROVIDERS,
 )
 
 DEFAULT_MODEL = "claude-sonnet-5"
@@ -34,11 +43,22 @@ class LLMParseError(ValueError):
     """The model's response did not contain parseable JSON."""
 
 
+class LLMCallError(RuntimeError):
+    """Provider failure with optional, credential-free persistence context."""
+
+    def __init__(self, message: str, diagnostic_record: dict | None = None) -> None:
+        super().__init__(message)
+        self.diagnostic_record = diagnostic_record
+
+
 @runtime_checkable
 class LLMClient(Protocol):
     """Protocol all LLM providers must satisfy.
 
-    complete() returns the model's raw text. Providers should raise on
+    complete() returns text (native text or an adapter's compatibility JSON).
+    Providers may optionally implement cache_key(agent, system, user) when
+    their request contains additional semantics beyond the two prompts.
+    Providers should raise on
     transport failure — the LLMAgent layer decides to abstain, not the
     provider.
     """
@@ -51,9 +71,9 @@ class LLMClient(Protocol):
 class ChatLLM:
     """A langchain chat model behind the LLMClient protocol.
 
-    Every provider we support ends up here — only *constructing* the chat
-    model differs, and that lives in make_llm(). The response handling is
-    identical across providers, so it is written once.
+    Chat providers share this wrapper — only *constructing* the chat model
+    differs, and that lives in make_llm(). Their response handling is written
+    once; JevLLM handles TypeSafe's native typed responses separately.
 
     With an `on_token` listener the same call streams: the listener sees text
     as it arrives, and complete() still returns the whole response. Watching
@@ -81,6 +101,125 @@ class ChatLLM:
                 parts.append(text)
                 self._on_token(text)
         return "".join(parts)
+
+
+class JevLLM:
+    """Native TypeSafe adapter returning compatibility JSON without streaming.
+
+    Provider metadata travels with the result so cache replay needs no mutable
+    last-response state. Native response bodies are preserved except for echoed
+    credentials, which are redacted. Credentials are passed in explicitly.
+    """
+
+    ENDPOINT = "https://api.typesafe.ai/v1/systemone"
+    _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504, 529})
+
+    def __init__(self, api_key: str, model: str = "jev-1.13.0", timeout: float = 60.0) -> None:
+        if not isinstance(api_key, str) or not api_key.strip():
+            raise ValueError("A non-empty TypeSafe API key is required")
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError("timeout must be a positive finite number")
+        self.model = model
+        self._api_key = api_key
+        self._timeout = timeout
+
+    def cache_key(self, agent: str, system: str, user: str) -> str:
+        """Hash semantic inputs only; do not disturb legacy prompt keys."""
+        identity = {
+            "provider": "TypeSafe",
+            "endpoint": self.ENDPOINT,
+            "agent": agent,
+            "request": contract.build_jev_request(system, user, self.model),
+            "contract_version": contract.JEV_CONTRACT_VERSION,
+        }
+        canonical = json.dumps(identity, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode()).hexdigest()[:24]
+
+    def complete(self, system: str, user: str) -> str:
+        request = contract.build_jev_request(system, user, self.model)
+        started = time.monotonic()
+        diagnostics = {
+            "provider": "TypeSafe",
+            "contract_version": contract.JEV_CONTRACT_VERSION,
+            "request": request,
+            "attempt_count": 0,
+            "status_code": None,
+            "raw_response": None,
+        }
+
+        def fail(category: str, message: str) -> None:
+            diagnostics.update(failure_category=category, elapsed_seconds=time.monotonic() - started)
+            # Do not chain transport exceptions: their message/request can carry
+            # credentials. Diagnostics intentionally omit all HTTP headers.
+            raise LLMCallError(message, self._redact(diagnostics)) from None
+
+        for attempt in range(1, 3):
+            diagnostics["attempt_count"] = attempt
+            try:
+                with requests.post(
+                    self.ENDPOINT,
+                    json=request,
+                    headers={"Authorization": f"Bearer {self._api_key}"},
+                    timeout=self._timeout,
+                    allow_redirects=False,
+                ) as response:
+                    status = response.status_code
+                    raw = response.text
+                    retry_after = response.headers.get("Retry-After")
+            except requests.RequestException:
+                fail("transport", "TypeSafe request failed during transport")
+
+            diagnostics.update(status_code=status, raw_response=raw)
+            if status in self._RETRY_STATUSES and attempt == 1:
+                delay = _retry_delay(retry_after)
+                if delay > self._timeout:
+                    fail("http", f"TypeSafe HTTP {status}: retry delay exceeds timeout")
+                time.sleep(delay)
+                continue
+            if not 200 <= status < 300:
+                fail("http", f"TypeSafe returned HTTP {status}")
+            try:
+                native_response = json.loads(raw)
+            except ValueError:
+                fail("json_decode", "TypeSafe returned invalid JSON")
+            try:
+                payload, metadata = contract.normalize_jev_response(native_response)
+            except contract.JevContractError as exc:
+                fail("contract", f"TypeSafe response failed validation: {exc}")
+
+            metadata.update(diagnostics, elapsed_seconds=time.monotonic() - started)
+            payload["provider_metadata"] = {"jev": self._redact(metadata)}
+            return json.dumps(payload)
+
+        raise AssertionError("unreachable: every attempt returns, retries, or raises")
+
+    def _redact(self, value):
+        """Protect against a service echoing the API key in an error body."""
+        if isinstance(value, str):
+            return value.replace(self._api_key, "[REDACTED]")
+        if isinstance(value, dict):
+            return {self._redact(key): self._redact(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [self._redact(item) for item in value]
+        return value
+
+
+def _retry_delay(header: str | None) -> float:
+    """One-second backoff, honoring valid delta-seconds and HTTP-date values."""
+    if header is not None:
+        try:
+            seconds = float(header)
+        except ValueError:
+            try:
+                retry_at = parsedate_to_datetime(header)
+                if retry_at.tzinfo is None:
+                    retry_at = retry_at.replace(tzinfo=timezone.utc)
+                seconds = (retry_at - datetime.now(timezone.utc)).total_seconds()
+            except (ValueError, TypeError, OverflowError):
+                return 1.0
+        if math.isfinite(seconds):
+            return max(1.0, seconds)
+    return 1.0
 
 
 def make_llm(

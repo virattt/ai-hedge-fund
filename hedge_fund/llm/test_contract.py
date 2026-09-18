@@ -7,7 +7,7 @@ from copy import deepcopy
 import pytest
 
 from hedge_fund.llm import PromptCache
-from hedge_fund.llm.jev.contract import (
+from hedge_fund.llm.contract import (
     build_jev_request,
     JEV_CONTRACT_VERSION,
     JevContractError,
