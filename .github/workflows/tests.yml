@@ -36,7 +36,7 @@ jobs:
       # actually move. virtualenvs-in-project above is what puts it at .venv
       # where this can reach it.
       - name: Cache the virtualenv
-        uses: actions/cache@0057852bfaa89a56745ba8c7296529d2fc39830 # v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .venv
           key: venv-${{ runner.os }}-py3.11-${{ hashFiles('poetry.lock') }}
