@@ -1,0 +1,45 @@
+# Runs the test suite on every pull request and every push to main.
+#
+# Scoping push to main rather than all branches is deliberate: a branch with an
+# open PR is already covered by pull_request, so unscoped push would run the
+# same commit twice. What this is here to catch is code going stale on main —
+# the last bug fixed in this repo was a test assertion that upstream invalidated
+# and nobody noticed, because nothing ran the suite.
+
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-in-project: true
+
+      # Keyed on poetry.lock, so the venv is rebuilt only when dependencies
+      # actually move. virtualenvs-in-project above is what puts it at .venv
+      # where this can reach it.
+      - name: Cache the virtualenv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-py3.11-${{ hashFiles('poetry.lock') }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run tests
+        run: poetry run pytest
