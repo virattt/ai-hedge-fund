@@ -7,6 +7,7 @@
 #
 #   aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
 #   aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
+#   python -m hedge_fund.daemon ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
 #
 name: example-fund
 strategies:

@@ -28,15 +28,18 @@ strategies are powered by quant models (post-earnings drift) — the model *is*
 the strategy, no persona attached. Both kinds implement one interface and
 plug into the same engine unchanged.
 
-Run a fund two ways: **one paper cycle** (live clock + `PaperBroker`, today's
+Run a fund three ways: **one paper cycle** (live clock + `PaperBroker`, today's
 data → today's target book, seeded from the newest `CycleRecord` receipt when
-this mandate has one, so cash, positions, and NAV persist) or a **backtest**
-— the same cycle looped over history at the mandate's rebalance cadence on
-`SimBroker`, producing an equity curve against your benchmark and a full
-`CycleRecord` for every tick. Backtests always open at the mandate's capital
-and carry the book only across ticks inside that run. Same code path, so a
-backtest is honest by construction: it's the fund, replayed, not a separate
-simulator.
+this mandate has one, so cash, positions, and NAV persist); the **scheduler
+daemon** (`python -m hedge_fund.daemon`) — the same paper (or sim) cycle on
+a poll, gated by the market calendar and the mandate's rebalance cadence,
+with an idempotency key per mandate+session and a file/env kill-switch; or
+a **backtest** — the same cycle looped over history at the mandate's
+rebalance cadence on `SimBroker`, producing an equity curve against your
+benchmark and a full `CycleRecord` for every tick. Backtests always open at
+the mandate's capital and carry the book only across ticks inside that run.
+Same code path, so a backtest is honest by construction: it's the fund,
+replayed, not a separate simulator.
 
 ## Quickstart
 
@@ -65,6 +68,15 @@ poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT,NVDA --p
 # mandate's rebalance cadence on SimBroker, full result JSON on stdout.
 poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
 
+# Always-on scheduler: the same run_cycle on a live clock, gated by the
+# market calendar and the mandate's rebalance cadence. Paper venue by
+# default; --venue sim is the other allowed book. --once evaluates one
+# tick and exits (no polling sleep). Double-fire of the same
+# mandate+session is a no-op. touch ~/.hedge-fund/KILL (or
+# HEDGE_FUND_KILL_SWITCH=1) to halt new ticks.
+poetry run python -m hedge_fund.daemon ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
+poetry run python -m hedge_fund.daemon ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --once
+
 # Tests (offline; live Financial Datasets smoke skips without FINANCIAL_DATASETS_API_KEY)
 # See ../CONTRIBUTING.md for the fork's first-test / first-backtest path.
 poetry run pytest hedge_fund/
@@ -92,6 +104,7 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | `brokers/` | `Broker` protocol + `SimBroker` (backtest) + `PaperBroker` (live-clock paper; live venue planned) | ◐ |
 | `ledger.py` | Persist `CycleRecord` receipts; seed the next live-clock `PaperBroker` from the newest one | ✅ |
 | `pipeline/` | `run_cycle` — one code path for backtest/paper/live; `CycleRecord` | ✅ |
+| `daemon/` | Scheduler: market-calendar poll, idempotent ticks, kill-switch; paper or sim | ✅ |
 | `backtesting/` | `backtest_fund` — the whole fund over history on `run_cycle` — plus the per-model engine | ✅ |
 | `event_study/` | Market-model abnormal returns (CARs) | ✅ |
 | `validation/` | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO) | ⬜ |

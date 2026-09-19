@@ -34,6 +34,8 @@ poetry run aihf
 # or, non-interactive paper cycle / backtest:
 poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --paper
 poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
+# always-on paper/sim scheduler (one evaluation, no long poll):
+poetry run python -m hedge_fund.daemon ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --once
 ```
 
 The interactive app still prompts for missing keys on first run. Non-interactive and library paths raise immediately if a required key is absent (`FINANCIAL_DATASETS_API_KEY` on `FDClient()`, LLM keys on `make_llm()`).

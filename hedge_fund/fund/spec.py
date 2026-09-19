@@ -116,7 +116,7 @@ class FundSpec(BaseModel):
         default="weekly",
         description="how often the fund re-runs its cycle — a mandate choice, "
         "not an engine constant: a fundamentals fund trades weekly, a "
-        "news-driven fund daily. The backtester (and the future daemon) obey "
+        "news-driven fund daily. The backtester and the scheduler daemon obey "
         "it; run_cycle itself never sees it.",
     )
     benchmark: str = Field(

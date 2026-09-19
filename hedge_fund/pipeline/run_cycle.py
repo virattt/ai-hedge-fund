@@ -18,7 +18,7 @@ Notable behavior, chosen deliberately:
 - Targets are the complete statement of the desired book. If every analyst
   abstains or goes neutral, the targets are all zero and the fund closes to
   flat. The record shows `abstained` on each signal, so an outer loop (the
-  Day-5 daemon) can decide to skip a tick instead — that guard belongs
+  scheduler daemon) can decide to skip a tick instead — that guard belongs
   outside the pipeline.
 - A universe ticker with no price and no position is skipped (recorded, its
   analysts never called): unlisted/delisted names are normal in history.

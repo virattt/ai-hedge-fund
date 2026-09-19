@@ -78,6 +78,33 @@ aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
 
 A mandate is the desk — strategies, staff, risk, capital, cadence — and never names tickers; `--tickers` says what to point it at for this run.
 
+### Scheduler daemon (always-on paper / sim)
+
+The same `run_cycle` on a live clock, polled on an interval, gated by the market calendar and the mandate's rebalance cadence. Each tick is keyed by mandate + session date, so a double-fire is a no-op. Paper is the default venue; `sim` is the other allowed book. There is no live venue on this path.
+
+```bash
+# always-on: poll every 60s, fire when the session is due
+python -m hedge_fund.daemon ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
+
+# one evaluation, then exit (no polling sleep) — useful from cron
+python -m hedge_fund.daemon ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --once
+
+# optional schedule YAML (CLI flags override)
+# interval_seconds: 300
+# venue: paper
+python -m hedge_fund.daemon ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --config ~/.hedge-fund/daemon.yaml
+```
+
+Halt new ticks without killing the process mid-cycle:
+
+```bash
+touch ~/.hedge-fund/KILL
+# or
+export HEDGE_FUND_KILL_SWITCH=1
+```
+
+`--once` prints a JSON result on stdout (`status` is `ran`, `skipped`, `halted`, or `not_due`). The always-on loop logs each evaluation to stderr and exits when the kill-switch is on. Idempotency keys live under `~/.hedge-fund/ticks/`.
+
 ## Development
 
 This fork lives at [bugman666/ai-hedge-fund](https://github.com/bugman666/ai-hedge-fund). See [CONTRIBUTING.md](CONTRIBUTING.md) for the first-test / first-backtest path.

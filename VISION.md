@@ -94,7 +94,8 @@ construction. A live-clock paper run seeds `PaperBroker` from the newest
 process invocations (a corrupt or incompatible receipt fails the run rather
 than resetting the book). Backtests still open at the mandate's capital on
 `SimBroker` and carry the book only across ticks inside that run. What remains
-for always-on paper is the scheduler. An older per-model harness remains for
+for always-on paper is observability (heartbeat, per-cycle events) on top of
+the scheduler that now ships. An older per-model harness remains for
 single-model studies.)
 
 ### One cycle

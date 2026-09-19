@@ -10,12 +10,10 @@ read [VISION.md](./VISION.md).
 
 ✅ Shipped · 🚧 In progress · ⬜ Planned
 
-**Current focus:** the paper venue now ships for this fork path — live-clock
-runs use `PaperBroker` (fills at mark, no live exchange) and seed from the
-newest `CycleRecord` so cash, positions, and NAV carry between invocations.
-Next: the scheduler — that's the path from "run it by hand" to a fund that
-is genuinely always-on. In parallel: retiring the v1 CLI, which needs Ollama
-(the free, local, no-key path) and the remaining investor personas ported.
+**Current focus:** the scheduler daemon now ships for this fork path —
+`python -m hedge_fund.daemon` runs `run_cycle` on the market calendar with
+idempotent ticks and a kill-switch, paper or sim only. Next: observability
+(heartbeat / per-cycle events). In parallel: remaining investor personas.
 
 The tables below are a capability map, not a strict order; where items depend on
 each other, the dependency is noted.
@@ -30,9 +28,9 @@ it in backtest, paper, or live mode (see [VISION.md](./VISION.md)).
 | `AlphaModel` / `Signal` interface — the contract every analyst implements | ✅ |
 | Backtesting engine — `backtest_fund`: the whole fund over history on `run_cycle`, equity curve vs the mandate's benchmark (plus the per-model harness) | ✅ |
 | Event-study engine — market-model abnormal returns (CARs) | ✅ |
-| `run_cycle` — one pipeline (data → analysts → portfolio → risk → execution → ledger), three modes | 🚧 (single cycle, live-clock paper with a carried book, and the backtest loop ship; a live venue and the always-on daemon remain) |
+| `run_cycle` — one pipeline (data → analysts → portfolio → risk → execution → ledger), three modes | 🚧 (single cycle, live-clock paper with a carried book, the backtest loop, and the always-on scheduler ship; a live venue remains) |
 | Fund object — persistent mandate, staff, capital, books | 🚧 (mandates, staffing, per-run receipts, and a carried book between live-clock runs ship; tickers are a run-time input, not part of the mandate) |
-| Persistent ledger — positions, every decision + thesis, orders, fills, NAV history | 🚧 (live-clock paper runs write a `CycleRecord` and the next run seeds `PaperBroker` from the newest receipt so NAV carries; backtests still start from mandate capital on `SimBroker`; the always-on daemon remains) |
+| Persistent ledger — positions, every decision + thesis, orders, fills, NAV history | 🚧 (live-clock paper runs and the scheduler write a `CycleRecord` and the next tick seeds the book from the newest receipt so NAV carries; backtests still start from mandate capital on `SimBroker`) |
 | LLM provider layer — one client factory (`make_llm`) routed by the model registry: Anthropic · OpenAI · DeepSeek · Google · xAI · Kimi · TypeSafe · Ollama | ✅ |
 | Point-in-time data correctness — as-of / filing-date queries, no lookahead | 🚧 |
 | Validation gate — CPCV, probability of backtest overfitting (PBO) | ⬜ |
@@ -93,7 +91,7 @@ can be backtested and combined — is a great first contribution:
 
 | Item | Status |
 |------|--------|
-| Scheduler / daemon — market-calendar cron, idempotent ticks, kill-switch | ⬜ |
+| Scheduler / daemon — market-calendar cron, idempotent ticks, kill-switch | ✅ (`python -m hedge_fund.daemon`; paper or sim; key per mandate+session; file/env kill-switch) |
 | Observability — per-cycle events, notifications, heartbeat | ⬜ |
 | Research lab — backtest candidate strategies/allocators alongside the live fund | ⬜ |
 | Strategy generator — composes candidate strategies from the building blocks (analysts × policies × parameters), driven by the fund's mandate | ⬜ |
