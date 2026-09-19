@@ -47,6 +47,32 @@ export FINANCIAL_DATASETS_API_KEY=...
 poetry run pytest hedge_fund/data/test_client.py
 ```
 
+## Cycle observability (optional, offline)
+
+The paper / live-clock CLI path can emit structured cycle events, refresh a
+heartbeat file, and POST a failure webhook — no live APIs required to turn
+this on. Useful later for a scheduler/daemon; useful today to watch a
+hand-run cycle.
+
+| Variable | What it does |
+|----------|----------------|
+| `HEDGE_FUND_EVENTS_PATH` | Append `cycle_start` / `cycle_end` / `cycle_error` as JSONL (also `--events [PATH]`) |
+| `HEDGE_FUND_HEARTBEAT_PATH` | Heartbeat JSON the process rewrites each cycle (also `--heartbeat [PATH]`) |
+| `HEDGE_FUND_HEARTBEAT=1` | Same heartbeat at `~/.hedge-fund/observability/heartbeat.json` |
+| `HEDGE_FUND_WEBHOOK_URL` | POST a JSON failure summary if the cycle raises |
+| `HEDGE_FUND_WEBHOOK_TIMEOUT` | Webhook timeout in seconds (default 5) |
+
+Events always log at info/error. A failed webhook is logged; the original
+cycle exception still propagates (fail loud). Offline tests live in
+`hedge_fund/observability/test_observability.py` and use temp dirs plus a
+mocked HTTP POST.
+
+```bash
+poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT \
+  --heartbeat /tmp/hedge-fund-heartbeat.json \
+  --events /tmp/hedge-fund-events.jsonl
+```
+
 ## Pull requests
 
 Keep pull requests small and focused. CI must stay green without live API keys.

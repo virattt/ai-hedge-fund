@@ -17,7 +17,9 @@ Usage::
         incompatible receipt fails the run. The full CycleRecord prints to
         stdout as JSON (pipe it anywhere); a short human summary goes to
         stderr. The receipt is saved next to the mandate; add --out
-        record.json to also write a copy to a file.
+        record.json to also write a copy to a file. Optional cycle
+        observability (--heartbeat / --events, or HEDGE_FUND_* env vars)
+        records start/end/error without needing a live venue.
 
     aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
         Backtest the mandate: run_cycle looped over history at the mandate's
@@ -46,8 +48,8 @@ from hedge_fund.backtesting import backtest_fund
 from hedge_fund.data import CachedDataClient, FDClient
 from hedge_fund.fund import Fund, load_spec, normalize_universe
 from hedge_fund.ledger import broker_for_run, save_cycle_record
+from hedge_fund.observability import CycleObserver, observe_cycle
 from hedge_fund.paths import ensure_mandates_dir
-from hedge_fund.pipeline import run_cycle
 from hedge_fund.tui.keys import apply_credentials
 from hedge_fund.tui.shared import _BACKTEST_WEEKS
 
@@ -103,6 +105,24 @@ def main() -> None:
         "ignore it",
     )
     parser.add_argument("--out", help="also write the record JSON to this file")
+    parser.add_argument(
+        "--heartbeat",
+        nargs="?",
+        const="default",
+        metavar="PATH",
+        help="write a cycle heartbeat file (default: "
+        "~/.hedge-fund/observability/heartbeat.json). Also honored via "
+        "HEDGE_FUND_HEARTBEAT_PATH or HEDGE_FUND_HEARTBEAT=1",
+    )
+    parser.add_argument(
+        "--events",
+        nargs="?",
+        const="default",
+        metavar="PATH",
+        help="append cycle start/end/error events as JSONL (default: "
+        "~/.hedge-fund/observability/events.jsonl). Also honored via "
+        "HEDGE_FUND_EVENTS_PATH",
+    )
     args = parser.parse_args()
 
     if args.model:
@@ -168,7 +188,13 @@ def main() -> None:
             f"across {len(fund.strategies)} strategies…",
             spinner="dots",
         ):
-            record = run_cycle(fund, args.date, broker, fd, universe)
+            observer = CycleObserver.from_env(
+                events_path=args.events,
+                heartbeat_path=args.heartbeat,
+            )
+            record = observe_cycle(
+                fund, args.date, broker, fd, universe, observer=observer,
+            )
 
     receipt = save_cycle_record(record, receipts)
     print(record.model_dump_json(indent=2))

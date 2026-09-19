@@ -77,6 +77,12 @@ poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backte
 poetry run python -m hedge_fund.daemon ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
 poetry run python -m hedge_fund.daemon ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --once
 
+# Optional: heartbeat + JSONL events on a paper cycle (no live venue).
+# Webhook URL is env-only so it does not show up on the command line.
+#   HEDGE_FUND_WEBHOOK_URL=https://example.invalid/hook
+poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT \
+  --heartbeat --events
+
 # Tests (offline; live Financial Datasets smoke skips without FINANCIAL_DATASETS_API_KEY)
 # See ../CONTRIBUTING.md for the fork's first-test / first-backtest path.
 poetry run pytest hedge_fund/
@@ -84,6 +90,13 @@ poetry run pytest hedge_fund/
 
 All API responses cache to disk (`~/.hedge-fund/cache/`), so reruns are fast,
 free, and work offline once warmed.
+
+Cycle health is opt-in. Events always log; set `HEDGE_FUND_EVENTS_PATH` or
+`--events` to append JSONL, `HEDGE_FUND_HEARTBEAT_PATH` / `--heartbeat` for a
+heartbeat file under `~/.hedge-fund/observability/`, and
+`HEDGE_FUND_WEBHOOK_URL` to POST a JSON summary when a cycle fails. A webhook
+error is logged; the original cycle exception still raises. See
+[`../CONTRIBUTING.md`](../CONTRIBUTING.md) and `.env.example`.
 
 ## Architecture
 
@@ -105,6 +118,7 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | `ledger.py` | Persist `CycleRecord` receipts; seed the next live-clock `PaperBroker` from the newest one | ✅ |
 | `pipeline/` | `run_cycle` — one code path for backtest/paper/live; `CycleRecord` | ✅ |
 | `daemon/` | Scheduler: market-calendar poll, idempotent ticks, kill-switch; paper or sim | ✅ |
+| `observability/` | Cycle events (log + optional JSONL), heartbeat file, optional failure webhook — wraps `run_cycle`, does not change it | ✅ |
 | `backtesting/` | `backtest_fund` — the whole fund over history on `run_cycle` — plus the per-model engine | ✅ |
 | `event_study/` | Market-model abnormal returns (CARs) | ✅ |
 | `validation/` | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO) | ⬜ |

@@ -12,8 +12,10 @@ read [VISION.md](./VISION.md).
 
 **Current focus:** the scheduler daemon now ships for this fork path —
 `python -m hedge_fund.daemon` runs `run_cycle` on the market calendar with
-idempotent ticks and a kill-switch, paper or sim only. Next: observability
-(heartbeat / per-cycle events). In parallel: remaining investor personas.
+idempotent ticks and a kill-switch, paper or sim only. Cycle observability
+(heartbeat / per-cycle events / optional failure webhook) is available on
+the paper CLI path for the daemon to reuse. In parallel: remaining investor
+personas.
 
 The tables below are a capability map, not a strict order; where items depend on
 each other, the dependency is noted.
@@ -92,7 +94,7 @@ can be backtested and combined — is a great first contribution:
 | Item | Status |
 |------|--------|
 | Scheduler / daemon — market-calendar cron, idempotent ticks, kill-switch | ✅ (`python -m hedge_fund.daemon`; paper or sim; key per mandate+session; file/env kill-switch) |
-| Observability — per-cycle events, notifications, heartbeat | ⬜ |
+| Observability — per-cycle events, notifications, heartbeat | ✅ |
 | Research lab — backtest candidate strategies/allocators alongside the live fund | ⬜ |
 | Strategy generator — composes candidate strategies from the building blocks (analysts × policies × parameters), driven by the fund's mandate | ⬜ |
 | Auto-promotion — winners graduate into the live fund through the validation gate (CPCV/PBO), human-approved by default (depends: research lab, validation gate) | ⬜ |
