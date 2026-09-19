@@ -1,0 +1,23 @@
+{
+  "fund": "alpha-one",
+  "start": "2024-01-01",
+  "end": "2024-06-03",
+  "rebalance": "weekly",
+  "benchmark": "SPY",
+  "universe": ["AAPL"],
+  "capital": 100000.0,
+  "dates": ["2024-06-03"],
+  "nav": [100000.0],
+  "benchmark_nav": [100000.0],
+  "metrics": {
+    "total_return_pct": 0.0,
+    "annualized_return_pct": 0.0,
+    "sharpe_ratio": 0.0,
+    "max_drawdown_pct": 0.0,
+    "benchmark_return_pct": 0.0,
+    "excess_return_pct": 0.0,
+    "n_cycles": 1,
+    "n_orders": 0
+  },
+  "records": []
+}

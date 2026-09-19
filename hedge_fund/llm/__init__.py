@@ -13,6 +13,7 @@ from hedge_fund.llm.client import (
     make_llm,
 )
 from hedge_fund.llm.registry import (
+    KEYLESS_PROVIDERS,
     PROVIDER_ENV_VARS,
     SUPPORTED_PROVIDERS,
     env_var_for,
@@ -27,6 +28,7 @@ __all__ = [
     "ChatLLM",
     "DEFAULT_MODEL",
     "JevLLM",
+    "KEYLESS_PROVIDERS",
     "LLMCallError",
     "LLMClient",
     "LLMParseError",

@@ -1,4 +1,4 @@
-"""LLMAgent + BuffettAgent tests — fake LLM and data client, no network."""
+"""LLMAgent + persona tests — fake LLM and data client, no network."""
 
 import json
 
@@ -9,7 +9,7 @@ from hedge_fund.data.models import FinancialMetrics
 from hedge_fund.llm import PromptCache, extract_json
 from hedge_fund.llm.client import LLMParseError
 from hedge_fund.models import Signal
-from hedge_fund.signals import BuffettAgent
+from hedge_fund.signals import ALPHA_MODEL_REGISTRY, BuffettAgent, LLMAgent
 
 
 # ---------------------------------------------------------------------------
@@ -197,10 +197,26 @@ def test_failed_parse_still_persists_response(tmp_path):
 # Registry
 # ---------------------------------------------------------------------------
 
+def _llm_registry_keys() -> list[str]:
+    return [k for k, cls in ALPHA_MODEL_REGISTRY.items() if issubclass(cls, LLMAgent)]
+
+
+@pytest.mark.parametrize("key", _llm_registry_keys())
+def test_persona_predict_sets_model_name(tmp_path, key):
+    """Every registered persona constructs and folds a mocked LLM reply."""
+    cls = ALPHA_MODEL_REGISTRY[key]
+    agent = cls(llm=FakeLLM(BULLISH), cache=PromptCache(tmp_path / key))
+
+    sig = agent.predict("TEST", "2025-01-15", MockDataClient(metrics=_history()))
+
+    assert isinstance(sig, Signal)
+    assert sig.model_name == key
+    assert sig.value == pytest.approx(0.8)
+    assert sig.metadata["abstained"] is False
+
+
 def test_registry_names_match_keys(tmp_path):
     """Every registry entry instantiates and reports its own key as name."""
-    from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent
-
     for key, cls in ALPHA_MODEL_REGISTRY.items():
         if issubclass(cls, LLMAgent):
             model = cls(llm=FakeLLM(), cache=PromptCache(tmp_path / "llm"))
@@ -211,8 +227,6 @@ def test_registry_names_match_keys(tmp_path):
 
 def test_llm_personas_share_the_contract(tmp_path):
     """Every persona prompt keeps the PIT rule and the JSON schema."""
-    from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent
-
     for cls in ALPHA_MODEL_REGISTRY.values():
         if not issubclass(cls, LLMAgent):
             continue

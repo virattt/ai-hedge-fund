@@ -57,8 +57,9 @@ from textual.widgets.selection_list import Selection
 
 from hedge_fund.backtesting import FundBacktestResult, backtest_fund, rebalance_grid
 from hedge_fund.backtesting.fund import _PERIODS_PER_YEAR
-from hedge_fund.brokers import Fill, SimBroker
+from hedge_fund.brokers import Fill
 from hedge_fund.data import CachedDataClient, FDClient
+from hedge_fund.ledger import broker_for_run, save_cycle_record
 from hedge_fund.fund import (
     Fund,
     FundSpec,
@@ -136,7 +137,7 @@ class HomeScreen(Screen):
                 Option(
                     Text.assemble(
                         ("Run an existing fund\n", "bold"),
-                        ("pick a saved fund and run it as of today", MUTED)),
+                        ("pick a saved fund and paper-trade it as of today", MUTED)),
                     id="run"),
                 None,
                 Option(
@@ -579,6 +580,19 @@ def _receipts(name: str) -> list[Path]:
     return sorted(paths, key=lambda p: p.stat().st_mtime, reverse=True)
 
 
+def _last_run_book(name: str) -> tuple[str, float] | None:
+    """Newest run receipt's as-of and NAV, if this fund has ever traded.
+
+    Display-only: unreadable files are skipped here. Cycle start loads the
+    newest receipt through the ledger and fails loud if it is corrupt.
+    """
+    for path in _receipts(name):
+        summary = _summarize(path, 0.0)
+        if summary and summary["kind"] == "run":
+            return summary["as_of"], summary["nav"]
+    return None
+
+
 def _last_universe(name: str) -> list[str] | None:
     """The tickers this fund was last pointed at — the ticker inputs prefill
     from it, so a returning user just presses enter."""
@@ -635,8 +649,8 @@ def _fund_detail(spec: FundSpec, history: list[dict]) -> Group:
 
     if not history:
         parts.append(Text("\nNo runs yet — this fund has never traded.", style=MUTED))
-        parts.append(Text("\nEnter to run it as of today · ctrl+b to backtest "
-                          "over history", style=MUTED))
+        parts.append(Text("\nEnter to paper-trade it as of today · ctrl+b to "
+                          "backtest over history", style=MUTED))
         return Group(*parts)
 
     # The headline stats come from the most recent BACKTEST (a single run has
@@ -931,6 +945,10 @@ def _report_nav(record: CycleRecord) -> list[Option]:
     if record.clamps:
         options.append(Option(
             Text(f" Risk limits ({len(record.clamps)})", style=TEXT), id="sec:risk"))
+    if record.dropped:
+        options.append(Option(
+            Text(f" Dropped views ({len(record.dropped)})", style=TEXT),
+            id="sec:dropped"))
     options.append(Option(
         Text(f" Orders ({len(record.orders)})", style=TEXT), id="sec:orders"))
     options.append(Option(Text(" Portfolio", style=TEXT), id="sec:portfolio"))
@@ -984,6 +1002,23 @@ def _jev_details(metadata: dict) -> Text:
             ("bearish_strength", "Bearish strength"),
         )), style=TEXT)
     return details
+
+
+def _dropped_detail(record: CycleRecord) -> Group:
+    """Views that were produced but excluded from the blended book."""
+    table = Table(box=box.SQUARE, header_style="bold", border_style="#1f2b25")
+    table.add_column("Ticker", style=f"bold {CYAN}")
+    table.add_column("Analyst")
+    table.add_column("Strategy")
+    table.add_column("Reason", style="dim")
+    for item in record.dropped:
+        table.add_row(item.ticker, item.model, item.strategy, item.reason)
+    return Group(
+        Text.assemble(("DROPPED VIEWS  ", f"bold {BRIGHT}"),
+                      ("produced but excluded from the book", MUTED)),
+        Text(""),
+        table,
+    )
 
 
 def _risk_detail(record: CycleRecord) -> Group:
@@ -1108,10 +1143,13 @@ def _tape_table(tape: list[tuple[str, Fill, int]]) -> Table:
 
 
 class RunScreen(Screen):
-    """Run a fund as of today — the primary verb. Warm the roster, run one
-    cycle on today's data, then reveal the fund's thinking: signals, risk
-    clamps, orders, and the target book. Backtest is the side option (ctrl+b),
-    offered before a run and again from the finished report.
+    """Paper-trade a fund as of today — the primary verb. Warm the roster,
+    run one live-clock cycle on PaperBroker (seeded from the newest
+    CycleRecord when this mandate has one, so the book carries between
+    runs), then reveal the fund's thinking: signals, risk clamps, orders,
+    and the target book. Backtest is the side option (ctrl+b), offered
+    before a run and again from the finished report — and still starts
+    from the mandate's capital on SimBroker.
     """
 
     # ctrl+b, not plain b: the ticker Input owns letter keys (BABA, BRK.B),
@@ -1161,11 +1199,19 @@ class RunScreen(Screen):
     def on_mount(self) -> None:
         spec = self._spec
         staff = ", ".join(s.title for s in spec.strategies)
-        self.query_one("#run-hero", Static).update(Group(
+        hero = [
             Text(spec.name, style=f"bold {BRIGHT}"),
-            Text(f"{staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}",
+            Text(f"{staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}  ·  paper",
                  style=MUTED),
-        ))
+        ]
+        last_book = _last_run_book(spec.name)
+        if last_book:
+            as_of, nav = last_book
+            hero.append(Text(
+                f"carrying book from {as_of}  ·  NAV ${nav:,.0f}",
+                style=MUTED,
+            ))
+        self.query_one("#run-hero", Static).update(Group(*hero))
         tickers = self.query_one("#run-tickers", Input)
         last = _last_universe(spec.name)
         if last:
@@ -1203,10 +1249,13 @@ class RunScreen(Screen):
     def _begin(self) -> None:
         self._phase = "running"
         self.query_one("#run-panes", ContentSwitcher).current = "run-live"
+        last_book = _last_run_book(self._spec.name)
+        carry = (f"carrying book from {last_book[0]} → today's target"
+                 if last_book else "today's data → today's target book")
         self.query_one("#run-phase", Static).update(Text.assemble(
             ("Agents analyzing as of ", f"bold {BRIGHT}"),
             (self._as_of, f"bold {RED}"),
-            ("  ·  today's data → today's target book", MUTED),
+            (f"  ·  {carry}", MUTED),
         ))
         self._desks = [_Desk(DISPLAY_NAMES.get(n, n))
                        for n in _agent_names(self._spec)]
@@ -1229,6 +1278,8 @@ class RunScreen(Screen):
             detail.update(_signal_detail(self._record, int(si), int(sj)))
         elif oid == "sec:risk":
             detail.update(_risk_detail(self._record))
+        elif oid == "sec:dropped":
+            detail.update(_dropped_detail(self._record))
         elif oid == "sec:orders":
             detail.update(_orders_detail(self._record))
         elif oid == "sec:portfolio":
@@ -1267,17 +1318,19 @@ class RunScreen(Screen):
                     future.result()
 
             fund = Fund(spec)
-            broker = SimBroker(cash=spec.capital)
+            # Live-clock paper path: seed PaperBroker from the newest
+            # CycleRecord so cash, positions, and NAV carry between runs.
+            # BacktestScreen still opens a fresh SimBroker inside
+            # backtest_fund.
+            broker, _prior = broker_for_run(spec.name, spec.capital, FUNDS_DIR)
             with FDClient() as raw:
                 record = run_cycle(fund, as_of, broker, CachedDataClient(raw),
                                    universe)
 
             # Receipts, same shape as a backtest's: the run is recoverable,
-            # and it's what the fund's history pane reads.
-            FUNDS_DIR.mkdir(exist_ok=True)
-            stamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-            path = FUNDS_DIR / f"{spec.name}-run-{stamp}.json"
-            path.write_text(record.model_dump_json(indent=2))
+            # and it's what the fund's history pane reads — and what the
+            # next live-clock run seeds from.
+            path = save_cycle_record(record, FUNDS_DIR)
             app.call_from_thread(self._show_report, record, path)
         except Exception as exc:  # fail loud, in the UI
             app.call_from_thread(self._fail, exc)

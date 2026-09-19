@@ -21,8 +21,9 @@ class Position(BaseModel):
 
 class Order(BaseModel):
     """An instruction to trade. `price` is the reference price the caller
-    computed (the as-of close): SimBroker fills exactly there, a live broker
-    fills at its own quote — the Fill always carries the truth."""
+    computed (the as-of close): SimBroker and PaperBroker fill at that mark
+    (PaperBroker may delay the fill), a live broker fills at its own quote —
+    the Fill always carries the truth."""
 
     ticker: str
     side: Literal["buy", "sell"]

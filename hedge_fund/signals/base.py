@@ -18,6 +18,7 @@ and execution. This separation (views vs positions) is deliberate.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -55,7 +56,7 @@ class QuantModel(AlphaModel):
     """Base for pure-math alpha models (no LLM).
 
     Houses shared numeric helpers. Subclass this for quant signals like
-    PEAD or regime detection.
+    PEAD, momentum, or mean reversion.
     """
 
     # ------------------------------------------------------------------
@@ -103,3 +104,34 @@ class QuantModel(AlphaModel):
         if pd.isna(latest):
             return 50.0
         return float(latest)
+
+    @staticmethod
+    def _closes_as_of(
+        data_client: DataClient,
+        ticker: str,
+        date: str,
+        *,
+        min_bars: int,
+    ) -> list[float]:
+        """Oldest-to-newest closes on or before *date*.
+
+        Fetches a calendar window sized for *min_bars* trading days.
+        Bars after *date* are dropped (point-in-time). Empty means the
+        provider had no prices in range — not an infra failure. Infra
+        errors from ``get_prices`` propagate.
+        """
+        as_of = datetime.strptime(date[:10], "%Y-%m-%d").date()
+        calendar_span = max(min_bars * 2 + 10, min_bars + 30)
+        start = (as_of - timedelta(days=calendar_span)).isoformat()
+        prices = data_client.get_prices(ticker, start, date[:10])
+
+        by_day: dict[str, float] = {}
+        for price in prices:
+            day = price.time[:10]
+            if day > date[:10]:
+                continue
+            close = QuantModel._safe_float(price.close, default=float("nan"))
+            if np.isnan(close) or close <= 0.0:
+                continue
+            by_day[day] = close
+        return [by_day[day] for day in sorted(by_day)]

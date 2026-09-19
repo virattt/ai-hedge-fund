@@ -1,6 +1,6 @@
 """run_cycle — one tick of the fund, the same code path in every mode.
 
-    point-in-time data -> analysts -> blend -> risk -> execution -> record
+    point-in-time data -> shared snapshot -> analysts -> blend -> risk -> execution -> record
 
 This is the fund's heartbeat. A backtest is run_cycle in a loop over history
 with a SimBroker; paper trading is the same loop on a live clock with a
@@ -18,12 +18,16 @@ Notable behavior, chosen deliberately:
 - Targets are the complete statement of the desired book. If every analyst
   abstains or goes neutral, the targets are all zero and the fund closes to
   flat. The record shows `abstained` on each signal, so an outer loop (the
-  Day-5 daemon) can decide to skip a tick instead — that guard belongs
+  scheduler daemon) can decide to skip a tick instead — that guard belongs
   outside the pipeline.
 - A universe ticker with no price and no position is skipped (recorded, its
   analysts never called): unlisted/delisted names are normal in history.
   A HELD ticker with no price raises — a fund that cannot price its own
   book has an infrastructure problem, and its NAV would be a lie.
+- Data-client infrastructure failures (``FDClientError`` and similar)
+  propagate. They are not rewritten as skipped tickers or a neutral
+  ``Signal``. Empty news is genuine no-articles; a failed news fetch is
+  not.
 """
 
 from __future__ import annotations
@@ -34,10 +38,22 @@ from datetime import timedelta
 from hedge_fund.brokers.models import Fill
 from hedge_fund.brokers.protocol import Broker
 from hedge_fund.data.protocol import DataClient
+from hedge_fund.features.snapshot import SnapshotCache
+from hedge_fund.fund.allocator import (
+    Allocator,
+    AllocatorContext,
+    StrategyAllocationView,
+    require_slices,
+)
 from hedge_fund.fund.spec import Fund, normalize_universe
 from hedge_fund.models import Signal
 from hedge_fund.pipeline.execution import build_orders
-from hedge_fund.pipeline.models import CycleRecord, StrategyRecord, TickerSkip
+from hedge_fund.pipeline.models import (
+    CycleRecord,
+    DroppedOutput,
+    StrategyRecord,
+    TickerSkip,
+)
 from hedge_fund.portfolio.construction import blend_signals
 from hedge_fund.risk.limits import apply_limits
 
@@ -52,12 +68,18 @@ def run_cycle(
     broker: Broker,
     data_client: DataClient,
     universe: list[str],
+    allocator: Allocator | None = None,
 ) -> CycleRecord:
     """Run one tick of *fund* over *universe* as of *as_of* (YYYY-MM-DD).
 
     The universe is an argument, not a mandate field: a fund is its desk —
     strategies, staff, risk, capital — and can be pointed at any names. What
     it was asked to trade this tick is recorded on the returned CycleRecord.
+
+    Capital slices come from the CIO (`allocator`, or `fund.allocator`):
+    strategy performance / risk / mandate context → weights across
+    strategies. The default StaticAllocator is today's
+    ``weight / sum(weights)`` math, bit-identical.
     """
     spec = fund.spec
     universe = normalize_universe(universe)
@@ -82,28 +104,46 @@ def run_cycle(
     # Each strategy runs its own analysts and blends its own sleeve; the fund
     # nets the sleeves by capital slice. A persona staffed into two strategies
     # is asked twice, but the second ask is a prompt-cache hit, not spend.
-    total_slice = sum(s.weight for s, _ in fund.strategies)
+    # One SnapshotCache for the tick: every analyst on a ticker reads the
+    # same frozen fundamentals (D/E, ROE, …), even if the live feed moves.
+    # The CIO decides slices once per tick, before sleeves are netted —
+    # today's default is the mandate's static weights, unchanged.
+    alloc = allocator if allocator is not None else fund.allocator
+    slices = require_slices(
+        alloc.allocate(AllocatorContext(
+            as_of=as_of,
+            equity=equity_before,
+            strategies=tuple(
+                StrategyAllocationView(name=s.name, spec_weight=s.weight)
+                for s, _ in fund.strategies
+            ),
+        )),
+        [s.name for s, _ in fund.strategies],
+    )
     strategy_records: list[StrategyRecord] = []
+    dropped: list[DroppedOutput] = []
     netted: dict[str, float] = {t: 0.0 for t in tradeable}
-    for strategy, staff in fund.strategies:
-        signals: list[Signal] = []
-        for ticker in tradeable:
-            for model in staff:
-                signals.append(model.predict(ticker, as_of, data_client))
-        blend = blend_signals(
-            signals, strategy.model_weights, strategy.blend.gross_target,
-            market_neutral=strategy.blend.market_neutral,
-        )
-        slice_ = strategy.weight / total_slice
-        for ticker, weight in blend.weights.items():
-            netted[ticker] += slice_ * weight
-        strategy_records.append(StrategyRecord(
-            name=strategy.name,
-            slice=slice_,
-            signals=signals,
-            convictions=blend.convictions,
-            weights=blend.weights,
-        ))
+    with SnapshotCache():
+        for strategy, staff in fund.strategies:
+            signals: list[Signal] = []
+            for ticker in tradeable:
+                for model in staff:
+                    signals.append(model.predict(ticker, as_of, data_client))
+            dropped.extend(_dropped_outputs(signals, strategy.name))
+            blend = blend_signals(
+                signals, strategy.model_weights, strategy.blend.gross_target,
+                market_neutral=strategy.blend.market_neutral,
+            )
+            slice_ = slices[strategy.name]
+            for ticker, weight in blend.weights.items():
+                netted[ticker] += slice_ * weight
+            strategy_records.append(StrategyRecord(
+                name=strategy.name,
+                slice=slice_,
+                signals=signals,
+                convictions=blend.convictions,
+                weights=blend.weights,
+            ))
 
     risk = apply_limits(netted, spec.risk)
 
@@ -121,6 +161,7 @@ def run_cycle(
         universe=universe,
         marks=marks,
         skipped=skipped,
+        dropped=dropped,
         strategies=strategy_records,
         target_weights=netted,
         clamps=risk.clamps,
@@ -171,3 +212,26 @@ def _mark_prices(
             ))
 
     return marks, skipped
+
+
+def _dropped_outputs(signals: list[Signal], strategy: str) -> list[DroppedOutput]:
+    """Views blend_signals will ignore — recorded so the omit is visible."""
+    dropped: list[DroppedOutput] = []
+    for signal in signals:
+        if signal.metadata.get("abstained") is not True:
+            continue
+        reason = signal.metadata.get("abstain_reason")
+        if not reason:
+            text = signal.reasoning or "abstained"
+            reason = (
+                text.removeprefix("abstained: ").strip()
+                if text.startswith("abstained:")
+                else text
+            )
+        dropped.append(DroppedOutput(
+            ticker=signal.ticker,
+            model=signal.model_name,
+            strategy=strategy,
+            reason=reason,
+        ))
+    return dropped
