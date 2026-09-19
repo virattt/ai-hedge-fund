@@ -73,8 +73,9 @@ can be backtested and combined — is a great first contribution:
 | Strategy — bundle models + a blend policy + capital slice (a "pod") | ✅ (`StrategySpec` + library: fundamental-ls, deep-value, inflections, high-conviction, earnings-drift) |
 | Portfolio construction — blend model views → target weights | ✅ (conviction-weighted; optional market-neutral sleeves) |
 | Multi-strategy fund — many pods running at once, netted into one book | ✅ (`run_cycle` nets every sleeve into one target book, then master risk clamps it) |
-| Allocator (CIO) — pluggable capital allocation across strategies | 🚧 (static slices ship; the pluggable interface is next) |
-| ↳ Static (human-set dial) | ✅ (capital slices in the mandate) |
+| Allocator (CIO) — pluggable capital allocation across strategies | ✅ (`Allocator` protocol; `run_cycle` nets through it) |
+| ↳ Static (human-set dial) | ✅ (default: `StaticAllocator` normalizes `StrategySpec.weight`) |
+| ↳ Equal-weight (stub) | ✅ (selectable: `allocator: equal_weight` or `--allocator equal_weight`) |
 | ↳ Risk-parity / inverse-vol | ⬜ |
 | ↳ Dynamic — feed winners, cut drawdowns (Millennium-style) | ⬜ |
 | ↳ LLM CIO — reasons over regime + each pod's track record | ⬜ |

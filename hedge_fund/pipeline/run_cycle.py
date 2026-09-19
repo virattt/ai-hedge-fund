@@ -39,6 +39,12 @@ from hedge_fund.brokers.models import Fill
 from hedge_fund.brokers.protocol import Broker
 from hedge_fund.data.protocol import DataClient
 from hedge_fund.features.snapshot import SnapshotCache
+from hedge_fund.fund.allocator import (
+    Allocator,
+    AllocatorContext,
+    StrategyAllocationView,
+    require_slices,
+)
 from hedge_fund.fund.spec import Fund, normalize_universe
 from hedge_fund.models import Signal
 from hedge_fund.pipeline.execution import build_orders
@@ -62,12 +68,18 @@ def run_cycle(
     broker: Broker,
     data_client: DataClient,
     universe: list[str],
+    allocator: Allocator | None = None,
 ) -> CycleRecord:
     """Run one tick of *fund* over *universe* as of *as_of* (YYYY-MM-DD).
 
     The universe is an argument, not a mandate field: a fund is its desk —
     strategies, staff, risk, capital — and can be pointed at any names. What
     it was asked to trade this tick is recorded on the returned CycleRecord.
+
+    Capital slices come from the CIO (`allocator`, or `fund.allocator`):
+    strategy performance / risk / mandate context → weights across
+    strategies. The default StaticAllocator is today's
+    ``weight / sum(weights)`` math, bit-identical.
     """
     spec = fund.spec
     universe = normalize_universe(universe)
@@ -94,7 +106,20 @@ def run_cycle(
     # is asked twice, but the second ask is a prompt-cache hit, not spend.
     # One SnapshotCache for the tick: every analyst on a ticker reads the
     # same frozen fundamentals (D/E, ROE, …), even if the live feed moves.
-    total_slice = sum(s.weight for s, _ in fund.strategies)
+    # The CIO decides slices once per tick, before sleeves are netted —
+    # today's default is the mandate's static weights, unchanged.
+    alloc = allocator if allocator is not None else fund.allocator
+    slices = require_slices(
+        alloc.allocate(AllocatorContext(
+            as_of=as_of,
+            equity=equity_before,
+            strategies=tuple(
+                StrategyAllocationView(name=s.name, spec_weight=s.weight)
+                for s, _ in fund.strategies
+            ),
+        )),
+        [s.name for s, _ in fund.strategies],
+    )
     strategy_records: list[StrategyRecord] = []
     dropped: list[DroppedOutput] = []
     netted: dict[str, float] = {t: 0.0 for t in tradeable}
@@ -109,7 +134,7 @@ def run_cycle(
                 signals, strategy.model_weights, strategy.blend.gross_target,
                 market_neutral=strategy.blend.market_neutral,
             )
-            slice_ = strategy.weight / total_slice
+            slice_ = slices[strategy.name]
             for ticker, weight in blend.weights.items():
                 netted[ticker] += slice_ * weight
             strategy_records.append(StrategyRecord(

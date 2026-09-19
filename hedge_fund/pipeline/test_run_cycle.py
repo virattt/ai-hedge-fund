@@ -7,6 +7,11 @@ import pytest
 from hedge_fund.brokers.sim import SimBroker
 from hedge_fund.data.client import FDClientError
 from hedge_fund.data.models import FinancialMetrics, Price
+from hedge_fund.fund.allocator import (
+    AllocatorContext,
+    EqualWeightAllocator,
+    StaticAllocator,
+)
 from hedge_fund.fund.spec import Fund, FundSpec
 from hedge_fund.llm import PromptCache
 from hedge_fund.models import Signal
@@ -163,6 +168,94 @@ def test_slices_normalize():
                          FakeDataClient(CLOSES), UNIVERSE)
 
     assert run(2.0, 2.0).target_weights == run(1.0, 1.0).target_weights
+
+
+def test_static_allocator_path_is_bit_identical_to_legacy_slices():
+    """Default CIO path is exactly weight/sum(weight) — same floats, same book."""
+    spec = _spec(strategies=[
+        {"name": "s1", "weight": 3.0, "models": [{"name": "a"}]},
+        {"name": "s2", "weight": 1.0, "models": [{"name": "b"}]},
+    ], max_position_pct=1.0)
+    models = {
+        "s1": [FakeAnalyst("a", views={"AAPL": 1.0, "MSFT": 1.0})],
+        "s2": [FakeAnalyst("b", views={"MSFT": -1.0})],
+    }
+    fund = Fund(spec, models=models)
+    record = run_cycle(fund, "2024-06-03", SimBroker(cash=100_000.0),
+                       FakeDataClient(CLOSES), UNIVERSE)
+
+    total = 3.0 + 1.0
+    legacy = {"s1": 3.0 / total, "s2": 1.0 / total}
+    assert {sr.name: sr.slice for sr in record.strategies} == legacy
+    assert record.strategies[0].slice == 3.0 / total
+    assert record.strategies[1].slice == 1.0 / total
+    # Same floats whether the CIO is implicit, explicit, or passed in.
+    via_arg = run_cycle(
+        Fund(spec, models=models), "2024-06-03", SimBroker(cash=100_000.0),
+        FakeDataClient(CLOSES), UNIVERSE, allocator=StaticAllocator(),
+    )
+    via_spec = run_cycle(
+        Fund(spec.model_copy(update={"allocator": "static"}), models=models),
+        "2024-06-03", SimBroker(cash=100_000.0), FakeDataClient(CLOSES),
+        UNIVERSE,
+    )
+    assert record.model_dump_json() == via_arg.model_dump_json() == via_spec.model_dump_json()
+
+
+def test_equal_weight_allocator_is_selectable():
+    """The stub CIO can be selected and ignores 3:1 mandate slices."""
+    spec = _spec(strategies=[
+        {"name": "s1", "weight": 3.0, "models": [{"name": "a"}]},
+        {"name": "s2", "weight": 1.0, "models": [{"name": "b"}]},
+    ], max_position_pct=1.0)
+    models = {
+        "s1": [FakeAnalyst("a", views={"AAPL": 1.0, "MSFT": 1.0})],
+        "s2": [FakeAnalyst("b", views={"MSFT": -1.0})],
+    }
+    static = run_cycle(
+        Fund(spec, models=models), "2024-06-03", SimBroker(cash=100_000.0),
+        FakeDataClient(CLOSES), UNIVERSE,
+    )
+    equal = run_cycle(
+        Fund(spec.model_copy(update={"allocator": "equal_weight"}), models=models),
+        "2024-06-03", SimBroker(cash=100_000.0), FakeDataClient(CLOSES),
+        UNIVERSE,
+    )
+    via_arg = run_cycle(
+        Fund(spec, models=models), "2024-06-03", SimBroker(cash=100_000.0),
+        FakeDataClient(CLOSES), UNIVERSE, allocator=EqualWeightAllocator(),
+    )
+
+    assert static.strategies[0].slice == 0.75
+    assert static.strategies[1].slice == 0.25
+    assert equal.strategies[0].slice == 0.5
+    assert equal.strategies[1].slice == 0.5
+    assert equal.spec.allocator == "equal_weight"
+    assert via_arg.strategies[0].slice == 0.5
+    # Hand-computed: each sleeve is 50%. s1 = AAPL 0.5, MSFT 0.5; s2 MSFT -1.
+    assert equal.target_weights["AAPL"] == pytest.approx(0.25)
+    assert equal.target_weights["MSFT"] == pytest.approx(-0.25)
+    assert equal.target_weights != static.target_weights
+
+
+def test_broken_allocator_fails_loud():
+    """A CIO that drops a strategy must not silently rebalance the book."""
+
+    class BrokenAllocator:
+        def allocate(self, context: AllocatorContext):
+            return {context.strategies[0].name: 1.0}
+
+    spec = _spec(strategies=[
+        {"name": "s1", "models": [{"name": "a"}]},
+        {"name": "s2", "models": [{"name": "b"}]},
+    ])
+    fund = Fund(spec, models={
+        "s1": [FakeAnalyst("a", views={"AAPL": 1.0})],
+        "s2": [FakeAnalyst("b", views={"MSFT": -1.0})],
+    }, allocator=BrokenAllocator())
+    with pytest.raises(ValueError, match="expected"):
+        run_cycle(fund, "2024-06-03", SimBroker(cash=100_000.0),
+                  FakeDataClient(CLOSES), UNIVERSE)
 
 
 def test_deterministic_and_json_round_trips():

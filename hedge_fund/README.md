@@ -9,9 +9,9 @@ v2 rebuilds the fund as a persistent, point-in-time-honest system, mirroring a
 real shop's hierarchy:
 
 ```
-FUND      =  capital slices over STRATEGIES   (master risk on the netted book)
-STRATEGY  =  a blend policy over MODELS       (a "pod")
-MODEL     =  an alpha model → a Signal        (conviction in [-1,+1] + thesis)
+FUND      =  an allocator (CIO) over STRATEGIES   (master risk on the netted book)
+STRATEGY  =  a blend policy over MODELS           (a "pod")
+MODEL     =  an alpha model → a Signal            (conviction in [-1,+1] + thesis)
 ```
 
 A fund is the **desk**, not a watchlist: the mandate names no tickers. Which
@@ -68,6 +68,9 @@ poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT,NVDA --p
 # mandate's rebalance cadence on SimBroker, full result JSON on stdout.
 poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
 
+# Select the equal-weight CIO stub (default is static mandate slices):
+poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --allocator equal_weight
+
 # Always-on scheduler: the same run_cycle on a live clock, gated by the
 # market calendar and the mandate's rebalance cadence. Paper venue by
 # default; --venue sim is the other allowed book. --once evaluates one
@@ -111,8 +114,9 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | `llm/` | LLM provider protocol, `make_llm` (Anthropic, OpenAI, DeepSeek, Google, xAI, Kimi, TypeSafe, Ollama), prompt cache | ✅ |
 | `features/` | Point-in-time fundamentals snapshot (more features planned) | ◐ |
 | `fund/` | `FundSpec`/`StrategySpec` — mandates as YAML data — and the `Fund` object | ✅ |
+| `fund/allocator.py` | `Allocator` protocol (CIO): strategy performance / risk → capital weights. `StaticAllocator` default; `EqualWeightAllocator` stub | ✅ |
 | `strategies/` | Strategy library (fundamental-ls, deep-value, inflections, high-conviction, earnings-drift) — add yours as a YAML | ✅ |
-| `portfolio/` | View blending → target weights (conviction-weighted, optional market-neutral) | ✅ |
+| `portfolio/` | View blending → target weights *inside* a strategy (not the CIO) | ✅ |
 | `risk/` | Hard limits — per-position and gross-exposure clamps | ✅ |
 | `brokers/` | `Broker` protocol + `SimBroker` (backtest) + `PaperBroker` (live-clock paper; live venue planned) | ◐ |
 | `ledger.py` | Persist `CycleRecord` receipts; seed the next live-clock `PaperBroker` from the newest one | ✅ |
@@ -143,6 +147,11 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
   deterministic code sizes and places orders; risk limits are hard gates.
 - **One interface for every analyst.** Implement `AlphaModel.predict(ticker,
   date, data_client) -> Signal` and it plugs into the engine unchanged.
+- **One interface for the CIO.** Implement `Allocator.allocate(context) ->
+  {strategy: weight}` and `run_cycle` nets sleeves through it. The default
+  `StaticAllocator` is today's `weight / sum(weights)` math. This is *not*
+  portfolio construction: that blends model views inside a strategy; the
+  allocator distributes capital *across* strategies.
 
 ## Data contracts (`models.py`)
 
@@ -159,5 +168,8 @@ Two high-leverage contributions:
   prompt) or `signals/pead.py` (quant) as a template, register it, add a test.
 - **A new strategy** (no code): drop a YAML in `strategies/` bundling existing
   models with a blend policy — the fund builder picks it up automatically.
+- **A new allocator** (code): read `fund/allocator.py` for the `Allocator`
+  protocol, implement `allocate(context)`, register it in `ALLOCATORS`, add
+  a test. Select it with `allocator: …` on the mandate or `--allocator`.
 
 See [`../ROADMAP.md`](../ROADMAP.md) for the open list.

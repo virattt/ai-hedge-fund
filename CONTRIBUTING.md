@@ -34,6 +34,8 @@ poetry run aihf
 # or, non-interactive paper cycle / backtest:
 poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --paper
 poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
+# optional CIO override; default is static mandate slices
+poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --allocator equal_weight
 # always-on paper/sim scheduler (one evaluation, no long poll):
 poetry run python -m hedge_fund.daemon ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --once
 ```

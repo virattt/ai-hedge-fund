@@ -10,6 +10,8 @@
 #   python -m hedge_fund.daemon ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
 #
 name: example-fund
+# allocator: static          # default CIO; equal_weight is a selectable stub
+#                            # (`--allocator equal_weight`, or set the field)
 strategies:
   - name: deep-value          # discretionary pod: Graham-led, long-biased
     weight: 0.6               # capital slice, relative to sibling strategies

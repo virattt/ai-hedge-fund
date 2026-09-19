@@ -151,6 +151,73 @@ def test_paper_and_backtest_are_exclusive(tmp_path, monkeypatch):
         run.main()
 
 
+def test_allocator_flag_selects_equal_weight(tmp_path, monkeypatch, capsys):
+    """--allocator equal_weight is selectable and recorded on the receipt."""
+    run = _patch_cli(monkeypatch, tmp_path, {"AAPL": 200.0})
+    mandate = tmp_path / "fund.yaml"
+    mandate.write_text(
+        """name: desk
+strategies:
+  - name: s1
+    weight: 3.0
+    models:
+      - name: pead
+  - name: s2
+    weight: 1.0
+    models:
+      - name: pead
+risk:
+  max_position_pct: 1.0
+  max_gross_exposure: 1.0
+capital: 100000
+"""
+    )
+
+    def two_sleeves(spec):
+        return Fund(spec, models={
+            "s1": [FakeAnalyst("pead", views={"AAPL": 1.0})],
+            "s2": [FakeAnalyst("pead", views={"AAPL": 1.0})],
+        })
+
+    monkeypatch.setattr(run, "Fund", two_sleeves)
+    output = tmp_path / "record.json"
+    monkeypatch.setattr(
+        sys, "argv",
+        ["aihf", str(mandate), "--tickers", "AAPL", "--date", "2024-06-03",
+         "--allocator", "equal_weight", "--out", str(output)],
+    )
+    run.main()
+    record = CycleRecord.model_validate_json(output.read_text())
+    assert record.spec.allocator == "equal_weight"
+    assert {sr.name: sr.slice for sr in record.strategies} == {
+        "s1": 0.5, "s2": 0.5,
+    }
+
+    monkeypatch.setattr(
+        sys, "argv",
+        ["aihf", str(mandate), "--tickers", "AAPL", "--date", "2024-06-03",
+         "--out", str(output)],
+    )
+    run.main()
+    static = CycleRecord.model_validate_json(output.read_text())
+    assert static.spec.allocator == "static"
+    assert {sr.name: sr.slice for sr in static.strategies} == {
+        "s1": 0.75, "s2": 0.25,
+    }
+
+
+def test_unknown_allocator_flag_is_rejected(tmp_path, monkeypatch):
+    from hedge_fund import run
+
+    mandate = _mandate(tmp_path / "fund.yaml")
+    monkeypatch.setattr(
+        sys, "argv",
+        ["aihf", str(mandate), "--tickers", "AAPL", "--allocator", "risk_parity"],
+    )
+    with pytest.raises(SystemExit):
+        run.main()
+
+
 def test_backtest_still_constructs_sim_broker(monkeypatch):
     constructed: list[object] = []
     real = SimBroker
