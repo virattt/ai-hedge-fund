@@ -40,6 +40,10 @@ DISPLAY_NAMES = {
     "graham": "Benjamin Graham",
     "lynch": "Peter Lynch",
     "druckenmiller": "Stanley Druckenmiller",
+    "wood": "Cathie Wood",
+    "burry": "Michael Burry",
+    "ackman": "Bill Ackman",
+    "damodaran": "Aswath Damodaran",
     "pead": "post-earnings drift",
 }
 
@@ -49,6 +53,10 @@ _SHORT_NAMES = {
     "graham": "Graham",
     "lynch": "Lynch",
     "druckenmiller": "Druckenmiller",
+    "wood": "Wood",
+    "burry": "Burry",
+    "ackman": "Ackman",
+    "damodaran": "Damodaran",
     "pead": "PEAD",
 }
 

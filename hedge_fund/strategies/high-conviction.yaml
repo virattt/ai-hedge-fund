@@ -1,0 +1,16 @@
+# High conviction — discretionary long/short pairing four later-generation
+# lenses: Wood on disruptive growth, Burry on asymmetric/deep-value setups,
+# Ackman on concentrated quality, Damodaran on whether the story is priced.
+# Edge claimed: disagreement among growth, value, activism, and valuation
+# ranks names the flagship desk may leave in the too-hard pile.
+name: high-conviction
+display_name: High Conviction
+models:
+  - name: wood
+  - name: burry
+  - name: ackman
+  - name: damodaran
+blend:
+  method: conviction_weighted
+  gross_target: 1.0
+  market_neutral: true

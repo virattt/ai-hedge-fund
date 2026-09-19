@@ -62,7 +62,7 @@ can be backtested and combined — is a great first contribution:
 |-------|--------|
 | Warren Buffett | ✅ |
 | Charlie Munger · Benjamin Graham · Peter Lynch · Stanley Druckenmiller | ✅ |
-| Cathie Wood · Michael Burry · Bill Ackman · Aswath Damodaran | ⬜ |
+| Cathie Wood · Michael Burry · Bill Ackman · Aswath Damodaran | ✅ |
 | Phil Fisher · Mohnish Pabrai · Nassim Taleb · Rakesh Jhunjhunwala | ⬜ |
 | *Your agent here* | ⬜ |
 
@@ -70,7 +70,7 @@ can be backtested and combined — is a great first contribution:
 
 | Item | Status |
 |------|--------|
-| Strategy — bundle models + a blend policy + capital slice (a "pod") | ✅ (`StrategySpec` + library: fundamental-ls, deep-value, inflections, earnings-drift) |
+| Strategy — bundle models + a blend policy + capital slice (a "pod") | ✅ (`StrategySpec` + library: fundamental-ls, deep-value, inflections, high-conviction, earnings-drift) |
 | Portfolio construction — blend model views → target weights | ✅ (conviction-weighted; optional market-neutral sleeves) |
 | Multi-strategy fund — many pods running at once, netted into one book | ✅ (`run_cycle` nets every sleeve into one target book, then master risk clamps it) |
 | Allocator (CIO) — pluggable capital allocation across strategies | 🚧 (static slices ship; the pluggable interface is next) |
