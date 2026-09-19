@@ -23,6 +23,7 @@ from hedge_fund.llm import contract
 from hedge_fund.llm import (
     LLMCallError,
     LLMClient,
+    env_var_for,
     load_api_models,
     make_llm,
     prompt_key,
@@ -31,14 +32,18 @@ from hedge_fund.llm import (
     SUPPORTED_PROVIDERS,
 )
 from hedge_fund.llm.client import (
+    DEFAULT_OLLAMA_HOST,
     DEFAULT_TIMEOUT,
+    OLLAMA_BASE_URL_VAR,
+    OLLAMA_PLACEHOLDER_KEY,
     OPENAI_BASE_URL_VARS,
     TIMEOUT_ENV_VAR,
     _flatten,
     JevLLM,
+    resolve_ollama_base_url,
     resolve_timeout,
 )
-from hedge_fund.llm.registry import PROVIDER_ENV_VARS
+from hedge_fund.llm.registry import KEYLESS_PROVIDERS, PROVIDER_ENV_VARS
 from hedge_fund.llm.test_contract import _response
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, BuffettAgent, LLMAgent, MungerAgent
 from hedge_fund.signals.test_llm_agents import (
@@ -59,8 +64,9 @@ def keyed(monkeypatch):
     for env_var in PROVIDER_ENV_VARS.values():
         monkeypatch.setenv(env_var, "test-key-not-real")
     monkeypatch.delenv("HEDGE_FUND_LLM_MODEL", raising=False)
-    for name in (*OPENAI_BASE_URL_VARS, TIMEOUT_ENV_VAR, "MOONSHOT_BASE_URL",
-                 "DEEPSEEK_BASE_URL", "DEEPSEEK_API_BASE", "XAI_BASE_URL", "XAI_API_BASE"):
+    for name in (*OPENAI_BASE_URL_VARS, TIMEOUT_ENV_VAR, OLLAMA_BASE_URL_VAR,
+                 "MOONSHOT_BASE_URL", "DEEPSEEK_BASE_URL", "DEEPSEEK_API_BASE",
+                 "XAI_BASE_URL", "XAI_API_BASE"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -113,7 +119,17 @@ def test_provider_for_reads_the_registry():
     assert provider_for("claude-fable-5-1") == "Anthropic"
     assert provider_for("gpt-5.6") == "OpenAI"
     assert provider_for("gpt-6-astra") == "OpenAI"
+    assert provider_for("llama3.1") == "Ollama"
+    assert provider_for("qwen2.5") == "Ollama"
     assert provider_for("not-a-model") is None
+
+
+def test_ollama_is_keyless_and_supported():
+    """The picker and missing_key() treat Ollama as selectable without a cloud key."""
+    assert "Ollama" in KEYLESS_PROVIDERS
+    assert "Ollama" in SUPPORTED_PROVIDERS
+    assert "Ollama" not in PROVIDER_ENV_VARS
+    assert env_var_for("Ollama") is None
 
 
 class FakeChunk:
@@ -345,6 +361,94 @@ class TestTimeoutAndBaseUrl:
         chat.invoke.side_effect = requests.ConnectionError("failed to connect")
         with pytest.raises(LLMCallError, match="connection error"):
             ChatLLM("gpt-5.6", chat).complete("s", "u")
+
+
+class TestOllama:
+    """Local, keyless Ollama: routing, OLLAMA_BASE_URL, fail-loud timeouts.
+
+    Nothing here talks to a real daemon. Construction is local; complete()
+    failures are injected on the chat model the way a missing Ollama host
+    would surface (timeout / connection error).
+    """
+
+    def test_registry_model_constructs_without_any_cloud_key(self, monkeypatch):
+        for variable in (*PROVIDER_ENV_VARS.values(), "MOONSHOT_API_KEY",
+                         "HEDGE_FUND_LLM_MODEL", OLLAMA_BASE_URL_VAR, *OPENAI_BASE_URL_VARS):
+            monkeypatch.delenv(variable, raising=False)
+        llm = make_llm("llama3.1", timeout=4)
+        assert llm.model == "llama3.1"
+        assert type(llm._chat).__name__ == "ChatOpenAI"
+        assert llm._timeout == 4
+        assert llm._chat.request_timeout == 4
+        assert llm._chat.openai_api_base == f"{DEFAULT_OLLAMA_HOST}/v1"
+        assert llm._chat.openai_api_key.get_secret_value() == OLLAMA_PLACEHOLDER_KEY
+        assert DEFAULT_OLLAMA_HOST in (llm._unreachable_hint or "")
+
+    def test_prefix_routes_unlisted_tags_and_strips_the_prefix(self, monkeypatch):
+        monkeypatch.delenv(OLLAMA_BASE_URL_VAR, raising=False)
+        llm = make_llm("ollama:mistral")
+        assert llm.model == "mistral"
+        assert type(llm._chat).__name__ == "ChatOpenAI"
+        assert llm._chat.openai_api_base == f"{DEFAULT_OLLAMA_HOST}/v1"
+
+    def test_empty_prefix_is_rejected(self):
+        with pytest.raises(ValueError, match="ollama:<tag>"):
+            make_llm("ollama:")
+
+    def test_ollama_base_url_default_and_overrides(self, monkeypatch):
+        monkeypatch.delenv(OLLAMA_BASE_URL_VAR, raising=False)
+        assert resolve_ollama_base_url() == f"{DEFAULT_OLLAMA_HOST}/v1"
+        assert resolve_ollama_base_url("http://ollama.example:11434") == "http://ollama.example:11434/v1"
+        assert resolve_ollama_base_url("http://ollama.example:11434/v1/") == "http://ollama.example:11434/v1"
+        monkeypatch.setenv(OLLAMA_BASE_URL_VAR, "http://gpu-box:11434")
+        llm = make_llm("qwen2.5")
+        assert llm._chat.openai_api_base == "http://gpu-box:11434/v1"
+        assert "http://gpu-box:11434" in (llm._unreachable_hint or "")
+
+    def test_timeout_env_lands_on_the_chat_model(self, monkeypatch):
+        monkeypatch.delenv(OLLAMA_BASE_URL_VAR, raising=False)
+        monkeypatch.setenv(TIMEOUT_ENV_VAR, "7")
+        llm = make_llm("llama3.1")
+        assert llm._chat.request_timeout == 7.0
+        assert make_llm("llama3.1", timeout=2)._chat.request_timeout == 2.0
+
+    def test_missing_daemon_is_a_clear_timeout_not_a_hang(self):
+        class DeadOllama:
+            def invoke(self, messages):
+                raise TimeoutError("The read operation timed out")
+
+            def stream(self, messages):
+                raise TimeoutError("The read operation timed out")
+
+        with pytest.raises(LLMCallError, match="timed out") as caught:
+            ChatLLM(
+                "llama3.1",
+                DeadOllama(),
+                timeout=0.05,
+                unreachable_hint=f"Is the Ollama daemon running at {DEFAULT_OLLAMA_HOST}?",
+            ).complete("s", "u")
+        assert DEFAULT_OLLAMA_HOST in str(caught.value)
+        assert "sk-" not in str(caught.value)
+
+    def test_missing_daemon_connection_error_names_the_host(self):
+        chat = Mock()
+        chat.invoke.side_effect = requests.ConnectionError("failed to connect")
+        with pytest.raises(LLMCallError, match="connection error") as caught:
+            ChatLLM(
+                "llama3.1",
+                chat,
+                unreachable_hint=f"Is the Ollama daemon running at {DEFAULT_OLLAMA_HOST}?",
+            ).complete("s", "u")
+        assert "Ollama daemon" in str(caught.value)
+        assert DEFAULT_OLLAMA_HOST in str(caught.value)
+
+    def test_environment_model_routes_without_cloud_keys(self, monkeypatch):
+        for variable in (*PROVIDER_ENV_VARS.values(), "MOONSHOT_API_KEY"):
+            monkeypatch.delenv(variable, raising=False)
+        monkeypatch.setenv("HEDGE_FUND_LLM_MODEL", "ollama:phi3")
+        llm = make_llm()
+        assert llm.model == "phi3"
+        assert type(llm._chat).__name__ == "ChatOpenAI"
 
 
 # Jev native transport and shared-agent integration.

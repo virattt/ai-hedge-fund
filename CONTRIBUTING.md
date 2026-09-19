@@ -25,6 +25,7 @@ Copy `.env.example` to `.env` in the repo root or to `~/.hedge-fund/.env` and se
 
 - `FINANCIAL_DATASETS_API_KEY` — prices, fundamentals, and earnings
 - one LLM provider key if investor agents will run (quant-only mandates do not need an LLM key)
+- or a local Ollama daemon for the no-key path: pull a tag (`ollama pull llama3.1`), then select it in the picker, pass `--model llama3.1`, or use `ollama:<tag>` for a pulled model that is not in the registry. Override the host with `OLLAMA_BASE_URL` (default `http://127.0.0.1:11434`). A missing daemon raises `LLMCallError` inside `LLM_REQUEST_TIMEOUT`; it does not hang. CI mocks this HTTP — do not point tests at a live Ollama.
 
 Then:
 

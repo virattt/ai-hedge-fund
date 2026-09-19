@@ -33,7 +33,7 @@ it in backtest, paper, or live mode (see [VISION.md](./VISION.md)).
 | `run_cycle` — one pipeline (data → analysts → portfolio → risk → execution → ledger), three modes | 🚧 (single cycle, live-clock paper with a carried book, and the backtest loop ship; a live venue and the always-on daemon remain) |
 | Fund object — persistent mandate, staff, capital, books | 🚧 (mandates, staffing, per-run receipts, and a carried book between live-clock runs ship; tickers are a run-time input, not part of the mandate) |
 | Persistent ledger — positions, every decision + thesis, orders, fills, NAV history | 🚧 (live-clock paper runs write a `CycleRecord` and the next run seeds `PaperBroker` from the newest receipt so NAV carries; backtests still start from mandate capital on `SimBroker`; the always-on daemon remains) |
-| LLM provider layer — one client factory (`make_llm`) routed by the model registry: Anthropic · OpenAI · DeepSeek · Google · xAI · Kimi | ✅ (Ollama next — the free local path, and the last blocker v1 holds over v2) |
+| LLM provider layer — one client factory (`make_llm`) routed by the model registry: Anthropic · OpenAI · DeepSeek · Google · xAI · Kimi · TypeSafe · Ollama | ✅ |
 | Point-in-time data correctness — as-of / filing-date queries, no lookahead | 🚧 |
 | Validation gate — CPCV, probability of backtest overfitting (PBO) | ⬜ |
 

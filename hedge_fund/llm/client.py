@@ -29,6 +29,7 @@ from hedge_fund.llm import contract
 from hedge_fund.llm.registry import (
     env_var_for,
     is_supported,
+    KEYLESS_PROVIDERS,
     provider_for,
     SUPPORTED_PROVIDERS,
 )
@@ -38,6 +39,11 @@ DEFAULT_TIMEOUT = 60.0
 TIMEOUT_ENV_VAR = "LLM_REQUEST_TIMEOUT"
 # Modern OpenAI SDK name first; OPENAI_API_BASE is the older alias.
 OPENAI_BASE_URL_VARS = ("OPENAI_BASE_URL", "OPENAI_API_BASE")
+OLLAMA_BASE_URL_VAR = "OLLAMA_BASE_URL"
+DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434"
+# ChatOpenAI requires a key string; Ollama ignores it.
+OLLAMA_PLACEHOLDER_KEY = "ollama"
+OLLAMA_MODEL_PREFIX = "ollama:"
 
 # Called with each piece of text as it arrives. None means don't stream.
 TokenListener = Callable[[str], None] | None
@@ -91,11 +97,13 @@ class ChatLLM:
         chat,
         on_token: TokenListener = None,
         timeout: float | None = None,
+        unreachable_hint: str | None = None,
     ) -> None:
         self.model = model
         self._chat = chat
         self._on_token = on_token
         self._timeout = timeout
+        self._unreachable_hint = unreachable_hint
 
     def complete(self, system: str, user: str) -> str:
         messages = [("system", system), ("human", user)]
@@ -116,7 +124,9 @@ class ChatLLM:
         except LLMCallError:
             raise
         except Exception as exc:
-            raise _chat_call_error(self.model, exc) from None
+            raise _chat_call_error(
+                self.model, exc, unreachable_hint=self._unreachable_hint
+            ) from None
 
 
 class JevLLM:
@@ -274,10 +284,38 @@ def _optional_kwarg(key: str, *names: str) -> dict:
     return {key: value} if value else {}
 
 
-def _chat_call_error(model: str, exc: BaseException) -> LLMCallError:
+def resolve_ollama_base_url(url: str | None = None) -> str:
+    """Ollama's OpenAI-compatible root: ``OLLAMA_BASE_URL`` or the local daemon.
+
+    A bare host (``http://127.0.0.1:11434``) becomes ``.../v1``. A URL that
+    already ends in ``/v1`` is left alone so overrides are not doubled.
+    """
+    raw = (url.strip() if isinstance(url, str) and url.strip()
+           else _first_env(OLLAMA_BASE_URL_VAR) or DEFAULT_OLLAMA_HOST)
+    return _as_openai_compatible(raw)
+
+
+def _as_openai_compatible(url: str) -> str:
+    url = url.rstrip("/")
+    return url if url.endswith("/v1") else f"{url}/v1"
+
+
+def _ollama_tag(model: str) -> str:
+    """Strip the ``ollama:`` prefix used to route unlisted local tags."""
+    if model.startswith(OLLAMA_MODEL_PREFIX):
+        return model[len(OLLAMA_MODEL_PREFIX):]
+    return model
+
+
+def _chat_call_error(
+    model: str,
+    exc: BaseException,
+    unreachable_hint: str | None = None,
+) -> LLMCallError:
     """Credential-free failure for chat-provider transport and HTTP errors."""
+    hint = f" {unreachable_hint}" if unreachable_hint else ""
     if _is_timeout(exc):
-        return LLMCallError(f"LLM request timed out for model {model}")
+        return LLMCallError(f"LLM request timed out for model {model}.{hint}".rstrip("."))
     status = _http_status(exc)
     if status in (401, 403):
         return LLMCallError(f"LLM endpoint rejected the API key for model {model} (HTTP {status})")
@@ -285,11 +323,14 @@ def _chat_call_error(model: str, exc: BaseException) -> LLMCallError:
         return LLMCallError(
             f"LLM endpoint rejected model {model} (HTTP 404). "
             f"Check the model id and any custom base URL ({OPENAI_BASE_URL_VARS[0]})."
+            f"{hint}"
         )
     if status is not None:
         return LLMCallError(f"LLM endpoint rejected the request for model {model} (HTTP {status})")
     if _is_connection_error(exc):
-        return LLMCallError(f"LLM request failed for model {model}: connection error")
+        return LLMCallError(
+            f"LLM request failed for model {model}: connection error.{hint}".rstrip(".")
+        )
     return LLMCallError(f"LLM request failed for model {model}")
 
 
@@ -357,9 +398,20 @@ def make_llm(
     Request timeout is ``timeout`` if given, else ``LLM_REQUEST_TIMEOUT``, else
     60 seconds. OpenAI-compatible transports honor ``OPENAI_BASE_URL`` /
     ``OPENAI_API_BASE`` (and the provider-specific aliases already documented).
+    Ollama talks to ``OLLAMA_BASE_URL`` (default ``http://127.0.0.1:11434``)
+    and needs no API key. Unlisted local tags route with an ``ollama:`` prefix
+    (``ollama:mistral`` → tag ``mistral``).
     """
     model = model or os.environ.get("HEDGE_FUND_LLM_MODEL") or DEFAULT_MODEL
     provider = provider_for(model)
+    if provider is None and model.startswith(OLLAMA_MODEL_PREFIX):
+        tag = _ollama_tag(model)
+        if not tag:
+            raise ValueError(
+                "Ollama model id is empty. Use ollama:<tag> (see `ollama list`)."
+            )
+        provider = "Ollama"
+        model = tag
     if provider is None:
         # Unlisted ids still work: a model newer than the registry should not
         # need a code change. A custom OpenAI-compatible base URL means the
@@ -372,8 +424,11 @@ def make_llm(
             f"Supported: {', '.join(sorted(SUPPORTED_PROVIDERS))}."
         )
 
-    api_key = _require_key(provider)
     timeout = resolve_timeout(timeout)
+    if provider == "Ollama":
+        return _ollama_llm(model, timeout=timeout, on_token=on_token)
+
+    api_key = _require_key(provider)
 
     if provider == "TypeSafe":
         # Typed judgments have no generated tokens or output-token budget.
@@ -412,6 +467,32 @@ def make_llm(
     return ChatLLM(model, chat, on_token, timeout=timeout)
 
 
+def _ollama_llm(
+    model: str,
+    timeout: float,
+    on_token: TokenListener,
+) -> ChatLLM:
+    """Local Ollama via the OpenAI-compatible /v1 surface. No cloud key."""
+    from langchain_openai import ChatOpenAI
+
+    host = _first_env(OLLAMA_BASE_URL_VAR) or DEFAULT_OLLAMA_HOST
+    base_url = resolve_ollama_base_url(host)
+    chat = ChatOpenAI(
+        model=model,
+        api_key=OLLAMA_PLACEHOLDER_KEY,
+        timeout=timeout,
+        max_retries=1,
+        base_url=base_url,
+    )
+    return ChatLLM(
+        model,
+        chat,
+        on_token,
+        timeout=timeout,
+        unreachable_hint=f"Is the Ollama daemon running at {host}?",
+    )
+
+
 def AnthropicLLM(model: str | None = None, **kwargs) -> LLMClient:  # noqa: N802
     """Back-compat shim: v2 was Anthropic-only, and this name is exported.
     Prefer make_llm(), which honours whichever model is selected."""
@@ -445,6 +526,8 @@ def _flatten(content, sep: str = "\n") -> str:
 
 def _require_key(provider: str) -> str:
     """The provider's API key, or a failure that names the variable to set."""
+    if provider in KEYLESS_PROVIDERS:
+        raise AssertionError(f"{provider} does not use an API key")
     env_var = env_var_for(provider)
     # Kimi accepts either name; v1 reads MOONSHOT_API_KEY first.
     key = (os.getenv("MOONSHOT_API_KEY") if provider == "Kimi" else None)

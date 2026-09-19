@@ -108,6 +108,30 @@ def test_picker_and_masked_key_save_or_cancel(save, isolated_configuration):
     asyncio.run(scenario())
 
 
+def test_ollama_is_selectable_and_needs_no_llm_key(monkeypatch, isolated_configuration):
+    """Ollama is the no-key local path: picker enables it, the run gate skips LLM keys."""
+    monkeypatch.setenv("FINANCIAL_DATASETS_API_KEY", "fixture-fd-key")
+    monkeypatch.setenv("HEDGE_FUND_LLM_MODEL", "llama3.1")
+
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=(100, 35)) as pilot:
+            await pilot.press("m")
+            picker = app.screen.query_one("#picker-list", OptionList)
+            index = picker.get_option_index("llama3.1")
+            assert not picker.get_option_at_index(index).disabled
+            assert "Llama 3.1" in _render(picker.get_option_at_index(index).prompt)
+            picker.highlighted = index
+            await pilot.press("enter")
+            assert os.environ["HEDGE_FUND_LLM_MODEL"] == "llama3.1"
+            resumed = Mock()
+            assert ui._demand_run_keys(app, resumed) is True
+            resumed.assert_not_called()
+            assert not isinstance(app.screen, ui.KeyPromptScreen)
+
+    asyncio.run(scenario())
+
+
 def test_missing_key_gate_save_resumes_and_cancel_does_not(monkeypatch, isolated_configuration):
     monkeypatch.setenv("FINANCIAL_DATASETS_API_KEY", "fixture-fd-key")
     monkeypatch.setenv("HEDGE_FUND_LLM_MODEL", "jev-1.13.0")

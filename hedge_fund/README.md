@@ -46,6 +46,7 @@ poetry install                          # dependencies
 # .env needs (at repo root):
 #   FINANCIAL_DATASETS_API_KEY=...      # market/fundamentals data
 #   ANTHROPIC_API_KEY=...               # only for LLM agents (Buffett)
+#   # or Ollama locally: no key; --model llama3.1 / OLLAMA_BASE_URL
 
 # THE command. No arguments: launch the interactive app (a Textual TUI).
 # Build a fund — pick stocks, strategies, rebalance cadence — or backtest a
@@ -82,7 +83,7 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 |--------|------|--------|
 | `data/` | `DataClient` protocol, Financial Datasets client, disk cache | ✅ |
 | `signals/` | `AlphaModel` interface, PEAD, `LLMAgent` + 9 investor personas | ✅ |
-| `llm/` | LLM provider protocol, Anthropic client, prompt cache | ✅ |
+| `llm/` | LLM provider protocol, `make_llm` (Anthropic, OpenAI, DeepSeek, Google, xAI, Kimi, TypeSafe, Ollama), prompt cache | ✅ |
 | `features/` | Point-in-time fundamentals snapshot (more features planned) | ◐ |
 | `fund/` | `FundSpec`/`StrategySpec` — mandates as YAML data — and the `Fund` object | ✅ |
 | `strategies/` | Strategy library (fundamental-ls, deep-value, inflections, high-conviction, earnings-drift) — add yours as a YAML | ✅ |

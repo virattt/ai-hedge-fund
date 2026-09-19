@@ -39,11 +39,11 @@ aihf
 The app asks for keys the first time it needs them and saves them to `~/.hedge-fund/.env` — nothing to configure up front. It needs:
 
 - A [Financial Datasets](https://financialdatasets.ai) API key, for prices, fundamentals, and earnings.
-- One model API key for the investor agents. Supported providers: Anthropic, OpenAI, DeepSeek, Google, xAI, Kimi, TypeSafe (Jev).
+- One model API key for the investor agents. Supported providers: Anthropic, OpenAI, DeepSeek, Google, xAI, Kimi, TypeSafe (Jev). Or run locally with Ollama — no key; model ids are Ollama tags (`llama3.1`, `qwen2.5`, or `ollama:<tag>` for anything you have pulled).
 
 Keys exported in your shell always win over the saved file.
 
-To point OpenAI-compatible models at a custom host (Groq, a local proxy, ...), set `OPENAI_BASE_URL` or the older `OPENAI_API_BASE` alias. Moonshot/Kimi already uses `MOONSHOT_BASE_URL`. Bound hung calls with `LLM_REQUEST_TIMEOUT` (seconds; default 60).
+To point OpenAI-compatible models at a custom host (Groq, a local proxy, ...), set `OPENAI_BASE_URL` or the older `OPENAI_API_BASE` alias. Moonshot/Kimi already uses `MOONSHOT_BASE_URL`. Ollama uses `OLLAMA_BASE_URL` (default `http://127.0.0.1:11434`). Bound hung calls with `LLM_REQUEST_TIMEOUT` (seconds; default 60). A missing Ollama daemon fails inside that timeout instead of hanging.
 
 ## How to Run
 
