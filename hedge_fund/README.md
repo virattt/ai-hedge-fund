@@ -28,14 +28,15 @@ strategies are powered by quant models (post-earnings drift) — the model *is*
 the strategy, no persona attached. Both kinds implement one interface and
 plug into the same engine unchanged.
 
-Run a fund two ways: **one cycle** (today's data → today's target book,
-seeded from the newest `CycleRecord` receipt when this mandate has one, so
-cash, positions, and NAV persist) or a **backtest** — the same cycle looped
-over history at the mandate's rebalance cadence, producing an equity curve
-against your benchmark and a full `CycleRecord` for every tick. Backtests
-always open at the mandate's capital and carry the book only across ticks
-inside that run. Same code path, so a backtest is honest by construction:
-it's the fund, replayed, not a separate simulator.
+Run a fund two ways: **one paper cycle** (live clock + `PaperBroker`, today's
+data → today's target book, seeded from the newest `CycleRecord` receipt when
+this mandate has one, so cash, positions, and NAV persist) or a **backtest**
+— the same cycle looped over history at the mandate's rebalance cadence on
+`SimBroker`, producing an equity curve against your benchmark and a full
+`CycleRecord` for every tick. Backtests always open at the mandate's capital
+and carry the book only across ticks inside that run. Same code path, so a
+backtest is honest by construction: it's the fund, replayed, not a separate
+simulator.
 
 ## Quickstart
 
@@ -51,15 +52,16 @@ poetry install                          # dependencies
 # saved fund and watch its equity curve draw against its benchmark.
 poetry run aihf       # or, equivalently: python -m hedge_fund.tui
 
-# With a mandate: run one cycle non-interactively (data → strategies →
-# netting → risk → execution), full CycleRecord as JSON on stdout. A mandate
-# carries no tickers — --tickers says what to point the fund at this run.
-# If a prior receipt exists for this mandate, the broker opens that ending
-# book; otherwise it opens at the mandate's capital.
+# With a mandate: one live-clock paper cycle (PaperBroker, fills at mark).
+# --paper is explicit; omitting it is the same path. Full CycleRecord as
+# JSON on stdout. A mandate carries no tickers — --tickers says what to
+# point the fund at this run. If a prior receipt exists for this mandate,
+# the broker opens that ending book; otherwise it opens at the mandate's capital.
 poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT,NVDA
+poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT,NVDA --paper
 
 # Backtest a mandate: the same run_cycle looped over history at the
-# mandate's rebalance cadence, full result JSON (every CycleRecord) on stdout.
+# mandate's rebalance cadence on SimBroker, full result JSON on stdout.
 poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
 
 # Tests (offline; live Financial Datasets smoke skips without FINANCIAL_DATASETS_API_KEY)
@@ -86,8 +88,8 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | `strategies/` | Strategy library (fundamental-ls, deep-value, inflections, high-conviction, earnings-drift) — add yours as a YAML | ✅ |
 | `portfolio/` | View blending → target weights (conviction-weighted, optional market-neutral) | ✅ |
 | `risk/` | Hard limits — per-position and gross-exposure clamps | ✅ |
-| `brokers/` | `Broker` protocol + `SimBroker` (paper/live brokers planned) | ◐ |
-| `ledger.py` | Persist `CycleRecord` receipts; seed the next live-clock `SimBroker` from the newest one | ✅ |
+| `brokers/` | `Broker` protocol + `SimBroker` (backtest) + `PaperBroker` (live-clock paper; live venue planned) | ◐ |
+| `ledger.py` | Persist `CycleRecord` receipts; seed the next live-clock `PaperBroker` from the newest one | ✅ |
 | `pipeline/` | `run_cycle` — one code path for backtest/paper/live; `CycleRecord` | ✅ |
 | `backtesting/` | `backtest_fund` — the whole fund over history on `run_cycle` — plus the per-model engine | ✅ |
 | `event_study/` | Market-model abnormal returns (CARs) | ✅ |

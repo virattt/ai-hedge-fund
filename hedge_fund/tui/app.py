@@ -137,7 +137,7 @@ class HomeScreen(Screen):
                 Option(
                     Text.assemble(
                         ("Run an existing fund\n", "bold"),
-                        ("pick a saved fund and run it as of today", MUTED)),
+                        ("pick a saved fund and paper-trade it as of today", MUTED)),
                     id="run"),
                 None,
                 Option(
@@ -649,8 +649,8 @@ def _fund_detail(spec: FundSpec, history: list[dict]) -> Group:
 
     if not history:
         parts.append(Text("\nNo runs yet — this fund has never traded.", style=MUTED))
-        parts.append(Text("\nEnter to run it as of today · ctrl+b to backtest "
-                          "over history", style=MUTED))
+        parts.append(Text("\nEnter to paper-trade it as of today · ctrl+b to "
+                          "backtest over history", style=MUTED))
         return Group(*parts)
 
     # The headline stats come from the most recent BACKTEST (a single run has
@@ -1143,12 +1143,13 @@ def _tape_table(tape: list[tuple[str, Fill, int]]) -> Table:
 
 
 class RunScreen(Screen):
-    """Run a fund as of today — the primary verb. Warm the roster, run one
-    cycle on today's data (seeded from the newest CycleRecord when this
-    mandate has one, so the book carries between runs), then reveal the
-    fund's thinking: signals, risk clamps, orders, and the target book.
-    Backtest is the side option (ctrl+b), offered before a run and again
-    from the finished report — and still starts from the mandate's capital.
+    """Paper-trade a fund as of today — the primary verb. Warm the roster,
+    run one live-clock cycle on PaperBroker (seeded from the newest
+    CycleRecord when this mandate has one, so the book carries between
+    runs), then reveal the fund's thinking: signals, risk clamps, orders,
+    and the target book. Backtest is the side option (ctrl+b), offered
+    before a run and again from the finished report — and still starts
+    from the mandate's capital on SimBroker.
     """
 
     # ctrl+b, not plain b: the ticker Input owns letter keys (BABA, BRK.B),
@@ -1200,7 +1201,7 @@ class RunScreen(Screen):
         staff = ", ".join(s.title for s in spec.strategies)
         hero = [
             Text(spec.name, style=f"bold {BRIGHT}"),
-            Text(f"{staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}",
+            Text(f"{staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}  ·  paper",
                  style=MUTED),
         ]
         last_book = _last_run_book(spec.name)
@@ -1317,9 +1318,10 @@ class RunScreen(Screen):
                     future.result()
 
             fund = Fund(spec)
-            # Live-clock only: seed from the newest CycleRecord so cash,
-            # positions, and NAV carry between runs. BacktestScreen still
-            # opens a fresh broker inside backtest_fund.
+            # Live-clock paper path: seed PaperBroker from the newest
+            # CycleRecord so cash, positions, and NAV carry between runs.
+            # BacktestScreen still opens a fresh SimBroker inside
+            # backtest_fund.
             broker, _prior = broker_for_run(spec.name, spec.capital, FUNDS_DIR)
             with FDClient() as raw:
                 record = run_cycle(fund, as_of, broker, CachedDataClient(raw),

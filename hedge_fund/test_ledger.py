@@ -1,4 +1,4 @@
-"""Ledger read-back — seed SimBroker from fixture CycleRecord receipts."""
+"""Ledger read-back — seed PaperBroker from fixture CycleRecord receipts."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from hedge_fund.backtesting.fund import backtest_fund
-from hedge_fund.brokers.sim import SimBroker
+from hedge_fund.brokers.paper import PaperBroker
 from hedge_fund.data.models import Price
 from hedge_fund.fund.spec import Fund, FundSpec
 from hedge_fund.ledger import (
@@ -48,6 +48,8 @@ def test_broker_for_run_seeds_from_newest_fixture(tmp_path):
     _place(tmp_path, VALID)
     broker, prior = broker_for_run("alpha-one", 50_000.0, tmp_path)
 
+    assert isinstance(broker, PaperBroker)
+    assert broker.venue == "paper"
     assert prior is not None
     assert prior.as_of == "2024-06-03"
     assert broker.cash() == pytest.approx(90_000.0)
@@ -58,6 +60,7 @@ def test_broker_for_run_seeds_from_newest_fixture(tmp_path):
 
 def test_broker_for_run_opens_at_capital_when_no_receipt(tmp_path):
     broker, prior = broker_for_run("alpha-one", 75_000.0, tmp_path)
+    assert isinstance(broker, PaperBroker)
     assert prior is None
     assert broker.cash() == pytest.approx(75_000.0)
     assert broker.positions() == {}
@@ -174,14 +177,14 @@ def _fund(capital=100_000.0):
 def test_second_run_starts_from_first_ending_book(tmp_path):
     """Acceptance: two sequential runs against the same mandate.
 
-    The second process opens a new SimBroker seeded from the first run's
+    The second process opens a new PaperBroker seeded from the first run's
     receipt — cash_before / positions / equity_before match the first
     ending book, not the mandate's capital.
     """
     fund = _fund()
     data = FakeDataClient({"AAPL": 200.0})
 
-    first_broker = SimBroker(cash=fund.spec.capital)
+    first_broker = PaperBroker(cash=fund.spec.capital)
     first = run_cycle(fund, "2024-06-03", first_broker, data, ["AAPL"])
     save_cycle_record(first, tmp_path)
 
@@ -190,6 +193,7 @@ def test_second_run_starts_from_first_ending_book(tmp_path):
     assert first.nav == pytest.approx(100_000.0)
 
     second_broker, prior = broker_for_run(fund.spec.name, fund.spec.capital, tmp_path)
+    assert isinstance(second_broker, PaperBroker)
     assert prior is not None
     assert prior.cash == pytest.approx(first.cash)
     assert prior.positions == first.positions
@@ -230,7 +234,7 @@ def test_backtest_starts_from_mandate_capital_despite_receipt(tmp_path):
     """A leftover live-clock receipt must not seed backtest_fund."""
     _place(tmp_path, VALID)
     # Even if the process has a receipt on disk, backtest_fund never
-    # consults the ledger — it opens at spec.capital.
+    # consults the ledger — it opens a fresh SimBroker at spec.capital.
     spec = FundSpec(
         name="alpha-one",
         strategies=[{"name": "solo", "models": [{"name": "a"}]}],

@@ -180,6 +180,19 @@ def test_jev_results_show_stored_direction_and_separate_confidence(direction, st
     assert verdict[0] in _render(option.prompt)
 
 
+def test_home_menu_labels_the_paper_path(isolated_configuration):
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=(100, 35)) as pilot:
+            picker = app.screen.query_one("#home-menu", OptionList)
+            text = _render(picker.get_option_at_index(0).prompt)
+            assert "paper-trade" in text
+            assert picker.get_option_at_index(0).id == "run"
+            _ = pilot
+
+    asyncio.run(scenario())
+
+
 def test_last_run_book_reads_newest_cycle_receipt(tmp_path, monkeypatch):
     monkeypatch.setattr(ui, "FUNDS_DIR", tmp_path)
     assert ui._last_run_book("alpha-one") is None

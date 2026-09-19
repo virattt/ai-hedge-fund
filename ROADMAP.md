@@ -10,12 +10,12 @@ read [VISION.md](./VISION.md).
 
 ✅ Shipped · 🚧 In progress · ⬜ Planned
 
-**Current focus:** the persistent ledger's read half now ships for live-clock
-runs — the newest `CycleRecord` seeds `SimBroker` so cash, positions, and NAV
-carry between invocations. Next: the paper broker, then the scheduler — that's
-the path from "run it by hand" to a fund that is genuinely always-on. In
-parallel: retiring the v1 CLI, which needs Ollama (the free, local, no-key
-path) and the remaining investor personas ported.
+**Current focus:** the paper venue now ships for this fork path — live-clock
+runs use `PaperBroker` (fills at mark, no live exchange) and seed from the
+newest `CycleRecord` so cash, positions, and NAV carry between invocations.
+Next: the scheduler — that's the path from "run it by hand" to a fund that
+is genuinely always-on. In parallel: retiring the v1 CLI, which needs Ollama
+(the free, local, no-key path) and the remaining investor personas ported.
 
 The tables below are a capability map, not a strict order; where items depend on
 each other, the dependency is noted.
@@ -30,9 +30,9 @@ it in backtest, paper, or live mode (see [VISION.md](./VISION.md)).
 | `AlphaModel` / `Signal` interface — the contract every analyst implements | ✅ |
 | Backtesting engine — `backtest_fund`: the whole fund over history on `run_cycle`, equity curve vs the mandate's benchmark (plus the per-model harness) | ✅ |
 | Event-study engine — market-model abnormal returns (CARs) | ✅ |
-| `run_cycle` — one pipeline (data → analysts → portfolio → risk → execution → ledger), three modes | 🚧 (single cycle, run-today with a carried book, and the backtest loop ship; a paper broker is what remains) |
+| `run_cycle` — one pipeline (data → analysts → portfolio → risk → execution → ledger), three modes | 🚧 (single cycle, live-clock paper with a carried book, and the backtest loop ship; a live venue and the always-on daemon remain) |
 | Fund object — persistent mandate, staff, capital, books | 🚧 (mandates, staffing, per-run receipts, and a carried book between live-clock runs ship; tickers are a run-time input, not part of the mandate) |
-| Persistent ledger — positions, every decision + thesis, orders, fills, NAV history | 🚧 (live-clock runs write a `CycleRecord` and the next run seeds `SimBroker` from the newest receipt so NAV carries; backtests still start from mandate capital; paper broker and the always-on daemon remain) |
+| Persistent ledger — positions, every decision + thesis, orders, fills, NAV history | 🚧 (live-clock paper runs write a `CycleRecord` and the next run seeds `PaperBroker` from the newest receipt so NAV carries; backtests still start from mandate capital on `SimBroker`; the always-on daemon remains) |
 | LLM provider layer — one client factory (`make_llm`) routed by the model registry: Anthropic · OpenAI · DeepSeek · Google · xAI · Kimi | ✅ (Ollama next — the free local path, and the last blocker v1 holds over v2) |
 | Point-in-time data correctness — as-of / filing-date queries, no lookahead | 🚧 |
 | Validation gate — CPCV, probability of backtest overfitting (PBO) | ⬜ |
@@ -86,7 +86,7 @@ can be backtested and combined — is a great first contribution:
 | Risk model — hard caps (pod-level budgets + fund-level limits) | 🚧 (fund-level position + gross caps ship; pod budgets with pods) |
 | Broker protocol — pluggable, mirrors the `DataClient` pattern | ✅ |
 | ↳ Simulated broker (backtest) | ✅ |
-| ↳ Paper broker | ⬜ |
+| ↳ Paper broker | ✅ (this fork: `PaperBroker` on `--paper` / default live-clock; fills at mark or delayed; open / fill / cancel; ledger read-back) |
 | ↳ Live broker (Interactive Brokers / Alpaca) — opt-in plugin, off by default | ⬜ |
 
 ## Autonomy
@@ -105,8 +105,8 @@ Thin clients over the engine — pick the surface, the core stays the same.
 
 | Item | Status |
 |------|--------|
-| TUI — the main interface (Textual): build a fund, run it as of today, backtest it, browse every signal's thesis, fund history + delete, model picker, in-app API-key setup | 🚧 (ships and is the default `python -m v2.run`; streaming reasoning + watch mode remain) |
-| CLI — thin machine client over the engine: `python -m v2.run mandate.yaml --tickers … [--backtest]`, JSON on stdout | ✅ |
+| TUI — the main interface (Textual): build a fund, paper-trade it as of today, backtest it, browse every signal's thesis, fund history + delete, model picker, in-app API-key setup | 🚧 (ships and is the default `python -m v2.run`; streaming reasoning + watch mode remain) |
+| CLI — thin machine client over the engine: `python -m v2.run mandate.yaml --tickers … [--paper|--backtest]`, JSON on stdout | ✅ |
 | Web dashboard — replayable, time-scrubbable reasoning ledger | 🚧 (frontend scaffold exists; still runs on the v1 engine) |
 | Conversational control plane — operate the fund in natural language | ⬜ |
 

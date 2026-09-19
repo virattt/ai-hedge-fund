@@ -8,18 +8,21 @@ Usage::
         cadence — or backtest a saved fund and watch its equity curve draw
         against its benchmark.
 
-    aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
-        With a mandate: run one cycle non-interactively. If this mandate has
-        a prior CycleRecord receipt, the broker opens that ending book so
-        cash, positions, and NAV carry forward; otherwise it opens at the
-        mandate's capital. A corrupt or incompatible receipt fails the run.
-        The full CycleRecord prints to stdout as JSON (pipe it anywhere); a
-        short human summary goes to stderr. The receipt is saved next to the
-        mandate; add --out record.json to also write a copy to a file.
+    aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT [--paper]
+        With a mandate: one live-clock paper cycle (PaperBroker, fills at
+        mark, no live venue). --paper is the explicit flag; omitting it is
+        the same path. If this mandate has a prior CycleRecord receipt, the
+        broker opens that ending book so cash, positions, and NAV carry
+        forward; otherwise it opens at the mandate's capital. A corrupt or
+        incompatible receipt fails the run. The full CycleRecord prints to
+        stdout as JSON (pipe it anywhere); a short human summary goes to
+        stderr. The receipt is saved next to the mandate; add --out
+        record.json to also write a copy to a file.
 
     aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
         Backtest the mandate: run_cycle looped over history at the mandate's
-        rebalance cadence; the full result JSON prints to stdout.
+        rebalance cadence against SimBroker; the full result JSON prints
+        to stdout. Mutually exclusive with --paper.
 
 A mandate is the desk — strategies, staff, risk, capital, cadence — and never
 names tickers; --tickers says what to point it at for this run.
@@ -55,8 +58,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="aihf",
         description="Run the AI hedge fund. No arguments: launch the "
-        "interactive app. With a mandate YAML: run one cycle (seeded from "
-        "the newest receipt when one exists) and print the record.",
+        "interactive app. With a mandate YAML: run one live-clock paper "
+        "cycle (seeded from the newest receipt when one exists) and print "
+        "the record, or --backtest over history.",
     )
     parser.add_argument("mandate", nargs="?",
                         help="path to a fund spec YAML, e.g. "
@@ -74,10 +78,18 @@ def main() -> None:
         help="as-of date YYYY-MM-DD (default: today); models only see data "
         "filed by this date",
     )
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--paper", action="store_true",
+        help="run one live-clock paper cycle: PaperBroker fills at mark "
+        "(no live venue); seed from the newest CycleRecord when one exists. "
+        "This is also the default without --backtest",
+    )
+    mode.add_argument(
         "--backtest", action="store_true",
         help="backtest the mandate instead of running one cycle: one run_cycle "
-        "per rebalance date from --start to --date, full result JSON on stdout",
+        "per rebalance date from --start to --date against SimBroker, full "
+        "result JSON on stdout",
     )
     parser.add_argument(
         "--start",
@@ -139,6 +151,7 @@ def main() -> None:
 
     receipts = ensure_mandates_dir()
     broker, prior = broker_for_run(spec.name, spec.capital, receipts)
+    console.print("[dim]paper venue · live clock · fills at mark[/]")
     if prior is not None:
         console.print(
             f"[dim]carrying book from {prior.as_of}  ·  "
@@ -150,7 +163,7 @@ def main() -> None:
         fd = CachedDataClient(raw)
         n_models = sum(len(staff) for _, staff in fund.strategies)
         with console.status(
-            f"[cyan]{spec.name}: running one cycle as of {args.date} — "
+            f"[cyan]{spec.name}: paper cycle as of {args.date} — "
             f"{len(universe)} tickers x {n_models} models "
             f"across {len(fund.strategies)} strategies…",
             spinner="dots",

@@ -2,8 +2,9 @@
 
 Fills every order completely, exactly at the order's reference price. That
 determinism is the point: given the same orders, a backtest replays to the
-same book. Slippage/costs are a declared future addition inside place_order,
-where they change fills without touching the pipeline.
+same book. Live-clock paper runs use PaperBroker (same bookkeeping, labeled
+paper, not a backtest clock). Slippage/costs are a declared future addition
+inside place_order, where they change fills without touching the pipeline.
 
 Margin is not modeled: cash may go negative and stays visible. With an
 unlevered mandate (gross_target <= 1), sells-before-buys ordering, and
@@ -19,10 +20,11 @@ from hedge_fund.brokers.models import Fill, Order, Position
 class SimBroker:
     """In-memory broker: signed positions plus a cash balance.
 
-    A live-clock run may seed *positions* from a prior CycleRecord so the
-    book carries between process invocations. Backtests always construct
-    with cash only and let place_order accumulate state across ticks.
+    Backtests always construct with cash only and let place_order accumulate
+    state across ticks. Live-clock paper runs use PaperBroker instead.
     """
+
+    venue = "sim"
 
     def __init__(
         self,

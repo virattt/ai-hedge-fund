@@ -1,9 +1,9 @@
 """Persistent ledger — CycleRecord receipts, write and read.
 
-Every live-clock run writes a receipt (cash, positions, NAV, every thesis).
-The next run loads the newest CycleRecord for that mandate and seeds
-SimBroker from the ending book, so NAV is a track record instead of a
-reset to the mandate's capital.
+Every live-clock paper run writes a receipt (cash, positions, NAV, every
+thesis). The next run loads the newest CycleRecord for that mandate and
+seeds PaperBroker from the ending book, so NAV is a track record instead
+of a reset to the mandate's capital.
 
 Backtests do not read the ledger. They open a fresh SimBroker at the
 mandate's capital and carry the book only across ticks inside that run.
@@ -17,7 +17,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from hedge_fund.brokers.sim import SimBroker
+from hedge_fund.brokers.paper import PaperBroker
 from hedge_fund.pipeline.models import CycleRecord
 
 
@@ -90,8 +90,8 @@ def broker_for_run(
     fund_name: str,
     capital: float,
     directory: Path,
-) -> tuple[SimBroker, CycleRecord | None]:
-    """Open a SimBroker for a live-clock run of *fund_name*.
+) -> tuple[PaperBroker, CycleRecord | None]:
+    """Open a PaperBroker for a live-clock paper run of *fund_name*.
 
     If a prior CycleRecord exists, the broker is seeded from that ending
     book (cash + signed shares). If not, it opens at *capital*. The newest
@@ -100,6 +100,6 @@ def broker_for_run(
     """
     path = latest_run_receipt(fund_name, directory)
     if path is None:
-        return SimBroker(cash=capital), None
+        return PaperBroker(cash=capital), None
     record = load_cycle_record(path, expected_fund=fund_name)
-    return SimBroker(cash=record.cash, positions=record.positions), record
+    return PaperBroker(cash=record.cash, positions=record.positions), record

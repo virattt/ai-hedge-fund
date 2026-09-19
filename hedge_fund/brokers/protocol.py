@@ -1,8 +1,8 @@
 """Broker protocol — the interface all brokers implement.
 
 Mirrors the DataClient pattern (hedge_fund/data/protocol.py): structural typing, no
-inheritance required. SimBroker backs backtests; PaperBroker and a live
-broker implement the same three methods later.
+inheritance required. SimBroker backs backtests; PaperBroker is the live-clock
+paper venue; a live broker implements the same three methods later.
 """
 
 from __future__ import annotations

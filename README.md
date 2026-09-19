@@ -57,10 +57,11 @@ With no arguments, this launches the interactive terminal app. Build a fund — 
 
 ### Non-interactive
 
-Run one fund cycle from a mandate file. If this mandate has a prior cycle receipt, the run opens that ending book so cash, positions, and NAV carry forward; otherwise it opens at the mandate's capital. A corrupt or incompatible receipt fails the run. The full cycle record prints to stdout as JSON; a short human summary goes to stderr; the receipt is saved next to the mandate:
+Run one live-clock paper cycle from a mandate file (`PaperBroker`, fills at mark, no live venue). `--paper` is the explicit flag; omitting it is the same path. If this mandate has a prior cycle receipt, the run opens that ending book so cash, positions, and NAV carry forward; otherwise it opens at the mandate's capital. A corrupt or incompatible receipt fails the run. The full cycle record prints to stdout as JSON; a short human summary goes to stderr; the receipt is saved next to the mandate:
 
 ```bash
 aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
+aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --paper
 ```
 
 Run the same mandate with Jev after configuring `TYPESAFE_API_KEY`:
@@ -69,7 +70,7 @@ Run the same mandate with Jev after configuring `TYPESAFE_API_KEY`:
 aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --model jev-1.13.0
 ```
 
-Backtest the mandate over history at its rebalance cadence:
+Backtest the mandate over history at its rebalance cadence (`SimBroker`, not the paper venue):
 
 ```bash
 aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest

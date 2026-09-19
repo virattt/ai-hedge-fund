@@ -30,7 +30,8 @@ Then:
 
 ```bash
 poetry run aihf
-# or, non-interactive:
+# or, non-interactive paper cycle / backtest:
+poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --paper
 poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
 ```
 

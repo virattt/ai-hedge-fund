@@ -4,7 +4,7 @@ A CycleRecord captures one tick of the fund end to end: what the analysts
 saw, what they said, which views were dropped before blending, how views
 became weights, what risk clamped, what was ordered and filled, and what
 the book looks like after. The ledger persists these and, on the next
-live-clock run, seeds SimBroker from the newest receipt so cash,
+live-clock paper run, seeds PaperBroker from the newest receipt so cash,
 positions, and NAV carry forward. `fund why AAPL` will answer from them
 alone.
 """
