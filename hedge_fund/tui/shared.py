@@ -45,6 +45,8 @@ DISPLAY_NAMES = {
     "ackman": "Bill Ackman",
     "damodaran": "Aswath Damodaran",
     "pead": "post-earnings drift",
+    "momentum": "price momentum",
+    "mean_reversion": "mean reversion",
 }
 
 _SHORT_NAMES = {
@@ -58,6 +60,8 @@ _SHORT_NAMES = {
     "ackman": "Ackman",
     "damodaran": "Damodaran",
     "pead": "PEAD",
+    "momentum": "Momentum",
+    "mean_reversion": "Mean-rev",
 }
 
 # The LLM the investor agents reason with. Picked once, upfront; make_llm()

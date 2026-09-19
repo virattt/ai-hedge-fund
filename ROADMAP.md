@@ -48,8 +48,8 @@ the engine. Two flavors:
 |-------|--------|
 | Post-Earnings Announcement Drift (PEAD) | ✅ |
 | Market-regime detection (HMM / regime-switching) | ⬜ |
-| Momentum | ⬜ |
-| Mean reversion | ⬜ |
+| Momentum | ✅ |
+| Mean reversion | ✅ |
 | Value / quality factors | ⬜ |
 | Statistical arbitrage | ⬜ |
 | *Your model here* | ⬜ |
@@ -70,7 +70,7 @@ can be backtested and combined — is a great first contribution:
 
 | Item | Status |
 |------|--------|
-| Strategy — bundle models + a blend policy + capital slice (a "pod") | ✅ (`StrategySpec` + library: fundamental-ls, deep-value, inflections, high-conviction, earnings-drift) |
+| Strategy — bundle models + a blend policy + capital slice (a "pod") | ✅ (`StrategySpec` + library: fundamental-ls, deep-value, inflections, high-conviction, earnings-drift, momentum, mean-reversion) |
 | Portfolio construction — blend model views → target weights | ✅ (conviction-weighted; optional market-neutral sleeves) |
 | Multi-strategy fund — many pods running at once, netted into one book | ✅ (`run_cycle` nets every sleeve into one target book, then master risk clamps it) |
 | Allocator (CIO) — pluggable capital allocation across strategies | ✅ (`Allocator` protocol; `run_cycle` nets through it) |

@@ -6,7 +6,7 @@ import pytest
 
 from hedge_fund.data.client import FDClientError
 from hedge_fund.data.models import EarningsData, EarningsRecord
-from hedge_fund.signals import PEADModel, QuantModel
+from hedge_fund.signals import MeanReversionModel, MomentumModel, PEADModel, QuantModel
 from hedge_fund.signals.base import AlphaModel
 from hedge_fund.models import Signal
 
@@ -39,9 +39,13 @@ class TestInterface:
     def test_quant_model_is_alpha_model(self):
         assert issubclass(QuantModel, AlphaModel)
         assert issubclass(PEADModel, QuantModel)
+        assert issubclass(MomentumModel, QuantModel)
+        assert issubclass(MeanReversionModel, QuantModel)
 
     def test_name(self):
         assert PEADModel().name == "pead"
+        assert MomentumModel().name == "momentum"
+        assert MeanReversionModel().name == "mean_reversion"
 
     def test_helpers(self):
         assert QuantModel._safe_float(None) == 0.0

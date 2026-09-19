@@ -24,9 +24,9 @@ are staffed by **agents** — LLM investor personas (Warren Buffett, Charlie
 Munger, Benjamin Graham, Peter Lynch, Stanley Druckenmiller, Cathie Wood,
 Michael Burry, Bill Ackman, Aswath Damodaran) whose judgment
 is the edge; blend them long-biased or market-neutral. **Systematic**
-strategies are powered by quant models (post-earnings drift) — the model *is*
-the strategy, no persona attached. Both kinds implement one interface and
-plug into the same engine unchanged.
+strategies are powered by quant models (post-earnings drift, momentum, mean
+reversion) — the model *is* the strategy, no persona attached. Both kinds
+implement one interface and plug into the same engine unchanged.
 
 Run a fund three ways: **one paper cycle** (live clock + `PaperBroker`, today's
 data → today's target book, seeded from the newest `CycleRecord` receipt when
@@ -110,12 +110,12 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | Module | What | Status |
 |--------|------|--------|
 | `data/` | `DataClient` protocol, Financial Datasets client, disk cache | ✅ |
-| `signals/` | `AlphaModel` interface, PEAD, `LLMAgent` + 9 investor personas | ✅ |
+| `signals/` | `AlphaModel` interface, PEAD, momentum, mean reversion, `LLMAgent` + 9 investor personas | ✅ |
 | `llm/` | LLM provider protocol, `make_llm` (Anthropic, OpenAI, DeepSeek, Google, xAI, Kimi, TypeSafe, Ollama), prompt cache | ✅ |
 | `features/` | Point-in-time fundamentals snapshot (more features planned) | ◐ |
 | `fund/` | `FundSpec`/`StrategySpec` — mandates as YAML data — and the `Fund` object | ✅ |
 | `fund/allocator.py` | `Allocator` protocol (CIO): strategy performance / risk → capital weights. `StaticAllocator` default; `EqualWeightAllocator` stub | ✅ |
-| `strategies/` | Strategy library (fundamental-ls, deep-value, inflections, high-conviction, earnings-drift) — add yours as a YAML | ✅ |
+| `strategies/` | Strategy library (fundamental-ls, deep-value, inflections, high-conviction, earnings-drift, momentum, mean-reversion) — add yours as a YAML | ✅ |
 | `portfolio/` | View blending → target weights *inside* a strategy (not the CIO) | ✅ |
 | `risk/` | Hard limits — per-position and gross-exposure clamps | ✅ |
 | `brokers/` | `Broker` protocol + `SimBroker` (backtest) + `PaperBroker` (live-clock paper; live venue planned) | ◐ |
