@@ -48,3 +48,14 @@ def test_positions_returns_a_copy():
     broker.place_order(Order(ticker="AAPL", side="buy", quantity=5, price=100.0))
     broker.positions().clear()
     assert broker.positions()["AAPL"].shares == 5
+
+
+def test_seeded_constructor_opens_the_given_book():
+    seed = {"AAPL": 100, "MSFT": -25, "FLAT": 0}
+    broker = SimBroker(cash=90_000.0, positions=seed)
+    assert broker.cash() == pytest.approx(90_000.0)
+    assert {t: p.shares for t, p in broker.positions().items()} == {
+        "AAPL": 100, "MSFT": -25,
+    }
+    seed["AAPL"] = 1
+    assert broker.positions()["AAPL"].shares == 100

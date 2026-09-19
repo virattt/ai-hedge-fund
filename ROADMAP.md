@@ -10,13 +10,12 @@ read [VISION.md](./VISION.md).
 
 ✅ Shipped · 🚧 In progress · ⬜ Planned
 
-**Current focus:** the persistent ledger. Every run already writes a full receipt
-(positions, cash, NAV, every thesis) — the missing half is *reading* it: seed each
-run's broker from the newest receipt so the fund carries its book between runs and
-NAV becomes a track record instead of resetting to the mandate's capital. Then the
-paper broker, then the scheduler — that's the path from "run it by hand" to a fund
-that is genuinely always-on. In parallel: retiring the v1 CLI, which needs Ollama
-(the free, local, no-key path) and the remaining investor personas ported.
+**Current focus:** the persistent ledger's read half now ships for live-clock
+runs — the newest `CycleRecord` seeds `SimBroker` so cash, positions, and NAV
+carry between invocations. Next: the paper broker, then the scheduler — that's
+the path from "run it by hand" to a fund that is genuinely always-on. In
+parallel: retiring the v1 CLI, which needs Ollama (the free, local, no-key
+path) and the remaining investor personas ported.
 
 The tables below are a capability map, not a strict order; where items depend on
 each other, the dependency is noted.
@@ -31,9 +30,9 @@ it in backtest, paper, or live mode (see [VISION.md](./VISION.md)).
 | `AlphaModel` / `Signal` interface — the contract every analyst implements | ✅ |
 | Backtesting engine — `backtest_fund`: the whole fund over history on `run_cycle`, equity curve vs the mandate's benchmark (plus the per-model harness) | ✅ |
 | Event-study engine — market-model abnormal returns (CARs) | ✅ |
-| `run_cycle` — one pipeline (data → analysts → portfolio → risk → execution → ledger), three modes | 🚧 (single cycle, run-today, and the backtest loop ship; a carried book + paper broker are what remain) |
-| Fund object — persistent mandate, staff, capital, books | 🚧 (mandates, staffing, and per-run receipts ship; tickers are a run-time input, not part of the mandate; the carried book is next) |
-| Persistent ledger — positions, every decision + thesis, orders, fills, NAV history | 🚧 (write half ships: every run and backtest saves a full `CycleRecord` receipt, and the TUI shows the history; read half next: seed the broker from the newest receipt so NAV moves between runs) |
+| `run_cycle` — one pipeline (data → analysts → portfolio → risk → execution → ledger), three modes | 🚧 (single cycle, run-today with a carried book, and the backtest loop ship; a paper broker is what remains) |
+| Fund object — persistent mandate, staff, capital, books | 🚧 (mandates, staffing, per-run receipts, and a carried book between live-clock runs ship; tickers are a run-time input, not part of the mandate) |
+| Persistent ledger — positions, every decision + thesis, orders, fills, NAV history | 🚧 (live-clock runs write a `CycleRecord` and the next run seeds `SimBroker` from the newest receipt so NAV carries; backtests still start from mandate capital; paper broker and the always-on daemon remain) |
 | LLM provider layer — one client factory (`make_llm`) routed by the model registry: Anthropic · OpenAI · DeepSeek · Google · xAI · Kimi | ✅ (Ollama next — the free local path, and the last blocker v1 holds over v2) |
 | Point-in-time data correctness — as-of / filing-date queries, no lookahead | 🚧 |
 | Validation gate — CPCV, probability of backtest overfitting (PBO) | ⬜ |

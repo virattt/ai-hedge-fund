@@ -1,0 +1,51 @@
+{
+  "fund": "alpha-one",
+  "as_of": "2024-06-03",
+  "spec": {
+    "name": "alpha-one",
+    "strategies": [
+      {
+        "name": "solo",
+        "models": [{"name": "pead"}]
+      }
+    ],
+    "risk": {
+      "max_position_pct": 0.25,
+      "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+  },
+  "universe": ["AAPL", "MSFT"],
+  "marks": {
+    "AAPL": 200.0,
+    "MSFT": 400.0
+  },
+  "skipped": [],
+  "strategies": [
+    {
+      "name": "solo",
+      "slice": 1.0,
+      "signals": [],
+      "convictions": {"AAPL": 1.0, "MSFT": -0.5},
+      "weights": {"AAPL": 0.2, "MSFT": -0.1}
+    }
+  ],
+  "target_weights": {"AAPL": 0.2, "MSFT": -0.1},
+  "clamps": [],
+  "final_weights": {"AAPL": 0.2, "MSFT": -0.1},
+  "equity_before": 100000.0,
+  "cash_before": 100000.0,
+  "orders": [
+    {"ticker": "AAPL", "side": "buy", "quantity": 100, "price": 200.0},
+    {"ticker": "MSFT", "side": "sell", "quantity": 25, "price": 400.0}
+  ],
+  "fills": [
+    {"ticker": "AAPL", "side": "buy", "quantity": 100, "price": 200.0},
+    {"ticker": "MSFT", "side": "sell", "quantity": 25, "price": 400.0}
+  ],
+  "positions": {"AAPL": 100, "MSFT": -25},
+  "cash": 90000.0,
+  "nav": 100000.0
+}

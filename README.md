@@ -57,7 +57,7 @@ With no arguments, this launches the interactive terminal app. Build a fund — 
 
 ### Non-interactive
 
-Run one fund cycle from a mandate file. The full cycle record prints to stdout as JSON; a short human summary goes to stderr:
+Run one fund cycle from a mandate file. If this mandate has a prior cycle receipt, the run opens that ending book so cash, positions, and NAV carry forward; otherwise it opens at the mandate's capital. A corrupt or incompatible receipt fails the run. The full cycle record prints to stdout as JSON; a short human summary goes to stderr; the receipt is saved next to the mandate:
 
 ```bash
 aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT

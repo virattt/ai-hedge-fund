@@ -17,11 +17,24 @@ from hedge_fund.brokers.models import Fill, Order, Position
 
 
 class SimBroker:
-    """In-memory broker: signed positions plus a cash balance."""
+    """In-memory broker: signed positions plus a cash balance.
 
-    def __init__(self, cash: float) -> None:
+    A live-clock run may seed *positions* from a prior CycleRecord so the
+    book carries between process invocations. Backtests always construct
+    with cash only and let place_order accumulate state across ticks.
+    """
+
+    def __init__(
+        self,
+        cash: float,
+        positions: dict[str, int] | None = None,
+    ) -> None:
         self._cash = cash
-        self._shares: dict[str, int] = {}
+        self._shares: dict[str, int] = {
+            ticker: shares
+            for ticker, shares in (positions or {}).items()
+            if shares != 0
+        }
 
     def positions(self) -> dict[str, Position]:
         return {

@@ -3,7 +3,8 @@
 Everything the user owns — mandates, run/backtest receipts, API caches, and
 the .env key file — lives under one home directory, outside the package. The
 package directory stays read-only code, so a pipx install behaves exactly
-like a checkout.
+like a checkout. Live-clock receipts are `{fund}-run-*.json` next to the
+mandate; the next run seeds its broker from the newest one.
 
 Textual-free and import-light on purpose: every layer (CLI, TUI, caches)
 anchors its paths here, and nothing here may import them back.

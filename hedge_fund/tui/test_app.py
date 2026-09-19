@@ -180,6 +180,24 @@ def test_jev_results_show_stored_direction_and_separate_confidence(direction, st
     assert verdict[0] in _render(option.prompt)
 
 
+def test_last_run_book_reads_newest_cycle_receipt(tmp_path, monkeypatch):
+    monkeypatch.setattr(ui, "FUNDS_DIR", tmp_path)
+    assert ui._last_run_book("alpha-one") is None
+    receipt = tmp_path / "alpha-one-run-2024-06-03-120000.json"
+    receipt.write_text(_record(_signal()).model_dump_json())
+    # A backtest sitting next to it must not win — only CycleRecords seed.
+    backtest = tmp_path / "alpha-one-backtest-2024-06-04-120000.json"
+    backtest.write_text('{"metrics": {"total_return_pct": 0.1, '
+                        '"annualized_return_pct": 0.1, "sharpe_ratio": 0, '
+                        '"max_drawdown_pct": 0, "benchmark_return_pct": 0, '
+                        '"excess_return_pct": 0, "n_cycles": 1}, '
+                        '"universe": ["AAPL"], "start": "2024-01-01", '
+                        '"end": "2024-06-04"}')
+    os.utime(receipt, (1_000_000, 1_000_000))
+    os.utime(backtest, (2_000_000, 2_000_000))
+    assert ui._last_run_book("alpha-one") == ("2025-01-15", 100000)
+
+
 def test_abstention_overrides_stored_direction():
     signal = Signal(model_name="buffett", ticker="TEST", date="2025-01-15", value=0, reasoning="abstained: TypeSafe returned HTTP 401", metadata={"abstained": True, "signal": "bullish"})
     text = _render(ui._signal_detail(_record(signal), 0, 0))

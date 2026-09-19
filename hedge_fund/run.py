@@ -9,9 +9,13 @@ Usage::
         against its benchmark.
 
     aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
-        With a mandate: run one cycle non-interactively. The full CycleRecord
-        prints to stdout as JSON (pipe it anywhere); a short human summary
-        goes to stderr. Add --out record.json to also write it to a file.
+        With a mandate: run one cycle non-interactively. If this mandate has
+        a prior CycleRecord receipt, the broker opens that ending book so
+        cash, positions, and NAV carry forward; otherwise it opens at the
+        mandate's capital. A corrupt or incompatible receipt fails the run.
+        The full CycleRecord prints to stdout as JSON (pipe it anywhere); a
+        short human summary goes to stderr. The receipt is saved next to the
+        mandate; add --out record.json to also write a copy to a file.
 
     aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
         Backtest the mandate: run_cycle looped over history at the mandate's
@@ -36,9 +40,9 @@ from pathlib import Path
 from rich.console import Console
 
 from hedge_fund.backtesting import backtest_fund
-from hedge_fund.brokers import SimBroker
 from hedge_fund.data import CachedDataClient, FDClient
 from hedge_fund.fund import Fund, load_spec, normalize_universe
+from hedge_fund.ledger import broker_for_run, save_cycle_record
 from hedge_fund.paths import ensure_mandates_dir
 from hedge_fund.pipeline import run_cycle
 from hedge_fund.tui.keys import apply_credentials
@@ -51,8 +55,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="aihf",
         description="Run the AI hedge fund. No arguments: launch the "
-        "interactive app. With a mandate YAML: run one cycle and print the "
-        "record.",
+        "interactive app. With a mandate YAML: run one cycle (seeded from "
+        "the newest receipt when one exists) and print the record.",
     )
     parser.add_argument("mandate", nargs="?",
                         help="path to a fund spec YAML, e.g. "
@@ -133,7 +137,14 @@ def main() -> None:
         )
         return
 
-    broker = SimBroker(cash=spec.capital)
+    receipts = ensure_mandates_dir()
+    broker, prior = broker_for_run(spec.name, spec.capital, receipts)
+    if prior is not None:
+        console.print(
+            f"[dim]carrying book from {prior.as_of}  ·  "
+            f"NAV ${prior.nav:,.2f}  ·  "
+            f"{len(prior.positions)} positions[/]"
+        )
 
     with FDClient() as raw:
         fd = CachedDataClient(raw)
@@ -146,6 +157,7 @@ def main() -> None:
         ):
             record = run_cycle(fund, args.date, broker, fd, universe)
 
+    receipt = save_cycle_record(record, receipts)
     print(record.model_dump_json(indent=2))
     if args.out:
         Path(args.out).write_text(record.model_dump_json(indent=2))
@@ -165,6 +177,7 @@ def main() -> None:
     )
     if record.skipped:
         console.print(f"[dim]skipped: {', '.join(s.ticker for s in record.skipped)}[/]")
+    console.print(f"[dim]saved {receipt}[/]")
 
 
 if __name__ == "__main__":
