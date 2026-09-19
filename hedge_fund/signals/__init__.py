@@ -14,13 +14,17 @@ from hedge_fund.signals.buffett import BuffettAgent
 from hedge_fund.signals.burry import BurryAgent
 from hedge_fund.signals.damodaran import DamodaranAgent
 from hedge_fund.signals.druckenmiller import DruckenmillerAgent
+from hedge_fund.signals.fisher import FisherAgent
 from hedge_fund.signals.graham import GrahamAgent
+from hedge_fund.signals.jhunjhunwala import JhunjhunwalaAgent
 from hedge_fund.signals.llm_agent import LLMAgent
 from hedge_fund.signals.lynch import LynchAgent
 from hedge_fund.signals.mean_reversion import MeanReversionModel
 from hedge_fund.signals.momentum import MomentumModel
 from hedge_fund.signals.munger import MungerAgent
+from hedge_fund.signals.pabrai import PabraiAgent
 from hedge_fund.signals.pead import PEADModel
+from hedge_fund.signals.taleb import TalebAgent
 from hedge_fund.signals.wood import WoodAgent
 
 # Keys are last-name slugs (buffett, wood, damodaran) — short, stable ids
@@ -40,6 +44,10 @@ ALPHA_MODEL_REGISTRY: dict[str, type[AlphaModel]] = {
     "burry": BurryAgent,
     "ackman": AckmanAgent,
     "damodaran": DamodaranAgent,
+    "fisher": FisherAgent,
+    "pabrai": PabraiAgent,
+    "taleb": TalebAgent,
+    "jhunjhunwala": JhunjhunwalaAgent,
 }
 
 __all__ = [
@@ -55,6 +63,10 @@ __all__ = [
     "BurryAgent",
     "AckmanAgent",
     "DamodaranAgent",
+    "FisherAgent",
+    "PabraiAgent",
+    "TalebAgent",
+    "JhunjhunwalaAgent",
     "PEADModel",
     "MomentumModel",
     "MeanReversionModel",

@@ -14,8 +14,8 @@ read [VISION.md](./VISION.md).
 `python -m hedge_fund.daemon` runs `run_cycle` on the market calendar with
 idempotent ticks and a kill-switch, paper or sim only. Cycle observability
 (heartbeat / per-cycle events / optional failure webhook) is available on
-the paper CLI path for the daemon to reuse. In parallel: remaining investor
-personas.
+the paper CLI path for the daemon to reuse. The ROADMAP LLM investor
+persona rows are shipped (stylized educational approximations).
 
 The tables below are a capability map, not a strict order; where items depend on
 each other, the dependency is noted.
@@ -63,14 +63,14 @@ can be backtested and combined — is a great first contribution:
 | Warren Buffett | ✅ |
 | Charlie Munger · Benjamin Graham · Peter Lynch · Stanley Druckenmiller | ✅ |
 | Cathie Wood · Michael Burry · Bill Ackman · Aswath Damodaran | ✅ |
-| Phil Fisher · Mohnish Pabrai · Nassim Taleb · Rakesh Jhunjhunwala | ⬜ |
+| Phil Fisher · Mohnish Pabrai · Nassim Taleb · Rakesh Jhunjhunwala | ✅ |
 | *Your agent here* | ⬜ |
 
 ## Strategies & allocation
 
 | Item | Status |
 |------|--------|
-| Strategy — bundle models + a blend policy + capital slice (a "pod") | ✅ (`StrategySpec` + library: fundamental-ls, deep-value, inflections, high-conviction, earnings-drift, momentum, mean-reversion) |
+| Strategy — bundle models + a blend policy + capital slice (a "pod") | ✅ (`StrategySpec` + library: fundamental-ls, deep-value, inflections, high-conviction, asymmetric, earnings-drift, momentum, mean-reversion) |
 | Portfolio construction — blend model views → target weights | ✅ (conviction-weighted; optional market-neutral sleeves) |
 | Multi-strategy fund — many pods running at once, netted into one book | ✅ (`run_cycle` nets every sleeve into one target book, then master risk clamps it) |
 | Allocator (CIO) — pluggable capital allocation across strategies | ✅ (`Allocator` protocol; `run_cycle` nets through it) |
