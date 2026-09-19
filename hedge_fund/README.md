@@ -56,7 +56,8 @@ poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT,NVDA
 # mandate's rebalance cadence, full result JSON (every CycleRecord) on stdout.
 poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
 
-# Tests
+# Tests (offline; live Financial Datasets smoke skips without FINANCIAL_DATASETS_API_KEY)
+# See ../CONTRIBUTING.md for the fork's first-test / first-backtest path.
 poetry run pytest hedge_fund/
 ```
 

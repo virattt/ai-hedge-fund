@@ -21,6 +21,23 @@ from hedge_fund.data.models import (
 logger = logging.getLogger(__name__)
 
 
+def _require_api_key(api_key: str | None) -> str:
+    """Return a usable Financial Datasets key, or fail with the variable to set.
+
+    Mocked tests pass ``api_key=...`` or stub the client. Live code paths
+    (CLI cycle/backtest, ``FDClient()`` with no argument) must not proceed
+    with an empty key — that looks like a 401 later instead of a setup error.
+    """
+    key = (api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY") or "").strip()
+    if not key:
+        raise ValueError(
+            "FINANCIAL_DATASETS_API_KEY is not set. Export it or add it to .env "
+            "for live data. Unit tests pass api_key=... or mock the client; "
+            "live Financial Datasets tests skip when this variable is absent."
+        )
+    return key
+
+
 class FDClientError(Exception):
     """An API request failed for infrastructure reasons (auth, rate limit,
     server error, network). Distinct from "no data exists" — that returns
@@ -50,7 +67,7 @@ class FDClient:
         api_key: str | None = None,
         timeout: float = 30.0,
     ) -> None:
-        self._api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY", "")
+        self._api_key = _require_api_key(api_key)
         self._timeout = timeout
         self._session = requests.Session()
         self._session.headers["X-API-Key"] = self._api_key

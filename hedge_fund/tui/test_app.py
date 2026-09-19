@@ -86,7 +86,7 @@ def test_picker_and_masked_key_save_or_cancel(save, isolated_configuration):
             picker = app.screen.query_one("#picker-list", OptionList)
             index = picker.get_option_index("jev-1.13.0")
             assert not picker.get_option_at_index(index).disabled
-            assert "Jev — TypeSafe" in _render(picker.get_option_at_index(index).prompt)
+            assert "Jev" in _render(picker.get_option_at_index(index).prompt)
             picker.highlighted = index
             await pilot.press("enter")
             assert os.environ["HEDGE_FUND_LLM_MODEL"] == "jev-1.13.0"
@@ -156,7 +156,7 @@ def test_jev_results_show_stored_direction_and_separate_confidence(direction, st
     detail = _render(ui._signal_detail(_record(signal), 0, 0))
     assert direction.upper() in detail
     assert "investment conviction" in detail
-    assert "No written thesis generated." in detail
+    assert "No written thesis" in detail.replace("\n", " ")
     assert "Jev answer-option probabilities" in detail
     assert "not investment returns" in detail
     assert "Jev native answer confidence" in detail

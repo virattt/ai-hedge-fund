@@ -77,15 +77,21 @@ A mandate is the desk — strategies, staff, risk, capital, cadence — and neve
 
 ## Development
 
+This fork lives at [bugman666/ai-hedge-fund](https://github.com/bugman666/ai-hedge-fund). See [CONTRIBUTING.md](CONTRIBUTING.md) for the first-test / first-backtest path.
+
 ```bash
-git clone https://github.com/virattt/ai-hedge-fund.git
+git clone https://github.com/bugman666/ai-hedge-fund.git
 cd ai-hedge-fund
 poetry install
+poetry run pytest hedge_fund   # offline: no API keys required
 poetry run aihf
-poetry run pytest hedge_fund
 ```
 
+Live Financial Datasets tests skip unless `FINANCIAL_DATASETS_API_KEY` is set.
+
 ## How to Contribute
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). In short:
 
 1. Fork the repository
 2. Create a feature branch

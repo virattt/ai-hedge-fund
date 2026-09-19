@@ -33,6 +33,13 @@ def client():
     c.close()
 
 
+def test_missing_api_key_raises(monkeypatch):
+    """Live construction names FINANCIAL_DATASETS_API_KEY instead of failing later."""
+    monkeypatch.delenv("FINANCIAL_DATASETS_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="FINANCIAL_DATASETS_API_KEY"):
+        FDClient()
+
+
 def _stub(client, responses):
     """Replace the session's request method; each call pops one response.
 
