@@ -43,6 +43,8 @@ The app asks for keys the first time it needs them and saves them to `~/.hedge-f
 
 Keys exported in your shell always win over the saved file.
 
+To point OpenAI-compatible models at a custom host (Groq, a local proxy, ...), set `OPENAI_BASE_URL` or the older `OPENAI_API_BASE` alias. Moonshot/Kimi already uses `MOONSHOT_BASE_URL`. Bound hung calls with `LLM_REQUEST_TIMEOUT` (seconds; default 60).
+
 ## How to Run
 
 ### Interactive app

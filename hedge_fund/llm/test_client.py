@@ -30,7 +30,14 @@ from hedge_fund.llm import (
     provider_for,
     SUPPORTED_PROVIDERS,
 )
-from hedge_fund.llm.client import _flatten, JevLLM
+from hedge_fund.llm.client import (
+    DEFAULT_TIMEOUT,
+    OPENAI_BASE_URL_VARS,
+    TIMEOUT_ENV_VAR,
+    _flatten,
+    JevLLM,
+    resolve_timeout,
+)
 from hedge_fund.llm.registry import PROVIDER_ENV_VARS
 from hedge_fund.llm.test_contract import _response
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, BuffettAgent, LLMAgent, MungerAgent
@@ -52,7 +59,9 @@ def keyed(monkeypatch):
     for env_var in PROVIDER_ENV_VARS.values():
         monkeypatch.setenv(env_var, "test-key-not-real")
     monkeypatch.delenv("HEDGE_FUND_LLM_MODEL", raising=False)
-    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+    for name in (*OPENAI_BASE_URL_VARS, TIMEOUT_ENV_VAR, "MOONSHOT_BASE_URL",
+                 "DEEPSEEK_BASE_URL", "DEEPSEEK_API_BASE", "XAI_BASE_URL", "XAI_API_BASE"):
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.mark.parametrize("provider", sorted(SUPPORTED_PROVIDERS))
@@ -88,6 +97,7 @@ def test_unlisted_model_falls_back_to_anthropic(keyed):
     code change first."""
     llm = make_llm("claude-something-unreleased")
     assert llm.model == "claude-something-unreleased"
+    assert type(llm._chat).__name__ == "ChatAnthropic"
 
 
 def test_kimi_accepts_moonshot_key(monkeypatch):
@@ -200,6 +210,141 @@ class TestFlatten:
 
     def test_none_becomes_empty(self):
         assert _flatten(None) == ""
+
+
+class _StatusError(Exception):
+    """Mimic provider HTTP errors without importing every SDK exception type."""
+
+    def __init__(self, status, message=""):
+        super().__init__(message)
+        self.status_code = status
+
+
+class TestTimeoutAndBaseUrl:
+    """Timeout and OpenAI-compatible base URL contract: wiring plus mocked failures.
+
+    Nothing here waits on a real socket. A dead endpoint is represented by a
+    timeout/connection error that would hang only if the client omitted a timeout
+    or swallowed the failure.
+    """
+
+    def test_resolve_timeout_prefers_argument_then_env_then_default(self, monkeypatch):
+        monkeypatch.delenv(TIMEOUT_ENV_VAR, raising=False)
+        assert resolve_timeout(None) == DEFAULT_TIMEOUT
+        assert resolve_timeout(12) == 12.0
+        monkeypatch.setenv(TIMEOUT_ENV_VAR, "8.5")
+        assert resolve_timeout(None) == 8.5
+        assert resolve_timeout(2) == 2.0
+
+    @pytest.mark.parametrize("raw", ["0", "-1", "nan", "inf"])
+    def test_resolve_timeout_rejects_non_positive_env(self, raw, monkeypatch):
+        monkeypatch.setenv(TIMEOUT_ENV_VAR, raw)
+        with pytest.raises(ValueError, match=TIMEOUT_ENV_VAR):
+            resolve_timeout(None)
+
+    def test_resolve_timeout_rejects_unparseable_env(self, monkeypatch):
+        monkeypatch.setenv(TIMEOUT_ENV_VAR, "nope")
+        with pytest.raises(ValueError, match=TIMEOUT_ENV_VAR):
+            resolve_timeout(None)
+
+    def test_blank_timeout_env_uses_default(self, monkeypatch):
+        monkeypatch.setenv(TIMEOUT_ENV_VAR, "  ")
+        assert resolve_timeout(None) == DEFAULT_TIMEOUT
+
+    def test_openai_timeout_and_base_url_land_on_the_chat_model(self, keyed, monkeypatch):
+        monkeypatch.setenv("OPENAI_BASE_URL", "https://example.invalid/v1")
+        llm = make_llm("gpt-5.6", timeout=3.25)
+        assert llm._timeout == 3.25
+        assert llm._chat.request_timeout == 3.25
+        assert llm._chat.openai_api_base == "https://example.invalid/v1"
+
+    def test_openai_base_url_wins_over_api_base_alias(self, keyed, monkeypatch):
+        monkeypatch.setenv("OPENAI_BASE_URL", "https://preferred.example/v1")
+        monkeypatch.setenv("OPENAI_API_BASE", "https://legacy.example/v1")
+        llm = make_llm("gpt-5.6")
+        assert llm._chat.openai_api_base == "https://preferred.example/v1"
+
+    def test_openai_api_base_alias_is_honored(self, keyed, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_BASE", "https://legacy.example/v1")
+        llm = make_llm("gpt-5.6")
+        assert llm._chat.openai_api_base == "https://legacy.example/v1"
+
+    def test_openai_omits_base_url_when_unset(self, keyed):
+        llm = make_llm("gpt-5.6")
+        assert llm._chat.openai_api_base is None
+
+    def test_timeout_env_used_when_make_llm_omits_timeout(self, keyed, monkeypatch):
+        monkeypatch.setenv(TIMEOUT_ENV_VAR, "8")
+        llm = make_llm("gpt-5.6")
+        assert llm._chat.request_timeout == 8.0
+        assert make_llm("gpt-5.6", timeout=2)._chat.request_timeout == 2.0
+
+    def test_unlisted_model_uses_openai_when_base_url_is_set(self, keyed, monkeypatch):
+        """Custom endpoints need the OpenAI wire format for unlisted ids
+        (Groq, local proxies). Without a base URL they still fall back to Anthropic."""
+        monkeypatch.setenv("OPENAI_BASE_URL", "https://api.groq.com/openai/v1")
+        llm = make_llm("llama-3.3-70b-versatile")
+        assert llm.model == "llama-3.3-70b-versatile"
+        assert type(llm._chat).__name__ == "ChatOpenAI"
+        assert llm._chat.openai_api_base == "https://api.groq.com/openai/v1"
+
+    def test_kimi_honors_moonshot_base_url(self, keyed, monkeypatch):
+        monkeypatch.setenv("MOONSHOT_BASE_URL", "https://api.moonshot.cn/v1")
+        llm = make_llm(_BY_PROVIDER["Kimi"])
+        assert llm._chat.openai_api_base == "https://api.moonshot.cn/v1"
+
+    def test_deepseek_and_xai_honor_their_base_url_aliases(self, keyed, monkeypatch):
+        monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://deepseek.example/v1")
+        monkeypatch.setenv("XAI_API_BASE", "https://xai.example/v1")
+        deepseek = make_llm(_BY_PROVIDER["DeepSeek"])
+        xai = make_llm(_BY_PROVIDER["xAI"])
+        assert deepseek._chat.api_base == "https://deepseek.example/v1"
+        assert xai._chat.xai_api_base == "https://xai.example/v1"
+
+    @pytest.mark.parametrize("provider", sorted(p for p in SUPPORTED_PROVIDERS if p != "TypeSafe"))
+    def test_every_chat_provider_receives_timeout(self, provider, keyed):
+        llm = make_llm(_BY_PROVIDER[provider], timeout=9)
+        chat = llm._chat
+        observed = getattr(chat, "request_timeout", None)
+        if observed is None:
+            observed = getattr(chat, "timeout", None)
+        if observed is None:
+            observed = getattr(chat, "default_request_timeout", None)
+        assert observed == 9
+
+    def test_dead_endpoint_fails_with_timeout_error_and_does_not_hang(self):
+        class DeadChat:
+            def invoke(self, messages):
+                raise TimeoutError("The read operation timed out")
+
+            def stream(self, messages):
+                raise TimeoutError("The read operation timed out")
+
+        with pytest.raises(LLMCallError, match="timed out") as caught:
+            ChatLLM("gpt-5.6", DeadChat(), timeout=0.05).complete("s", "u")
+        assert "timed out" in str(caught.value)
+        assert "sk-" not in str(caught.value)
+
+    def test_rejected_key_is_a_clear_error_without_leaking_secrets(self):
+        chat = Mock()
+        chat.invoke.side_effect = _StatusError(401, "Authorization: Bearer sk-secret")
+        with pytest.raises(LLMCallError, match="rejected the API key") as caught:
+            ChatLLM("gpt-5.6", chat).complete("s", "u")
+        assert "sk-secret" not in str(caught.value)
+
+    def test_rejected_model_is_a_clear_error(self):
+        chat = Mock()
+        chat.invoke.side_effect = Exception(
+            "Error code: 404 - {'error': {'message': 'The model `llama-3.3-70b-versatile` does not exist'}}"
+        )
+        with pytest.raises(LLMCallError, match="rejected model gpt-5.6"):
+            ChatLLM("gpt-5.6", chat).complete("s", "u")
+
+    def test_connection_error_is_clear(self):
+        chat = Mock()
+        chat.invoke.side_effect = requests.ConnectionError("failed to connect")
+        with pytest.raises(LLMCallError, match="connection error"):
+            ChatLLM("gpt-5.6", chat).complete("s", "u")
 
 
 # Jev native transport and shared-agent integration.
@@ -368,6 +513,17 @@ def test_empty_key_is_rejected(key, http):
 def test_timeout_is_bounded(timeout):
     with pytest.raises(ValueError, match="timeout"):
         JevLLM(API_KEY, timeout=timeout)
+
+
+def test_jev_dead_endpoint_uses_timeout_and_does_not_hang(http):
+    """A silent TypeSafe host must raise inside the request timeout, not block."""
+    _serve(http, requests.Timeout("dead endpoint"))
+    with pytest.raises(LLMCallError) as caught:
+        JevLLM(API_KEY, timeout=0.01).complete("s", "u")
+    assert caught.value.diagnostic_record["failure_category"] == "transport"
+    assert http[0].call_args.kwargs["timeout"] == 0.01
+    http[0].assert_called_once()
+    http[1].assert_not_called()
 
 
 @pytest.mark.parametrize("status", [429, 500, 502, 503, 504, 529])
