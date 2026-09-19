@@ -3,6 +3,7 @@
 import pytest
 
 from hedge_fund.brokers.sim import SimBroker
+from hedge_fund.data.client import FDClientError
 from hedge_fund.data.models import Price
 from hedge_fund.fund.spec import Fund, FundSpec
 from hedge_fund.models import Signal
@@ -15,17 +16,31 @@ from hedge_fund.pipeline.run_cycle import run_cycle
 # ---------------------------------------------------------------------------
 
 class FakeDataClient:
-    """Canned closes per ticker; a ticker absent from `closes` has no bars."""
+    """Canned closes per ticker; a ticker absent from `closes` has no bars.
 
-    def __init__(self, closes):
+    ``price_error`` / ``news_error`` simulate infra failures (must raise,
+    not look like empty data). ``news`` is the canned ``get_news`` payload.
+    """
+
+    def __init__(self, closes, news=None, price_error=None, news_error=None):
         self._closes = closes
+        self._news = news if news is not None else []
+        self._price_error = price_error
+        self._news_error = news_error
 
     def get_prices(self, ticker, start_date, end_date, **kwargs):
+        if self._price_error is not None:
+            raise self._price_error
         close = self._closes.get(ticker)
         if close is None:
             return []
         return [Price(open=close, close=close, high=close, low=close,
                       volume=1000, time=f"{end_date}T00:00:00Z")]
+
+    def get_news(self, ticker, end_date, start_date=None, limit=1000):
+        if self._news_error is not None:
+            raise self._news_error
+        return list(self._news)
 
 
 class FakeAnalyst:
@@ -251,3 +266,62 @@ def test_analyst_error_propagates():
     with pytest.raises(ConnectionError):
         run_cycle(fund, "2024-06-03", SimBroker(cash=100_000.0),
                   FakeDataClient(CLOSES), UNIVERSE)
+
+
+def test_price_infra_failure_fails_the_cycle():
+    """A data-client transport/auth error is not 'no close' / a skipped ticker."""
+    fund = Fund(_spec(), models={"solo": [FakeAnalyst("a", views={"AAPL": 1.0})]})
+    data = FakeDataClient(
+        CLOSES,
+        price_error=FDClientError("unauthorized", status_code=401, path="/prices/"),
+    )
+    with pytest.raises(FDClientError) as exc_info:
+        run_cycle(fund, "2024-06-03", SimBroker(cash=100_000.0), data, UNIVERSE)
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.path == "/prices/"
+
+
+class NewsAnalyst:
+    """Reads get_news: empty news → abstain; articles → a view.
+
+    Mirrors the documented news/sentiment contract: empty list is no
+    narrative input (a legitimate zero), not an infra failure.
+    """
+
+    name = "news"
+
+    def predict(self, ticker, date, data_client):
+        news = data_client.get_news(ticker, date)
+        if not news:
+            return Signal(
+                model_name=self.name, ticker=ticker, date=date, value=0.0,
+                metadata={"abstained": True, "abstain_reason": "no news"},
+            )
+        return Signal(model_name=self.name, ticker=ticker, date=date, value=0.5)
+
+
+def test_empty_news_is_no_narrative_not_a_failed_cycle():
+    """Genuine empty news may abstain; the cycle still completes."""
+    fund = Fund(_spec(), models={"solo": [NewsAnalyst()]})
+    record = run_cycle(
+        fund, "2024-06-03", SimBroker(cash=100_000.0),
+        FakeDataClient(CLOSES, news=[]), UNIVERSE,
+    )
+    signals = record.strategies[0].signals
+    assert signals
+    assert all(s.value == 0.0 and s.metadata.get("abstained") for s in signals)
+
+
+def test_news_infra_failure_fails_the_cycle():
+    """Auth/quota on get_news must not become a neutral Signal / empty cycle."""
+    fund = Fund(_spec(), models={"solo": [NewsAnalyst()]})
+    data = FakeDataClient(
+        CLOSES,
+        news_error=FDClientError(
+            "unauthorized", status_code=401, path="/news/",
+        ),
+    )
+    with pytest.raises(FDClientError) as exc_info:
+        run_cycle(fund, "2024-06-03", SimBroker(cash=100_000.0), data, UNIVERSE)
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.path == "/news/"

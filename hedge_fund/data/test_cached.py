@@ -1,6 +1,9 @@
 """CachedDataClient tests — counting fake, no network."""
 
+import pytest
+
 from hedge_fund.data.cached import CachedDataClient
+from hedge_fund.data.client import FDClientError
 from hedge_fund.data.models import CompanyFacts, Price
 
 
@@ -76,6 +79,41 @@ def test_item_rehydrates(tmp_path):
     assert inner.calls == 1
     assert isinstance(facts, CompanyFacts)
     assert facts.sector == "Tech"
+
+
+def test_wrapped_error_propagates_and_is_not_cached_as_empty(tmp_path):
+    """Infra failures must surface, not be memoized as an empty news list."""
+
+    class BoomNews:
+        calls = 0
+
+        def get_news(self, ticker, end_date, start_date=None, limit=1000):
+            self.calls += 1
+            raise FDClientError("unauthorized", status_code=401, path="/news/")
+
+    inner = BoomNews()
+    fd = CachedDataClient(inner, cache_dir=tmp_path)
+    with pytest.raises(FDClientError) as exc_info:
+        fd.get_news("AAPL", "2024-12-31")
+    assert exc_info.value.status_code == 401
+    with pytest.raises(FDClientError):
+        fd.get_news("AAPL", "2024-12-31")
+    assert inner.calls == 2
+
+
+def test_empty_news_is_cached_as_empty(tmp_path):
+    class EmptyNews:
+        calls = 0
+
+        def get_news(self, ticker, end_date, start_date=None, limit=1000):
+            self.calls += 1
+            return []
+
+    inner = EmptyNews()
+    fd = CachedDataClient(inner, cache_dir=tmp_path)
+    assert fd.get_news("AAPL", "2024-12-31") == []
+    assert fd.get_news("AAPL", "2024-12-31") == []
+    assert inner.calls == 1
 
 
 def test_scalar_cached(tmp_path):

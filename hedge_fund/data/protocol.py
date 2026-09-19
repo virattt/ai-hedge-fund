@@ -39,6 +39,13 @@ class DataClient(Protocol):
     must RAISE — a provider that silently returns empty on failure poisons
     backtests, because missing data is indistinguishable from "no signal".
 
+    News and sentiment: ``get_news`` returning ``[]`` means there were
+    genuinely no articles in the requested range. There is no separate
+    sentiment endpoint. If a caller derives sentiment from news, empty
+    news is "no narrative input" — not a zero / "no opinion" trade. An
+    infra failure on that fetch must raise so the cycle cannot treat it
+    as a neutral signal.
+
     get_financial_metrics must be point-in-time: return only data that was
     publicly filed by *end_date*, not data whose fiscal period ended by then.
     """

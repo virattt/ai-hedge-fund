@@ -102,6 +102,12 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
   period. No lookahead, ever.
 - **Fail loud.** Infrastructure failures raise; only genuine "no data" returns
   empty. A silent empty would poison a backtest as a fake "no signal."
+  Financial Datasets 401/403 name `FINANCIAL_DATASETS_API_KEY`; exhausted
+  429s tell you to wait or check quota. An empty `get_news` list means no
+  articles in range — not a failed fetch. There is no sentiment endpoint;
+  if sentiment is derived from news, empty news is no narrative input, not
+  a zero / "no opinion" trade. A cycle must not convert an infra failure
+  into a neutral `Signal`.
 - **The LLM never touches the trade.** Agents form *views* and *narrate*;
   deterministic code sizes and places orders; risk limits are hard gates.
 - **One interface for every analyst.** Implement `AlphaModel.predict(ticker,

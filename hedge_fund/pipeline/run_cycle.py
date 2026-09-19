@@ -24,6 +24,10 @@ Notable behavior, chosen deliberately:
   analysts never called): unlisted/delisted names are normal in history.
   A HELD ticker with no price raises — a fund that cannot price its own
   book has an infrastructure problem, and its NAV would be a lie.
+- Data-client infrastructure failures (``FDClientError`` and similar)
+  propagate. They are not rewritten as skipped tickers or a neutral
+  ``Signal``. Empty news is genuine no-articles; a failed news fetch is
+  not.
 """
 
 from __future__ import annotations

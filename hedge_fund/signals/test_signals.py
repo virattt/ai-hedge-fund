@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import pytest
+
+from hedge_fund.data.client import FDClientError
 from hedge_fund.data.models import EarningsData, EarningsRecord
 from hedge_fund.signals import PEADModel, QuantModel
 from hedge_fund.signals.base import AlphaModel
@@ -15,6 +18,8 @@ class MockFDClient:
         self._earnings = earnings or []
 
     def get_earnings_history(self, ticker, limit=12):
+        if isinstance(self._earnings, Exception):
+            raise self._earnings
         return self._earnings
 
 
@@ -71,6 +76,13 @@ class TestPEADPredict:
         fd = MockFDClient([])
         sig = PEADModel().predict("TEST", "2025-08-01", fd)
         assert sig.value == 0.0
+
+    def test_earnings_infra_failure_is_not_neutral(self):
+        """Empty history is no-view; a data-client infra error must raise."""
+        fd = MockFDClient(FDClientError("API down", status_code=500, path="/earnings/"))
+        with pytest.raises(FDClientError) as exc_info:
+            PEADModel().predict("TEST", "2025-08-01", fd)
+        assert exc_info.value.status_code == 500
 
     def test_stale_event_is_neutral(self):
         # Event filed 30 days before the query date — outside the freshness window

@@ -50,6 +50,49 @@ class FDClientError(Exception):
         self.path = path
 
 
+def _http_error(
+    method: str,
+    path: str,
+    status_code: int,
+    detail: str = "",
+    *,
+    retries: int | None = None,
+) -> FDClientError:
+    """Build an FDClientError with an actionable hint for key/quota failures.
+
+    401/403 tell the caller to check FINANCIAL_DATASETS_API_KEY.
+    Exhausted 429s tell the caller to wait or inspect quota.
+    Status code and path stay on the exception for tests and callers.
+    """
+    excerpt = (detail or "").strip()
+    if status_code in (401, 403):
+        message = f"{method} {path} returned {status_code}"
+        if excerpt:
+            message += f": {excerpt}"
+        message += (
+            ". Check FINANCIAL_DATASETS_API_KEY (export it or add it to .env). "
+            "This is an authentication failure, not missing data."
+        )
+    elif status_code == 429:
+        if retries is not None:
+            message = (
+                f"{method} {path} rate limited (429) after {retries} retries"
+            )
+        else:
+            message = f"{method} {path} returned 429"
+        if excerpt:
+            message += f": {excerpt}"
+        message += (
+            ". Wait and retry, or check your Financial Datasets plan/quota. "
+            "A 429 after retries is an infrastructure failure, not missing data."
+        )
+    else:
+        message = f"{method} {path} returned {status_code}"
+        if excerpt:
+            message += f": {excerpt}"
+    return FDClientError(message, status_code=status_code, path=path)
+
+
 class FDClient:
     """Financial Datasets API client.
 
@@ -147,7 +190,15 @@ class FDClient:
         start_date: str | None = None,
         limit: int = 1000,
     ) -> list[CompanyNews]:
-        """Fetch company news."""
+        """Fetch company news published on or before *end_date*.
+
+        An empty list means there were genuinely no articles in range.
+        Auth, quota, and transport failures raise ``FDClientError`` — they
+        are not an empty news feed. There is no separate sentiment
+        endpoint; callers that derive sentiment from news must treat
+        empty news as "no narrative input", not a zero signal from a
+        failed fetch.
+        """
         params: dict = {"ticker": ticker, "end_date": end_date, "limit": limit}
         if start_date is not None:
             params["start_date"] = start_date
@@ -256,6 +307,10 @@ class FDClient:
         if resp is None:
             return None
         body = resp.json()
+        # A 200 with a missing key, null, empty list, or a bare JSON list
+        # is genuine no-data. Transport/auth failures already raised.
+        if not isinstance(body, dict):
+            return body if isinstance(body, list) else None
         rows = body.get(response_key)
         next_page_url = body.get("next_page_url")
         while next_page_url and isinstance(rows, list):
@@ -307,14 +362,13 @@ class FDClient:
                 return None
 
             if resp.status_code >= 400:
-                raise FDClientError(
-                    f"{method} {path} returned {resp.status_code}: {resp.text[:200]}",
-                    status_code=resp.status_code, path=path,
+                raise _http_error(
+                    method, path, resp.status_code, resp.text[:200],
+                    retries=len(self._RETRY_DELAYS) if resp.status_code == 429 else None,
                 )
 
             return resp
 
-        raise FDClientError(
-            f"{method} {path} rate limited (429) after {len(self._RETRY_DELAYS)} retries",
-            status_code=429, path=path,
+        raise _http_error(
+            method, path, 429, retries=len(self._RETRY_DELAYS),
         )
