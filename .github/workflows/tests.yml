@@ -21,7 +21,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Nothing past this step runs a git command, so the job has no use for
+      # the token checkout would otherwise leave in the local git config —
+      # where the pull request's own code, which the steps below execute,
+      # could read it.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
