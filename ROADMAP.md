@@ -35,7 +35,7 @@ it in backtest, paper, or live mode (see [VISION.md](./VISION.md)).
 | Persistent ledger — positions, every decision + thesis, orders, fills, NAV history | 🚧 (live-clock paper runs and the scheduler write a `CycleRecord` and the next tick seeds the book from the newest receipt so NAV carries; backtests still start from mandate capital on `SimBroker`) |
 | LLM provider layer — one client factory (`make_llm`) routed by the model registry: Anthropic · OpenAI · DeepSeek · Google · xAI · Kimi · TypeSafe · Ollama | ✅ |
 | Point-in-time data correctness — as-of / filing-date queries, no lookahead | 🚧 |
-| Validation gate — CPCV, probability of backtest overfitting (PBO) | ⬜ |
+| Validation gate — CPCV, probability of backtest overfitting (PBO) | 🚧 (scaffold: CPCV splits + PBO hook on a saved backtest; not the research lab, not a trading green-light) |
 
 ## Analysts (alpha models) — the main contribution surface
 

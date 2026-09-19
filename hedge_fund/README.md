@@ -89,6 +89,11 @@ poetry run python -m hedge_fund.daemon ~/.hedge-fund/mandates/example.yaml --tic
 poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT \
   --heartbeat --events
 
+# Validation-gate scaffold on a saved backtest JSON (offline; educational only —
+# not a trading green-light). Accepts FundBacktestResult (nav), BacktestResult
+# (equity_curve), or a bare {"returns": [...]} object.
+poetry run python -m hedge_fund.validation path/to/backtest.json
+
 # Tests (offline; live Financial Datasets smoke skips without FINANCIAL_DATASETS_API_KEY)
 # See ../CONTRIBUTING.md for the fork's first-test / first-backtest path.
 poetry run pytest hedge_fund/
@@ -128,7 +133,7 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | `observability/` | Cycle events (log + optional JSONL), heartbeat file, optional failure webhook — wraps `run_cycle`, does not change it | ✅ |
 | `backtesting/` | `backtest_fund` — the whole fund over history on `run_cycle` — plus the per-model engine | ✅ |
 | `event_study/` | Market-model abnormal returns (CARs) | ✅ |
-| `validation/` | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO) | ⬜ |
+| `validation/` | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO) — scaffold only | ◐ |
 | `tui/` | The interactive app (Textual): fund builder + live backtest board | ✅ |
 
 ✅ built · ◐ partial · ⬜ planned
@@ -161,6 +166,25 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 - `Signal` — an alpha model's output: `value` in `[-1, +1]`, plus `reasoning`,
   `components`, and `metadata`.
 - `QuantSignals` — all signals for a ticker on a date.
+
+## Validation gate (scaffold)
+
+`hedge_fund.validation` is a **research hook**, not a go-live check. It takes a
+return series, an equity/NAV curve, or a saved backtest JSON and returns a
+`ValidationReport` with combinatorial purged CV (CPCV) fold summaries and a
+probability-of-backtest-overfitting (PBO) placeholder.
+
+> **Educational use only.** Not a trading green-light and not investment advice.
+> A report does not authorize live capital, auto-promotion, or real trading.
+> Auto-promotion through this gate stays human-approved and is not built yet.
+
+```bash
+poetry run python -m hedge_fund.validation path/to/backtest.json
+```
+
+`run_validation_gate(...)` is the library entry. CPCV purge/embargo are numbers
+of bars dropped from the train set before/after each test block. Single-series
+PBO is a documented heuristic; the CSCV rank estimator needs multiple trials.
 
 ## Contributing
 
