@@ -15,7 +15,7 @@ from hedge_fund.llm import PROVIDER_ENV_VARS
 from hedge_fund.llm.contract import normalize_jev_response
 from hedge_fund.llm.test_contract import _response
 from hedge_fund.models import Signal
-from hedge_fund.pipeline.models import CycleRecord
+from hedge_fund.pipeline.models import CycleRecord, DroppedOutput
 from hedge_fund.tui import app as ui
 from hedge_fund.tui import keys
 
@@ -203,6 +203,20 @@ def test_abstention_overrides_stored_direction():
     text = _render(ui._signal_detail(_record(signal), 0, 0))
     assert "ABSTAIN" in text and "HTTP 401" in text
     assert "Jev native answer confidence" not in text
+
+
+def test_dropped_views_appear_in_the_report():
+    record = _record(_signal()).model_copy(update={"dropped": [
+        DroppedOutput(ticker="TEST", model="buffett", strategy="value",
+                      reason="insufficient data: only 2 filed periods"),
+    ]})
+    nav = ui._report_nav(record)
+    assert any(option.id == "sec:dropped" for option in nav)
+    text = _render(ui._dropped_detail(record))
+    assert "DROPPED VIEWS" in text
+    assert "TEST" in text
+    assert "buffett" in text
+    assert "insufficient data" in text
 
 
 def test_chat_rendering_and_quantitative_fallback_are_preserved():

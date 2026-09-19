@@ -1,14 +1,18 @@
 """run_cycle end-to-end tests — fake data client + fake analysts + real SimBroker."""
 
+import json
+
 import pytest
 
 from hedge_fund.brokers.sim import SimBroker
 from hedge_fund.data.client import FDClientError
-from hedge_fund.data.models import Price
+from hedge_fund.data.models import FinancialMetrics, Price
 from hedge_fund.fund.spec import Fund, FundSpec
+from hedge_fund.llm import PromptCache
 from hedge_fund.models import Signal
 from hedge_fund.pipeline.models import CycleRecord
 from hedge_fund.pipeline.run_cycle import run_cycle
+from hedge_fund.signals import BuffettAgent, MungerAgent
 
 
 # ---------------------------------------------------------------------------
@@ -310,6 +314,9 @@ def test_empty_news_is_no_narrative_not_a_failed_cycle():
     signals = record.strategies[0].signals
     assert signals
     assert all(s.value == 0.0 and s.metadata.get("abstained") for s in signals)
+    # Abstentions are also listed on the record — not a silent omit.
+    assert {d.ticker for d in record.dropped} == set(UNIVERSE)
+    assert all(d.reason == "no news" for d in record.dropped)
 
 
 def test_news_infra_failure_fails_the_cycle():
@@ -325,3 +332,151 @@ def test_news_infra_failure_fails_the_cycle():
         run_cycle(fund, "2024-06-03", SimBroker(cash=100_000.0), data, UNIVERSE)
     assert exc_info.value.status_code == 401
     assert exc_info.value.path == "/news/"
+
+
+# ---------------------------------------------------------------------------
+# Shared PIT snapshot + dropped views
+# ---------------------------------------------------------------------------
+
+BULLISH = json.dumps({
+    "signal": "bullish", "confidence": 80, "reasoning": "Wonderful business.",
+})
+
+
+class RecordingLLM:
+    """Canned LLM that keeps every user prompt it was shown."""
+
+    model = "fake-model"
+
+    def __init__(self, response=BULLISH):
+        self._response = response
+        self.users: list[str] = []
+
+    def complete(self, system, user):
+        self.users.append(user)
+        return self._response
+
+
+class DriftCycleClient:
+    """Prices are stable; each fundamentals fetch mutates D/E and ROE."""
+
+    def __init__(self, close=200.0):
+        self._close = close
+        self.metrics_calls = 0
+
+    def get_prices(self, ticker, start_date, end_date, **kwargs):
+        return [Price(open=self._close, close=self._close, high=self._close,
+                      low=self._close, volume=1000,
+                      time=f"{end_date}T00:00:00Z")]
+
+    def get_financial_metrics(self, ticker, end_date, period="ttm", limit=10):
+        self.metrics_calls += 1
+        quarters = [
+            "2024-12-31", "2024-09-30", "2024-06-30", "2024-03-31",
+            "2023-12-31", "2023-09-30", "2023-06-30", "2023-03-31",
+        ]
+        rows = []
+        for i, q in enumerate(quarters):
+            de = 0.5 * self.metrics_calls if i == 0 else 0.5
+            roe = 0.20 * self.metrics_calls if i == 0 else 0.20
+            rows.append(FinancialMetrics(
+                ticker=ticker, report_period=q, period="ttm", filing_date=q,
+                return_on_equity=roe, debt_to_equity=de,
+                gross_margin=0.40, book_value_per_share=10.0, market_cap=1e9,
+            ))
+        return rows
+
+    def get_company_facts(self, ticker):
+        return None
+
+
+def test_same_ticker_same_cycle_identical_fundamentals(tmp_path):
+    """Two personas, one name, one tick — identical D/E, ROE, prompt, hash.
+
+    The data client drifts on every fetch. If each persona built its own
+    snapshot they would disagree; the cycle cache freezes the first fetch.
+    """
+    buffett_llm = RecordingLLM()
+    munger_llm = RecordingLLM()
+    data = DriftCycleClient()
+    fund = Fund(_spec(strategies=[
+        {"name": "value", "models": [{"name": "buffett"}]},
+        {"name": "quality", "models": [{"name": "munger"}]},
+    ]), models={
+        "value": [BuffettAgent(llm=buffett_llm, cache=PromptCache(tmp_path / "b"))],
+        "quality": [MungerAgent(llm=munger_llm, cache=PromptCache(tmp_path / "m"))],
+    })
+
+    record = run_cycle(fund, "2025-01-15", SimBroker(cash=100_000.0),
+                       data, ["TEST"])
+
+    hashes = [s.metadata["snapshot_hash"]
+              for sr in record.strategies for s in sr.signals]
+    assert len(hashes) == 2
+    assert hashes[0] == hashes[1]
+    assert buffett_llm.users == munger_llm.users
+    assert len(buffett_llm.users) == 1
+    prompt = buffett_llm.users[0]
+    # First-fetch D/E 0.50 and ROE 0.20 — not the drifted 1.00 / 0.40.
+    assert "| 0.50 |" in prompt  # latest D/E column
+    assert "0.20" in prompt      # ROE avg / latest ROE
+    assert "| 1.00 |" not in prompt
+    assert data.metrics_calls == 1
+    assert record.dropped == []
+
+
+def test_abstained_views_are_listed_on_the_record():
+    """A view blend ignores must appear on CycleRecord.dropped."""
+    fund = Fund(_spec(), models={
+        "solo": [FakeAnalyst("a", abstain=True)],
+    })
+    record = run_cycle(fund, "2024-06-03", SimBroker(cash=100_000.0),
+                       FakeDataClient(CLOSES), UNIVERSE)
+
+    assert {d.ticker for d in record.dropped} == set(UNIVERSE)
+    assert all(d.model == "a" for d in record.dropped)
+    assert all(d.strategy == "solo" for d in record.dropped)
+    assert all(d.reason == "abstained" for d in record.dropped)
+    # The view is still on the sleeve — dropped is the explicit exclude list.
+    assert all(s.metadata.get("abstained") is True
+               for sr in record.strategies for s in sr.signals)
+
+
+def test_voting_views_are_not_dropped():
+    fund = Fund(_spec(), models={
+        "solo": [FakeAnalyst("a", views={"AAPL": 1.0})],
+    })
+    record = run_cycle(fund, "2024-06-03", SimBroker(cash=100_000.0),
+                       FakeDataClient(CLOSES), UNIVERSE)
+    assert record.dropped == []
+
+
+def test_insufficient_history_is_dropped_with_reason(tmp_path):
+    """Short history → abstain, and CycleRecord names the drop."""
+    class ThinClient(DriftCycleClient):
+        def get_financial_metrics(self, ticker, end_date, period="ttm", limit=10):
+            self.metrics_calls += 1
+            return [
+                FinancialMetrics(
+                    ticker=ticker, report_period="2024-12-31", period="ttm",
+                    filing_date="2024-12-31", return_on_equity=0.2,
+                    debt_to_equity=0.5, market_cap=1e9,
+                ),
+            ]
+
+    fund = Fund(_spec(strategies=[
+        {"name": "value", "models": [{"name": "buffett"}]},
+    ]), models={
+        "value": [BuffettAgent(llm=RecordingLLM(),
+                               cache=PromptCache(tmp_path / "b"))],
+    })
+    record = run_cycle(fund, "2025-01-15", SimBroker(cash=100_000.0),
+                       ThinClient(), ["TEST"])
+
+    assert len(record.dropped) == 1
+    drop = record.dropped[0]
+    assert drop.ticker == "TEST"
+    assert drop.model == "buffett"
+    assert drop.strategy == "value"
+    assert "insufficient data" in drop.reason
+    assert record.strategies[0].signals[0].metadata["abstained"] is True

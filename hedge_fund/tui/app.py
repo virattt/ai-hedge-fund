@@ -945,6 +945,10 @@ def _report_nav(record: CycleRecord) -> list[Option]:
     if record.clamps:
         options.append(Option(
             Text(f" Risk limits ({len(record.clamps)})", style=TEXT), id="sec:risk"))
+    if record.dropped:
+        options.append(Option(
+            Text(f" Dropped views ({len(record.dropped)})", style=TEXT),
+            id="sec:dropped"))
     options.append(Option(
         Text(f" Orders ({len(record.orders)})", style=TEXT), id="sec:orders"))
     options.append(Option(Text(" Portfolio", style=TEXT), id="sec:portfolio"))
@@ -998,6 +1002,23 @@ def _jev_details(metadata: dict) -> Text:
             ("bearish_strength", "Bearish strength"),
         )), style=TEXT)
     return details
+
+
+def _dropped_detail(record: CycleRecord) -> Group:
+    """Views that were produced but excluded from the blended book."""
+    table = Table(box=box.SQUARE, header_style="bold", border_style="#1f2b25")
+    table.add_column("Ticker", style=f"bold {CYAN}")
+    table.add_column("Analyst")
+    table.add_column("Strategy")
+    table.add_column("Reason", style="dim")
+    for item in record.dropped:
+        table.add_row(item.ticker, item.model, item.strategy, item.reason)
+    return Group(
+        Text.assemble(("DROPPED VIEWS  ", f"bold {BRIGHT}"),
+                      ("produced but excluded from the book", MUTED)),
+        Text(""),
+        table,
+    )
 
 
 def _risk_detail(record: CycleRecord) -> Group:
@@ -1256,6 +1277,8 @@ class RunScreen(Screen):
             detail.update(_signal_detail(self._record, int(si), int(sj)))
         elif oid == "sec:risk":
             detail.update(_risk_detail(self._record))
+        elif oid == "sec:dropped":
+            detail.update(_dropped_detail(self._record))
         elif oid == "sec:orders":
             detail.update(_orders_detail(self._record))
         elif oid == "sec:portfolio":

@@ -1,25 +1,35 @@
 """Point-in-time fundamentals snapshot — the shared input for LLM analysts.
 
-A `FundamentalsSnapshot` is everything an investor agent is allowed to know
+A `FundamentalsSnapshot` is everything an investor persona is allowed to know
 about a company as of a given date: a history of financial metrics (each row
 provably public by `as_of` — the data layer filters on filing_date, not
 report_period) plus a few derived aggregates computed here in Python so the
 LLM reasons over facts instead of re-deriving arithmetic.
 
 The snapshot is pure data: build it once, hash it, feed it to any persona.
-`content_hash` is the cache key for LLM calls — an agent only re-reasons
+`content_hash` is the cache key for LLM calls — a persona only re-reasons
 when a new filing changes its snapshot. Both the hash and `render()` exclude
 `as_of`: two dates between filings see identical data, and identical data
 must produce an identical prompt (a cache hit), not two paid LLM calls.
+
+A cycle owns one `SnapshotCache`. The first request for (ticker, as_of)
+builds the snapshot; every later request in that cycle returns the same
+object. Live feeds can change mid-run; the cache is what keeps D/E, ROE,
+and the rest identical across every analyst on the same name.
 """
 
 from __future__ import annotations
 
 import hashlib
+from contextvars import ContextVar
 
 from pydantic import BaseModel
 
 from hedge_fund.data.protocol import DataClient
+
+_active_cache: ContextVar[SnapshotCache | None] = ContextVar(
+    "hedge_fund_snapshot_cache", default=None,
+)
 
 # An agent can't say anything defensible about a company with less history
 # than this (one year of ttm rows).
@@ -115,6 +125,57 @@ class FundamentalsSnapshot(BaseModel):
         return "\n".join(lines)
 
 
+class SnapshotCache:
+    """One FundamentalsSnapshot per (ticker, as_of) for the life of a cycle.
+
+    The first `get` builds via the data client; later `get`s return that
+    same object. Failures (InsufficientData and data-layer errors) are
+    memoized too — the cycle saw one truth, even when that truth is
+    "not enough history" or "the feed died".
+    """
+
+    def __init__(self) -> None:
+        self._hits: dict[tuple[str, str, int], FundamentalsSnapshot] = {}
+        self._errors: dict[tuple[str, str, int], BaseException] = {}
+        self._token = None
+
+    def __enter__(self) -> SnapshotCache:
+        self._token = _active_cache.set(self)
+        return self
+
+    def __exit__(self, *exc) -> None:
+        if self._token is not None:
+            _active_cache.reset(self._token)
+            self._token = None
+
+    @classmethod
+    def active(cls) -> SnapshotCache | None:
+        """The cache bound to the current cycle, or None outside a cycle."""
+        return _active_cache.get()
+
+    def get(
+        self,
+        ticker: str,
+        as_of: str,
+        data_client: DataClient,
+        periods: int = 20,
+    ) -> FundamentalsSnapshot:
+        """Return the cycle's snapshot for (ticker, as_of), building once."""
+        key = (ticker, as_of, periods)
+        if key in self._errors:
+            raise self._errors[key]
+        hit = self._hits.get(key)
+        if hit is not None:
+            return hit
+        try:
+            snap = _compute_snapshot(ticker, as_of, data_client, periods)
+        except Exception as exc:
+            self._errors[key] = exc
+            raise
+        self._hits[key] = snap
+        return snap
+
+
 def build_snapshot(
     ticker: str,
     as_of: str,
@@ -123,10 +184,27 @@ def build_snapshot(
 ) -> FundamentalsSnapshot:
     """Build the point-in-time snapshot for (ticker, as_of).
 
+    When a `SnapshotCache` is active (a cycle owns one), this returns the
+    cached snapshot for the key — every analyst in the tick sees the same
+    numbers. Outside a cycle it computes fresh.
+
     Raises InsufficientData if fewer than MIN_PERIODS filed periods exist.
     Data-layer failures propagate (fail loud) — a broken snapshot must never
     silently become a neutral view.
     """
+    cache = SnapshotCache.active()
+    if cache is not None:
+        return cache.get(ticker, as_of, data_client, periods)
+    return _compute_snapshot(ticker, as_of, data_client, periods)
+
+
+def _compute_snapshot(
+    ticker: str,
+    as_of: str,
+    data_client: DataClient,
+    periods: int,
+) -> FundamentalsSnapshot:
+    """Uncached build — the cache and `build_snapshot` both end here."""
     metrics = data_client.get_financial_metrics(
         ticker, as_of, period="ttm", limit=periods,
     )

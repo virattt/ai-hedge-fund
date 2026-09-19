@@ -1,16 +1,17 @@
 """Pipeline records — the serialized truth of every cycle.
 
 A CycleRecord captures one tick of the fund end to end: what the analysts
-saw, what they said, how views became weights, what risk clamped, what was
-ordered and filled, and what the book looks like after. The ledger persists
-these and, on the next live-clock run, seeds SimBroker from the newest
-receipt so cash, positions, and NAV carry forward. `fund why AAPL` will
-answer from them alone.
+saw, what they said, which views were dropped before blending, how views
+became weights, what risk clamped, what was ordered and filled, and what
+the book looks like after. The ledger persists these and, on the next
+live-clock run, seeds SimBroker from the newest receipt so cash,
+positions, and NAV carry forward. `fund why AAPL` will answer from them
+alone.
 """
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from hedge_fund.brokers.models import Fill, Order
 from hedge_fund.fund.spec import FundSpec
@@ -22,6 +23,20 @@ class TickerSkip(BaseModel):
     """A requested name that could not be traded this cycle, and why."""
 
     ticker: str
+    reason: str
+
+
+class DroppedOutput(BaseModel):
+    """An analyst view that was produced but excluded from the book.
+
+    Abstained views (insufficient history, an LLM call/parse failure) stay
+    on `StrategyRecord.signals` so the thesis is still auditable, and are
+    listed here so the exclusion is explicit — never a silent omit.
+    """
+
+    ticker: str
+    model: str
+    strategy: str
     reason: str
 
 
@@ -46,6 +61,7 @@ class CycleRecord(BaseModel):
     universe: list[str]                 # the tickers this cycle was asked to trade
     marks: dict[str, float]             # ticker -> close used for sizing and NAV
     skipped: list[TickerSkip]
+    dropped: list[DroppedOutput] = Field(default_factory=list)
     strategies: list[StrategyRecord]    # every sleeve, incl. each thesis
     target_weights: dict[str, float]    # the NETTED book, pre-risk
     clamps: list[ClampEvent]

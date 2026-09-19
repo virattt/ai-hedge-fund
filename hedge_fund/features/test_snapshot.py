@@ -3,7 +3,7 @@
 import pytest
 
 from hedge_fund.data.models import CompanyFacts, FinancialMetrics
-from hedge_fund.features.snapshot import InsufficientData, build_snapshot
+from hedge_fund.features.snapshot import InsufficientData, SnapshotCache, build_snapshot
 
 
 class MockDataClient:
@@ -120,3 +120,85 @@ def test_render_contains_the_facts():
     assert "2025-01-15" not in text  # as_of must never leak into the prompt
     assert "2024-12-31" in text
     assert "publicly filed" in text
+
+
+# ---------------------------------------------------------------------------
+# Cycle-scoped cache — one snapshot per (ticker, as_of)
+# ---------------------------------------------------------------------------
+
+class DriftClient(MockDataClient):
+    """Each metrics fetch mutates D/E and ROE — a live feed mid-cycle."""
+
+    def __init__(self, facts=None):
+        super().__init__(metrics=_history(), facts=facts)
+        self._n = 0
+
+    def get_financial_metrics(self, ticker, end_date, period="ttm", limit=10):
+        self._n += 1
+        metrics = _history()
+        metrics[0] = _metric(
+            "2024-12-31",
+            debt_to_equity=0.5 * self._n,
+            return_on_equity=0.10 * self._n,
+        )
+        self.metrics_calls.append(
+            {"ticker": ticker, "end_date": end_date, "period": period, "limit": limit}
+        )
+        return metrics
+
+
+def test_uncached_builds_see_feed_drift():
+    """Without a cache, two builds of the same name can disagree — the bug."""
+    client = DriftClient()
+    first = build_snapshot("TEST", "2025-01-15", client)
+    second = build_snapshot("TEST", "2025-01-15", client)
+    assert first.debt_to_equity_latest != second.debt_to_equity_latest
+    assert first.periods[0].return_on_equity != second.periods[0].return_on_equity
+    assert first.content_hash != second.content_hash
+
+
+def test_cache_freezes_metrics_across_gets():
+    """Same ticker, same as_of → the same object, first-fetch numbers."""
+    client = DriftClient()
+    cache = SnapshotCache()
+    first = cache.get("TEST", "2025-01-15", client)
+    second = cache.get("TEST", "2025-01-15", client)
+
+    assert first is second
+    assert first.debt_to_equity_latest == pytest.approx(0.5)
+    assert first.periods[0].return_on_equity == pytest.approx(0.10)
+    assert first.content_hash == second.content_hash
+    assert first.render() == second.render()
+    assert len(client.metrics_calls) == 1
+
+
+def test_active_cache_makes_build_snapshot_reuse():
+    """build_snapshot joins the cycle cache when one is bound."""
+    client = DriftClient()
+    with SnapshotCache():
+        first = build_snapshot("TEST", "2025-01-15", client)
+        second = build_snapshot("TEST", "2025-01-15", client)
+    assert first is second
+    assert first.debt_to_equity_latest == pytest.approx(0.5)
+    assert len(client.metrics_calls) == 1
+
+
+def test_cache_is_keyed_by_ticker():
+    client = DriftClient()
+    cache = SnapshotCache()
+    aapl = cache.get("AAPL", "2025-01-15", client)
+    msft = cache.get("MSFT", "2025-01-15", client)
+    assert aapl is not msft
+    assert aapl.ticker == "AAPL"
+    assert msft.ticker == "MSFT"
+    assert len(client.metrics_calls) == 2
+
+
+def test_cache_memoizes_insufficient_data():
+    client = MockDataClient(metrics=_history(2))
+    cache = SnapshotCache()
+    with pytest.raises(InsufficientData):
+        cache.get("TEST", "2025-01-15", client)
+    with pytest.raises(InsufficientData):
+        cache.get("TEST", "2025-01-15", client)
+    assert len(client.metrics_calls) == 1

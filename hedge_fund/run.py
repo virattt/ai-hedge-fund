@@ -177,6 +177,12 @@ def main() -> None:
     )
     if record.skipped:
         console.print(f"[dim]skipped: {', '.join(s.ticker for s in record.skipped)}[/]")
+    if record.dropped:
+        console.print(
+            "[dim]dropped: "
+            + ", ".join(f"{d.model}@{d.ticker} ({d.reason})" for d in record.dropped)
+            + "[/]"
+        )
     console.print(f"[dim]saved {receipt}[/]")
 
 

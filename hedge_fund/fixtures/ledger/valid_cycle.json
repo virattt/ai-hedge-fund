@@ -23,6 +23,7 @@
     "MSFT": 400.0
   },
   "skipped": [],
+  "dropped": [],
   "strategies": [
     {
       "name": "solo",
