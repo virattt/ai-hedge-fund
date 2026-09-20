@@ -1,6 +1,40 @@
 # Research dossier
 
-Six independent agent reports, run 2026-09-19/20, plus the synthesis across them.
+---
+
+## ⭐ THE SINGLE MOST IMPORTANT FINDING IN THIS DOSSIER
+
+> ### **FOMO sponsors gas on every user transaction.**
+>
+> ### **The gas-sponsor address is `AgmLJBMDCqWynYnQiPCuj9ewsNNsBJXyzoUhD9LJzN51`** — published in DeFiLlama's open-source adapter, **confirmed live on Solana mainnet RPC, 2026-09-20.**
+>
+> ### **Therefore: every FOMO Solana trade is enumerable on-chain.**
+>
+> **The entire flow layer. Free. Complete. Historical. Without touching FOMO's own
+> website, API, or profiles at all** — so none of FOMO's robots.txt or ToS
+> restrictions apply to it, because it is not FOMO's data. It is Solana's.
+>
+> Alongside it, the second one: **Hyperliquid publishes per-builder fill dumps** at
+> `stats-data.hyperliquid.xyz/Mainnet/builder_fills/{addr}/{YYYYMMDD}.csv.lz4` —
+> downloaded and decoded, schema carries per-user fills with `closed_pnl` and
+> `builder_fee`. Free, historical, **for any builder**. The dossier elsewhere calls
+> routed order flow a private data asset; it is already public for everyone who has
+> one.
+>
+> **Neither of these needs permission, a key, a vendor, or a subscription. They need
+> a query.**
+
+Also settled, and stated here because an earlier draft of this file got it wrong:
+**following pseudonymous wallets is not a GDPR problem.** Watching on-chain
+addresses, clustering their behaviour, ranking them, and trading their flow is
+public blockchain data and is what every on-chain analytics product does. The
+narrow exposure is *deriving a natural person's real-world identity from a wallet
+they did not themselves publish* — a much smaller activity, and one the recommended
+build does not perform. Report 08 sets the line properly.
+
+---
+
+Eight independent agent reports, run 2026-09-19/20, plus the synthesis across them.
 Each report was written by an agent that did not see the others. Where they agree,
 they agree *independently* — that is the only reason the agreements below are worth
 anything.
@@ -14,6 +48,7 @@ anything.
 | [05](05-architecture-review-b.md) | Architecture review B | Internal audit of this repo's *implementation* |
 | [06](06-architecture-review-c.md) | Architecture review C | Outside view: how does this compare to standard practice? |
 | [07](07-fomo-identity-graph.md) | FOMO identity graph | Can FOMO's social flow be resolved to named wallets, and is it worth it? |
+| [08](08-free-resolution-sources.md) | Free resolution sources *(in progress)* | Second pass: the free resolver stack under the paid vendors, and where the legal line actually sits |
 
 Numbers in the reports were pulled live on the dates stated in each. Nothing here is
 illustrative or simulated; where an agent could not verify a claim it says so.
@@ -260,13 +295,29 @@ data:**
   everyone who has one.
 
 **Build:** the anonymous flow layer — 2–3 days, $0/month, point-in-time frozen
-rosters, risk-adjusted persistence rather than 24h PnL. **Don't** build the identity
-graph and **don't** buy the vendor dataset (openly offered over Telegram as "every
-fomo.family username mapped to its verified Solana + EVM wallet"). The recommended
-build stores no derived identity, which also disposes of the GDPR exposure: derived
-wallet↔person linkage is personal data plus profiling, on a legitimate-interests
-balancing you would likely lose, with an Art. 14 notice obligation that cannot be
-discharged at scale.
+rosters, risk-adjusted persistence rather than 24h PnL.
+
+**On the legal line — report 07 overstated this and it is corrected here.** It
+treated "identity graph" as one thing and attached a GDPR objection to all of it.
+There are three activities and they are not alike:
+
+| | Activity | Position |
+|---|---|---|
+| **(a)** | Following pseudonymous wallets — clustering, ranking, trading their flow | **Fine.** Public chain data. What every on-chain analytics product does. |
+| **(b)** | Using links the person published themselves — own wallet posted on X, own `fomo.family/r/{handle}` referral link, signed Farcaster verification, ENS/SNS they control | **Fine.** Reading what someone published about themselves is not deanonymisation. |
+| **(c)** | Inferring a real-world identity from a wallet the person did not publish | **This is the narrow one with the actual problem**, and it is the only one the GDPR argument was ever about. |
+
+Only (c) needs the personal-data-plus-profiling analysis. The recommended build does
+not perform (c). Report 08 works the line properly against the EDPB's 2025 blockchain
+guidance rather than hand-waving.
+
+What **does** still stand: don't scrape `fomo.family` itself (robots.txt and ToS §16
+cover its own surfaces), and don't buy the vendor dataset openly offered over Telegram
+as "every fomo.family username mapped to its verified Solana + EVM wallet" — not
+because following wallets is wrong, but because that dataset was assembled by
+violating the ToS the seller is advertising around. Third-party sources that
+independently publish the same facts are a different matter entirely, and report 08
+goes and finds them.
 
 ---
 
