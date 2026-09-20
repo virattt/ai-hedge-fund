@@ -13,6 +13,7 @@ anything.
 | [04](04-architecture-review-a.md) | Architecture review A | Adversarial review of this repo's *premise* |
 | [05](05-architecture-review-b.md) | Architecture review B | Internal audit of this repo's *implementation* |
 | [06](06-architecture-review-c.md) | Architecture review C | Outside view: how does this compare to standard practice? |
+| [07](07-fomo-identity-graph.md) | FOMO identity graph | Can FOMO's social flow be resolved to named wallets, and is it worth it? |
 
 Numbers in the reports were pulled live on the dates stated in each. Nothing here is
 illustrative or simulated; where an agent could not verify a claim it says so.
@@ -200,13 +201,72 @@ Stated plainly because they are the only parts of this that are not replicable:
   perps in June 2026 routed through Hyperliquid + Trade.xyz, and Trade.xyz is the
   dominant HIP-3 builder. That reframes FOMO from "memecoin sentiment" — a family the
   evidence review rates net-negative — to *leading indicator of order flow into the
-  exact HIP-3 markets you can trade.* Defensible; testable; nobody else is positioned
-  to test it.
+  exact HIP-3 markets you can trade.*
+
+  **Report 07 tested the obvious next step — attaching names to that flow — and it
+  does not survive.** See §8. The flow itself does, and it is free.
 - **Builder-routed flow as consented private data.** Report 01 found no public
   write-up of anyone treating it this way. It needs an explicit, written line on
   trading against your own users' flow, decided deliberately rather than discovered
   later — and per §4, it does not exist at all until there is a second user, which is
   also the moment the regulatory exposure starts.
+
+---
+
+### 8. The identity graph: don't build it, and you don't need it
+
+Report 07 was commissioned to test whether FOMO's public profiles could be resolved
+to named wallets — the idea being that a *named* social signal is tradeable where an
+anonymous one is noise. Four findings kill it, and a fifth makes it moot.
+
+1. **FOMO wallets are freshly-generated Privy embedded wallets** (email or Apple
+   signup, no seed phrase). Every resolver in the brief — ENS, SNS, Farcaster,
+   Arkham, Nansen, CEX-funding heuristics — resolves *prior* identity. These
+   addresses have none. Farcaster coverage of FOMO wallets is approximately **zero**.
+2. **FOMO does not publish wallet addresses at all.** The wallet is the withheld
+   part, which is precisely the gap grey-market vendors sell into. So this was never
+   "reading a profile that already says I am @handle" — it is inference, and that
+   moves the ethical boundary materially rather than marginally.
+3. **`fomo.family/robots.txt` disallows the profile paths, and ToS §16 forbids
+   automated *and manual* collection.** Not designed around. Noted and stopped.
+4. **The fade isn't executable.** The negative-return finding (Merkley et al., RAS
+   2024: −7.9%/30d, −62.8% annualised, worst for large-following self-described
+   experts) is concentrated in **non-top-100 tokens** — no borrow, no perp listing.
+   The fade signal and the executable universe are disjoint sets. This was the
+   adversarial question the brief posed, and the answer is no.
+5. **Identity is not the discriminating variable anyway.** Yale's Polymarket study
+   (1.72M accounts, $13.76B) finds 3% skilled traders with 44% persistence — but
+   **69% of profits went to lucky winners**, and separating them took two years and
+   99k events. FOMO ranks on 24h PnL, which is the lucky-winner metric. A
+   risk-adjusted persistence classifier answers the same question from the anonymous
+   layer, without anyone's name.
+
+No study exists evaluating whether naming on-chain flow improves signal. The report
+says so rather than inventing a conclusion.
+
+**What it found instead — two live, free, no-ToS-issue sources that are not FOMO's
+data:**
+
+- **FOMO's Solana addresses are published in DeFiLlama's open-source adapter**,
+  including the **gas sponsor** (`AgmLJBMDCqWynYnQiPCuj9ewsNNsBJXyzoUhD9LJzN51`),
+  confirmed live on mainnet RPC. FOMO sponsors gas on every user transaction, which
+  makes **every FOMO Solana trade enumerable on-chain** — the whole flow layer,
+  anonymous, complete, free.
+- **Hyperliquid publishes per-builder fill dumps** at
+  `stats-data.hyperliquid.xyz/Mainnet/builder_fills/{addr}/{YYYYMMDD}.csv.lz4` —
+  downloaded and decoded, schema carries per-user fills with `closed_pnl` and
+  `builder_fee`. Free, historical, for *any* builder. This generalises well past
+  FOMO: it is the routed-flow dataset §7 calls a private asset, already public for
+  everyone who has one.
+
+**Build:** the anonymous flow layer — 2–3 days, $0/month, point-in-time frozen
+rosters, risk-adjusted persistence rather than 24h PnL. **Don't** build the identity
+graph and **don't** buy the vendor dataset (openly offered over Telegram as "every
+fomo.family username mapped to its verified Solana + EVM wallet"). The recommended
+build stores no derived identity, which also disposes of the GDPR exposure: derived
+wallet↔person linkage is personal data plus profiling, on a legitimate-interests
+balancing you would likely lose, with an Art. 14 notice obligation that cannot be
+discharged at scale.
 
 ---
 
