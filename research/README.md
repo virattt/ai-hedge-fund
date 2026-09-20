@@ -23,6 +23,29 @@
 >
 > **Neither of these needs permission, a key, a vendor, or a subscription. They need
 > a query.**
+>
+> ---
+>
+> ### **FOMO's Hyperliquid builder address is `0x2a2b6b093a9813fbd8cddae800c3d17d46460d17`**
+>
+> (`fomo-social-trading-perps`, start 2026-06-05, from DeFiLlama's
+> `factory/hyperliquid.ts`.) Three sampled days of its public fill dumps carry
+> **56,373 fills across 3,789 distinct traders**, each with price, size,
+> counterparty and `closed_pnl`.
+>
+> **⚠️ There are two "fomo" builders and the obvious one is the wrong company.**
+> `0xb838e4d1c8bcf71fa8e63299d5aa3258c83d6adb` (`fomo-perps`) is **onfomo.com**, an
+> unrelated business. Both return HTTP 200. Wrong one: 626 fills/day. Right one:
+> 16,803. Verified by control — three invalid addresses all return 403, so a 200 is
+> positive evidence — and by launch day, where 20260605 has exactly 12 fills across
+> 3 users, matching the declared start.
+>
+> ### **And the pattern generalises past FOMO entirely.**
+>
+> `factory/hyperliquid.ts` is a public directory of **136 builders**. Every one of
+> them is enumerable by exactly this method. **A product that abstracts away gas or
+> routing has to pay for it from a public address — so the abstraction layer is the
+> enumeration handle.**
 
 Also settled, and stated here because an earlier draft of this file got it wrong:
 **following pseudonymous wallets is not a GDPR problem.** Watching on-chain
@@ -48,7 +71,7 @@ anything.
 | [05](05-architecture-review-b.md) | Architecture review B | Internal audit of this repo's *implementation* |
 | [06](06-architecture-review-c.md) | Architecture review C | Outside view: how does this compare to standard practice? |
 | [07](07-fomo-identity-graph.md) | FOMO identity graph | Can FOMO's social flow be resolved to named wallets, and is it worth it? |
-| [08](08-free-resolution-sources.md) | Free resolution sources *(in progress)* | Second pass: the free resolver stack under the paid vendors, and where the legal line actually sits |
+| [08](08-free-resolution-sources.md) | Free resolution sources | Second pass: the free resolver stack under the paid vendors, and the per-chain enumeration handles |
 
 Numbers in the reports were pulled live on the dates stated in each. Nothing here is
 illustrative or simulated; where an agent could not verify a claim it says so.
@@ -318,6 +341,67 @@ because following wallets is wrong, but because that dataset was assembled by
 violating the ToS the seller is advertising around. Third-party sources that
 independently publish the same facts are a different matter entirely, and report 08
 goes and finds them.
+
+---
+
+### 9. Where the data actually is — measured, 2026-09-20
+
+Report 08 was a second pass correcting report 07. It settles the coverage question
+with numbers rather than argument.
+
+**Two coverage numbers, and conflating them is what went wrong the first time:**
+
+| | Coverage | Cost | Status |
+|---|---|---|---|
+| **Pseudonymous** — every trade attributed to a stable address with realised PnL | **~100%** | $0 | Available today |
+| **Named** via free automated resolvers | **~0%** | $0 | Measured, not assumed |
+
+The ~0% is now a *measurement*: ENS reverse resolution returned **0 of 60** on the
+real top-trader population, with zero request failures. And the structural reason is
+proven from chain rather than inferred — **73.5% of the top 200 have a Base nonce of
+exactly 1.** Accepting their wallet delegation is the only thing those addresses have
+ever done. Only 6–15% have any independent EVM activity at all. There is nothing to
+resolve because there is no prior history to resolve *to*.
+
+**The EVM side works differently than expected, and the finding is better than the
+one it replaces.** There is no FOMO EVM paymaster, and that is correct rather than a
+gap: DeFiLlama's adapter states EVM fees "occur on Relay… counted on Solana, **where
+user balances are held**." FOMO does not trade from per-user EVM accounts. What
+exists instead is a free membership test — **every FOMO EVM wallet carries an EIP-7702
+delegation to `0xe6Cae83BdE06E4c305530e199D7217f42808555B`** (ERC-4337
+`Simple7702Account`, Privy's singleton), byte-identical at the same address across
+chains. One `eth_getCode` call answers "is this a FOMO wallet."
+
+| Chain | Top-50 traders delegated | Virgin-address control |
+|---|---|---|
+| **Robinhood Chain** (ID 4663, verified live) | 49/50 | 0/50 |
+| Base | 46/50 | 0/50 |
+| Ethereum | 34/50 | 0/50 |
+| Arbitrum | 3/50 | 0/50 |
+| HyperEVM | 0/50 | 0/50 |
+
+**Caveat stated plainly:** the delegate is generic Privy infrastructure, so it is
+necessary but not sufficient. **Seed from the builder dump and test outward; never
+enumerate inward from the delegate.**
+
+**Ranked free stack.** Tier 1, works with no key: Hyperliquid `builder_fills`; public
+Solana RPC; public EVM RPC for the 7702 test; DeFiLlama adapters via
+raw.githubusercontent; HL `/info`. Tier 2, works but names nobody: Dune Spellbook —
+**report 07 was wrong that it is unreachable; it was cloned** (HEAD 014adca, 198 label
+models) but carries no Solana CEX or social labels; Farcaster hubs are alive but have
+no reverse index. Tier 3, dead or newly gated: `api.farcaster.xyz/v2/user-by-verification`
+is **now auth-required**, a regression since report 07; Solana Tracker's FOMO
+leaderboard is client-rendered with zero addresses in the HTML; Solscan, SolanaFM and
+SolanaBeach all failed.
+
+**Unexplored lead, flagged unverified:** `dune.tryfomo.fomo_relay_fees` — FOMO's *own*
+Dune namespace, referenced by DeFiLlama's fees adapter. First-party published data,
+not a scrape. A free Dune account settles it.
+
+**One operational warning.** Naive Solana RPC extraction still fails: token-owner
+parsing returned 9–11 owners per transaction with a router among them in 5 of 5
+samples. Use the indexed path (Allium/Dune) for Solana. Hyperliquid needs no such
+care — its dumps are already per-user.
 
 ---
 
