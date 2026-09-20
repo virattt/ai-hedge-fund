@@ -100,7 +100,27 @@ On builder codes, reports 01 and 03 disagree and 03 is right. 01 frames routed f
 as a moat; 03's line is the correct one: *"the builder-code mechanism is free money
 per unit of flow and offers no mechanism whatsoever for generating flow. Do not
 confuse having the pipe with having the water."* Market-clearing retail rate is
-**2.5–5 bps**; break-even on infrastructure is **$500k–1M/day routed notional**.
+**2.5–5 bps**; break-even on infrastructure is **~$478k/day routed notional** at a
+96/4 perps/spot mix — or ~$287k/day against the infrastructure floor alone, before
+any LLM spend. (Report 03 originally said $500k–1M/day; on re-examination that was
+its *with-LLM-cost* row quoted as if it were the floor, and the spot leg then moved
+it ~14%. Both corrections are the report's own.)
+
+**Spot is a real second channel, and it carries the one decision that must be made
+before anything is signed.** The builder fee cap is 1% on spot against 0.1% on perps
+— ten times — but two facts cut it down: builder codes **do not apply to the buying
+side of spot**, and HL spot is only **4.03% of core perp volume** ($163M vs $4.04B).
+Per $1M of user round-trip that is $600 on perps at 3bp versus $3,000 on spot at
+30bp: 5x on a base a twenty-fifth the size.
+
+The decision: **the builder-fee approval is a single shared grant.** Reading the SDK
+source, `HyperliquidTransaction:ApproveBuilderFee` carries exactly four fields —
+`hyperliquidChain`, `maxFeeRate`, `builder`, `nonce`. **There is no venue field.**
+One signature covers perps, spot and every HIP-3 market at one ceiling. Onboard at
+`"0.05%"` because it reads as cheap on perps and spot is permanently capped at 5bp
+too, until every user signs again from their main wallet. The protocol caps perps at
+0.1% independently, so a higher ceiling cannot over-charge them there. **Approve at
+0.3%.** This costs nothing to get right now and cannot be fixed unilaterally later.
 
 And the regulatory point that decides the shape of the whole thing: the CFTC fined
 Falcon Labs $1.7M for *facilitating* — routing, not operating. IP geoblocking was
@@ -152,6 +172,19 @@ second path, which quietly falsifies the "one code path" claim.
 3. **Perp-structural strategies** — funding/basis carry, cross-sectional funding,
    TSMOM. Self-flow only, Hyperliquid first.
 4. **HIP-3 basis**, once §5.2 has produced enough history to test on.
+   Spot–perp carry on the same venue is the cleaner cousin and is *real* but
+   *small*. Portfolio margin (live ~Dec 2025) does net the two legs into one
+   collateral pool with PnL offset and stablecoin borrow at 0.05% APY below 80%
+   utilization. Funding a short actually collected over the 4,320 hours to
+   2026-09-20: **HYPE +9.41% annualized, ETH +6.11%, BTC +5.52%, SOL +2.49%**,
+   negative 10.8–32.1% of hours. An all-taker round trip costs 0.23% — fifteen days
+   of BTC carry just to clear fees. The binding constraint is the spot leg's depth
+   (UBTC $655k within 10bp, HYPE $151k, $163M/day total turnover), so this tops out
+   in the low single-digit millions. It is yield on inventory you already hold, not
+   a strategy. Do it on HYPE, not SOL.
+   **One architectural constraint:** builder-code addresses must run in `standard`
+   mode, which is exactly the mode that does *not* net. The fee address cannot be
+   the carry address.
 5. **The LLM, re-roled** to the RD-Agent pattern.
 
 **Fork, don't write:** Nautilus Trader (LGPL-3.0 — link it, keep strategies
