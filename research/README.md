@@ -57,21 +57,36 @@ build does not perform. Report 08 sets the line properly.
 
 ---
 
-Eight independent agent reports, run 2026-09-19/20, plus the synthesis across them.
-Each report was written by an agent that did not see the others. Where they agree,
-they agree *independently* — that is the only reason the agreements below are worth
-anything.
+Seventeen independent agent reports plus the synthesis across them. Each was written
+by an agent that did not see the others, in two waves from two parallel sessions.
+Where they agree, they agree *independently* — that is the only reason the agreements
+below are worth anything. **Where they disagree, §10 says so and says which one won.**
+
+Numbering is by wave, not by importance: 01–08 are the first session's, 09–17 the
+second's. Two files originally collided on 07 and 08; the second wave was renumbered,
+and nothing else references them.
 
 | # | Report | Question it was given |
 |---|---|---|
+| **Wave 1** | *run 2026-09-19/20 from this session* | |
 | [01](01-agent-trading-framework-landscape.md) | Agent trading framework landscape | What exists in public OSS? What should we fork, steal, or avoid? |
 | [02](02-signal-evidence-review.md) | Signal evidence review | Which of these signal families actually has evidence behind it? |
-| [03](03-perps-venues-and-builder-economics.md) | Perp venues & builder economics | Hyperliquid vs Aster vs GMGN — what's real, what does it cost, what does it earn? |
+| [03](03-perps-venues-and-builder-economics.md) | Perp venues & builder economics | Hyperliquid vs Aster vs GMGN — what's real, what does it cost, what does it earn? (§8 of it extends to spot) |
 | [04](04-architecture-review-a.md) | Architecture review A | Adversarial review of this repo's *premise* |
 | [05](05-architecture-review-b.md) | Architecture review B | Internal audit of this repo's *implementation* |
 | [06](06-architecture-review-c.md) | Architecture review C | Outside view: how does this compare to standard practice? |
 | [07](07-fomo-identity-graph.md) | FOMO identity graph | Can FOMO's social flow be resolved to named wallets, and is it worth it? |
-| [08](08-free-resolution-sources.md) | Free resolution sources | Second pass: the free resolver stack under the paid vendors, and the per-chain enumeration handles |
+| [08](08-free-resolution-sources.md) | Free resolution sources | Second pass: the free resolver stack, and the per-chain enumeration handles |
+| **Wave 2** | *run 2026-09-19 from a parallel session* | |
+| [09](09-fomo-intel-inventory.md) | fomo-intel inventory | What in the `fomo-intel` repo is reusable for perps? |
+| [10](10-fomo-intel-adversarial.md) | fomo-intel adversarial | Is its data/signal integrity good enough to build on? |
+| [11](11-trading-stack-inventory.md) | trading-stack inventory | What in the `trading-stack` repo is reusable? |
+| [12](12-trading-stack-adversarial.md) | trading-stack adversarial | Is it safe to trade live? |
+| [13](13-fomo-identity-resolution.md) | FOMO identity resolution | Same question as 07, answered independently — **and it disagrees** |
+| [14](14-hyperliquid-spot-and-builder-fees.md) | Hyperliquid spot & builder fees | Same ground as 03 §8, answered independently |
+| [15](15-ml-methods.md) | ML & agentic methods | Which model families are worth it at this horizon and capital? |
+| [16](16-fomo-resolvers-and-flow-layer.md) | FOMO resolvers & flow layer | Third pass on resolvers — **it overturns 08** |
+| [17](17-alchemy-payg.md) | Alchemy pay-as-you-go | What does the node/RPC tier actually cost? |
 
 Numbers in the reports were pulled live on the dates stated in each. Nothing here is
 illustrative or simulated; where an agent could not verify a claim it says so.
@@ -330,9 +345,11 @@ There are three activities and they are not alike:
 | **(b)** | Using links the person published themselves — own wallet posted on X, own `fomo.family/r/{handle}` referral link, signed Farcaster verification, ENS/SNS they control | **Fine.** Reading what someone published about themselves is not deanonymisation. |
 | **(c)** | Inferring a real-world identity from a wallet the person did not publish | **This is the narrow one with the actual problem**, and it is the only one the GDPR argument was ever about. |
 
-Only (c) needs the personal-data-plus-profiling analysis. The recommended build does
-not perform (c). Report 08 works the line properly against the EDPB's 2025 blockchain
-guidance rather than hand-waving.
+Only (c) needs the personal-data-plus-profiling analysis, and the recommended build
+does not perform (c). Report 08 was originally commissioned to work that line against
+the EDPB's 2025 blockchain guidance; that section was **cut before it shipped**, on
+the instruction that the legal fine print is not worth tokens while the system is
+trading its own capital only. The table above is the whole of the position.
 
 What **does** still stand: don't scrape `fomo.family` itself (robots.txt and ToS §16
 cover its own surfaces), and don't buy the vendor dataset openly offered over Telegram
@@ -354,7 +371,8 @@ with numbers rather than argument.
 | | Coverage | Cost | Status |
 |---|---|---|---|
 | **Pseudonymous** — every trade attributed to a stable address with realised PnL | **~100%** | $0 | Available today |
-| **Named** via free automated resolvers | **~0%** | $0 | Measured, not assumed |
+| **Named** via *generic* web3 resolvers (ENS/SNS/Farcaster) | **~0%** | $0 | Measured — and see §10, this is not the whole question |
+| **Handle↔wallet** via *FOMO-specific* resolvers | **usable today** | $0 | Report 16; overturns what §8 implied |
 
 The ~0% is now a *measurement*: ENS reverse resolution returned **0 of 60** on the
 real top-trader population, with zero request failures. And the structural reason is
@@ -402,6 +420,68 @@ not a scrape. A free Dune account settles it.
 parsing returned 9–11 owners per transaction with a router among them in 5 of 5
 samples. Use the indexed path (Allium/Dune) for Solana. Hyperliquid needs no such
 care — its dumps are already per-user.
+
+---
+
+### 10. Where the two waves disagree
+
+Wave 2 was run independently and did not see wave 1. Three places it collides, and
+one place it independently confirms.
+
+**16 overturns 08 — and the earlier relay of 08 was misleading.** Report 08 measured
+ENS reverse resolution at 0 of 60 on the real top-trader population and concluded
+named coverage was ~0%. That measurement stands, but it answers a narrower question
+than the summary implied: *generic* web3 identity infrastructure does not resolve
+freshly-minted Privy wallets, because those wallets have no prior history to resolve
+to. Report 16 asked the question that was actually on the table — are there
+**FOMO-specific** resolvers — and the answer is yes:
+
+> "The earlier 'no free resolver exists' conclusion was wrong and the known-five list
+> undercounted by about 2x. Four resolvers are free and usable today without login
+> (fomowalletfinder.com, fomolens.app, fomoscan.sh, the open-source
+> YvesxDev/fomo-wallet-resolver), and **fomoapi.io's free tier (1,000 calls/month, no
+> card, every endpoint) is the best free programmatic path.**"
+
+These give handle↔wallet, not wallet↔real-world-person, so they do not contradict
+08's finding about generic infrastructure — but "there is nothing free out there" was
+the wrong takeaway, and it was the takeaway. The correct one: *generic identity infra
+is useless here, purpose-built FOMO resolvers are free and work.*
+
+**13 and 08 disagree on the builder-code count, and this is unresolved.** Report 08
+found one FOMO builder (`0x2a2b6b09…`) and identified `0xb838e4d1…` as a *different
+company*, onfomo.com, verified against docs.onfomo.com and by a 26x fill-volume gap.
+Report 13 says FOMO's perps flow through **two** builder codes. Both were live-tested.
+Until someone reconciles them, treat the second address as unconfirmed rather than
+picking a side — and note that getting this wrong means archiving another company's
+order flow and calling it yours.
+
+**14 independently confirms 03's name trap, which makes it much stronger.** Both
+found, separately, that Hyperliquid's spot token `name` field is not a usable
+identifier. Report 14 puts it concretely: the real, live HYPE/USDC pair's registry
+entry is named `"WOW"`, while a separate entry actually named `"HYPE"` is a near-dead
+decoy doing about **$24** of 24h volume. Wave 1's venue agent hit the same thing as
+its own join bug and reported it. Two independent discoveries of the same trap is the
+strongest evidence in this dossier for a single operational rule: **key spot pairs on
+token ID or pair index, never on name.**
+
+### 11. What wave 2 found in your own two repos
+
+These are the repos handed over mid-session; reports 09–12 are the team that reviewed
+them.
+
+- **`fomo-intel`** — "a spot/memecoin wallet-intelligence research project on Solana
+  and BSC — it contains **zero perps, Hyperliquid, or builder-code work**." Its
+  adversarial pass: do not build a perp system on its outputs without first adding
+  point-in-time history and re-validating "smart money" wallets on a schedule. The
+  same restatement problem this dossier opens with, in your own codebase.
+- **`trading-stack`** — no live Hyperliquid or Aster execution: no order placement, no
+  signing. And the finding to read first, rated CRITICAL: **the authorized risk/safety
+  gate exists but is not on the branch the pipeline runs on**, so zero risk controls
+  are reachable from the live checkout. Its research layer is rated "unusually careful
+  for what it is" — real lookahead self-checks, disclosed survivorship bias, signals
+  actively demoted to NOT_VALIDATED — but two backtest cost assumptions (funding =
+  median not mean; liquidation = no-gap) understate the tail a crowded leveraged
+  momentum book would eat.
 
 ---
 
