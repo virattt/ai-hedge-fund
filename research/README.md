@@ -13,6 +13,7 @@ anything.
 | [04](04-architecture-review-a.md) | Architecture review A | Adversarial review of this repo's *premise* |
 | [05](05-architecture-review-b.md) | Architecture review B | Internal audit of this repo's *implementation* |
 | [06](06-architecture-review-c.md) | Architecture review C | Outside view: how does this compare to standard practice? |
+| [07](07-fomo-identity-graph.md) | FOMO identity graph | Can FOMO's social flow be resolved to named wallets, and is it worth it? |
 
 Numbers in the reports were pulled live on the dates stated in each. Nothing here is
 illustrative or simulated; where an agent could not verify a claim it says so.
@@ -100,7 +101,27 @@ On builder codes, reports 01 and 03 disagree and 03 is right. 01 frames routed f
 as a moat; 03's line is the correct one: *"the builder-code mechanism is free money
 per unit of flow and offers no mechanism whatsoever for generating flow. Do not
 confuse having the pipe with having the water."* Market-clearing retail rate is
-**2.5–5 bps**; break-even on infrastructure is **$500k–1M/day routed notional**.
+**2.5–5 bps**; break-even on infrastructure is **~$478k/day routed notional** at a
+96/4 perps/spot mix — or ~$287k/day against the infrastructure floor alone, before
+any LLM spend. (Report 03 originally said $500k–1M/day; on re-examination that was
+its *with-LLM-cost* row quoted as if it were the floor, and the spot leg then moved
+it ~14%. Both corrections are the report's own.)
+
+**Spot is a real second channel, and it carries the one decision that must be made
+before anything is signed.** The builder fee cap is 1% on spot against 0.1% on perps
+— ten times — but two facts cut it down: builder codes **do not apply to the buying
+side of spot**, and HL spot is only **4.03% of core perp volume** ($163M vs $4.04B).
+Per $1M of user round-trip that is $600 on perps at 3bp versus $3,000 on spot at
+30bp: 5x on a base a twenty-fifth the size.
+
+The decision: **the builder-fee approval is a single shared grant.** Reading the SDK
+source, `HyperliquidTransaction:ApproveBuilderFee` carries exactly four fields —
+`hyperliquidChain`, `maxFeeRate`, `builder`, `nonce`. **There is no venue field.**
+One signature covers perps, spot and every HIP-3 market at one ceiling. Onboard at
+`"0.05%"` because it reads as cheap on perps and spot is permanently capped at 5bp
+too, until every user signs again from their main wallet. The protocol caps perps at
+0.1% independently, so a higher ceiling cannot over-charge them there. **Approve at
+0.3%.** This costs nothing to get right now and cannot be fixed unilaterally later.
 
 And the regulatory point that decides the shape of the whole thing: the CFTC fined
 Falcon Labs $1.7M for *facilitating* — routing, not operating. IP geoblocking was
@@ -152,6 +173,19 @@ second path, which quietly falsifies the "one code path" claim.
 3. **Perp-structural strategies** — funding/basis carry, cross-sectional funding,
    TSMOM. Self-flow only, Hyperliquid first.
 4. **HIP-3 basis**, once §5.2 has produced enough history to test on.
+   Spot–perp carry on the same venue is the cleaner cousin and is *real* but
+   *small*. Portfolio margin (live ~Dec 2025) does net the two legs into one
+   collateral pool with PnL offset and stablecoin borrow at 0.05% APY below 80%
+   utilization. Funding a short actually collected over the 4,320 hours to
+   2026-09-20: **HYPE +9.41% annualized, ETH +6.11%, BTC +5.52%, SOL +2.49%**,
+   negative 10.8–32.1% of hours. An all-taker round trip costs 0.23% — fifteen days
+   of BTC carry just to clear fees. The binding constraint is the spot leg's depth
+   (UBTC $655k within 10bp, HYPE $151k, $163M/day total turnover), so this tops out
+   in the low single-digit millions. It is yield on inventory you already hold, not
+   a strategy. Do it on HYPE, not SOL.
+   **One architectural constraint:** builder-code addresses must run in `standard`
+   mode, which is exactly the mode that does *not* net. The fee address cannot be
+   the carry address.
 5. **The LLM, re-roled** to the RD-Agent pattern.
 
 **Fork, don't write:** Nautilus Trader (LGPL-3.0 — link it, keep strategies
@@ -167,13 +201,72 @@ Stated plainly because they are the only parts of this that are not replicable:
   perps in June 2026 routed through Hyperliquid + Trade.xyz, and Trade.xyz is the
   dominant HIP-3 builder. That reframes FOMO from "memecoin sentiment" — a family the
   evidence review rates net-negative — to *leading indicator of order flow into the
-  exact HIP-3 markets you can trade.* Defensible; testable; nobody else is positioned
-  to test it.
+  exact HIP-3 markets you can trade.*
+
+  **Report 07 tested the obvious next step — attaching names to that flow — and it
+  does not survive.** See §8. The flow itself does, and it is free.
 - **Builder-routed flow as consented private data.** Report 01 found no public
   write-up of anyone treating it this way. It needs an explicit, written line on
   trading against your own users' flow, decided deliberately rather than discovered
   later — and per §4, it does not exist at all until there is a second user, which is
   also the moment the regulatory exposure starts.
+
+---
+
+### 8. The identity graph: don't build it, and you don't need it
+
+Report 07 was commissioned to test whether FOMO's public profiles could be resolved
+to named wallets — the idea being that a *named* social signal is tradeable where an
+anonymous one is noise. Four findings kill it, and a fifth makes it moot.
+
+1. **FOMO wallets are freshly-generated Privy embedded wallets** (email or Apple
+   signup, no seed phrase). Every resolver in the brief — ENS, SNS, Farcaster,
+   Arkham, Nansen, CEX-funding heuristics — resolves *prior* identity. These
+   addresses have none. Farcaster coverage of FOMO wallets is approximately **zero**.
+2. **FOMO does not publish wallet addresses at all.** The wallet is the withheld
+   part, which is precisely the gap grey-market vendors sell into. So this was never
+   "reading a profile that already says I am @handle" — it is inference, and that
+   moves the ethical boundary materially rather than marginally.
+3. **`fomo.family/robots.txt` disallows the profile paths, and ToS §16 forbids
+   automated *and manual* collection.** Not designed around. Noted and stopped.
+4. **The fade isn't executable.** The negative-return finding (Merkley et al., RAS
+   2024: −7.9%/30d, −62.8% annualised, worst for large-following self-described
+   experts) is concentrated in **non-top-100 tokens** — no borrow, no perp listing.
+   The fade signal and the executable universe are disjoint sets. This was the
+   adversarial question the brief posed, and the answer is no.
+5. **Identity is not the discriminating variable anyway.** Yale's Polymarket study
+   (1.72M accounts, $13.76B) finds 3% skilled traders with 44% persistence — but
+   **69% of profits went to lucky winners**, and separating them took two years and
+   99k events. FOMO ranks on 24h PnL, which is the lucky-winner metric. A
+   risk-adjusted persistence classifier answers the same question from the anonymous
+   layer, without anyone's name.
+
+No study exists evaluating whether naming on-chain flow improves signal. The report
+says so rather than inventing a conclusion.
+
+**What it found instead — two live, free, no-ToS-issue sources that are not FOMO's
+data:**
+
+- **FOMO's Solana addresses are published in DeFiLlama's open-source adapter**,
+  including the **gas sponsor** (`AgmLJBMDCqWynYnQiPCuj9ewsNNsBJXyzoUhD9LJzN51`),
+  confirmed live on mainnet RPC. FOMO sponsors gas on every user transaction, which
+  makes **every FOMO Solana trade enumerable on-chain** — the whole flow layer,
+  anonymous, complete, free.
+- **Hyperliquid publishes per-builder fill dumps** at
+  `stats-data.hyperliquid.xyz/Mainnet/builder_fills/{addr}/{YYYYMMDD}.csv.lz4` —
+  downloaded and decoded, schema carries per-user fills with `closed_pnl` and
+  `builder_fee`. Free, historical, for *any* builder. This generalises well past
+  FOMO: it is the routed-flow dataset §7 calls a private asset, already public for
+  everyone who has one.
+
+**Build:** the anonymous flow layer — 2–3 days, $0/month, point-in-time frozen
+rosters, risk-adjusted persistence rather than 24h PnL. **Don't** build the identity
+graph and **don't** buy the vendor dataset (openly offered over Telegram as "every
+fomo.family username mapped to its verified Solana + EVM wallet"). The recommended
+build stores no derived identity, which also disposes of the GDPR exposure: derived
+wallet↔person linkage is personal data plus profiling, on a legitimate-interests
+balancing you would likely lose, with an Art. 14 notice obligation that cannot be
+discharged at scale.
 
 ---
 
