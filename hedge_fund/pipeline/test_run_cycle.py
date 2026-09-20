@@ -251,3 +251,35 @@ def test_analyst_error_propagates():
     with pytest.raises(ConnectionError):
         run_cycle(fund, "2024-06-03", SimBroker(cash=100_000.0),
                   FakeDataClient(CLOSES), UNIVERSE)
+
+
+def test_cash_reserve_floor_leaves_cash_in_the_book():
+    """The floor's whole claim is about the broker's cash, so assert on cash.
+
+    A long-only sleeve targets gross 1.0 and would otherwise spend the book
+    down to share dust. With a 10% reserve the netted weights are scaled to
+    0.9 before sizing, so roughly a tenth of equity never leaves cash.
+    """
+    spec = FundSpec(
+        name="test-fund",
+        strategies=[{"name": "solo", "models": [{"name": "a"}]}],
+        risk={
+            "max_position_pct": 1.0,
+            "max_gross_exposure": 1.0,
+            "min_cash_reserve_pct": 0.10,
+        },
+        capital=100_000.0,
+    )
+    fund = Fund(spec, models={
+        "solo": [FakeAnalyst("a", views={"AAPL": 1.0, "MSFT": 1.0, "NVDA": 1.0})],
+    })
+    broker = SimBroker(cash=100_000.0)
+
+    record = run_cycle(fund, "2024-06-03", broker, FakeDataClient(CLOSES),
+                       UNIVERSE)
+
+    assert sum(record.final_weights.values()) == pytest.approx(0.9)
+    assert any(c.limit == "min_cash_reserve_pct" for c in record.clamps)
+    # Floor-toward-zero sizing can only leave MORE cash than the target, never
+    # less, so this is the binding direction.
+    assert broker.cash() >= 0.10 * record.equity_before
