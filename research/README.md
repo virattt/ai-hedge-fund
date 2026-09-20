@@ -447,13 +447,25 @@ These give handle↔wallet, not wallet↔real-world-person, so they do not contr
 the wrong takeaway, and it was the takeaway. The correct one: *generic identity infra
 is useless here, purpose-built FOMO resolvers are free and work.*
 
-**13 and 08 disagree on the builder-code count, and this is unresolved.** Report 08
-found one FOMO builder (`0x2a2b6b09…`) and identified `0xb838e4d1…` as a *different
-company*, onfomo.com, verified against docs.onfomo.com and by a 26x fill-volume gap.
-Report 13 says FOMO's perps flow through **two** builder codes. Both were live-tested.
-Until someone reconciles them, treat the second address as unconfirmed rather than
-picking a side — and note that getting this wrong means archiving another company's
-order flow and calling it yours.
+**13 and 08 disagreed on the builder-code count. Resolved in 08's favour,
+2026-09-20, by decoding both fill dumps.** Report 08 found one FOMO builder
+(`0x2a2b6b09…`) and identified `0xb838e4d1…` as onfomo.com, a different company.
+Report 13 said FOMO routes through **two**. The test that settles it: two builder
+codes belonging to the same app would share traders.
+
+| 2026-09-18 | fills | users | | 2026-06-05 (FOMO perps launch) | fills | users |
+|---|---|---|---|---|---|---|
+| `0x2a2b…` | 16,803 | 1,620 | | `0x2a2b…` | 12 | 3 |
+| `0xb838…` | 626 | 44 | | `0xb838…` | 1,034 | 59 |
+
+**Shared users: zero, on both days.** Across 1,620 and 44 distinct traders, not one
+address appears under both codes. And on FOMO's own launch day `0x2a2b…` had 12 fills
+from 3 users while `0xb838…` was already doing 1,034 from 59 — it predates FOMO's
+perps with real volume, which a FOMO builder code cannot.
+
+`0x2a2b6b093a9813fbd8cddae800c3d17d46460d17` is FOMO's, and it is the only one.
+Archiving `0xb838…` would be archiving another company's order flow and calling it
+ours.
 
 **14 independently confirms 03's name trap, which makes it much stronger.** Both
 found, separately, that Hyperliquid's spot token `name` field is not a usable
