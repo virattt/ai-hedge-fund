@@ -1,6 +1,6 @@
 """LLMAgent — base class for LLM investor agents (the second AlphaModel flavor).
 
-An LLMAgent reasons over a point-in-time FundamentalsSnapshot in a persona's
+An LLMAgent reasons over a point-in-time snapshot (fundamentals by default) in a persona's
 voice and emits the same Signal every quant model does. The base class owns
 all the machinery; a persona is just a name + a system prompt:
 
@@ -23,9 +23,10 @@ Failure contract (locked decisions):
 from __future__ import annotations
 
 import logging
+from typing import Protocol
 
 from hedge_fund.data.protocol import DataClient
-from hedge_fund.features.snapshot import FundamentalsSnapshot, InsufficientData, build_snapshot
+from hedge_fund.features.snapshot import InsufficientData, build_snapshot
 from hedge_fund.llm import LLMCallError, LLMClient, PromptCache, extract_json, make_llm, prompt_key
 from hedge_fund.models import Signal
 from hedge_fund.signals.base import AlphaModel
@@ -34,6 +35,18 @@ logger = logging.getLogger(__name__)
 
 # What the model must return; folded into Signal.value below.
 _SIGNAL_TO_SIGN = {"bullish": 1.0, "neutral": 0.0, "bearish": -1.0}
+
+
+class Snapshot(Protocol):
+    """What an LLMAgent needs from any snapshot type (fundamentals, news, ...)."""
+
+    ticker: str
+    as_of: str
+
+    @property
+    def content_hash(self) -> str: ...
+
+    def render(self) -> str: ...
 
 
 class LLMAgent(AlphaModel):
@@ -111,16 +124,14 @@ class LLMAgent(AlphaModel):
         """The persona — every subclass must define its voice."""
         raise NotImplementedError(f"{type(self).__name__} must define get_system_prompt()")
 
-    def build_snapshot(self, ticker: str, date: str, data_client: DataClient) -> FundamentalsSnapshot:
+    def build_snapshot(self, ticker: str, date: str, data_client: DataClient) -> Snapshot:
         """What this persona is allowed to know. Default: the shared
         point-in-time fundamentals snapshot — right for value/quality
         personas. Override for personas that reason over different data
-        (macro, news); when a second snapshot TYPE exists, extract the
-        implicit interface (ticker/as_of/content_hash/render) into a
-        Protocol — not before."""
+        (see NewsAnalystAgent); any object satisfying `Snapshot` works."""
         return build_snapshot(ticker, date, data_client)
 
-    def build_user_prompt(self, snapshot: FundamentalsSnapshot) -> str:
+    def build_user_prompt(self, snapshot: Snapshot) -> str:
         """Default user prompt: the rendered snapshot. Override to enrich."""
         return snapshot.render()
 
@@ -154,7 +165,7 @@ class LLMAgent(AlphaModel):
         date: str,
         parsed: dict,
         key: str,
-        snapshot: FundamentalsSnapshot,
+        snapshot: Snapshot,
         cached: bool,
     ) -> Signal:
         value = _SIGNAL_TO_SIGN[parsed["signal"]] * parsed["confidence"] / 100.0

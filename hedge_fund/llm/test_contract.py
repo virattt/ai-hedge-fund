@@ -13,7 +13,7 @@ from hedge_fund.llm.contract import (
     JevContractError,
     normalize_jev_response,
 )
-from hedge_fund.signals import ALPHA_MODEL_REGISTRY, BuffettAgent, LLMAgent
+from hedge_fund.signals import ALPHA_MODEL_REGISTRY, BuffettAgent, LLMAgent, NewsAnalystAgent
 
 _PERSONAS = [cls for cls in ALPHA_MODEL_REGISTRY.values() if issubclass(cls, LLMAgent)]
 
@@ -69,7 +69,8 @@ def test_existing_persona_inputs_are_preserved(persona, tmp_path):
     assert request["state"] == {"investor_prompt": system, "financial_snapshot": user}
     assert agent.get_system_prompt() == system
     assert "Respond with JSON" in request["state"]["investor_prompt"]
-    assert "most recent filing date" in request["state"]["investor_prompt"]
+    pit = "newest date shown" if persona is NewsAnalystAgent else "most recent filing date"
+    assert pit in request["state"]["investor_prompt"]
 
 
 def test_questions_are_self_contained_and_requests_do_not_share_mutable_state():

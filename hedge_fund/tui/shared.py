@@ -41,6 +41,8 @@ DISPLAY_NAMES = {
     "lynch": "Peter Lynch",
     "druckenmiller": "Stanley Druckenmiller",
     "pead": "post-earnings drift",
+    "news_sentiment": "news sentiment",
+    "news_analyst": "News Desk Analyst",
 }
 
 _SHORT_NAMES = {
@@ -50,6 +52,8 @@ _SHORT_NAMES = {
     "lynch": "Lynch",
     "druckenmiller": "Druckenmiller",
     "pead": "PEAD",
+    "news_sentiment": "News",
+    "news_analyst": "NewsDesk",
 }
 
 # The LLM the investor agents reason with. Picked once, upfront; make_llm()

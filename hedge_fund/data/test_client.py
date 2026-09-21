@@ -62,6 +62,20 @@ def test_news(fd: FDClient, ticker: str) -> None:
     print(f"  {ticker} news: {len(news)} articles  sources={sources}")
 
 
+@pytest.mark.parametrize("as_of", ["2024-03-15", "2025-03-15", "2026-03-15"])
+def test_news_history_depth(fd: FDClient, as_of: str) -> None:
+    """Does /news return articles as of past dates? Backtests of the news
+    models are only meaningful where this holds (run with -s to see the table)."""
+    from hedge_fund.features.news import recent_headlines
+
+    covered = 0
+    for ticker in TICKERS:
+        headlines = recent_headlines(ticker, as_of, fd, lookback_days=7)
+        covered += bool(headlines)
+        print(f"  {ticker} as of {as_of}: {len(headlines)} headlines in the last 7d")
+    print(f"  {covered}/{len(TICKERS)} tickers had news as of {as_of}")
+
+
 @pytest.mark.parametrize("ticker", TICKERS)
 def test_insider_trades(fd: FDClient, ticker: str) -> None:
     trades = fd.get_insider_trades(ticker, PRICE_END, limit=5)
