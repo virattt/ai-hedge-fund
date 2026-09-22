@@ -1,7 +1,7 @@
 [
   {
-    "display_name": "Opus 5",
-    "model_name": "claude-opus-5",
+    "display_name": "Opus 5.5",
+    "model_name": "claude-opus-5-5",
     "provider": "Anthropic"
   },
   {
