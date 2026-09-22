@@ -1,0 +1,17 @@
+# Asymmetric — discretionary long/short pairing the remaining ROADMAP
+# lenses: Fisher on outstanding growth, Pabrai on Dhandho downside-first
+# setups, Taleb on fragility vs convexity, Jhunjhunwala on concentrated
+# compounding. Edge claimed: disagreement among quality-growth, cheap
+# doubles, tail-risk, and patient compounders. Stylized educational
+# personas — not the actual individuals.
+name: asymmetric
+display_name: Asymmetric
+models:
+  - name: fisher
+  - name: pabrai
+  - name: taleb
+  - name: jhunjhunwala
+blend:
+  method: conviction_weighted
+  gross_target: 1.0
+  market_neutral: true

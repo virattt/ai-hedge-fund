@@ -176,10 +176,12 @@ class TestPlots:
 # Integration tests — require API key
 # ---------------------------------------------------------------------------
 
-pytestmark_live = pytest.mark.skipif(
-    not os.environ.get("FINANCIAL_DATASETS_API_KEY"),
-    reason="live tests require FINANCIAL_DATASETS_API_KEY",
-)
+def pytestmark_live(fn):
+    fn = pytest.mark.skipif(
+        not os.environ.get("FINANCIAL_DATASETS_API_KEY"),
+        reason="live tests require FINANCIAL_DATASETS_API_KEY",
+    )(fn)
+    return pytest.mark.live(fn)
 
 
 @pytest.fixture(scope="module")

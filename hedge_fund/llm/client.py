@@ -29,11 +29,21 @@ from hedge_fund.llm import contract
 from hedge_fund.llm.registry import (
     env_var_for,
     is_supported,
+    KEYLESS_PROVIDERS,
     provider_for,
     SUPPORTED_PROVIDERS,
 )
 
 DEFAULT_MODEL = "claude-opus-5"
+DEFAULT_TIMEOUT = 60.0
+TIMEOUT_ENV_VAR = "LLM_REQUEST_TIMEOUT"
+# Modern OpenAI SDK name first; OPENAI_API_BASE is the older alias.
+OPENAI_BASE_URL_VARS = ("OPENAI_BASE_URL", "OPENAI_API_BASE")
+OLLAMA_BASE_URL_VAR = "OLLAMA_BASE_URL"
+DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434"
+# ChatOpenAI requires a key string; Ollama ignores it.
+OLLAMA_PLACEHOLDER_KEY = "ollama"
+OLLAMA_MODEL_PREFIX = "ollama:"
 
 # Called with each piece of text as it arrives. None means don't stream.
 TokenListener = Callable[[str], None] | None
@@ -81,26 +91,42 @@ class ChatLLM:
     the prompt cache, and the parse are untouched by it.
     """
 
-    def __init__(self, model: str, chat, on_token: TokenListener = None) -> None:
+    def __init__(
+        self,
+        model: str,
+        chat,
+        on_token: TokenListener = None,
+        timeout: float | None = None,
+        unreachable_hint: str | None = None,
+    ) -> None:
         self.model = model
         self._chat = chat
         self._on_token = on_token
+        self._timeout = timeout
+        self._unreachable_hint = unreachable_hint
 
     def complete(self, system: str, user: str) -> str:
         messages = [("system", system), ("human", user)]
-        if self._on_token is None:
-            return _flatten(self._chat.invoke(messages).content)
+        try:
+            if self._on_token is None:
+                return _flatten(self._chat.invoke(messages).content)
 
-        # Streaming chunks concatenate into the response, so they flatten
-        # without a separator — the "\n" that joins whole-message blocks would
-        # land mid-word here.
-        parts: list[str] = []
-        for chunk in self._chat.stream(messages):
-            text = _flatten(chunk.content, sep="")
-            if text:
-                parts.append(text)
-                self._on_token(text)
-        return "".join(parts)
+            # Streaming chunks concatenate into the response, so they flatten
+            # without a separator — the "\n" that joins whole-message blocks would
+            # land mid-word here.
+            parts: list[str] = []
+            for chunk in self._chat.stream(messages):
+                text = _flatten(chunk.content, sep="")
+                if text:
+                    parts.append(text)
+                    self._on_token(text)
+            return "".join(parts)
+        except LLMCallError:
+            raise
+        except Exception as exc:
+            raise _chat_call_error(
+                self.model, exc, unreachable_hint=self._unreachable_hint
+            ) from None
 
 
 class JevLLM:
@@ -117,11 +143,9 @@ class JevLLM:
     def __init__(self, api_key: str, model: str = "jev-1.13.0", timeout: float = 60.0) -> None:
         if not isinstance(api_key, str) or not api_key.strip():
             raise ValueError("A non-empty TypeSafe API key is required")
-        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
-            raise ValueError("timeout must be a positive finite number")
         self.model = model
         self._api_key = api_key
-        self._timeout = timeout
+        self._timeout = _positive_timeout(timeout)
 
     def cache_key(self, agent: str, system: str, user: str) -> str:
         """Hash semantic inputs only; do not disturb legacy prompt keys."""
@@ -222,9 +246,146 @@ def _retry_delay(header: str | None) -> float:
     return 1.0
 
 
+def resolve_timeout(timeout: float | None = None) -> float:
+    """Explicit timeout wins; else LLM_REQUEST_TIMEOUT; else DEFAULT_TIMEOUT."""
+    if timeout is not None:
+        return _positive_timeout(timeout)
+    raw = os.getenv(TIMEOUT_ENV_VAR)
+    if raw is None or not str(raw).strip():
+        return DEFAULT_TIMEOUT
+    try:
+        return _positive_timeout(float(raw))
+    except (TypeError, ValueError):
+        raise ValueError(f"{TIMEOUT_ENV_VAR} must be a positive finite number") from None
+
+
+def _positive_timeout(timeout: object) -> float:
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError("timeout must be a positive finite number")
+    return float(timeout)
+
+
+def _first_env(*names: str) -> str | None:
+    """First non-empty environment value among *names*, stripped."""
+    for name in names:
+        value = os.getenv(name)
+        if value is not None and value.strip():
+            return value.strip()
+    return None
+
+
+def _optional_base_url(*names: str) -> dict:
+    """Pass base_url only when set — an explicit None hides OPENAI_BASE_URL."""
+    return _optional_kwarg("base_url", *names)
+
+
+def _optional_kwarg(key: str, *names: str) -> dict:
+    value = _first_env(*names)
+    return {key: value} if value else {}
+
+
+def resolve_ollama_base_url(url: str | None = None) -> str:
+    """Ollama's OpenAI-compatible root: ``OLLAMA_BASE_URL`` or the local daemon.
+
+    A bare host (``http://127.0.0.1:11434``) becomes ``.../v1``. A URL that
+    already ends in ``/v1`` is left alone so overrides are not doubled.
+    """
+    raw = (url.strip() if isinstance(url, str) and url.strip()
+           else _first_env(OLLAMA_BASE_URL_VAR) or DEFAULT_OLLAMA_HOST)
+    return _as_openai_compatible(raw)
+
+
+def _as_openai_compatible(url: str) -> str:
+    url = url.rstrip("/")
+    return url if url.endswith("/v1") else f"{url}/v1"
+
+
+def _ollama_tag(model: str) -> str:
+    """Strip the ``ollama:`` prefix used to route unlisted local tags."""
+    if model.startswith(OLLAMA_MODEL_PREFIX):
+        return model[len(OLLAMA_MODEL_PREFIX):]
+    return model
+
+
+def _chat_call_error(
+    model: str,
+    exc: BaseException,
+    unreachable_hint: str | None = None,
+) -> LLMCallError:
+    """Credential-free failure for chat-provider transport and HTTP errors."""
+    hint = f" {unreachable_hint}" if unreachable_hint else ""
+    if _is_timeout(exc):
+        return LLMCallError(f"LLM request timed out for model {model}.{hint}".rstrip("."))
+    status = _http_status(exc)
+    if status in (401, 403):
+        return LLMCallError(f"LLM endpoint rejected the API key for model {model} (HTTP {status})")
+    if status == 404:
+        return LLMCallError(
+            f"LLM endpoint rejected model {model} (HTTP 404). "
+            f"Check the model id and any custom base URL ({OPENAI_BASE_URL_VARS[0]})."
+            f"{hint}"
+        )
+    if status is not None:
+        return LLMCallError(f"LLM endpoint rejected the request for model {model} (HTTP {status})")
+    if _is_connection_error(exc):
+        return LLMCallError(
+            f"LLM request failed for model {model}: connection error.{hint}".rstrip(".")
+        )
+    return LLMCallError(f"LLM request failed for model {model}")
+
+
+def _walk_exceptions(exc: BaseException):
+    seen: set[int] = set()
+    stack = [exc]
+    while stack:
+        current = stack.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        yield current
+        stack.append(current.__cause__)
+        stack.append(current.__context__)
+
+
+def _is_timeout(exc: BaseException) -> bool:
+    for current in _walk_exceptions(exc):
+        if isinstance(current, (TimeoutError, requests.Timeout)):
+            return True
+        if "timeout" in type(current).__name__.replace("_", "").lower():
+            return True
+    return False
+
+
+def _is_connection_error(exc: BaseException) -> bool:
+    for current in _walk_exceptions(exc):
+        if isinstance(current, (ConnectionError, requests.ConnectionError)):
+            return True
+        name = type(current).__name__.replace("_", "").lower()
+        if "connection" in name or name in {"apiconnectionerror", "connecterror"}:
+            return True
+    return False
+
+
+def _http_status(exc: BaseException) -> int | None:
+    for current in _walk_exceptions(exc):
+        for attr in ("status_code", "status"):
+            value = getattr(current, attr, None)
+            if isinstance(value, int) and 100 <= value <= 599:
+                return value
+        response = getattr(current, "response", None)
+        if response is not None:
+            value = getattr(response, "status_code", None)
+            if isinstance(value, int) and 100 <= value <= 599:
+                return value
+        match = re.search(r"(?:error code|HTTP)\s*:?\s*(\d{3})", str(current), re.I)
+        if match:
+            return int(match.group(1))
+    return None
+
+
 def make_llm(
     model: str | None = None,
-    timeout: float = 60.0,
+    timeout: float | None = None,
     max_tokens: int = 4096,
     on_token: TokenListener = None,
 ) -> LLMClient:
@@ -233,18 +394,39 @@ def make_llm(
     The id comes from the caller, else HEDGE_FUND_LLM_MODEL, else DEFAULT_MODEL — the
     same seam the TUI's picker writes to. Raises with the name of the missing
     environment variable, because that is the only thing the user can act on.
+
+    Request timeout is ``timeout`` if given, else ``LLM_REQUEST_TIMEOUT``, else
+    60 seconds. OpenAI-compatible transports honor ``OPENAI_BASE_URL`` /
+    ``OPENAI_API_BASE`` (and the provider-specific aliases already documented).
+    Ollama talks to ``OLLAMA_BASE_URL`` (default ``http://127.0.0.1:11434``)
+    and needs no API key. Unlisted local tags route with an ``ollama:`` prefix
+    (``ollama:mistral`` → tag ``mistral``).
     """
     model = model or os.environ.get("HEDGE_FUND_LLM_MODEL") or DEFAULT_MODEL
     provider = provider_for(model)
+    if provider is None and model.startswith(OLLAMA_MODEL_PREFIX):
+        tag = _ollama_tag(model)
+        if not tag:
+            raise ValueError(
+                "Ollama model id is empty. Use ollama:<tag> (see `ollama list`)."
+            )
+        provider = "Ollama"
+        model = tag
     if provider is None:
         # Unlisted ids still work: a model newer than the registry should not
-        # need a code change. Anthropic is the default transport.
-        provider = "Anthropic"
+        # need a code change. A custom OpenAI-compatible base URL means the
+        # caller is routing that id (Groq, local proxy, ...) off OpenAI's host;
+        # otherwise Anthropic remains the default transport.
+        provider = "OpenAI" if _first_env(*OPENAI_BASE_URL_VARS) else "Anthropic"
     if not is_supported(provider):
         raise ValueError(
             f"No v2 client for {provider} (model {model}). "
             f"Supported: {', '.join(sorted(SUPPORTED_PROVIDERS))}."
         )
+
+    timeout = resolve_timeout(timeout)
+    if provider == "Ollama":
+        return _ollama_llm(model, timeout=timeout, on_token=on_token)
 
     api_key = _require_key(provider)
 
@@ -259,11 +441,11 @@ def make_llm(
     elif provider == "OpenAI":
         from langchain_openai import ChatOpenAI
         chat = ChatOpenAI(model=model, api_key=api_key, timeout=timeout,
-                          max_retries=1, base_url=os.getenv("OPENAI_API_BASE"))
+                          max_retries=1, **_optional_base_url(*OPENAI_BASE_URL_VARS))
     elif provider == "DeepSeek":
         from langchain_deepseek import ChatDeepSeek
         chat = ChatDeepSeek(model=model, api_key=api_key, timeout=timeout,
-                            max_retries=1)
+                            max_retries=1, **_optional_kwarg("api_base", "DEEPSEEK_BASE_URL", "DEEPSEEK_API_BASE"))
     elif provider == "Google":
         from langchain_google_genai import ChatGoogleGenerativeAI
         chat = ChatGoogleGenerativeAI(model=model, api_key=api_key,
@@ -271,19 +453,44 @@ def make_llm(
     elif provider == "xAI":
         from langchain_xai import ChatXAI
         chat = ChatXAI(model=model, api_key=api_key, timeout=timeout,
-                       max_retries=1)
+                       max_retries=1, **_optional_kwarg("xai_api_base", "XAI_BASE_URL", "XAI_API_BASE"))
     elif provider == "Kimi":
         # Moonshot speaks the OpenAI wire format. Default to the international
         # host; mainland users override with MOONSHOT_BASE_URL (v1 does the same).
         from langchain_openai import ChatOpenAI
         chat = ChatOpenAI(
             model=model, api_key=api_key, timeout=timeout, max_retries=1,
-            base_url=(os.getenv("MOONSHOT_BASE_URL")
-                      or "https://api.moonshot.ai/v1"))
+            base_url=(_first_env("MOONSHOT_BASE_URL") or "https://api.moonshot.ai/v1"))
     else:  # pragma: no cover - SUPPORTED_PROVIDERS is checked above
         raise ValueError(f"Unhandled provider {provider}")
 
-    return ChatLLM(model, chat, on_token)
+    return ChatLLM(model, chat, on_token, timeout=timeout)
+
+
+def _ollama_llm(
+    model: str,
+    timeout: float,
+    on_token: TokenListener,
+) -> ChatLLM:
+    """Local Ollama via the OpenAI-compatible /v1 surface. No cloud key."""
+    from langchain_openai import ChatOpenAI
+
+    host = _first_env(OLLAMA_BASE_URL_VAR) or DEFAULT_OLLAMA_HOST
+    base_url = resolve_ollama_base_url(host)
+    chat = ChatOpenAI(
+        model=model,
+        api_key=OLLAMA_PLACEHOLDER_KEY,
+        timeout=timeout,
+        max_retries=1,
+        base_url=base_url,
+    )
+    return ChatLLM(
+        model,
+        chat,
+        on_token,
+        timeout=timeout,
+        unreachable_hint=f"Is the Ollama daemon running at {host}?",
+    )
 
 
 def AnthropicLLM(model: str | None = None, **kwargs) -> LLMClient:  # noqa: N802
@@ -319,6 +526,8 @@ def _flatten(content, sep: str = "\n") -> str:
 
 def _require_key(provider: str) -> str:
     """The provider's API key, or a failure that names the variable to set."""
+    if provider in KEYLESS_PROVIDERS:
+        raise AssertionError(f"{provider} does not use an API key")
     env_var = env_var_for(provider)
     # Kimi accepts either name; v1 reads MOONSHOT_API_KEY first.
     key = (os.getenv("MOONSHOT_API_KEY") if provider == "Kimi" else None)

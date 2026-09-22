@@ -1,5 +1,15 @@
 """v2 fund — mandates as data, and the Fund object that lives them."""
 
+from hedge_fund.fund.allocator import (
+    ALLOCATOR_NAMES,
+    ALLOCATORS,
+    Allocator,
+    AllocatorContext,
+    EqualWeightAllocator,
+    StaticAllocator,
+    StrategyAllocationView,
+    get_allocator,
+)
 from hedge_fund.fund.spec import (
     ModelSpec,
     BlendPolicy,
@@ -12,11 +22,19 @@ from hedge_fund.fund.spec import (
 )
 
 __all__ = [
-    "ModelSpec",
+    "ALLOCATOR_NAMES",
+    "ALLOCATORS",
+    "Allocator",
+    "AllocatorContext",
     "BlendPolicy",
+    "EqualWeightAllocator",
     "Fund",
     "FundSpec",
+    "ModelSpec",
+    "StaticAllocator",
+    "StrategyAllocationView",
     "StrategySpec",
+    "get_allocator",
     "load_spec",
     "load_strategy",
     "normalize_universe",

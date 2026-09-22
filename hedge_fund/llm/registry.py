@@ -17,6 +17,9 @@ from pathlib import Path
 API_MODELS_PATH = Path(__file__).resolve().parent / "api_models.json"
 
 # Provider names are the strings used in api_models.json.
+# Cloud hosts only — a missing value is the variable make_llm() names.
+# Local Ollama is keyless; it lives in KEYLESS_PROVIDERS so the picker
+# can select it without a cloud key.
 PROVIDER_ENV_VARS = {
     "Anthropic": "ANTHROPIC_API_KEY",
     "OpenAI": "OPENAI_API_KEY",
@@ -27,10 +30,13 @@ PROVIDER_ENV_VARS = {
     "TypeSafe": "TYPESAFE_API_KEY",
 }
 
+# make_llm() constructs these without reading an API key.
+KEYLESS_PROVIDERS = frozenset({"Ollama"})
+
 # Providers v2 has a client for (see client.py:make_llm). Anything in the
 # registry but missing here is shown in the picker and not selectable — better
 # a greyed row than a run that dies on an id the transport rejects.
-SUPPORTED_PROVIDERS = frozenset(PROVIDER_ENV_VARS)
+SUPPORTED_PROVIDERS = frozenset(PROVIDER_ENV_VARS) | KEYLESS_PROVIDERS
 
 _FALLBACK = ("Opus 5", "claude-opus-5", "Anthropic")
 

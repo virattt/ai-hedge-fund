@@ -39,9 +39,11 @@ aihf
 The app asks for keys the first time it needs them and saves them to `~/.hedge-fund/.env` — nothing to configure up front. It needs:
 
 - A [Financial Datasets](https://financialdatasets.ai) API key, for prices, fundamentals, and earnings.
-- One model API key for the investor agents. Supported providers: Anthropic, OpenAI, DeepSeek, Google, xAI, Kimi, TypeSafe (Jev).
+- One model API key for the investor agents. Supported providers: Anthropic, OpenAI, DeepSeek, Google, xAI, Kimi, TypeSafe (Jev). Or run locally with Ollama — no key; model ids are Ollama tags (`llama3.1`, `qwen2.5`, or `ollama:<tag>` for anything you have pulled).
 
 Keys exported in your shell always win over the saved file.
+
+To point OpenAI-compatible models at a custom host (Groq, a local proxy, ...), set `OPENAI_BASE_URL` or the older `OPENAI_API_BASE` alias. Moonshot/Kimi already uses `MOONSHOT_BASE_URL`. Ollama uses `OLLAMA_BASE_URL` (default `http://127.0.0.1:11434`). Bound hung calls with `LLM_REQUEST_TIMEOUT` (seconds; default 60). A missing Ollama daemon fails inside that timeout instead of hanging.
 
 ## How to Run
 
@@ -55,10 +57,11 @@ With no arguments, this launches the interactive terminal app. Build a fund — 
 
 ### Non-interactive
 
-Run one fund cycle from a mandate file. The full cycle record prints to stdout as JSON; a short human summary goes to stderr:
+Run one live-clock paper cycle from a mandate file (`PaperBroker`, fills at mark, no live venue). `--paper` is the explicit flag; omitting it is the same path. If this mandate has a prior cycle receipt, the run opens that ending book so cash, positions, and NAV carry forward; otherwise it opens at the mandate's capital. A corrupt or incompatible receipt fails the run. The full cycle record prints to stdout as JSON; a short human summary goes to stderr; the receipt is saved next to the mandate:
 
 ```bash
 aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
+aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --paper
 ```
 
 Run the same mandate with Jev after configuring `TYPESAFE_API_KEY`:
@@ -67,7 +70,7 @@ Run the same mandate with Jev after configuring `TYPESAFE_API_KEY`:
 aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --model jev-1.13.0
 ```
 
-Backtest the mandate over history at its rebalance cadence:
+Backtest the mandate over history at its rebalance cadence (`SimBroker`, not the paper venue):
 
 ```bash
 aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
@@ -75,17 +78,50 @@ aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
 
 A mandate is the desk — strategies, staff, risk, capital, cadence — and never names tickers; `--tickers` says what to point it at for this run.
 
-## Development
+### Scheduler daemon (always-on paper / sim)
+
+The same `run_cycle` on a live clock, polled on an interval, gated by the market calendar and the mandate's rebalance cadence. Each tick is keyed by mandate + session date, so a double-fire is a no-op. Paper is the default venue; `sim` is the other allowed book. There is no live venue on this path.
 
 ```bash
-git clone https://github.com/virattt/ai-hedge-fund.git
-cd ai-hedge-fund
-poetry install
-poetry run aihf
-poetry run pytest hedge_fund
+# always-on: poll every 60s, fire when the session is due
+python -m hedge_fund.daemon ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
+
+# one evaluation, then exit (no polling sleep) — useful from cron
+python -m hedge_fund.daemon ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --once
+
+# optional schedule YAML (CLI flags override)
+# interval_seconds: 300
+# venue: paper
+python -m hedge_fund.daemon ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --config ~/.hedge-fund/daemon.yaml
 ```
 
+Halt new ticks without killing the process mid-cycle:
+
+```bash
+touch ~/.hedge-fund/KILL
+# or
+export HEDGE_FUND_KILL_SWITCH=1
+```
+
+`--once` prints a JSON result on stdout (`status` is `ran`, `skipped`, `halted`, or `not_due`). The always-on loop logs each evaluation to stderr and exits when the kill-switch is on. Idempotency keys live under `~/.hedge-fund/ticks/`.
+
+## Development
+
+This fork lives at [bugman666/ai-hedge-fund](https://github.com/bugman666/ai-hedge-fund). See [CONTRIBUTING.md](CONTRIBUTING.md) for the first-test / first-backtest path.
+
+```bash
+git clone https://github.com/bugman666/ai-hedge-fund.git
+cd ai-hedge-fund
+poetry install
+poetry run pytest hedge_fund   # offline: no API keys required
+poetry run aihf
+```
+
+Live Financial Datasets tests skip unless `FINANCIAL_DATASETS_API_KEY` is set.
+
 ## How to Contribute
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). In short:
 
 1. Fork the repository
 2. Create a feature branch

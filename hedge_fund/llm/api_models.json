@@ -43,5 +43,15 @@
     "display_name": "Gemini 3.1 Pro",
     "model_name": "gemini-3.1-pro-preview",
     "provider": "Google"
+  },
+  {
+    "display_name": "Llama 3.1",
+    "model_name": "llama3.1",
+    "provider": "Ollama"
+  },
+  {
+    "display_name": "Qwen 2.5",
+    "model_name": "qwen2.5",
+    "provider": "Ollama"
   }
 ]

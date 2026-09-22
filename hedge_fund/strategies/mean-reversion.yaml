@@ -1,0 +1,14 @@
+# Mean reversion — systematic, fade a z-score stretch.
+# Short names whose latest close sits well above the trailing window
+# mean; long names well below it. Defaults are a 20-bar window with
+# z mapped through tanh(z / 2). Override via model params.
+name: mean-reversion
+display_name: Mean Reversion
+models:
+  - name: mean_reversion
+    params:
+      window: 20
+      z_scale: 2.0
+blend:
+  method: conviction_weighted
+  gross_target: 1.0

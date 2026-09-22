@@ -1,0 +1,14 @@
+# Momentum — systematic, skip-period price trend.
+# Long names that rose over the lookback after dropping the most recent
+# skip bars; short names that fell. Defaults are the classic 12-1
+# (252-bar lookback, 21-bar skip). Override via model params.
+name: momentum
+display_name: Momentum
+models:
+  - name: momentum
+    params:
+      lookback: 252
+      skip: 21
+blend:
+  method: conviction_weighted
+  gross_target: 1.0

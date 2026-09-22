@@ -1,13 +1,23 @@
 """run_cycle end-to-end tests — fake data client + fake analysts + real SimBroker."""
 
+import json
+
 import pytest
 
 from hedge_fund.brokers.sim import SimBroker
-from hedge_fund.data.models import Price
+from hedge_fund.data.client import FDClientError
+from hedge_fund.data.models import FinancialMetrics, Price
+from hedge_fund.fund.allocator import (
+    AllocatorContext,
+    EqualWeightAllocator,
+    StaticAllocator,
+)
 from hedge_fund.fund.spec import Fund, FundSpec
+from hedge_fund.llm import PromptCache
 from hedge_fund.models import Signal
 from hedge_fund.pipeline.models import CycleRecord
 from hedge_fund.pipeline.run_cycle import run_cycle
+from hedge_fund.signals import BuffettAgent, MungerAgent
 
 
 # ---------------------------------------------------------------------------
@@ -15,17 +25,31 @@ from hedge_fund.pipeline.run_cycle import run_cycle
 # ---------------------------------------------------------------------------
 
 class FakeDataClient:
-    """Canned closes per ticker; a ticker absent from `closes` has no bars."""
+    """Canned closes per ticker; a ticker absent from `closes` has no bars.
 
-    def __init__(self, closes):
+    ``price_error`` / ``news_error`` simulate infra failures (must raise,
+    not look like empty data). ``news`` is the canned ``get_news`` payload.
+    """
+
+    def __init__(self, closes, news=None, price_error=None, news_error=None):
         self._closes = closes
+        self._news = news if news is not None else []
+        self._price_error = price_error
+        self._news_error = news_error
 
     def get_prices(self, ticker, start_date, end_date, **kwargs):
+        if self._price_error is not None:
+            raise self._price_error
         close = self._closes.get(ticker)
         if close is None:
             return []
         return [Price(open=close, close=close, high=close, low=close,
                       volume=1000, time=f"{end_date}T00:00:00Z")]
+
+    def get_news(self, ticker, end_date, start_date=None, limit=1000):
+        if self._news_error is not None:
+            raise self._news_error
+        return list(self._news)
 
 
 class FakeAnalyst:
@@ -146,6 +170,94 @@ def test_slices_normalize():
     assert run(2.0, 2.0).target_weights == run(1.0, 1.0).target_weights
 
 
+def test_static_allocator_path_is_bit_identical_to_legacy_slices():
+    """Default CIO path is exactly weight/sum(weight) — same floats, same book."""
+    spec = _spec(strategies=[
+        {"name": "s1", "weight": 3.0, "models": [{"name": "a"}]},
+        {"name": "s2", "weight": 1.0, "models": [{"name": "b"}]},
+    ], max_position_pct=1.0)
+    models = {
+        "s1": [FakeAnalyst("a", views={"AAPL": 1.0, "MSFT": 1.0})],
+        "s2": [FakeAnalyst("b", views={"MSFT": -1.0})],
+    }
+    fund = Fund(spec, models=models)
+    record = run_cycle(fund, "2024-06-03", SimBroker(cash=100_000.0),
+                       FakeDataClient(CLOSES), UNIVERSE)
+
+    total = 3.0 + 1.0
+    legacy = {"s1": 3.0 / total, "s2": 1.0 / total}
+    assert {sr.name: sr.slice for sr in record.strategies} == legacy
+    assert record.strategies[0].slice == 3.0 / total
+    assert record.strategies[1].slice == 1.0 / total
+    # Same floats whether the CIO is implicit, explicit, or passed in.
+    via_arg = run_cycle(
+        Fund(spec, models=models), "2024-06-03", SimBroker(cash=100_000.0),
+        FakeDataClient(CLOSES), UNIVERSE, allocator=StaticAllocator(),
+    )
+    via_spec = run_cycle(
+        Fund(spec.model_copy(update={"allocator": "static"}), models=models),
+        "2024-06-03", SimBroker(cash=100_000.0), FakeDataClient(CLOSES),
+        UNIVERSE,
+    )
+    assert record.model_dump_json() == via_arg.model_dump_json() == via_spec.model_dump_json()
+
+
+def test_equal_weight_allocator_is_selectable():
+    """The stub CIO can be selected and ignores 3:1 mandate slices."""
+    spec = _spec(strategies=[
+        {"name": "s1", "weight": 3.0, "models": [{"name": "a"}]},
+        {"name": "s2", "weight": 1.0, "models": [{"name": "b"}]},
+    ], max_position_pct=1.0)
+    models = {
+        "s1": [FakeAnalyst("a", views={"AAPL": 1.0, "MSFT": 1.0})],
+        "s2": [FakeAnalyst("b", views={"MSFT": -1.0})],
+    }
+    static = run_cycle(
+        Fund(spec, models=models), "2024-06-03", SimBroker(cash=100_000.0),
+        FakeDataClient(CLOSES), UNIVERSE,
+    )
+    equal = run_cycle(
+        Fund(spec.model_copy(update={"allocator": "equal_weight"}), models=models),
+        "2024-06-03", SimBroker(cash=100_000.0), FakeDataClient(CLOSES),
+        UNIVERSE,
+    )
+    via_arg = run_cycle(
+        Fund(spec, models=models), "2024-06-03", SimBroker(cash=100_000.0),
+        FakeDataClient(CLOSES), UNIVERSE, allocator=EqualWeightAllocator(),
+    )
+
+    assert static.strategies[0].slice == 0.75
+    assert static.strategies[1].slice == 0.25
+    assert equal.strategies[0].slice == 0.5
+    assert equal.strategies[1].slice == 0.5
+    assert equal.spec.allocator == "equal_weight"
+    assert via_arg.strategies[0].slice == 0.5
+    # Hand-computed: each sleeve is 50%. s1 = AAPL 0.5, MSFT 0.5; s2 MSFT -1.
+    assert equal.target_weights["AAPL"] == pytest.approx(0.25)
+    assert equal.target_weights["MSFT"] == pytest.approx(-0.25)
+    assert equal.target_weights != static.target_weights
+
+
+def test_broken_allocator_fails_loud():
+    """A CIO that drops a strategy must not silently rebalance the book."""
+
+    class BrokenAllocator:
+        def allocate(self, context: AllocatorContext):
+            return {context.strategies[0].name: 1.0}
+
+    spec = _spec(strategies=[
+        {"name": "s1", "models": [{"name": "a"}]},
+        {"name": "s2", "models": [{"name": "b"}]},
+    ])
+    fund = Fund(spec, models={
+        "s1": [FakeAnalyst("a", views={"AAPL": 1.0})],
+        "s2": [FakeAnalyst("b", views={"MSFT": -1.0})],
+    }, allocator=BrokenAllocator())
+    with pytest.raises(ValueError, match="expected"):
+        run_cycle(fund, "2024-06-03", SimBroker(cash=100_000.0),
+                  FakeDataClient(CLOSES), UNIVERSE)
+
+
 def test_deterministic_and_json_round_trips():
     def make():
         spec = _spec()
@@ -251,3 +363,213 @@ def test_analyst_error_propagates():
     with pytest.raises(ConnectionError):
         run_cycle(fund, "2024-06-03", SimBroker(cash=100_000.0),
                   FakeDataClient(CLOSES), UNIVERSE)
+
+
+def test_price_infra_failure_fails_the_cycle():
+    """A data-client transport/auth error is not 'no close' / a skipped ticker."""
+    fund = Fund(_spec(), models={"solo": [FakeAnalyst("a", views={"AAPL": 1.0})]})
+    data = FakeDataClient(
+        CLOSES,
+        price_error=FDClientError("unauthorized", status_code=401, path="/prices/"),
+    )
+    with pytest.raises(FDClientError) as exc_info:
+        run_cycle(fund, "2024-06-03", SimBroker(cash=100_000.0), data, UNIVERSE)
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.path == "/prices/"
+
+
+class NewsAnalyst:
+    """Reads get_news: empty news → abstain; articles → a view.
+
+    Mirrors the documented news/sentiment contract: empty list is no
+    narrative input (a legitimate zero), not an infra failure.
+    """
+
+    name = "news"
+
+    def predict(self, ticker, date, data_client):
+        news = data_client.get_news(ticker, date)
+        if not news:
+            return Signal(
+                model_name=self.name, ticker=ticker, date=date, value=0.0,
+                metadata={"abstained": True, "abstain_reason": "no news"},
+            )
+        return Signal(model_name=self.name, ticker=ticker, date=date, value=0.5)
+
+
+def test_empty_news_is_no_narrative_not_a_failed_cycle():
+    """Genuine empty news may abstain; the cycle still completes."""
+    fund = Fund(_spec(), models={"solo": [NewsAnalyst()]})
+    record = run_cycle(
+        fund, "2024-06-03", SimBroker(cash=100_000.0),
+        FakeDataClient(CLOSES, news=[]), UNIVERSE,
+    )
+    signals = record.strategies[0].signals
+    assert signals
+    assert all(s.value == 0.0 and s.metadata.get("abstained") for s in signals)
+    # Abstentions are also listed on the record — not a silent omit.
+    assert {d.ticker for d in record.dropped} == set(UNIVERSE)
+    assert all(d.reason == "no news" for d in record.dropped)
+
+
+def test_news_infra_failure_fails_the_cycle():
+    """Auth/quota on get_news must not become a neutral Signal / empty cycle."""
+    fund = Fund(_spec(), models={"solo": [NewsAnalyst()]})
+    data = FakeDataClient(
+        CLOSES,
+        news_error=FDClientError(
+            "unauthorized", status_code=401, path="/news/",
+        ),
+    )
+    with pytest.raises(FDClientError) as exc_info:
+        run_cycle(fund, "2024-06-03", SimBroker(cash=100_000.0), data, UNIVERSE)
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.path == "/news/"
+
+
+# ---------------------------------------------------------------------------
+# Shared PIT snapshot + dropped views
+# ---------------------------------------------------------------------------
+
+BULLISH = json.dumps({
+    "signal": "bullish", "confidence": 80, "reasoning": "Wonderful business.",
+})
+
+
+class RecordingLLM:
+    """Canned LLM that keeps every user prompt it was shown."""
+
+    model = "fake-model"
+
+    def __init__(self, response=BULLISH):
+        self._response = response
+        self.users: list[str] = []
+
+    def complete(self, system, user):
+        self.users.append(user)
+        return self._response
+
+
+class DriftCycleClient:
+    """Prices are stable; each fundamentals fetch mutates D/E and ROE."""
+
+    def __init__(self, close=200.0):
+        self._close = close
+        self.metrics_calls = 0
+
+    def get_prices(self, ticker, start_date, end_date, **kwargs):
+        return [Price(open=self._close, close=self._close, high=self._close,
+                      low=self._close, volume=1000,
+                      time=f"{end_date}T00:00:00Z")]
+
+    def get_financial_metrics(self, ticker, end_date, period="ttm", limit=10):
+        self.metrics_calls += 1
+        quarters = [
+            "2024-12-31", "2024-09-30", "2024-06-30", "2024-03-31",
+            "2023-12-31", "2023-09-30", "2023-06-30", "2023-03-31",
+        ]
+        rows = []
+        for i, q in enumerate(quarters):
+            de = 0.5 * self.metrics_calls if i == 0 else 0.5
+            roe = 0.20 * self.metrics_calls if i == 0 else 0.20
+            rows.append(FinancialMetrics(
+                ticker=ticker, report_period=q, period="ttm", filing_date=q,
+                return_on_equity=roe, debt_to_equity=de,
+                gross_margin=0.40, book_value_per_share=10.0, market_cap=1e9,
+            ))
+        return rows
+
+    def get_company_facts(self, ticker):
+        return None
+
+
+def test_same_ticker_same_cycle_identical_fundamentals(tmp_path):
+    """Two personas, one name, one tick — identical D/E, ROE, prompt, hash.
+
+    The data client drifts on every fetch. If each persona built its own
+    snapshot they would disagree; the cycle cache freezes the first fetch.
+    """
+    buffett_llm = RecordingLLM()
+    munger_llm = RecordingLLM()
+    data = DriftCycleClient()
+    fund = Fund(_spec(strategies=[
+        {"name": "value", "models": [{"name": "buffett"}]},
+        {"name": "quality", "models": [{"name": "munger"}]},
+    ]), models={
+        "value": [BuffettAgent(llm=buffett_llm, cache=PromptCache(tmp_path / "b"))],
+        "quality": [MungerAgent(llm=munger_llm, cache=PromptCache(tmp_path / "m"))],
+    })
+
+    record = run_cycle(fund, "2025-01-15", SimBroker(cash=100_000.0),
+                       data, ["TEST"])
+
+    hashes = [s.metadata["snapshot_hash"]
+              for sr in record.strategies for s in sr.signals]
+    assert len(hashes) == 2
+    assert hashes[0] == hashes[1]
+    assert buffett_llm.users == munger_llm.users
+    assert len(buffett_llm.users) == 1
+    prompt = buffett_llm.users[0]
+    # First-fetch D/E 0.50 and ROE 0.20 — not the drifted 1.00 / 0.40.
+    assert "| 0.50 |" in prompt  # latest D/E column
+    assert "0.20" in prompt      # ROE avg / latest ROE
+    assert "| 1.00 |" not in prompt
+    assert data.metrics_calls == 1
+    assert record.dropped == []
+
+
+def test_abstained_views_are_listed_on_the_record():
+    """A view blend ignores must appear on CycleRecord.dropped."""
+    fund = Fund(_spec(), models={
+        "solo": [FakeAnalyst("a", abstain=True)],
+    })
+    record = run_cycle(fund, "2024-06-03", SimBroker(cash=100_000.0),
+                       FakeDataClient(CLOSES), UNIVERSE)
+
+    assert {d.ticker for d in record.dropped} == set(UNIVERSE)
+    assert all(d.model == "a" for d in record.dropped)
+    assert all(d.strategy == "solo" for d in record.dropped)
+    assert all(d.reason == "abstained" for d in record.dropped)
+    # The view is still on the sleeve — dropped is the explicit exclude list.
+    assert all(s.metadata.get("abstained") is True
+               for sr in record.strategies for s in sr.signals)
+
+
+def test_voting_views_are_not_dropped():
+    fund = Fund(_spec(), models={
+        "solo": [FakeAnalyst("a", views={"AAPL": 1.0})],
+    })
+    record = run_cycle(fund, "2024-06-03", SimBroker(cash=100_000.0),
+                       FakeDataClient(CLOSES), UNIVERSE)
+    assert record.dropped == []
+
+
+def test_insufficient_history_is_dropped_with_reason(tmp_path):
+    """Short history → abstain, and CycleRecord names the drop."""
+    class ThinClient(DriftCycleClient):
+        def get_financial_metrics(self, ticker, end_date, period="ttm", limit=10):
+            self.metrics_calls += 1
+            return [
+                FinancialMetrics(
+                    ticker=ticker, report_period="2024-12-31", period="ttm",
+                    filing_date="2024-12-31", return_on_equity=0.2,
+                    debt_to_equity=0.5, market_cap=1e9,
+                ),
+            ]
+
+    fund = Fund(_spec(strategies=[
+        {"name": "value", "models": [{"name": "buffett"}]},
+    ]), models={
+        "value": [BuffettAgent(llm=RecordingLLM(),
+                               cache=PromptCache(tmp_path / "b"))],
+    })
+    record = run_cycle(fund, "2025-01-15", SimBroker(cash=100_000.0),
+                       ThinClient(), ["TEST"])
+
+    assert len(record.dropped) == 1
+    drop = record.dropped[0]
+    assert drop.ticker == "TEST"
+    assert drop.model == "buffett"
+    assert drop.strategy == "value"
+    assert "insufficient data" in drop.reason
+    assert record.strategies[0].signals[0].metadata["abstained"] is True

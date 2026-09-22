@@ -9,9 +9,9 @@ v2 rebuilds the fund as a persistent, point-in-time-honest system, mirroring a
 real shop's hierarchy:
 
 ```
-FUND      =  capital slices over STRATEGIES   (master risk on the netted book)
-STRATEGY  =  a blend policy over MODELS       (a "pod")
-MODEL     =  an alpha model → a Signal        (conviction in [-1,+1] + thesis)
+FUND      =  an allocator (CIO) over STRATEGIES   (master risk on the netted book)
+STRATEGY  =  a blend policy over MODELS           (a "pod")
+MODEL     =  an alpha model → a Signal            (conviction in [-1,+1] + thesis)
 ```
 
 A fund is the **desk**, not a watchlist: the mandate names no tickers. Which
@@ -21,17 +21,28 @@ and every run remembers what it traded.
 
 A fund runs two kinds of pods, like a real shop. **Discretionary** strategies
 are staffed by **agents** — LLM investor personas (Warren Buffett, Charlie
-Munger, Benjamin Graham, Peter Lynch, Stanley Druckenmiller) whose judgment
-is the edge; blend them long-biased or market-neutral. **Systematic**
-strategies are powered by quant models (post-earnings drift) — the model *is*
-the strategy, no persona attached. Both kinds implement one interface and
-plug into the same engine unchanged.
+Munger, Benjamin Graham, Peter Lynch, Stanley Druckenmiller, Cathie Wood,
+Michael Burry, Bill Ackman, Aswath Damodaran, Phil Fisher, Mohnish Pabrai,
+Nassim Taleb, Rakesh Jhunjhunwala) whose judgment
+is the edge; blend them long-biased or market-neutral. (The personas are
+stylized approximations of public philosophies — not the actual
+individuals, and not endorsements.) **Systematic** strategies are powered
+by quant models (post-earnings drift, momentum, mean reversion) — the
+model *is* the strategy, no persona attached. Both kinds implement one
+interface and plug into the same engine unchanged.
 
-Run a fund two ways: **one cycle** (today's data → today's target book) or a
-**backtest** — the same cycle looped over history at the mandate's rebalance
-cadence, producing an equity curve against your benchmark and a full
-`CycleRecord` for every tick. Same code path, so a backtest is honest by
-construction: it's the fund, replayed, not a separate simulator.
+Run a fund three ways: **one paper cycle** (live clock + `PaperBroker`, today's
+data → today's target book, seeded from the newest `CycleRecord` receipt when
+this mandate has one, so cash, positions, and NAV persist); the **scheduler
+daemon** (`python -m hedge_fund.daemon`) — the same paper (or sim) cycle on
+a poll, gated by the market calendar and the mandate's rebalance cadence,
+with an idempotency key per mandate+session and a file/env kill-switch; or
+a **backtest** — the same cycle looped over history at the mandate's
+rebalance cadence on `SimBroker`, producing an equity curve against your
+benchmark and a full `CycleRecord` for every tick. Backtests always open at
+the mandate's capital and carry the book only across ticks inside that run.
+Same code path, so a backtest is honest by construction: it's the fund,
+replayed, not a separate simulator.
 
 ## Quickstart
 
@@ -41,27 +52,62 @@ poetry install                          # dependencies
 # .env needs (at repo root):
 #   FINANCIAL_DATASETS_API_KEY=...      # market/fundamentals data
 #   ANTHROPIC_API_KEY=...               # only for LLM agents (Buffett)
+#   # or Ollama locally: no key; --model llama3.1 / OLLAMA_BASE_URL
 
 # THE command. No arguments: launch the interactive app (a Textual TUI).
 # Build a fund — pick stocks, strategies, rebalance cadence — or backtest a
 # saved fund and watch its equity curve draw against its benchmark.
 poetry run aihf       # or, equivalently: python -m hedge_fund.tui
 
-# With a mandate: run one cycle non-interactively (data → strategies →
-# netting → risk → execution), full CycleRecord as JSON on stdout. A mandate
-# carries no tickers — --tickers says what to point the fund at this run.
+# With a mandate: one live-clock paper cycle (PaperBroker, fills at mark).
+# --paper is explicit; omitting it is the same path. Full CycleRecord as
+# JSON on stdout. A mandate carries no tickers — --tickers says what to
+# point the fund at this run. If a prior receipt exists for this mandate,
+# the broker opens that ending book; otherwise it opens at the mandate's capital.
 poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT,NVDA
+poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT,NVDA --paper
 
 # Backtest a mandate: the same run_cycle looped over history at the
-# mandate's rebalance cadence, full result JSON (every CycleRecord) on stdout.
+# mandate's rebalance cadence on SimBroker, full result JSON on stdout.
 poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
 
-# Tests
+# Select the equal-weight CIO stub (default is static mandate slices):
+poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --allocator equal_weight
+
+# Always-on scheduler: the same run_cycle on a live clock, gated by the
+# market calendar and the mandate's rebalance cadence. Paper venue by
+# default; --venue sim is the other allowed book. --once evaluates one
+# tick and exits (no polling sleep). Double-fire of the same
+# mandate+session is a no-op. touch ~/.hedge-fund/KILL (or
+# HEDGE_FUND_KILL_SWITCH=1) to halt new ticks.
+poetry run python -m hedge_fund.daemon ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
+poetry run python -m hedge_fund.daemon ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --once
+
+# Optional: heartbeat + JSONL events on a paper cycle (no live venue).
+# Webhook URL is env-only so it does not show up on the command line.
+#   HEDGE_FUND_WEBHOOK_URL=https://example.invalid/hook
+poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT \
+  --heartbeat --events
+
+# Validation-gate scaffold on a saved backtest JSON (offline; educational only —
+# not a trading green-light). Accepts FundBacktestResult (nav), BacktestResult
+# (equity_curve), or a bare {"returns": [...]} object.
+poetry run python -m hedge_fund.validation path/to/backtest.json
+
+# Tests (offline; live Financial Datasets smoke skips without FINANCIAL_DATASETS_API_KEY)
+# See ../CONTRIBUTING.md for the fork's first-test / first-backtest path.
 poetry run pytest hedge_fund/
 ```
 
 All API responses cache to disk (`~/.hedge-fund/cache/`), so reruns are fast,
 free, and work offline once warmed.
+
+Cycle health is opt-in. Events always log; set `HEDGE_FUND_EVENTS_PATH` or
+`--events` to append JSONL, `HEDGE_FUND_HEARTBEAT_PATH` / `--heartbeat` for a
+heartbeat file under `~/.hedge-fund/observability/`, and
+`HEDGE_FUND_WEBHOOK_URL` to POST a JSON summary when a cycle fails. A webhook
+error is logged; the original cycle exception still raises. See
+[`../CONTRIBUTING.md`](../CONTRIBUTING.md) and `.env.example`.
 
 ## Architecture
 
@@ -72,18 +118,22 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | Module | What | Status |
 |--------|------|--------|
 | `data/` | `DataClient` protocol, Financial Datasets client, disk cache | ✅ |
-| `signals/` | `AlphaModel` interface, PEAD, `LLMAgent` + 5 investor personas | ✅ |
-| `llm/` | LLM provider protocol, Anthropic client, prompt cache | ✅ |
+| `signals/` | `AlphaModel` interface, PEAD, momentum, mean reversion, `LLMAgent` + 13 investor personas | ✅ |
+| `llm/` | LLM provider protocol, `make_llm` (Anthropic, OpenAI, DeepSeek, Google, xAI, Kimi, TypeSafe, Ollama), prompt cache | ✅ |
 | `features/` | Point-in-time fundamentals snapshot (more features planned) | ◐ |
 | `fund/` | `FundSpec`/`StrategySpec` — mandates as YAML data — and the `Fund` object | ✅ |
-| `strategies/` | Strategy library (fundamental-ls, deep-value, inflections, earnings-drift) — add yours as a YAML | ✅ |
-| `portfolio/` | View blending → target weights (conviction-weighted, optional market-neutral) | ✅ |
+| `fund/allocator.py` | `Allocator` protocol (CIO): strategy performance / risk → capital weights. `StaticAllocator` default; `EqualWeightAllocator` stub | ✅ |
+| `strategies/` | Strategy library (fundamental-ls, deep-value, inflections, high-conviction, asymmetric, earnings-drift, momentum, mean-reversion) — add yours as a YAML | ✅ |
+| `portfolio/` | View blending → target weights *inside* a strategy (not the CIO) | ✅ |
 | `risk/` | Hard limits — per-position and gross-exposure clamps | ✅ |
-| `brokers/` | `Broker` protocol + `SimBroker` (paper/live brokers planned) | ◐ |
+| `brokers/` | `Broker` protocol + `SimBroker` (backtest) + `PaperBroker` (live-clock paper; live venue planned) | ◐ |
+| `ledger.py` | Persist `CycleRecord` receipts; seed the next live-clock `PaperBroker` from the newest one | ✅ |
 | `pipeline/` | `run_cycle` — one code path for backtest/paper/live; `CycleRecord` | ✅ |
+| `daemon/` | Scheduler: market-calendar poll, idempotent ticks, kill-switch; paper or sim | ✅ |
+| `observability/` | Cycle events (log + optional JSONL), heartbeat file, optional failure webhook — wraps `run_cycle`, does not change it | ✅ |
 | `backtesting/` | `backtest_fund` — the whole fund over history on `run_cycle` — plus the per-model engine | ✅ |
 | `event_study/` | Market-model abnormal returns (CARs) | ✅ |
-| `validation/` | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO) | ⬜ |
+| `validation/` | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO) — scaffold only | ◐ |
 | `tui/` | The interactive app (Textual): fund builder + live backtest board | ✅ |
 
 ✅ built · ◐ partial · ⬜ planned
@@ -95,16 +145,46 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
   period. No lookahead, ever.
 - **Fail loud.** Infrastructure failures raise; only genuine "no data" returns
   empty. A silent empty would poison a backtest as a fake "no signal."
+  Financial Datasets 401/403 name `FINANCIAL_DATASETS_API_KEY`; exhausted
+  429s tell you to wait or check quota. An empty `get_news` list means no
+  articles in range — not a failed fetch. There is no sentiment endpoint;
+  if sentiment is derived from news, empty news is no narrative input, not
+  a zero / "no opinion" trade. A cycle must not convert an infra failure
+  into a neutral `Signal`.
 - **The LLM never touches the trade.** Agents form *views* and *narrate*;
   deterministic code sizes and places orders; risk limits are hard gates.
 - **One interface for every analyst.** Implement `AlphaModel.predict(ticker,
   date, data_client) -> Signal` and it plugs into the engine unchanged.
+- **One interface for the CIO.** Implement `Allocator.allocate(context) ->
+  {strategy: weight}` and `run_cycle` nets sleeves through it. The default
+  `StaticAllocator` is today's `weight / sum(weights)` math. This is *not*
+  portfolio construction: that blends model views inside a strategy; the
+  allocator distributes capital *across* strategies.
 
 ## Data contracts (`models.py`)
 
 - `Signal` — an alpha model's output: `value` in `[-1, +1]`, plus `reasoning`,
   `components`, and `metadata`.
 - `QuantSignals` — all signals for a ticker on a date.
+
+## Validation gate (scaffold)
+
+`hedge_fund.validation` is a **research hook**, not a go-live check. It takes a
+return series, an equity/NAV curve, or a saved backtest JSON and returns a
+`ValidationReport` with combinatorial purged CV (CPCV) fold summaries and a
+probability-of-backtest-overfitting (PBO) placeholder.
+
+> **Educational use only.** Not a trading green-light and not investment advice.
+> A report does not authorize live capital, auto-promotion, or real trading.
+> Auto-promotion through this gate stays human-approved and is not built yet.
+
+```bash
+poetry run python -m hedge_fund.validation path/to/backtest.json
+```
+
+`run_validation_gate(...)` is the library entry. CPCV purge/embargo are numbers
+of bars dropped from the train set before/after each test block. Single-series
+PBO is a documented heuristic; the CSCV rank estimator needs multiple trials.
 
 ## Contributing
 
@@ -115,5 +195,8 @@ Two high-leverage contributions:
   prompt) or `signals/pead.py` (quant) as a template, register it, add a test.
 - **A new strategy** (no code): drop a YAML in `strategies/` bundling existing
   models with a blend policy — the fund builder picks it up automatically.
+- **A new allocator** (code): read `fund/allocator.py` for the `Allocator`
+  protocol, implement `allocate(context)`, register it in `ALLOCATORS`, add
+  a test. Select it with `allocator: …` on the mandate or `--allocator`.
 
 See [`../ROADMAP.md`](../ROADMAP.md) for the open list.

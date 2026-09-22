@@ -1,0 +1,42 @@
+{
+  "fund": "other-desk",
+  "as_of": "2024-06-03",
+  "spec": {
+    "name": "other-desk",
+    "strategies": [
+      {
+        "name": "solo",
+        "models": [{"name": "pead"}]
+      }
+    ],
+    "risk": {
+      "max_position_pct": 0.25,
+      "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+  },
+  "universe": ["AAPL"],
+  "marks": {"AAPL": 200.0},
+  "skipped": [],
+  "strategies": [
+    {
+      "name": "solo",
+      "slice": 1.0,
+      "signals": [],
+      "convictions": {},
+      "weights": {}
+    }
+  ],
+  "target_weights": {},
+  "clamps": [],
+  "final_weights": {},
+  "equity_before": 100000.0,
+  "cash_before": 100000.0,
+  "orders": [],
+  "fills": [],
+  "positions": {"AAPL": 10},
+  "cash": 98000.0,
+  "nav": 100000.0
+}

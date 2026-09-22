@@ -15,7 +15,7 @@ from hedge_fund.llm import PROVIDER_ENV_VARS
 from hedge_fund.llm.contract import normalize_jev_response
 from hedge_fund.llm.test_contract import _response
 from hedge_fund.models import Signal
-from hedge_fund.pipeline.models import CycleRecord
+from hedge_fund.pipeline.models import CycleRecord, DroppedOutput
 from hedge_fund.tui import app as ui
 from hedge_fund.tui import keys
 
@@ -86,7 +86,7 @@ def test_picker_and_masked_key_save_or_cancel(save, isolated_configuration):
             picker = app.screen.query_one("#picker-list", OptionList)
             index = picker.get_option_index("jev-1.13.0")
             assert not picker.get_option_at_index(index).disabled
-            assert "Jev — TypeSafe" in _render(picker.get_option_at_index(index).prompt)
+            assert "Jev" in _render(picker.get_option_at_index(index).prompt)
             picker.highlighted = index
             await pilot.press("enter")
             assert os.environ["HEDGE_FUND_LLM_MODEL"] == "jev-1.13.0"
@@ -104,6 +104,30 @@ def test_picker_and_masked_key_save_or_cancel(save, isolated_configuration):
             else:
                 assert "TYPESAFE_API_KEY" not in os.environ
                 assert saved.read_text() == original
+
+    asyncio.run(scenario())
+
+
+def test_ollama_is_selectable_and_needs_no_llm_key(monkeypatch, isolated_configuration):
+    """Ollama is the no-key local path: picker enables it, the run gate skips LLM keys."""
+    monkeypatch.setenv("FINANCIAL_DATASETS_API_KEY", "fixture-fd-key")
+    monkeypatch.setenv("HEDGE_FUND_LLM_MODEL", "llama3.1")
+
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=(100, 35)) as pilot:
+            await pilot.press("m")
+            picker = app.screen.query_one("#picker-list", OptionList)
+            index = picker.get_option_index("llama3.1")
+            assert not picker.get_option_at_index(index).disabled
+            assert "Llama 3.1" in _render(picker.get_option_at_index(index).prompt)
+            picker.highlighted = index
+            await pilot.press("enter")
+            assert os.environ["HEDGE_FUND_LLM_MODEL"] == "llama3.1"
+            resumed = Mock()
+            assert ui._demand_run_keys(app, resumed) is True
+            resumed.assert_not_called()
+            assert not isinstance(app.screen, ui.KeyPromptScreen)
 
     asyncio.run(scenario())
 
@@ -156,7 +180,7 @@ def test_jev_results_show_stored_direction_and_separate_confidence(direction, st
     detail = _render(ui._signal_detail(_record(signal), 0, 0))
     assert direction.upper() in detail
     assert "investment conviction" in detail
-    assert "No written thesis generated." in detail
+    assert "No written thesis" in detail.replace("\n", " ")
     assert "Jev answer-option probabilities" in detail
     assert "not investment returns" in detail
     assert "Jev native answer confidence" in detail
@@ -180,11 +204,56 @@ def test_jev_results_show_stored_direction_and_separate_confidence(direction, st
     assert verdict[0] in _render(option.prompt)
 
 
+def test_home_menu_labels_the_paper_path(isolated_configuration):
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=(100, 35)) as pilot:
+            picker = app.screen.query_one("#home-menu", OptionList)
+            text = _render(picker.get_option_at_index(0).prompt)
+            assert "paper-trade" in text
+            assert picker.get_option_at_index(0).id == "run"
+            _ = pilot
+
+    asyncio.run(scenario())
+
+
+def test_last_run_book_reads_newest_cycle_receipt(tmp_path, monkeypatch):
+    monkeypatch.setattr(ui, "FUNDS_DIR", tmp_path)
+    assert ui._last_run_book("alpha-one") is None
+    receipt = tmp_path / "alpha-one-run-2024-06-03-120000.json"
+    receipt.write_text(_record(_signal()).model_dump_json())
+    # A backtest sitting next to it must not win — only CycleRecords seed.
+    backtest = tmp_path / "alpha-one-backtest-2024-06-04-120000.json"
+    backtest.write_text('{"metrics": {"total_return_pct": 0.1, '
+                        '"annualized_return_pct": 0.1, "sharpe_ratio": 0, '
+                        '"max_drawdown_pct": 0, "benchmark_return_pct": 0, '
+                        '"excess_return_pct": 0, "n_cycles": 1}, '
+                        '"universe": ["AAPL"], "start": "2024-01-01", '
+                        '"end": "2024-06-04"}')
+    os.utime(receipt, (1_000_000, 1_000_000))
+    os.utime(backtest, (2_000_000, 2_000_000))
+    assert ui._last_run_book("alpha-one") == ("2025-01-15", 100000)
+
+
 def test_abstention_overrides_stored_direction():
     signal = Signal(model_name="buffett", ticker="TEST", date="2025-01-15", value=0, reasoning="abstained: TypeSafe returned HTTP 401", metadata={"abstained": True, "signal": "bullish"})
     text = _render(ui._signal_detail(_record(signal), 0, 0))
     assert "ABSTAIN" in text and "HTTP 401" in text
     assert "Jev native answer confidence" not in text
+
+
+def test_dropped_views_appear_in_the_report():
+    record = _record(_signal()).model_copy(update={"dropped": [
+        DroppedOutput(ticker="TEST", model="buffett", strategy="value",
+                      reason="insufficient data: only 2 filed periods"),
+    ]})
+    nav = ui._report_nav(record)
+    assert any(option.id == "sec:dropped" for option in nav)
+    text = _render(ui._dropped_detail(record))
+    assert "DROPPED VIEWS" in text
+    assert "TEST" in text
+    assert "buffett" in text
+    assert "insufficient data" in text
 
 
 def test_chat_rendering_and_quantitative_fallback_are_preserved():

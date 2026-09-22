@@ -2,11 +2,11 @@
 
 `run_cycle`'s docstring makes the promise: "a backtest is run_cycle in a
 loop over history with a SimBroker; paper trading is the same loop on a
-live clock." This module is that loop. Nothing here re-implements pipeline
-mechanics — every tick is the real run_cycle against a persistent broker,
-so anything true of one cycle (point-in-time data, fail-loud pricing,
-master risk on the netted book) is true of every backtested tick by
-construction.
+live clock with a PaperBroker." This module is that loop — still SimBroker.
+Nothing here re-implements pipeline mechanics — every tick is the real
+run_cycle against a persistent broker, so anything true of one cycle
+(point-in-time data, fail-loud pricing, master risk on the netted book)
+is true of every backtested tick by construction.
 
 Nothing here assumes what the fund trades on. The rebalance cadence comes
 from the mandate (FundSpec.rebalance): a fundamentals fund says weekly, a

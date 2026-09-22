@@ -87,11 +87,15 @@ clock and the broker:**
 Because it's **one code path by design**, what you backtest is what trades — no
 separate "research" implementation that quietly diverges from production. (Two of
 the three modes exist today: the backtester is `run_cycle` looped over history with
-a simulated broker, and "run it as of today" is the same `run_cycle` as a single
-live-clock tick — so PIT, fail-loud, and master risk hold for every tick by
-construction. What separates run-today from true paper mode is the ledger's read
-half: today each run starts from the mandate's cash instead of carrying the book
-forward, so NAV has no memory yet. An older per-model harness remains for
+`SimBroker`, and paper is the same `run_cycle` as a single live-clock tick on
+`PaperBroker` — so PIT, fail-loud, and master risk hold for every tick by
+construction. A live-clock paper run seeds `PaperBroker` from the newest
+`CycleRecord` for that mandate, so cash, positions, and NAV carry between
+process invocations (a corrupt or incompatible receipt fails the run rather
+than resetting the book). Backtests still open at the mandate's capital on
+`SimBroker` and carry the book only across ticks inside that run. What remains
+for always-on paper is observability (heartbeat, per-cycle events) on top of
+the scheduler that now ships. An older per-model harness remains for
 single-model studies.)
 
 ### One cycle

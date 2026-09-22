@@ -40,7 +40,17 @@ DISPLAY_NAMES = {
     "graham": "Benjamin Graham",
     "lynch": "Peter Lynch",
     "druckenmiller": "Stanley Druckenmiller",
+    "wood": "Cathie Wood",
+    "burry": "Michael Burry",
+    "ackman": "Bill Ackman",
+    "damodaran": "Aswath Damodaran",
+    "fisher": "Phil Fisher",
+    "pabrai": "Mohnish Pabrai",
+    "taleb": "Nassim Taleb",
+    "jhunjhunwala": "Rakesh Jhunjhunwala",
     "pead": "post-earnings drift",
+    "momentum": "price momentum",
+    "mean_reversion": "mean reversion",
 }
 
 _SHORT_NAMES = {
@@ -49,7 +59,17 @@ _SHORT_NAMES = {
     "graham": "Graham",
     "lynch": "Lynch",
     "druckenmiller": "Druckenmiller",
+    "wood": "Wood",
+    "burry": "Burry",
+    "ackman": "Ackman",
+    "damodaran": "Damodaran",
+    "fisher": "Fisher",
+    "pabrai": "Pabrai",
+    "taleb": "Taleb",
+    "jhunjhunwala": "Jhunjhunwala",
     "pead": "PEAD",
+    "momentum": "Momentum",
+    "mean_reversion": "Mean-rev",
 }
 
 # The LLM the investor agents reason with. Picked once, upfront; make_llm()
