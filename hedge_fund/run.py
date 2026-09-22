@@ -82,7 +82,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--model",
-        help="LLM the investor agents reason with, e.g. claude-opus-5 "
+        help="LLM the investor agents reason with, e.g. claude-opus-5-5 "
         "(default: HEDGE_FUND_LLM_MODEL env, else the built-in default); quant models "
         "ignore it",
     )

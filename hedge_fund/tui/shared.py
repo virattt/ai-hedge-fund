@@ -56,7 +56,7 @@ _SHORT_NAMES = {
 # reads HEDGE_FUND_LLM_MODEL (hedge_fund/llm/client.py) and routes to the right provider, so
 # setting that env var steers every agent instance — the warm roster AND the
 # Fund — with no threading. Quant models (PEAD) carry no LLM and ignore it.
-_DEFAULT_MODEL_LABEL = "Opus 5"
+_DEFAULT_MODEL_LABEL = "Opus 5.5"
 
 # The registry lives in hedge_fund/llm — it is a fact about providers, not about
 # presentation. Re-exported here so screens keep importing from one place.

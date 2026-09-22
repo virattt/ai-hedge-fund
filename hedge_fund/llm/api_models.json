@@ -10,8 +10,8 @@
     "provider": "Anthropic"
   },
   {
-    "display_name": "GPT-5.6",
-    "model_name": "gpt-5.6",
+    "display_name": "GPT-6 Sol",
+    "model_name": "gpt-6-sol",
     "provider": "OpenAI"
   },
   {
@@ -25,23 +25,23 @@
     "provider": "TypeSafe"
   },
   {
-    "display_name": "Grok 4.3",
-    "model_name": "grok-4.3",
+    "display_name": "Grok 4.7",
+    "model_name": "grok-4.7",
     "provider": "xAI"
   },
   {
-    "display_name": "DeepSeek V4 Pro",
-    "model_name": "deepseek-v4-pro",
+    "display_name": "DeepSeek V4.1 Flash",
+    "model_name": "deepseek-flash",
     "provider": "DeepSeek"
   },
   {
-    "display_name": "Kimi K2.6",
-    "model_name": "kimi-k2.6",
+    "display_name": "Kimi K3",
+    "model_name": "kimi-k3",
     "provider": "Kimi"
   },
   {
-    "display_name": "Gemini 3.1 Pro",
-    "model_name": "gemini-3.1-pro-preview",
+    "display_name": "Gemini 3.8 Flash",
+    "model_name": "gemini-3.8-flash",
     "provider": "Google"
   }
 ]

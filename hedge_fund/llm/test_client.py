@@ -99,9 +99,9 @@ def test_kimi_accepts_moonshot_key(monkeypatch):
 
 
 def test_provider_for_reads_the_registry():
-    assert provider_for("claude-opus-5") == "Anthropic"
+    assert provider_for("claude-opus-5-5") == "Anthropic"
     assert provider_for("claude-fable-5-1") == "Anthropic"
-    assert provider_for("gpt-5.5") == "OpenAI"
+    assert provider_for("gpt-6-sol") == "OpenAI"
     assert provider_for("gpt-6-astra") == "OpenAI"
     assert provider_for("not-a-model") is None
 
@@ -223,7 +223,7 @@ def test_factory_routes_jev_with_only_its_key(use_environment, monkeypatch, http
     llm = make_llm(None if use_environment else "jev-1.13.0", timeout=17, max_tokens=1, on_token=listener)
     assert isinstance(llm, JevLLM)
     assert provider_for(llm.model) == "TypeSafe"
-    assert ("Jev — TypeSafe", "jev-1.13.0", "TypeSafe") in load_api_models()
+    assert ("Jev", "jev-1.13.0", "TypeSafe") in load_api_models()
     _serve(http, _http_response())
     llm.complete("investor", "snapshot")
     assert http[0].call_args.kwargs["timeout"] == 17
