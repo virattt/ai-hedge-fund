@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from hedge_fund import paths
+from hedge_fund.run import _write_output
 
 
 def test_ensure_mandates_dir_seeds_example_into_existing_directory(tmp_path, monkeypatch):
@@ -44,3 +45,11 @@ def test_ensure_mandates_dir_rejects_existing_file(tmp_path, monkeypatch):
 
     with pytest.raises(NotADirectoryError, match="not a directory"):
         paths.ensure_mandates_dir()
+
+
+def test_write_output_creates_parent_dirs_and_writes_utf8(tmp_path):
+    target = tmp_path / "nested" / "records" / "cycle.json"
+
+    _write_output(str(target), '{"status": "ok", "name": "测试"}')
+
+    assert target.read_text(encoding="utf-8") == '{"status": "ok", "name": "测试"}'
