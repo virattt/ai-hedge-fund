@@ -10,7 +10,6 @@ from pydantic import ValidationError
 from hedge_fund.fund import (
     custom_strategy,
     discover_funds,
-    execution_unavailable,
     Fund,
     FundSpec,
     load_spec,
@@ -227,12 +226,12 @@ def test_discovery_is_read_only_and_isolates_invalid_files(tmp_path):
         (["buffett"], "long_short"),
     ],
 )
-def test_whole_fund_blocked_before_any_analyst_is_constructed(monkeypatch, names, mode):
+def test_all_modes_construct_without_execution_gates(monkeypatch, names, mode):
     strategy = custom_strategy(names)
     strategy.blend.mode = mode
     spec = FundSpec(**{**MINIMAL, "strategies": [MINIMAL["strategies"][0], strategy]})
     for cls in ALPHA_MODEL_REGISTRY.values():
-        monkeypatch.setattr(cls, "__init__", Mock(side_effect=AssertionError("constructed")))
-    assert "Custom" in execution_unavailable(spec)
-    with pytest.raises(ValueError, match="Execution unavailable"):
-        Fund(spec)
+        monkeypatch.setattr(cls, "__init__", lambda self, **kwargs: None)
+    fund = Fund(spec)
+    assert [s.name for s, _ in fund.strategies] == ["event", "custom"]
+    assert len(fund.strategies[1][1]) == len(names)

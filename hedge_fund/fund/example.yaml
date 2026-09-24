@@ -1,6 +1,3 @@
-# This example can be saved and inspected, but its long-only Deep Value
-# strategy is not supported for execution. An Earnings Drift-only fund can run.
-#
 # An example mandate. Specs are data: the fund builder (aihf),
 # a chat LLM, and the strategy generator all emit this same format.
 #

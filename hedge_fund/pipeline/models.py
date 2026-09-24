@@ -10,11 +10,12 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from hedge_fund.brokers.models import Fill, Order
 from hedge_fund.fund.spec import FundSpec
 from hedge_fund.models import Signal
+from hedge_fund.portfolio.construction import FlatReason
 from hedge_fund.risk.limits import ClampEvent
 
 
@@ -33,6 +34,9 @@ class StrategyRecord(BaseModel):
     signals: list[Signal]               # this strategy's analysts x tradeable tickers
     convictions: dict[str, float]       # blended views, pre-scaling
     weights: dict[str, float]           # the sleeve, before netting across strategies
+    eligible_scores: dict[str, float] = Field(default_factory=dict)
+    flat_reason: FlatReason | None = None
+    final_contribution: dict[str, float] = Field(default_factory=dict)  # fraction of fund equity
 
 
 class CycleRecord(BaseModel):
@@ -58,3 +62,4 @@ class CycleRecord(BaseModel):
     positions: dict[str, int]           # signed shares after fills
     cash: float
     nav: float                          # cash + sum(shares * mark)
+    risk_scale_factor: float | None = None

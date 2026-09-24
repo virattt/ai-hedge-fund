@@ -12,6 +12,7 @@ inverts its job.
 
 from __future__ import annotations
 
+from math import isfinite
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -44,18 +45,37 @@ class RiskResult(BaseModel):
 
     weights: dict[str, float]
     clamps: list[ClampEvent]
+    scale_factor: float | None = None  # common multiplier when preserving proportions
 
 
-def apply_limits(weights: dict[str, float], limits: RiskLimits) -> RiskResult:
+def apply_limits(
+    weights: dict[str, float], limits: RiskLimits, *, preserve_proportions: bool = False,
+) -> RiskResult:
     """Clamp target weights against the fund's hard limits.
 
-    Order matters and makes the pair idempotent:
+    With preserve_proportions, reduce every weight by a common factor instead
+    of clipping individual names. This preserves strategy neutrality when the
+    same factor is applied to each strategy's contribution.
+
+    Without preserve_proportions, apply the existing two-stage reduction:
     1. Per-ticker cap: any |weight| above max_position_pct is clamped to the
        cap, preserving sign. One ClampEvent per clamped ticker.
     2. Gross cap: if the summed |weights| still exceed max_gross_exposure,
        every weight is scaled down proportionally. Scaling only shrinks, so
        it can never re-violate the per-ticker cap.
     """
+    if not isfinite(limits.max_position_pct) or not isfinite(limits.max_gross_exposure):
+        raise ValueError("risk limits must be finite")
+    if not 0 < limits.max_position_pct <= 1 or limits.max_gross_exposure <= 0:
+        raise ValueError("risk limits must be positive, with max_position_pct at most 1")
+    for ticker, weight in weights.items():
+        if not isfinite(weight):
+            raise ValueError(f"{ticker}: target weight must be finite")
+    if not isfinite(sum(abs(w) for w in weights.values())):
+        raise ValueError("fund gross exposure must be finite")
+    if preserve_proportions:
+        return _scale_proportionally(weights, limits)
+
     clamped: dict[str, float] = {}
     clamps: list[ClampEvent] = []
 
@@ -80,3 +100,20 @@ def apply_limits(weights: dict[str, float], limits: RiskLimits) -> RiskResult:
         ))
 
     return RiskResult(weights=clamped, clamps=clamps)
+
+
+def _scale_proportionally(weights: dict[str, float], limits: RiskLimits) -> RiskResult:
+    largest = max((abs(w) for w in weights.values()), default=0.0)
+    factor = min(1.0, limits.max_position_pct / largest) if largest else 1.0
+    clamped = {t: weights[t] * factor for t in sorted(weights)}
+    clamps = [
+        ClampEvent(limit="max_position_pct", ticker=t, before=weights[t], after=clamped[t])
+        for t in sorted(weights) if abs(weights[t]) > limits.max_position_pct
+    ]
+    gross = sum(abs(w) for w in clamped.values())
+    if gross > limits.max_gross_exposure:
+        gross_factor = limits.max_gross_exposure / gross
+        clamped = {t: w * gross_factor for t, w in clamped.items()}
+        factor *= gross_factor
+        clamps.append(ClampEvent(limit="max_gross_exposure", before=gross, after=limits.max_gross_exposure))
+    return RiskResult(weights=clamped, clamps=clamps, scale_factor=factor)

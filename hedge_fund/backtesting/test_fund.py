@@ -7,7 +7,6 @@ from hedge_fund.data.models import Price
 from hedge_fund.fund.spec import Fund, FundSpec
 from hedge_fund.models import Signal
 
-
 # ---------------------------------------------------------------------------
 # Fakes (date-aware variants of the run_cycle test fakes)
 # ---------------------------------------------------------------------------
@@ -187,3 +186,21 @@ def test_grid_follows_mandate_cadence():
     result = _run(spec=spec)
     assert result.dates == ["2024-06-21"]  # one June rebalance
     assert result.rebalance == "monthly"
+
+
+@pytest.mark.parametrize("mode", ["long_only", "long_short", "dollar_neutral"])
+def test_backtest_enforces_each_mode_with_mixed_analysts(mode):
+    spec = _spec(strategies=[{"name": "mixed", "models": [{"name": "buffett"}, {"name": "druckenmiller"}], "blend": {"mode": mode}}])
+    fund = Fund(spec, models={"mixed": [FakeAnalyst(name, {"AAPL": .8, "MSFT": -.6}) for name in ("buffett", "druckenmiller")]})
+    series = {"SPY": {day: 100 for day in FRIDAYS}, "AAPL": {day: 100 for day in FRIDAYS}, "MSFT": {day: 100 for day in FRIDAYS}}
+    result = backtest_fund(fund, FRIDAYS[0], FRIDAYS[-1], FakeDataClient(series), ["AAPL", "MSFT"])
+    assert len(result.records) == 3
+    assert result.nav == [100_000] * 3
+    for record in result.records:
+        assert record.positions["AAPL"] > 0
+        if mode == "long_only":
+            assert record.positions.get("MSFT", 0) == 0
+        else:
+            assert record.positions["MSFT"] < 0
+        if mode == "dollar_neutral":
+            assert sum(record.final_weights.values()) == pytest.approx(0)

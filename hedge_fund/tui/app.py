@@ -44,12 +44,10 @@ from hedge_fund.data import CachedDataClient, FDClient
 from hedge_fund.fund import (
     custom_strategy,
     discover_funds,
-    execution_unavailable,
     Fund,
     FundSpec,
     load_strategy,
     normalize_universe,
-    require_executable,
     SavedFund,
     StrategySpec,
 )
@@ -415,9 +413,6 @@ class FundSelectScreen(Screen):
             spec = self._slots[int(oid.split(":")[1])].spec
             if spec is None:
                 return
-            if reason := execution_unavailable(spec):
-                self.notify(reason, severity="warning")
-                return
             self.app.push_screen(RunScreen(spec))
 
     def action_delete(self) -> None:
@@ -626,8 +621,6 @@ def _slot_card(index: int, spec: FundSpec, score: tuple | None) -> Text:
     card.append(f"\n     {n} {'strategy' if n == 1 else 'strategies'}"
                 f"  ·  {spec.rebalance}", style=MUTED)
     card.append("\n     " + ", ".join(MODE_LABELS[s.blend.mode] for s in spec.strategies), style=MUTED)
-    if execution_unavailable(spec):
-        card.append(" · Execution unavailable", style=MUTED)
     return card
 
 
@@ -641,15 +634,11 @@ def _fund_detail(spec: FundSpec, history: list[dict]) -> Group:
         Text(f"{staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}", style=MUTED),
     ]
     parts.extend(Text(f"{s.title}: {strategy_description(s)}", style=MUTED) for s in spec.strategies)
-    unavailable = execution_unavailable(spec)
-    if unavailable:
-        parts.append(Text(unavailable, style="yellow"))
 
     if not history:
         parts.append(Text("\nNo runs yet — this fund has never traded.", style=MUTED))
-        if not unavailable:
-            parts.append(Text("\nEnter to run it as of today · ctrl+b to backtest "
-                              "over history", style=MUTED))
+        parts.append(Text("\nEnter to run it as of today · ctrl+b to backtest "
+                          "over history", style=MUTED))
         return Group(*parts)
 
     # The headline stats come from the most recent BACKTEST (a single run has
@@ -1044,12 +1033,26 @@ def _orders_detail(record: CycleRecord) -> Group:
 
 
 def _portfolio_detail(record: CycleRecord) -> Group:
+    target_net = record.equity_before * sum(record.final_weights.values())
+    actual_net = sum(shares * record.marks[ticker] for ticker, shares in record.positions.items())
+    details = [
+        Text("PORTFOLIO", style=f"bold {BRIGHT}"),
+        Text(f"Target net ${target_net:+,.2f} · Actual net ${actual_net:+,.2f} · Difference ${actual_net - target_net:+,.2f}", style=MUTED),
+    ]
+    if any(s.blend.mode == "dollar_neutral" for s in record.spec.strategies):
+        details.append(Text("Dollar-neutral rules apply to strategy targets. Whole-share holdings can differ; other strategies can add net exposure.", style=MUTED))
+    if record.risk_scale_factor is not None and record.risk_scale_factor < 1:
+        details.append(Text(f"Risk limits scaled all strategy targets to {record.risk_scale_factor:.1%} of their requested exposure.", style=MUTED))
+    flat_reasons = {
+        "no_eligible_positions": "no eligible positions",
+        "missing_long_side": "no eligible longs to balance the shorts",
+        "missing_short_side": "no eligible shorts to balance the longs",
+    }
+    for strategy in record.strategies:
+        if strategy.flat_reason:
+            details.append(Text(f"{strategy.name}: zero exposure — {flat_reasons[strategy.flat_reason]}. Allocated capital remains unused.", style=MUTED))
     if not record.positions:
-        return Group(
-            Text("PORTFOLIO", style=f"bold {BRIGHT}"),
-            Text(""),
-            Text("flat — no positions", style=MUTED),
-        )
+        return Group(*details, Text("flat — no positions", style=MUTED))
     table = Table(box=box.SQUARE, header_style="bold", border_style="#1f2b25")
     table.add_column("Ticker", style=f"bold {CYAN}")
     table.add_column("Side", justify="center")
@@ -1067,7 +1070,7 @@ def _portfolio_detail(record: CycleRecord) -> Group:
             Text(f"${value:+,.0f}", style=tone),
             Text(f"{value / record.nav:+.1%}", style=tone),
         )
-    return Group(Text("PORTFOLIO", style=f"bold {BRIGHT}"), Text(""), table)
+    return Group(*details, Text(""), table)
 
 
 def _book_summary(record: CycleRecord) -> Text:
@@ -1174,16 +1177,13 @@ class RunScreen(Screen):
     def on_mount(self) -> None:
         spec = self._spec
         staff = ", ".join(s.title for s in spec.strategies)
-        unavailable = execution_unavailable(spec)
         self.query_one("#run-hero", Static).update(Group(
             Text(spec.name, style=f"bold {BRIGHT}"),
             Text(f"{staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}",
                  style=MUTED),
             *(Text(strategy_description(s), style=MUTED) for s in spec.strategies),
-            Text(unavailable or "", style="yellow"),
         ))
         tickers = self.query_one("#run-tickers", Input)
-        tickers.disabled = unavailable is not None
         last = _last_universe(spec.name)
         if last:
             tickers.value = ", ".join(last)
@@ -1195,22 +1195,17 @@ class RunScreen(Screen):
         if self._phase == "running":
             return action not in ("back", "backtest")
         if action == "backtest":
-            return self._phase in ("ready", "done") and execution_unavailable(self._spec) is None
+            return self._phase in ("ready", "done")
         return True
 
     def action_back(self) -> None:
         self.app.pop_screen()
 
     def action_backtest(self) -> None:
-        if execution_unavailable(self._spec):
-            return
         self.app.push_screen(BacktestScreen(spec=self._spec))
 
     @on(Input.Submitted, "#run-tickers")
     def _start(self, event: Input.Submitted) -> None:
-        if reason := execution_unavailable(self._spec):
-            self.notify(reason, severity="warning")
-            return
         try:
             self._universe = normalize_universe(
                 event.value.replace(",", " ").split())
@@ -1223,9 +1218,6 @@ class RunScreen(Screen):
         resume()
 
     def _begin(self) -> None:
-        if reason := execution_unavailable(self._spec):
-            self.notify(reason, severity="warning")
-            return
         self._phase = "running"
         self.query_one("#run-panes", ContentSwitcher).current = "run-live"
         self.query_one("#run-phase", Static).update(Text.assemble(
@@ -1267,7 +1259,6 @@ class RunScreen(Screen):
         as_of = self._as_of
         universe = self._universe
         try:
-            require_executable(spec)
             desks = dict(zip(_agent_names(spec), self._desks, strict=True))
 
             def warm(agent_name: str) -> None:
@@ -1602,7 +1593,6 @@ class BuilderScreen(Screen):
         self._built = (spec, path)
 
         staff = ", ".join(s.title for s in self._state["strategies"])
-        unavailable = execution_unavailable(spec)
         self.query_one("#done-summary", Static).update(Group(
             Text.assemble(("✓ ", f"bold {GREEN}"), ("Saved fund to ", TEXT),
                           (str(path), f"bold {BRIGHT}")),
@@ -1616,21 +1606,13 @@ class BuilderScreen(Screen):
             Text("Pick the tickers when you run it — a fund carries no watchlist.",
                  style=MUTED),
             *(Text(f"{s.title}: {strategy_description(s)}", style=MUTED) for s in spec.strategies),
-            Text(unavailable or "", style="yellow"),
         ))
-        menu = self.query_one("#done-menu", OptionList)
-        if unavailable:
-            menu.disable_option("go-run")
-        else:
-            menu.enable_option("go-run")
         self._goto("step-done")
 
     @on(OptionList.OptionSelected, "#done-menu")
     def _after_build(self, event: OptionList.OptionSelected) -> None:
         assert self._built is not None
         if event.option.id == "go-run":
-            if execution_unavailable(self._built[0]):
-                return
             self.app.switch_screen(RunScreen(self._built[0]))
         else:
             self.app.pop_screen()
@@ -1764,8 +1746,7 @@ class BacktestScreen(Screen):
             if entry.spec is None:
                 fund_list.add_option(Option(Text(f"{entry.path.name} — Unavailable\n{entry.error}"), disabled=True))
             else:
-                reason = execution_unavailable(entry.spec)
-                fund_list.add_option(Option(Text(_fund_label(entry.spec) + (f"\n{reason}" if reason else "")), disabled=bool(reason)))
+                fund_list.add_option(Option(Text(_fund_label(entry.spec))))
         fund_list.focus()
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
@@ -1793,9 +1774,6 @@ class BacktestScreen(Screen):
 
     def _begin_dates(self) -> None:
         assert self._spec is not None
-        if reason := execution_unavailable(self._spec):
-            self.query_one("#no-funds", Static).update(Text(reason, style="yellow"))
-            return
         self._phase = "dates"
         today = _date.today()
         tickers = self.query_one("#bt-tickers", Input)
@@ -1823,9 +1801,6 @@ class BacktestScreen(Screen):
     @on(Input.Submitted, "#end-input")
     def _submit_end(self, event: Input.Submitted) -> None:
         assert self._spec is not None
-        if reason := execution_unavailable(self._spec):
-            self.notify(reason, severity="warning")
-            return
         start = self.query_one("#start-input", Input).value.strip()
         end = event.value.strip()
         for value in (start, end):
@@ -1852,9 +1827,6 @@ class BacktestScreen(Screen):
 
     def _begin(self, start: str, end: str, universe: list[str]) -> None:
         assert self._spec is not None
-        if reason := execution_unavailable(self._spec):
-            self.notify(reason, severity="warning")
-            return
         self._phase = "run"
         self.query_one("#bt-panes", ContentSwitcher).current = "bt-run"
         self.query_one("#phase-line", Static).update(
@@ -1876,7 +1848,6 @@ class BacktestScreen(Screen):
              universe: list[str]) -> None:
         app = self.app
         try:
-            require_executable(spec)
             with FDClient() as raw:
                 bars = CachedDataClient(raw).get_prices(spec.benchmark, start, end)
             closes = {b.time[:10]: b.close for b in bars

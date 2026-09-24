@@ -8,7 +8,6 @@ from typing import Any, Literal, TypeAlias
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, ValidationError
 
-from hedge_fund.fund.policy import require_executable
 from hedge_fund.risk.limits import RiskLimits
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, get_investment_approach
 from hedge_fund.signals.base import AlphaModel
@@ -174,7 +173,6 @@ class Fund:
 
     Models are constructed once so their caches survive successive cycles.
     Callers may supply instances keyed by strategy name, including test doubles.
-    Unsupported investment rules raise ValueError before model construction.
     """
 
     def __init__(
@@ -182,7 +180,6 @@ class Fund:
         spec: FundSpec,
         models: dict[str, list[AlphaModel]] | None = None,
     ) -> None:
-        require_executable(spec)
         self.spec = spec
         self.strategies: list[tuple[StrategySpec, list[AlphaModel]]] = []
         for strategy in spec.strategies:

@@ -1,89 +1,103 @@
-"""Portfolio construction — blend analyst views into target weights.
-
-This is the fund's portfolio manager: it takes every analyst's Signal and
-produces one target weight per ticker. Pure arithmetic, no I/O — given the
-same signals it always produces the same book.
-
-v0 policy: conviction-weighted. Capital flows to tickers in proportion to
-their blended conviction, scaled so the whole book deploys `gross_target`.
-Known wart, accepted deliberately: the cross-sectional normalization ignores
-*absolute* conviction — a lone weak view would receive the full gross target,
-which the risk stage then clamps ("conviction requests, risk disposes"). A
-min-conviction floor is the obvious knob once `evaluate()` can measure it.
-"""
+"""Deterministic portfolio targets from analyst opinions and permissions."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from math import isfinite
+from typing import Literal, Mapping, TYPE_CHECKING, TypeAlias
+
+from pydantic import BaseModel, Field
 
 from hedge_fund.models import Signal
+from hedge_fund.signals.base import InvestmentApproach
+
+if TYPE_CHECKING:
+    from hedge_fund.fund.spec import PortfolioMode
+
+FlatReason: TypeAlias = Literal["no_eligible_positions", "missing_long_side", "missing_short_side"]
+WEIGHT_TOLERANCE = 1e-9
 
 
 class BlendResult(BaseModel):
-    """Per-ticker blended convictions and the target weights they imply."""
+    """Raw opinions, permitted sizing scores, and strategy target weights."""
 
-    convictions: dict[str, float]  # blended view per ticker, pre-scaling
-    weights: dict[str, float]      # target weight per ticker; sum(|w|) <= gross_target
+    convictions: dict[str, float]
+    weights: dict[str, float]
+    eligible_scores: dict[str, float] = Field(default_factory=dict)
+    flat_reason: FlatReason | None = None
 
 
 def blend_signals(
     signals: list[Signal],
-    model_weights: dict[str, float],
+    model_weights: Mapping[str, float],
     gross_target: float,
-    market_neutral: bool = False,
+    *,
+    mode: PortfolioMode,
+    investment_approaches: Mapping[str, InvestmentApproach],
 ) -> BlendResult:
-    """Blend model signals into target weights.
+    """Blend voting opinions, respecting each analyst's permission to short.
 
-    Per ticker, the conviction is a weighted mean over *voting* models:
+    Abstentions are excluded from both averages; neutral opinions still vote.
+    All opinions contribute to ownership. Only short-capable analysts' signed
+    opinions and long-only analysts' positive opinions contribute to the short
+    assessment. Long-only bearishness can therefore reduce ownership without
+    creating or strengthening short evidence.
 
-        conviction_t = sum(w_m * value_mt) / sum(w_m)
-
-    An abstained signal (metadata.abstained is True — LLM failure or
-    insufficient data) is excluded from numerator AND denominator: "no
-    opinion" must not masquerade as "opinion: neutral". A non-abstained 0.0
-    (e.g. PEAD outside its window) is a real neutral vote and dilutes.
-
-    With market_neutral, convictions are demeaned cross-sectionally before
-    scaling — what a pod does with analyst rankings: long the names the desk
-    likes most *relative to the others*, short the least liked, sleeve sums
-    to zero dollars. Uniform convictions demean to a flat book.
-
-    Cross-sectionally, weights are (demeaned) convictions normalized to the
-    gross target: weight_t = conviction_t / sum(|convictions|) * gross_target.
-    All-zero convictions produce an all-zero (flat) book.
-
-    Args:
-        signals:        Every model's Signal for every ticker this cycle.
-        model_weights:  model_name -> blend weight from the StrategySpec.
-        gross_target:   Desired sum of |weights| when views exist.
-        market_neutral: Demean convictions before scaling (dollar-neutral).
+    Eligible scores are normalized to gross_target. Dollar-neutral strategies
+    allocate half to each side, or target zero when either side is missing.
+    This relative sizing does not calibrate conviction into expected returns.
+    Invalid modes, profiles, weights, or signal values raise ValueError.
     """
+    if mode not in ("long_only", "long_short", "dollar_neutral"):
+        raise ValueError(f"unknown portfolio mode {mode!r}")
+    if not isfinite(gross_target) or gross_target <= 0:
+        raise ValueError("gross_target must be finite and positive")
+    for name, weight in model_weights.items():
+        if not isfinite(weight) or weight <= 0:
+            raise ValueError(f"analyst {name!r}: blend weight must be finite and positive")
+        if investment_approaches.get(name) not in ("long_only", "long_short"):
+            raise ValueError(f"analyst {name!r}: missing or invalid investment approach")
+
     weighted_sum: dict[str, float] = {}
+    short_sum: dict[str, float] = {}
     weight_total: dict[str, float] = {}
     for signal in signals:
+        name, ticker, value = signal.model_name, signal.ticker, signal.value
+        if name not in model_weights:
+            raise ValueError(f"{ticker}: analyst {name!r} has no blend weight")
+        if not isfinite(value) or not -1 <= value <= 1:
+            raise ValueError(f"{ticker}: analyst {name!r} signal must be finite and within [-1, 1]")
         if signal.metadata.get("abstained") is True:
             continue
-        w = model_weights[signal.model_name]
-        weighted_sum[signal.ticker] = weighted_sum.get(signal.ticker, 0.0) + w * signal.value
-        weight_total[signal.ticker] = weight_total.get(signal.ticker, 0.0) + w
+        weight = model_weights[name]
+        short_value = value if investment_approaches[name] == "long_short" else max(value, 0.0)
+        weighted_sum[ticker] = weighted_sum.get(ticker, 0.0) + weight * value
+        short_sum[ticker] = short_sum.get(ticker, 0.0) + weight * short_value
+        weight_total[ticker] = weight_total.get(ticker, 0.0) + weight
+        if not all(isfinite(v) for v in (weighted_sum[ticker], short_sum[ticker], weight_total[ticker])):
+            raise ValueError(f"{ticker}: blended signal totals must be finite")
 
     tickers = sorted({s.ticker for s in signals})
-    convictions = {
-        t: (weighted_sum[t] / weight_total[t]) if weight_total.get(t) else 0.0
-        for t in tickers
-    }
-
-    scaled = convictions
-    if market_neutral and tickers:
-        mean = sum(convictions.values()) / len(convictions)
-        scaled = {t: c - mean for t, c in convictions.items()}
-
-    # Threshold, not == 0: demeaning identical convictions leaves ~1e-16
-    # residue, and dividing by it would normalize noise into a full book.
-    gross = sum(abs(c) for c in scaled.values())
-    if gross < 1e-9:
-        weights = {t: 0.0 for t in tickers}
+    convictions = {t: weighted_sum[t] / weight_total[t] if weight_total.get(t) else 0.0 for t in tickers}
+    short_assessments = {t: short_sum[t] / weight_total[t] if weight_total.get(t) else 0.0 for t in tickers}
+    scores = {t: max(convictions[t], 0.0) + (min(short_assessments[t], 0.0) if mode != "long_only" else 0.0) for t in tickers}
+    weights = dict.fromkeys(tickers, 0.0)
+    flat_reason: FlatReason | None = None
+    if mode == "dollar_neutral":
+        longs = sum(max(score, 0.0) for score in scores.values())
+        shorts = sum(-min(score, 0.0) for score in scores.values())
+        if longs < WEIGHT_TOLERANCE and shorts < WEIGHT_TOLERANCE:
+            flat_reason = "no_eligible_positions"
+        elif longs < WEIGHT_TOLERANCE:
+            flat_reason = "missing_long_side"
+        elif shorts < WEIGHT_TOLERANCE:
+            flat_reason = "missing_short_side"
+        else:
+            weights = {t: score / (longs if score > 0 else shorts) * (gross_target / 2) for t, score in scores.items()}
     else:
-        weights = {t: c / gross * gross_target for t, c in scaled.items()}
+        gross = sum(abs(score) for score in scores.values())
+        if gross < WEIGHT_TOLERANCE:
+            flat_reason = "no_eligible_positions"
+        else:
+            weights = {t: score / gross * gross_target for t, score in scores.items()}
 
-    return BlendResult(convictions=convictions, weights=weights)
+    return BlendResult(convictions=convictions, eligible_scores=scores, weights=weights, flat_reason=flat_reason)

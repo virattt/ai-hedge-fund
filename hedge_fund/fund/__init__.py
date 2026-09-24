@@ -1,6 +1,5 @@
-"""Fund configuration, model construction, execution policy, and saved mandates."""
+"""Fund configuration, model construction, and saved mandates."""
 
-from hedge_fund.fund.policy import execution_unavailable, require_executable
 from hedge_fund.fund.spec import (
     BlendPolicy,
     custom_strategy,
@@ -25,9 +24,7 @@ __all__ = [
     "StrategySpec",
     "custom_strategy",
     "discover_funds",
-    "execution_unavailable",
     "load_spec",
     "load_strategy",
     "normalize_universe",
-    "require_executable",
 ]

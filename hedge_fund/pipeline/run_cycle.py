@@ -34,12 +34,14 @@ from datetime import timedelta
 from hedge_fund.brokers.models import Fill
 from hedge_fund.brokers.protocol import Broker
 from hedge_fund.data.protocol import DataClient
-from hedge_fund.fund import Fund, normalize_universe, require_executable
+from hedge_fund.fund import Fund, normalize_universe
 from hedge_fund.models import Signal
 from hedge_fund.pipeline.execution import build_orders
 from hedge_fund.pipeline.models import CycleRecord, StrategyRecord, TickerSkip
 from hedge_fund.portfolio.construction import blend_signals
+from hedge_fund.portfolio.validation import validate_targets
 from hedge_fund.risk.limits import apply_limits
+from hedge_fund.signals import get_investment_approach
 
 # How far back to look for the most recent close: covers weekends, holiday
 # clusters, and short trading halts without reaching into stale history.
@@ -60,7 +62,6 @@ def run_cycle(
     it was asked to trade this tick is recorded on the returned CycleRecord.
     """
     spec = fund.spec
-    require_executable(spec)
     universe = normalize_universe(universe)
     held = broker.positions()
 
@@ -93,7 +94,8 @@ def run_cycle(
                 signals.append(model.predict(ticker, as_of, data_client))
         blend = blend_signals(
             signals, strategy.model_weights, strategy.blend.gross_target,
-            market_neutral=False,  # preflight currently permits only long_short
+            mode=strategy.blend.mode,
+            investment_approaches={m.name: get_investment_approach(m.name) for m in strategy.models},
         )
         slice_ = strategy.weight / total_slice
         for ticker, weight in blend.weights.items():
@@ -104,9 +106,23 @@ def run_cycle(
             signals=signals,
             convictions=blend.convictions,
             weights=blend.weights,
+            eligible_scores=blend.eligible_scores,
+            flat_reason=blend.flat_reason,
         ))
 
-    risk = apply_limits(netted, spec.risk)
+    preserve_proportions = any(s.blend.mode == "dollar_neutral" for s in spec.strategies)
+    risk = apply_limits(netted, spec.risk, preserve_proportions=preserve_proportions)
+    if risk.scale_factor is not None:
+        multipliers = dict.fromkeys(netted, risk.scale_factor)
+    else:
+        # Exactly offset contributions stay visible even though no net trade remains.
+        multipliers = {ticker: risk.weights[ticker] / weight if weight != 0 else 1.0 for ticker, weight in netted.items()}
+    for record in strategy_records:
+        record.final_contribution = {
+            ticker: record.slice * weight * multipliers[ticker]
+            for ticker, weight in record.weights.items()
+        }
+    validate_targets(spec, strategy_records, risk.weights)
 
     orders = build_orders(risk.weights, held, marks, equity_before)
     fills: list[Fill] = [broker.place_order(o) for o in orders]
@@ -125,6 +141,7 @@ def run_cycle(
         strategies=strategy_records,
         target_weights=netted,
         clamps=risk.clamps,
+        risk_scale_factor=risk.scale_factor,
         final_weights=risk.weights,
         equity_before=equity_before,
         cash_before=cash_before,

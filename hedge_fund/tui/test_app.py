@@ -222,13 +222,13 @@ def test_mixed_description_identifies_short_analysts():
     assert "Long-only" in ui.BuilderScreen._agent_prompt("buffett", ui.ALPHA_MODEL_REGISTRY["buffett"]).plain
 
 
-@pytest.mark.parametrize("names,mode,blocked", [
-    (["buffett"], "long_only", True),
-    (["buffett", "druckenmiller"], "long_short", True),
-    (["druckenmiller"], "long_short", False),
+@pytest.mark.parametrize("names,mode", [
+    (["buffett"], "long_only"),
+    (["buffett", "druckenmiller"], "long_short"),
+    (["druckenmiller"], "long_short"),
 ])
 @pytest.mark.parametrize("size", [(120, 45), (80, 24)])
-def test_builder_derives_rules_and_back_navigation_does_not_duplicate(names, mode, blocked, size):
+def test_builder_derives_rules_and_back_navigation_does_not_duplicate(names, mode, size):
     async def scenario():
         app = ui.HedgeFundApp()
         async with app.run_test(size=size) as pilot:
@@ -253,14 +253,12 @@ def test_builder_derives_rules_and_back_navigation_does_not_duplicate(names, mod
             assert saved.schema_version == 2
             assert len(saved.strategies) == 1
             assert saved.strategies[0].blend.mode == mode
-            assert screen.query_one("#done-menu", OptionList).get_option("go-run").disabled == blocked
+            assert not screen.query_one("#done-menu", OptionList).get_option("go-run").disabled
             await pilot.wait_for_scheduled_animations()
             await pilot.pause()
             assert screen.query_one("#done-menu", OptionList).region.intersection(screen.region).height > 0
             text = _render(screen.query_one("#done-summary", Static).content)
             assert ui.MODE_LABELS[mode] in text
-            if blocked:
-                assert "Execution unavailable" in text
     asyncio.run(scenario())
 
 
@@ -294,9 +292,9 @@ def test_builder_existing_name_and_save_race_never_overwrite():
     asyncio.run(scenario())
 
 
-def test_both_pickers_tolerate_invalid_funds_and_disable_backtests():
+def test_both_pickers_disable_only_invalid_configurations():
     files = {"old.yaml": "name: old\n", "broken.yaml": "[oops",
-             "blocked.yaml": yaml.safe_dump(_spec().model_dump()),
+             "mixed.yaml": yaml.safe_dump(_spec().model_dump()),
              "valid.yaml": yaml.safe_dump(_spec(["pead"], "ready").model_dump())}
     for name, content in files.items():
         (ui.FUNDS_DIR / name).write_text(content)
@@ -310,14 +308,14 @@ def test_both_pickers_tolerate_invalid_funds_and_disable_backtests():
             prompts = [_render(menu.get_option_at_index(i).prompt) for i in range(4)]
             assert any("old.yaml" in p and "older format" in p for p in prompts)
             assert sum(menu.get_option_at_index(i).disabled for i in range(4)) == 2
-            await pilot.press("enter")  # first valid entry is blocked, inspectable
-            assert isinstance(app.screen, ui.FundSelectScreen)
-            assert "Execution unavailable" in _render(app.screen.query_one("#detail-body", Static).content)
+            await pilot.press("enter")
+            assert isinstance(app.screen, ui.RunScreen)
+            assert not app.screen.query_one("#run-tickers", Input).disabled
             await pilot.press("escape")
             await app.push_screen(ui.BacktestScreen())
             menu = app.screen.query_one("#fund-list", OptionList)
             assert menu.option_count == 4
-            assert sum(menu.get_option_at_index(i).disabled for i in range(4)) == 3
+            assert sum(menu.get_option_at_index(i).disabled for i in range(4)) == 2
     asyncio.run(scenario())
     assert {p.name: p.read_text() for p in ui.FUNDS_DIR.glob("*.yaml")} == files
 
@@ -332,29 +330,21 @@ def test_all_invalid_funds_do_not_crash_home_picker():
     asyncio.run(scenario())
 
 
-def test_blocked_screens_never_request_keys_or_start_warming(monkeypatch):
-    forbidden = Mock(side_effect=AssertionError("external activity"))
-    monkeypatch.setattr(ui, "_demand_run_keys", forbidden)
-    monkeypatch.setattr(ui, "FDClient", forbidden)
-    monkeypatch.setattr(ui, "make_llm", forbidden)
-
+@pytest.mark.parametrize("mode", ["long_only", "long_short", "dollar_neutral"])
+@pytest.mark.parametrize("size", [(120, 45), (80, 24)])
+def test_all_modes_enable_run_and_backtest(mode, size):
+    spec = _spec()
+    spec.strategies[0].blend.mode = mode
     async def scenario():
         app = ui.HedgeFundApp()
-        async with app.run_test(size=(120, 45)) as pilot:
-            await app.push_screen(ui.RunScreen(_spec()))
-            screen = app.screen
-            assert screen.query_one("#run-tickers", Input).disabled
-            assert not screen.check_action("backtest", ())
-            screen._begin()
-            worker = screen._run()
-            await worker.wait()
-            await pilot.press("escape")
-            await app.push_screen(ui.BacktestScreen(_spec()))
-            screen = app.screen
-            screen._begin("2025-01-01", "2025-02-01", ["AAPL"])
-            worker = screen._run(_spec(), "2025-01-01", "2025-02-01", ["AAPL"])
-            await worker.wait()
-            assert forbidden.call_count == 0
+        async with app.run_test(size=size) as pilot:
+            await app.push_screen(ui.RunScreen(spec))
+            assert not app.screen.query_one("#run-tickers", Input).disabled
+            assert app.screen.check_action("backtest", ())
+            await pilot.press("ctrl+b")
+            assert isinstance(app.screen, ui.BacktestScreen)
+            assert app.screen.query_one("#bt-panes", ContentSwitcher).current == "bt-dates"
+            assert not app.screen.query_one("#bt-tickers", Input).disabled
     asyncio.run(scenario())
 
 
@@ -388,3 +378,27 @@ def test_latest_backtest_sets_headline_regardless_of_version(newest_version):
     headline = detail.split("RUNS & BACKTESTS")[0]
     assert "LATEST BACKTEST" in headline and "30.0%" in headline
     assert older.read_bytes() == original
+
+
+
+def test_portfolio_report_explains_rounding_scaling_and_flat_strategies():
+    record = _record(_signal())
+    record.spec.strategies[0].blend.mode = "dollar_neutral"
+    record.equity_before = record.nav = 10_000
+    record.final_weights = {"A": .5, "B": -.5}
+    record.positions = {"A": 16, "B": -7}
+    record.marks = {"A": 300, "B": 700}
+    record.risk_scale_factor = .5
+    text = _render(ui._portfolio_detail(record))
+    assert "Target net $+0.00" in text
+    assert "Actual net $-100.00" in text
+    assert "Difference $-100.00" in text
+    assert "scaled all strategy targets to 50.0%" in text
+    assert "Whole-share holdings can differ" in text
+    record.positions = {}
+    record.final_weights = {"A": 0, "B": 0}
+    record.strategies[0].flat_reason = "missing_short_side"
+    text = _render(ui._portfolio_detail(record))
+    assert "no eligible shorts to balance the longs" in text
+    assert "Allocated capital remains unused" in text
+    assert "flat — no positions" in text
