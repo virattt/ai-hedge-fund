@@ -9,5 +9,6 @@ models:
   - name: buffett
   - name: munger
 blend:
+  mode: long_only
   method: conviction_weighted
   gross_target: 1.0

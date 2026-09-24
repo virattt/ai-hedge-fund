@@ -34,7 +34,7 @@ from datetime import timedelta
 from hedge_fund.brokers.models import Fill
 from hedge_fund.brokers.protocol import Broker
 from hedge_fund.data.protocol import DataClient
-from hedge_fund.fund.spec import Fund, normalize_universe
+from hedge_fund.fund import Fund, normalize_universe, require_executable
 from hedge_fund.models import Signal
 from hedge_fund.pipeline.execution import build_orders
 from hedge_fund.pipeline.models import CycleRecord, StrategyRecord, TickerSkip
@@ -60,6 +60,7 @@ def run_cycle(
     it was asked to trade this tick is recorded on the returned CycleRecord.
     """
     spec = fund.spec
+    require_executable(spec)
     universe = normalize_universe(universe)
     held = broker.positions()
 
@@ -92,7 +93,7 @@ def run_cycle(
                 signals.append(model.predict(ticker, as_of, data_client))
         blend = blend_signals(
             signals, strategy.model_weights, strategy.blend.gross_target,
-            market_neutral=strategy.blend.market_neutral,
+            market_neutral=False,  # preflight currently permits only long_short
         )
         slice_ = strategy.weight / total_slice
         for ticker, weight in blend.weights.items():

@@ -1,39 +1,19 @@
-"""FundSpec — a fund's mandate as data, and the Fund that lives it.
-
-The hierarchy mirrors a real shop (see VISION.md):
-
-    FUND      = capital slices over STRATEGIES  (master risk on the netted book)
-    STRATEGY  = a blend policy over MODELS      (a "pod")
-    MODEL     = an alpha model -> Signal
-
-Models come in two kinds, and the strategy's character follows from its
-staff: a strategy of LLM investor AGENTS (Buffett, Munger, ...) is a
-discretionary pod — its identity is who's on the desk; a strategy powered
-by quant models (PEAD, ...) is a systematic pod — its identity is the edge
-it harvests. Same spec shape, same engine slot; the kind is derived, never
-declared.
-
-Specs are data (a Loop-2 ground rule): a mandate is a serializable YAML/JSON
-config. The wizard, a chat LLM, and the strategy generator all emit this same
-format — nothing downstream ever needs to know who authored a fund.
-
-A `Fund` is the living counterpart: the spec plus its models instantiated
-once. Models are stateful (LLM prompt caches, PEAD earnings caches), so
-they must be constructed per fund — never per cycle — for caches to survive
-across cycles.
-"""
+"""Validated fund configurations, strategy composition, and model construction."""
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, ValidationError
 
+from hedge_fund.fund.policy import require_executable
 from hedge_fund.risk.limits import RiskLimits
-from hedge_fund.signals import ALPHA_MODEL_REGISTRY
+from hedge_fund.signals import ALPHA_MODEL_REGISTRY, get_investment_approach
 from hedge_fund.signals.base import AlphaModel
+
+PortfolioMode: TypeAlias = Literal["long_only", "long_short", "dollar_neutral"]
 
 
 class ModelSpec(BaseModel):
@@ -43,9 +23,13 @@ class ModelSpec(BaseModel):
 
     name: str = Field(description="key into ALPHA_MODEL_REGISTRY, e.g. 'buffett'")
     weight: float = Field(default=1.0, gt=0, description="blend weight")
-    params: dict[str, Any] = Field(
-        default_factory=dict, description="constructor kwargs for the model"
-    )
+    params: dict[str, Any] = Field(default_factory=dict, description="constructor kwargs for the model")
+
+    @field_validator("name")
+    @classmethod
+    def _declared_approach(cls, name: str) -> str:
+        get_investment_approach(name)
+        return name
 
 
 class BlendPolicy(BaseModel):
@@ -54,15 +38,8 @@ class BlendPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     method: Literal["conviction_weighted"] = "conviction_weighted"
-    gross_target: float = Field(
-        default=1.0, gt=0, description="desired sum of |weights| when views exist"
-    )
-    market_neutral: bool = Field(
-        default=False,
-        description="demean convictions cross-sectionally before scaling: long "
-        "the best-liked names relative to the rest, short the least-liked — a "
-        "dollar-neutral sleeve",
-    )
+    gross_target: float = Field(default=1.0, gt=0, description="desired sum of |weights| when views exist")
+    mode: PortfolioMode
 
 
 class StrategySpec(BaseModel):
@@ -77,12 +54,10 @@ class StrategySpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    display_name: str | None = Field(
-        default=None, description="human-facing name, e.g. 'Deep Value'"
-    )
+    display_name: str | None = Field(default=None, description="human-facing name, e.g. 'Deep Value'")
     weight: float = Field(default=1.0, gt=0)
     models: list[ModelSpec] = Field(min_length=1)
-    blend: BlendPolicy = Field(default_factory=BlendPolicy)
+    blend: BlendPolicy
 
     @property
     def title(self) -> str:
@@ -96,33 +71,26 @@ class StrategySpec(BaseModel):
 
 
 class FundSpec(BaseModel):
-    """A fund's complete mandate. `extra='forbid'` everywhere: YAML typos
-    fail loud at load time, not silently at trade time. `risk` is MASTER
-    risk — applied to the netted book after all strategies are combined.
+    """A mandate with fund-level risk limits and no fixed ticker universe.
 
-    Deliberately ticker-free: a mandate is the DESK — its strategies, staff,
-    risk limits, capital, and cadence — not a watchlist. Which names to trade
-    is a run-time input (see `normalize_universe` and `run_cycle`), exactly as
-    a real fund's mandate outlives any particular position.
+    Unknown fields are rejected. Risk limits apply to the combined portfolio;
+    the ticker universe is supplied separately for each run.
     """
 
     model_config = ConfigDict(extra="forbid")
 
+    schema_version: Literal[2]
     name: str
     strategies: list[StrategySpec] = Field(min_length=1)
     risk: RiskLimits
     capital: float = Field(default=100_000.0, gt=0)
     rebalance: Literal["daily", "weekly", "monthly"] = Field(
         default="weekly",
-        description="how often the fund re-runs its cycle — a mandate choice, "
-        "not an engine constant: a fundamentals fund trades weekly, a "
-        "news-driven fund daily. The backtester (and the future daemon) obey "
-        "it; run_cycle itself never sees it.",
+        description="rebalance frequency used by the backtester",
     )
     benchmark: str = Field(
         default="SPY",
-        description="what the fund measures itself against; also the source "
-        "of the backtest's trading-day grid",
+        description="what the fund measures itself against; also the source " "of the backtest's trading-day grid",
     )
 
     @field_validator("benchmark")
@@ -141,11 +109,9 @@ class FundSpec(BaseModel):
 
 
 def normalize_universe(tickers: list[str]) -> list[str]:
-    """Clean a run's ticker list: upper-cased, de-duped, order preserved.
+    """Strip, uppercase, and deduplicate tickers while preserving their order.
 
-    The single normalizer for every entry point (CLI flag, TUI input, a future
-    API), so what the engine trades can't drift by caller. Empty raises: a
-    cycle with nothing to trade is a caller mistake, not an empty result.
+    Raise ValueError if no nonempty tickers remain.
     """
     universe: list[str] = []
     for ticker in tickers:
@@ -158,34 +124,57 @@ def normalize_universe(tickers: list[str]) -> list[str]:
 
 
 def load_spec(path: str | Path) -> FundSpec:
-    """Load a mandate from YAML. Validation errors carry the pydantic detail."""
-    with open(path) as f:
-        data = yaml.safe_load(f)
-    # Mandates used to carry a `universe`. Tickers are a run-time input now
-    # (see FundSpec), so drop the legacy key rather than fail extra='forbid'
-    # on funds saved by an older build.
-    data.pop("universe", None)
-    return FundSpec(**data)
+    """Load a YAML mandate, raising ValueError with its path and error details."""
+    data = _read_yaml(path)
+    if "schema_version" not in data:
+        raise ValueError(f"{path}: schema_version: This fund uses an older format. " "Recreate it or update its configuration.")
+    try:
+        return FundSpec.model_validate(data)
+    except ValidationError as exc:
+        raise ValueError(_validation_message(path, exc)) from exc
 
 
 def load_strategy(path: str | Path) -> StrategySpec:
     """Load one strategy (a library file under hedge_fund/strategies/) from YAML."""
-    with open(path) as f:
-        data = yaml.safe_load(f)
-    return StrategySpec(**data)
+    try:
+        return StrategySpec.model_validate(_read_yaml(path))
+    except ValidationError as exc:
+        raise ValueError(_validation_message(path, exc)) from exc
+
+
+def _validation_message(path: str | Path, exc: ValidationError) -> str:
+    errors = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
+    return f"{path}: {errors}"
+
+
+def _read_yaml(path: str | Path) -> dict[str, Any]:
+    try:
+        data = yaml.safe_load(Path(path).read_text())
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
+        raise ValueError(f"{path}: cannot read configuration: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: configuration must be a YAML mapping")
+    return data
+
+
+def custom_strategy(names: list[str]) -> StrategySpec:
+    """Build a strategy with its mode derived from registered analyst profiles.
+
+    Duplicate names are removed in selection order. Any analyst that permits
+    shorting enables long/short mode; dollar neutrality is never inferred.
+    Invalid or empty selections raise ValueError.
+    """
+    models = [ModelSpec(name=n) for n in dict.fromkeys(names)]
+    mode: PortfolioMode = "long_short" if any(get_investment_approach(m.name) == "long_short" for m in models) else "long_only"
+    return StrategySpec(name="custom", models=models, blend=BlendPolicy(mode=mode))
 
 
 class Fund:
-    """A living fund: its spec plus instantiated models, per strategy.
+    """A validated mandate with persistent model instances for each strategy.
 
-    Plain class, not pydantic — models hold state (LLM clients, prompt
-    caches, per-ticker data caches) and are constructed exactly once here.
-    A persona appearing in two strategies gets two instances; that's fine —
-    the prompt cache is disk-keyed by prompt content and shared, so the
-    second instance's calls are cache hits, not spend.
-
-    The `models` override (strategy name -> instances) exists for tests to
-    inject fakes; production callers let the registry build the staff.
+    Models are constructed once so their caches survive successive cycles.
+    Callers may supply instances keyed by strategy name, including test doubles.
+    Unsupported investment rules raise ValueError before model construction.
     """
 
     def __init__(
@@ -193,6 +182,7 @@ class Fund:
         spec: FundSpec,
         models: dict[str, list[AlphaModel]] | None = None,
     ) -> None:
+        require_executable(spec)
         self.spec = spec
         self.strategies: list[tuple[StrategySpec, list[AlphaModel]]] = []
         for strategy in spec.strategies:
@@ -202,9 +192,6 @@ class Fund:
             staff = []
             for m in strategy.models:
                 if m.name not in ALPHA_MODEL_REGISTRY:
-                    raise ValueError(
-                        f"unknown model {m.name!r} in strategy "
-                        f"{strategy.name!r}; available: {sorted(ALPHA_MODEL_REGISTRY)}"
-                    )
+                    raise ValueError(f"unknown model {m.name!r} in strategy " f"{strategy.name!r}; available: {sorted(ALPHA_MODEL_REGISTRY)}")
                 staff.append(ALPHA_MODEL_REGISTRY[m.name](**m.params))
             self.strategies.append((strategy, staff))

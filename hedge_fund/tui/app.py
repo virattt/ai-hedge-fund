@@ -1,34 +1,16 @@
-"""The Textual app: home → builder → backtest, on the unchanged v2 engine.
-
-Three screens:
-
-- HomeScreen      — the brand moment: wordmark, two verbs, the model picker.
-- BuilderScreen   — the fund wizard as a two-pane app: a step rail that shows
-                    where you are (and what you chose), the active step on
-                    the right. Esc rewinds one step.
-- BacktestScreen  — pick a fund, pick a window, then warm → replay, with the
-                    equity curve drawing live.
-
-The engine is untouched: composing a FundSpec writes the same YAML the CLI
-reads, and the replay is `backtest_fund` with an `on_cycle` hook. The warm
-phase only warms disk caches (market data, then every agent across the
-window); the sequential `backtest_fund` afterward is the source of truth
-(determinism and fail-loud live in the engine, not the UI). Presentation
-constants and the equity-curve renderable live in `hedge_fund.tui.shared`, shared
-with the non-interactive CLI (`hedge_fund/run.py`).
-"""
+"""Terminal screens for building, inspecting, running, and backtesting funds."""
 
 from __future__ import annotations
 
 import json
 import os
 import time
-from math import sqrt
-from statistics import mean, stdev
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import as_completed, ThreadPoolExecutor
 from datetime import date as _date
 from datetime import datetime, timedelta
+from math import isfinite, sqrt
 from pathlib import Path
+from statistics import mean, stdev
 
 import yaml
 from rich import box
@@ -55,54 +37,60 @@ from textual.widgets import (
 from textual.widgets.option_list import Option
 from textual.widgets.selection_list import Selection
 
-from hedge_fund.backtesting import FundBacktestResult, backtest_fund, rebalance_grid
+from hedge_fund.backtesting import backtest_fund, FundBacktestResult, rebalance_grid
 from hedge_fund.backtesting.fund import _PERIODS_PER_YEAR
 from hedge_fund.brokers import Fill, SimBroker
 from hedge_fund.data import CachedDataClient, FDClient
 from hedge_fund.fund import (
+    custom_strategy,
+    discover_funds,
+    execution_unavailable,
     Fund,
     FundSpec,
-    StrategySpec,
-    load_spec,
     load_strategy,
     normalize_universe,
+    require_executable,
+    SavedFund,
+    StrategySpec,
 )
+from hedge_fund.llm import make_llm, provider_for, ThesisStream
 from hedge_fund.models import Signal
 from hedge_fund.pipeline import CycleRecord, run_cycle
 from hedge_fund.pipeline.run_cycle import _MARK_LOOKBACK_DAYS
+from hedge_fund.signals import ALPHA_MODEL_REGISTRY, get_investment_approach, LLMAgent
+from hedge_fund.tui.keys import (
+    apply_credentials,
+    ENV_PATH,
+    masked,
+    missing_key,
+    PROVIDER_ENV_VARS,
+    save_credential,
+)
 from hedge_fund.tui.shared import (
-    DEFAULT_CAPITAL,
-    DEFAULT_RISK,
-    DISPLAY_NAMES,
-    FUNDS_DIR,
-    STRATEGY_DIR,
-    UNIVERSE_PRESETS,
-    VERSION,
+    _agent_names,
     _BACKTEST_WEEKS,
     _BOARD_REFRESH,
     _CYCLE_DWELL,
     _DEFAULT_MODEL_LABEL,
-    _SHORT_NAMES,
-    _WARM_CHUNK,
-    _agent_names,
     _fund_label,
     _render_area_chart,
+    _SHORT_NAMES,
     _strategy_kind,
     _valid_date,
+    _WARM_CHUNK,
+    DEFAULT_CAPITAL,
+    DEFAULT_RISK,
+    DISPLAY_NAMES,
     ensure_mandates_dir,
+    FUNDS_DIR,
     is_supported,
     load_api_models,
+    MODE_LABELS,
+    strategy_description,
+    STRATEGY_DIR,
+    UNIVERSE_PRESETS,
+    VERSION,
 )
-from hedge_fund.llm import ThesisStream, make_llm, provider_for
-from hedge_fund.tui.keys import (
-    ENV_PATH,
-    PROVIDER_ENV_VARS,
-    apply_credentials,
-    masked,
-    missing_key,
-    save_credential,
-)
-from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent
 
 # The palette, mirrored from app.tcss (rich styles can't read CSS variables).
 GREEN = "#2bd97c"
@@ -396,14 +384,23 @@ class FundSelectScreen(Screen):
             self.query_one("#detail-body", Static).update(
                 Text("No funds yet — go back and build one first.", style=MUTED))
             return
-        for i, (_, spec) in enumerate(self._slots):
-            menu.add_option(Option(
-                _slot_card(i, spec, _last_score(spec.name)), id=f"fund:{i}"))
+        for i, entry in enumerate(self._slots):
+            if entry.spec is None:
+                menu.add_option(Option(Text(f"{entry.path.name} — Unavailable\n{entry.error}", style=MUTED),
+                                       id=f"unavailable:{i}", disabled=True))
+            else:
+                menu.add_option(Option(
+                    _slot_card(i, entry.spec, _last_score(entry.spec.name)), id=f"fund:{i}"))
         # Options added after mount leave `highlighted` unset — pin it so the
         # detail pane fills in and Enter works without an arrow press first.
-        menu.highlighted = 0
+        first = next((i for i, entry in enumerate(self._slots) if entry.spec is not None), None)
+        menu.highlighted = first
         menu.focus()
-        self._show_detail(0)
+        if first is not None:
+            self._show_detail(first)
+        else:
+            self.query_one("#detail-body", Static).update(
+                Text("Saved funds are unavailable. Recreate them in the fund builder or update their configurations.", style=MUTED))
 
     @on(OptionList.OptionHighlighted, "#select-menu")
     def _hover(self, event: OptionList.OptionHighlighted) -> None:
@@ -415,7 +412,12 @@ class FundSelectScreen(Screen):
     def _choose(self, event: OptionList.OptionSelected) -> None:
         oid = event.option.id or ""
         if oid.startswith("fund:"):
-            _, spec = self._slots[int(oid.split(":")[1])]
+            spec = self._slots[int(oid.split(":")[1])].spec
+            if spec is None:
+                return
+            if reason := execution_unavailable(spec):
+                self.notify(reason, severity="warning")
+                return
             self.app.push_screen(RunScreen(spec))
 
     def action_delete(self) -> None:
@@ -424,7 +426,10 @@ class FundSelectScreen(Screen):
             return
         # Remember what was asked for: the list repopulates on resume, so the
         # highlighted index is not trustworthy by the time the callback fires.
-        self._pending_delete = self._slots[menu.highlighted]
+        entry = self._slots[menu.highlighted]
+        if entry.spec is None:
+            return
+        self._pending_delete = (entry.path, entry.spec)
         path, spec = self._pending_delete
         self.app.push_screen(
             ConfirmDeleteScreen(path, spec, self._history(spec.name)),
@@ -444,7 +449,9 @@ class FundSelectScreen(Screen):
                     f"{'file' if gone == 1 else 'files'} removed")
 
     def _show_detail(self, i: int) -> None:
-        spec = self._slots[i][1]
+        spec = self._slots[i].spec
+        if spec is None:
+            return
         self.query_one("#detail-body", Static).update(
             _fund_detail(spec, self._history(spec.name)))
 
@@ -466,10 +473,9 @@ class FundSelectScreen(Screen):
         return out
 
 
-def _saved_funds() -> list[tuple[Path, FundSpec]]:
-    """Every saved mandate as (file, spec). The path travels with the spec
-    because the two names can differ — example.yaml holds "example-fund"."""
-    return [(p, load_spec(p)) for p in sorted(FUNDS_DIR.glob("*.yaml"))]
+def _saved_funds() -> list[SavedFund]:
+    """Valid and unavailable saved mandates, shared by both pickers."""
+    return discover_funds(FUNDS_DIR)
 
 
 def _delete_fund(path: Path, name: str, *, with_history: bool) -> int:
@@ -550,6 +556,8 @@ def _summarize(path: Path, mtime: float) -> dict | None:
     light summary the history pane renders. None if the file is unreadable."""
     try:
         d = json.loads(path.read_text())
+        if not isinstance(d, dict):
+            return None
         universe = d.get("universe", [])
         if "metrics" in d:  # a backtest
             m = d["metrics"]
@@ -568,7 +576,7 @@ def _summarize(path: Path, mtime: float) -> dict | None:
             "as_of": d["as_of"], "nav": d["nav"],
             "n_orders": len(d.get("orders", [])),
         }
-    except (json.JSONDecodeError, KeyError, OSError):
+    except (json.JSONDecodeError, KeyError, OSError, TypeError, UnicodeError):
         return None
 
 
@@ -593,14 +601,11 @@ def _last_score(name: str) -> tuple[float, float, str] | None:
     """The fund's most recent BACKTEST result, if any: (total return, excess
     return, benchmark). A quiet scoreboard on each slot — runs have no return
     to show, only a NAV."""
-    files = list(FUNDS_DIR.glob(f"{name}-backtest*.json"))
-    if not files:
-        return None
-    newest = max(files, key=lambda p: p.stat().st_mtime)
-    summary = _summarize(newest, 0.0)
-    if summary is None or summary["kind"] != "backtest":
-        return None
-    return (summary["total"], summary["excess"], summary["benchmark"])
+    for path in _receipts(name):
+        summary = _summarize(path, 0.0)
+        if summary and summary["kind"] == "backtest":
+            return (summary["total"], summary["excess"], summary["benchmark"])
+    return None
 
 
 def _slot_card(index: int, spec: FundSpec, score: tuple | None) -> Text:
@@ -620,6 +625,9 @@ def _slot_card(index: int, spec: FundSpec, score: tuple | None) -> Text:
                     style=f"bold {GREEN if up else RED}")
     card.append(f"\n     {n} {'strategy' if n == 1 else 'strategies'}"
                 f"  ·  {spec.rebalance}", style=MUTED)
+    card.append("\n     " + ", ".join(MODE_LABELS[s.blend.mode] for s in spec.strategies), style=MUTED)
+    if execution_unavailable(spec):
+        card.append(" · Execution unavailable", style=MUTED)
     return card
 
 
@@ -632,11 +640,16 @@ def _fund_detail(spec: FundSpec, history: list[dict]) -> Group:
         Text(spec.name, style=f"bold {BRIGHT}"),
         Text(f"{staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}", style=MUTED),
     ]
+    parts.extend(Text(f"{s.title}: {strategy_description(s)}", style=MUTED) for s in spec.strategies)
+    unavailable = execution_unavailable(spec)
+    if unavailable:
+        parts.append(Text(unavailable, style="yellow"))
 
     if not history:
         parts.append(Text("\nNo runs yet — this fund has never traded.", style=MUTED))
-        parts.append(Text("\nEnter to run it as of today · ctrl+b to backtest "
-                          "over history", style=MUTED))
+        if not unavailable:
+            parts.append(Text("\nEnter to run it as of today · ctrl+b to backtest "
+                              "over history", style=MUTED))
         return Group(*parts)
 
     # The headline stats come from the most recent BACKTEST (a single run has
@@ -1161,12 +1174,16 @@ class RunScreen(Screen):
     def on_mount(self) -> None:
         spec = self._spec
         staff = ", ".join(s.title for s in spec.strategies)
+        unavailable = execution_unavailable(spec)
         self.query_one("#run-hero", Static).update(Group(
             Text(spec.name, style=f"bold {BRIGHT}"),
             Text(f"{staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}",
                  style=MUTED),
+            *(Text(strategy_description(s), style=MUTED) for s in spec.strategies),
+            Text(unavailable or "", style="yellow"),
         ))
         tickers = self.query_one("#run-tickers", Input)
+        tickers.disabled = unavailable is not None
         last = _last_universe(spec.name)
         if last:
             tickers.value = ", ".join(last)
@@ -1178,17 +1195,22 @@ class RunScreen(Screen):
         if self._phase == "running":
             return action not in ("back", "backtest")
         if action == "backtest":
-            return self._phase in ("ready", "done")
+            return self._phase in ("ready", "done") and execution_unavailable(self._spec) is None
         return True
 
     def action_back(self) -> None:
         self.app.pop_screen()
 
     def action_backtest(self) -> None:
+        if execution_unavailable(self._spec):
+            return
         self.app.push_screen(BacktestScreen(spec=self._spec))
 
     @on(Input.Submitted, "#run-tickers")
     def _start(self, event: Input.Submitted) -> None:
+        if reason := execution_unavailable(self._spec):
+            self.notify(reason, severity="warning")
+            return
         try:
             self._universe = normalize_universe(
                 event.value.replace(",", " ").split())
@@ -1201,6 +1223,9 @@ class RunScreen(Screen):
         resume()
 
     def _begin(self) -> None:
+        if reason := execution_unavailable(self._spec):
+            self.notify(reason, severity="warning")
+            return
         self._phase = "running"
         self.query_one("#run-panes", ContentSwitcher).current = "run-live"
         self.query_one("#run-phase", Static).update(Text.assemble(
@@ -1242,6 +1267,7 @@ class RunScreen(Screen):
         as_of = self._as_of
         universe = self._universe
         try:
+            require_executable(spec)
             desks = dict(zip(_agent_names(spec), self._desks, strict=True))
 
             def warm(agent_name: str) -> None:
@@ -1400,7 +1426,8 @@ class BuilderScreen(Screen):
                              style=MUTED),
                         classes="hint",
                     )
-                with Vertical(id="step-capital", classes="pane"):
+                with VerticalScroll(id="step-capital", classes="pane"):
+                    yield Static("", id="strategy-summary")
                     yield Label("Starting capital ($)", classes="q")
                     yield Input(
                         value=f"{DEFAULT_CAPITAL:.0f}", type="number",
@@ -1420,7 +1447,7 @@ class BuilderScreen(Screen):
                             ("slow-turn — the fewest LLM calls", MUTED))),
                         id="cadence-list",
                     )
-                with Vertical(id="step-done", classes="pane"):
+                with VerticalScroll(id="step-done", classes="pane"):
                     yield Static("", id="done-summary")
                     yield OptionList(
                         Option("▶  Run it as of today", id="go-run"),
@@ -1457,7 +1484,15 @@ class BuilderScreen(Screen):
             self.query_one("#cadence-list", OptionList).highlighted = (
                 self.CADENCES.index(picked)
             )
+        if pane_id == "step-capital":
+            self.query_one("#strategy-summary", Static).update(Group(*(
+                Text(f"{s.title}: {strategy_description(s)}", style=MUTED)
+                for s in self._state.get("strategies", [])
+            )))
         self._refresh_rail()
+
+        # Wrapped summaries can move controls below the viewport during layout.
+        self.call_after_refresh(self.query_one(focus).scroll_visible, animate=False)
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
         # The list steps own Enter (confirm) and 'a' (toggle all); everywhere
@@ -1472,6 +1507,8 @@ class BuilderScreen(Screen):
             self.app.pop_screen()
         elif pane == "step-agents":
             self._goto("step-strategies")
+        elif pane == "step-capital" and self._state.get("custom_selected"):
+            self._goto("step-agents")
         elif pane == "step-done":
             self._goto("step-cadence")
         else:
@@ -1481,9 +1518,16 @@ class BuilderScreen(Screen):
 
     @on(Input.Submitted, "#name-input")
     def _submit_name(self, event: Input.Submitted) -> None:
-        self._state["name"] = (
+        name = (
             event.value.strip().replace(" ", "-").lower() or "ai-hedge-fund"
         )
+        if "/" in name or "\\" in name or name in (".", ".."):
+            self.notify("Use a fund name without path separators.", severity="error")
+            return
+        if (FUNDS_DIR / f"{name}.yaml").exists():
+            self.notify("That fund name already exists. Choose a different name.", severity="error")
+            return
+        self._state["name"] = name
         self._goto("step-strategies")
 
     def action_toggle_all(self) -> None:
@@ -1501,9 +1545,11 @@ class BuilderScreen(Screen):
             if not picked:
                 self.notify("Select at least one strategy.", severity="error")
                 return
-            self._state["strategies"] = [
+            self._state["library_strategies"] = [
                 self._library[i] for i in picked if i != _CUSTOM
             ]
+            self._state["custom_selected"] = _CUSTOM in picked
+            self._state["strategies"] = list(self._state["library_strategies"])
             if _CUSTOM in picked:
                 self._goto("step-agents")
                 return
@@ -1512,17 +1558,18 @@ class BuilderScreen(Screen):
             if not keys:
                 self.notify("Pick at least one agent.", severity="error")
                 return
-            self._state["strategies"] = self._state["strategies"] + [
-                StrategySpec(name="custom", models=[{"name": k} for k in keys])
-            ]
+            self._state["strategies"] = self._state["library_strategies"] + [custom_strategy(keys)]
         self._goto("step-capital")
 
     @on(Input.Submitted, "#capital-input")
     def _submit_capital(self, event: Input.Submitted) -> None:
         try:
-            self._state["capital"] = float(event.value or DEFAULT_CAPITAL)
+            capital = float(event.value or DEFAULT_CAPITAL)
+            if not isfinite(capital) or capital <= 0:
+                raise ValueError("capital must be positive")
+            self._state["capital"] = capital
         except ValueError:
-            self.notify("Enter a number.", severity="error")
+            self.notify("Enter a positive starting capital.", severity="error")
             return
         self._goto("step-cadence")
 
@@ -1536,6 +1583,7 @@ class BuilderScreen(Screen):
     def _finish_build(self) -> None:
         # Equal capital slices; master risk defaults. Power users edit the YAML.
         spec = FundSpec(
+            schema_version=2,
             name=self._state["name"],
             strategies=[s.model_dump() for s in self._state["strategies"]],
             risk=DEFAULT_RISK,
@@ -1544,10 +1592,17 @@ class BuilderScreen(Screen):
         )
         FUNDS_DIR.mkdir(exist_ok=True)
         path = FUNDS_DIR / f"{spec.name}.yaml"
-        path.write_text(yaml.safe_dump(spec.model_dump(), sort_keys=False))
+        try:
+            with path.open("x") as output:
+                output.write(yaml.safe_dump(spec.model_dump(), sort_keys=False))
+        except FileExistsError:
+            self.notify("That fund name already exists. Choose a different name.", severity="error")
+            self._goto("step-name")
+            return
         self._built = (spec, path)
 
         staff = ", ".join(s.title for s in self._state["strategies"])
+        unavailable = execution_unavailable(spec)
         self.query_one("#done-summary", Static).update(Group(
             Text.assemble(("✓ ", f"bold {GREEN}"), ("Saved fund to ", TEXT),
                           (str(path), f"bold {BRIGHT}")),
@@ -1560,13 +1615,22 @@ class BuilderScreen(Screen):
             Text(""),
             Text("Pick the tickers when you run it — a fund carries no watchlist.",
                  style=MUTED),
+            *(Text(f"{s.title}: {strategy_description(s)}", style=MUTED) for s in spec.strategies),
+            Text(unavailable or "", style="yellow"),
         ))
+        menu = self.query_one("#done-menu", OptionList)
+        if unavailable:
+            menu.disable_option("go-run")
+        else:
+            menu.enable_option("go-run")
         self._goto("step-done")
 
     @on(OptionList.OptionSelected, "#done-menu")
     def _after_build(self, event: OptionList.OptionSelected) -> None:
         assert self._built is not None
         if event.option.id == "go-run":
+            if execution_unavailable(self._built[0]):
+                return
             self.app.switch_screen(RunScreen(self._built[0]))
         else:
             self.app.pop_screen()
@@ -1608,13 +1672,13 @@ class BuilderScreen(Screen):
         staff = ", ".join(
             _SHORT_NAMES.get(m.name, m.name) for m in strategy.models
         )
-        return Text.assemble((f"{strategy.title:<20}", "bold"), (staff, MUTED))
+        return Text.assemble((f"{strategy.title:<20}", "bold"), (f"{MODE_LABELS[strategy.blend.mode]} · {staff}", MUTED))
 
     @staticmethod
     def _agent_prompt(key: str, cls: type) -> Text:
         name = DISPLAY_NAMES.get(key, key)
         tag = "" if issubclass(cls, LLMAgent) else "  quant"
-        return Text.assemble((f"{name:<24}", "bold"), (tag, MUTED))
+        return Text.assemble((f"{name:<24}", "bold"), (MODE_LABELS[get_investment_approach(key)] + tag, MUTED))
 
 
 class BacktestScreen(Screen):
@@ -1631,7 +1695,7 @@ class BacktestScreen(Screen):
         super().__init__()
         self._spec = spec  # preselected by the builder's "Backtest it now"
         self._preselected = spec is not None
-        self._specs: list[FundSpec] = []
+        self._specs: list[FundSpec | None] = []
         self._phase = "pick"
         self._roster_order: list[str] = []
         self._roster_state: dict[str, tuple[str, str | None]] = {}
@@ -1687,8 +1751,8 @@ class BacktestScreen(Screen):
         if self._spec is not None:
             self._begin_dates()
             return
-        paths = sorted(FUNDS_DIR.glob("*.yaml"))
-        self._specs = [load_spec(p) for p in paths]
+        entries = _saved_funds()
+        self._specs = [entry.spec for entry in entries]
         fund_list = self.query_one("#fund-list", OptionList)
         if not self._specs:
             self.query_one("#no-funds", Static).update(
@@ -1696,7 +1760,12 @@ class BacktestScreen(Screen):
                      style=MUTED)
             )
             return
-        fund_list.add_options([Option(_fund_label(s)) for s in self._specs])
+        for entry in entries:
+            if entry.spec is None:
+                fund_list.add_option(Option(Text(f"{entry.path.name} — Unavailable\n{entry.error}"), disabled=True))
+            else:
+                reason = execution_unavailable(entry.spec)
+                fund_list.add_option(Option(Text(_fund_label(entry.spec) + (f"\n{reason}" if reason else "")), disabled=bool(reason)))
         fund_list.focus()
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
@@ -1718,10 +1787,15 @@ class BacktestScreen(Screen):
     @on(OptionList.OptionSelected, "#fund-list")
     def _pick_fund(self, event: OptionList.OptionSelected) -> None:
         self._spec = self._specs[event.option_index]
+        if self._spec is None:
+            return
         self._begin_dates()
 
     def _begin_dates(self) -> None:
         assert self._spec is not None
+        if reason := execution_unavailable(self._spec):
+            self.query_one("#no-funds", Static).update(Text(reason, style="yellow"))
+            return
         self._phase = "dates"
         today = _date.today()
         tickers = self.query_one("#bt-tickers", Input)
@@ -1748,6 +1822,10 @@ class BacktestScreen(Screen):
 
     @on(Input.Submitted, "#end-input")
     def _submit_end(self, event: Input.Submitted) -> None:
+        assert self._spec is not None
+        if reason := execution_unavailable(self._spec):
+            self.notify(reason, severity="warning")
+            return
         start = self.query_one("#start-input", Input).value.strip()
         end = event.value.strip()
         for value in (start, end):
@@ -1774,6 +1852,9 @@ class BacktestScreen(Screen):
 
     def _begin(self, start: str, end: str, universe: list[str]) -> None:
         assert self._spec is not None
+        if reason := execution_unavailable(self._spec):
+            self.notify(reason, severity="warning")
+            return
         self._phase = "run"
         self.query_one("#bt-panes", ContentSwitcher).current = "bt-run"
         self.query_one("#phase-line", Static).update(
@@ -1795,6 +1876,7 @@ class BacktestScreen(Screen):
              universe: list[str]) -> None:
         app = self.app
         try:
+            require_executable(spec)
             with FDClient() as raw:
                 bars = CachedDataClient(raw).get_prices(spec.benchmark, start, end)
             closes = {b.time[:10]: b.close for b in bars

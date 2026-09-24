@@ -31,6 +31,8 @@ class FakeDataClient:
 class FakeAnalyst:
     """Fixed conviction per ticker; counts predict calls."""
 
+    investment_approach = "long_short"
+
     def __init__(self, name, views=None, abstain=False, error=None):
         self._name = name
         self._views = views or {}
@@ -52,10 +54,19 @@ class FakeAnalyst:
                       value=value, metadata=metadata)
 
 
+@pytest.fixture(autouse=True)
+def registered_fakes(monkeypatch):
+    from hedge_fund.signals import ALPHA_MODEL_REGISTRY
+    for name in ("a", "b"):
+        monkeypatch.setitem(ALPHA_MODEL_REGISTRY, name, FakeAnalyst)
+
+
 def _spec(strategies=None, max_position_pct=0.25):
     if strategies is None:
         strategies = [{"name": "solo", "models": [{"name": "a"}]}]
+    strategies = [{**s, "blend": {"mode": "long_short"}} for s in strategies]
     return FundSpec(
+        schema_version=2,
         name="test-fund",
         strategies=strategies,
         risk={"max_position_pct": max_position_pct, "max_gross_exposure": 1.0},
@@ -87,6 +98,7 @@ def test_full_cycle_record_is_consistent():
                        UNIVERSE)
 
     assert record.fund == "test-fund"
+    assert record.schema_version == 2
     assert record.equity_before == pytest.approx(100_000.0)
     assert len(record.strategies) == 2
     assert all(len(sr.signals) == 3 for sr in record.strategies)  # 3 tickers x 1 analyst
@@ -251,3 +263,16 @@ def test_analyst_error_propagates():
     with pytest.raises(ConnectionError):
         run_cycle(fund, "2024-06-03", SimBroker(cash=100_000.0),
                   FakeDataClient(CLOSES), UNIVERSE)
+
+
+def test_recheck_changed_rules_before_touching_broker_or_data():
+    from unittest.mock import Mock
+    from hedge_fund.backtesting import backtest_fund
+    fund = Fund(_spec(), models={"solo": [FakeAnalyst("a")]})
+    fund.spec.strategies[0].blend.mode = "long_only"
+    data, broker = Mock(), Mock()
+    with pytest.raises(ValueError, match="Execution unavailable"):
+        run_cycle(fund, "2024-06-03", broker, data, UNIVERSE)
+    with pytest.raises(ValueError, match="Execution unavailable"):
+        backtest_fund(fund, "2024-06-03", "2024-06-10", data, UNIVERSE)
+    assert data.mock_calls == broker.mock_calls == []

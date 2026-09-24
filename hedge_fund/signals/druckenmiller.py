@@ -16,6 +16,8 @@ from hedge_fund.signals.llm_agent import LLMAgent
 class DruckenmillerAgent(LLMAgent):
     """Reasons over fundamentals in Stanley Druckenmiller's voice."""
 
+    investment_approach = "long_short"
+
     @property
     def name(self) -> str:
         return "druckenmiller"

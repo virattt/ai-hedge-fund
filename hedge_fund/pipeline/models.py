@@ -8,6 +8,8 @@ these; `fund why AAPL` will answer from them alone.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 from hedge_fund.brokers.models import Fill, Order
@@ -38,6 +40,7 @@ class CycleRecord(BaseModel):
     outputs. `model_dump_json()` round-trips; nothing about a decision
     lives anywhere else."""
 
+    schema_version: Literal[2] = 2
     fund: str
     as_of: str
     spec: FundSpec                      # self-contained audit copy

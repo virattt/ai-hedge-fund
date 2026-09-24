@@ -2,15 +2,18 @@
 
 import asyncio
 import io
+import json
 import os
 import stat
 from unittest.mock import Mock
 
 import pytest
 import requests
+import yaml
 from rich.console import Console
-from textual.widgets import Input, OptionList
+from textual.widgets import ContentSwitcher, Input, OptionList, SelectionList, Static
 
+from hedge_fund.fund import custom_strategy, FundSpec, load_spec
 from hedge_fund.llm import PROVIDER_ENV_VARS
 from hedge_fund.llm.contract import normalize_jev_response
 from hedge_fund.llm.test_contract import _response
@@ -27,6 +30,7 @@ def isolated_configuration(tmp_path, monkeypatch):
     saved.parent.mkdir()
     mandates = tmp_path / "mandates"
     mandates.mkdir()
+    monkeypatch.setattr(ui, "FUNDS_DIR", mandates)
     monkeypatch.setattr(keys, "ENV_PATH", saved)
     monkeypatch.setattr(ui, "ENV_PATH", saved)
     monkeypatch.setattr(ui, "ensure_mandates_dir", lambda: mandates)
@@ -55,7 +59,7 @@ def _record(signal):
     return CycleRecord(
         fund="test",
         as_of=signal.date,
-        spec={"name": "test", "strategies": [{"name": "value", "models": [{"name": "buffett"}]}], "risk": {"max_position_pct": 0.25, "max_gross_exposure": 1}},
+        spec={"schema_version": 2, "name": "test", "strategies": [{"name": "value", "models": [{"name": "buffett"}], "blend": {"mode": "long_only"}}], "risk": {"max_position_pct": 0.25, "max_gross_exposure": 1}},
         universe=[signal.ticker],
         marks={signal.ticker: 100},
         skipped=[],
@@ -86,7 +90,9 @@ def test_picker_and_masked_key_save_or_cancel(save, isolated_configuration):
             picker = app.screen.query_one("#picker-list", OptionList)
             index = picker.get_option_index("jev-1.13.0")
             assert not picker.get_option_at_index(index).disabled
-            assert "Jev — TypeSafe" in _render(picker.get_option_at_index(index).prompt)
+            # Provider names are group headers; model rows show label and id.
+            assert "Jev" in _render(picker.get_option_at_index(index).prompt)
+            assert "jev-1.13.0" in _render(picker.get_option_at_index(index).prompt)
             picker.highlighted = index
             await pilot.press("enter")
             assert os.environ["HEDGE_FUND_LLM_MODEL"] == "jev-1.13.0"
@@ -202,3 +208,183 @@ def test_chat_rendering_and_quantitative_fallback_are_preserved():
         assert ui._verdict(quant)[1] == direction
         desk.settle(quant)
         assert ui._live_thesis(desk).plain == ""
+
+
+def _spec(names=("buffett", "druckenmiller"), name="test"):
+    return FundSpec(schema_version=2, name=name, strategies=[custom_strategy(list(names))],
+                       risk={"max_position_pct": 0.25, "max_gross_exposure": 1})
+
+
+def test_mixed_description_identifies_short_analysts():
+    description = ui.strategy_description(_spec().strategies[0])
+    assert "Short ideas must be supported by Druckenmiller." in description
+    assert "Long-only analysts contribute ownership views." in description
+    assert "Long-only" in ui.BuilderScreen._agent_prompt("buffett", ui.ALPHA_MODEL_REGISTRY["buffett"]).plain
+
+
+@pytest.mark.parametrize("names,mode,blocked", [
+    (["buffett"], "long_only", True),
+    (["buffett", "druckenmiller"], "long_short", True),
+    (["druckenmiller"], "long_short", False),
+])
+@pytest.mark.parametrize("size", [(120, 45), (80, 24)])
+def test_builder_derives_rules_and_back_navigation_does_not_duplicate(names, mode, blocked, size):
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=size) as pilot:
+            await app.push_screen(ui.BuilderScreen())
+            screen = app.screen
+            screen.query_one("#name-input", Input).value = "new-fund"
+            await pilot.press("enter")
+            screen.query_one("#strategy-list", SelectionList).select(ui._CUSTOM)
+            await pilot.press("enter")
+            agents = screen.query_one("#agent-list", SelectionList)
+            for name in names:
+                agents.select(name)
+            await pilot.press("enter")
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-capital"
+            await pilot.press("escape")
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-agents"
+            assert set(agents.selected) == set(names)
+            await pilot.press("enter")
+            await pilot.press("enter", "enter")
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-done"
+            saved = load_spec(ui.FUNDS_DIR / "new-fund.yaml")
+            assert saved.schema_version == 2
+            assert len(saved.strategies) == 1
+            assert saved.strategies[0].blend.mode == mode
+            assert screen.query_one("#done-menu", OptionList).get_option("go-run").disabled == blocked
+            await pilot.wait_for_scheduled_animations()
+            await pilot.pause()
+            assert screen.query_one("#done-menu", OptionList).region.intersection(screen.region).height > 0
+            text = _render(screen.query_one("#done-summary", Static).content)
+            assert ui.MODE_LABELS[mode] in text
+            if blocked:
+                assert "Execution unavailable" in text
+    asyncio.run(scenario())
+
+
+def test_builder_existing_name_and_save_race_never_overwrite():
+    original = "name: old-user-fund\n"
+    path = ui.FUNDS_DIR / "existing.yaml"
+    path.write_text(original)
+
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=(120, 45)) as pilot:
+            await app.push_screen(ui.BuilderScreen())
+            screen = app.screen
+            screen.query_one("#name-input", Input).value = "existing"
+            await pilot.press("enter")
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-name"
+            assert path.read_text() == original
+            screen.query_one("#name-input", Input).value = "save-race"
+            await pilot.press("enter")
+            screen.query_one("#strategy-list", SelectionList).select(ui._CUSTOM)
+            await pilot.press("enter")
+            screen.query_one("#agent-list", SelectionList).select("pead")
+            await pilot.press("enter", "enter")
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-cadence"
+            # Simulate another process saving the chosen name after validation.
+            competing_path = ui.FUNDS_DIR / "save-race.yaml"
+            competing_path.write_text(original)
+            await pilot.press("enter")
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-name"
+            assert competing_path.read_text() == original
+    asyncio.run(scenario())
+
+
+def test_both_pickers_tolerate_invalid_funds_and_disable_backtests():
+    files = {"old.yaml": "name: old\n", "broken.yaml": "[oops",
+             "blocked.yaml": yaml.safe_dump(_spec().model_dump()),
+             "valid.yaml": yaml.safe_dump(_spec(["pead"], "ready").model_dump())}
+    for name, content in files.items():
+        (ui.FUNDS_DIR / name).write_text(content)
+
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=(140, 50)) as pilot:
+            await app.push_screen(ui.FundSelectScreen())
+            menu = app.screen.query_one("#select-menu", OptionList)
+            assert menu.option_count == 4
+            prompts = [_render(menu.get_option_at_index(i).prompt) for i in range(4)]
+            assert any("old.yaml" in p and "older format" in p for p in prompts)
+            assert sum(menu.get_option_at_index(i).disabled for i in range(4)) == 2
+            await pilot.press("enter")  # first valid entry is blocked, inspectable
+            assert isinstance(app.screen, ui.FundSelectScreen)
+            assert "Execution unavailable" in _render(app.screen.query_one("#detail-body", Static).content)
+            await pilot.press("escape")
+            await app.push_screen(ui.BacktestScreen())
+            menu = app.screen.query_one("#fund-list", OptionList)
+            assert menu.option_count == 4
+            assert sum(menu.get_option_at_index(i).disabled for i in range(4)) == 3
+    asyncio.run(scenario())
+    assert {p.name: p.read_text() for p in ui.FUNDS_DIR.glob("*.yaml")} == files
+
+
+def test_all_invalid_funds_do_not_crash_home_picker():
+    (ui.FUNDS_DIR / "old.yaml").write_text("name: old\n")
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test() as pilot:
+            await app.push_screen(ui.FundSelectScreen())
+            assert "Saved funds are unavailable" in _render(app.screen.query_one("#detail-body", Static).content)
+    asyncio.run(scenario())
+
+
+def test_blocked_screens_never_request_keys_or_start_warming(monkeypatch):
+    forbidden = Mock(side_effect=AssertionError("external activity"))
+    monkeypatch.setattr(ui, "_demand_run_keys", forbidden)
+    monkeypatch.setattr(ui, "FDClient", forbidden)
+    monkeypatch.setattr(ui, "make_llm", forbidden)
+
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=(120, 45)) as pilot:
+            await app.push_screen(ui.RunScreen(_spec()))
+            screen = app.screen
+            assert screen.query_one("#run-tickers", Input).disabled
+            assert not screen.check_action("backtest", ())
+            screen._begin()
+            worker = screen._run()
+            await worker.wait()
+            await pilot.press("escape")
+            await app.push_screen(ui.BacktestScreen(_spec()))
+            screen = app.screen
+            screen._begin("2025-01-01", "2025-02-01", ["AAPL"])
+            worker = screen._run(_spec(), "2025-01-01", "2025-02-01", ["AAPL"])
+            await worker.wait()
+            assert forbidden.call_count == 0
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("newest_version", [None, 2])
+def test_latest_backtest_sets_headline_regardless_of_version(newest_version):
+    spec = _spec(["pead"])
+    receipt = {"start": "2025-01-01", "end": "2025-02-01", "benchmark": "SPY",
+               "metrics": {"total_return_pct": .5, "annualized_return_pct": .5,
+                           "sharpe_ratio": 2, "max_drawdown_pct": .1,
+                           "benchmark_return_pct": .1, "excess_return_pct": .4, "n_cycles": 5}}
+    if newest_version is None:
+        receipt["schema_version"] = 2
+    older = ui.FUNDS_DIR / "test-backtest-older.json"
+    older.write_text(json.dumps(receipt))
+    os.utime(older, (1000, 1000))
+    original = older.read_bytes()
+    older_summary = ui._summarize(older, 1000)
+    assert ui._last_score("test") == (.5, .4, "SPY")
+    assert "LATEST BACKTEST" in _render(ui._fund_detail(spec, [older_summary]))
+
+    receipt.pop("schema_version", None)
+    if newest_version is not None:
+        receipt["schema_version"] = newest_version
+    receipt["metrics"].update(total_return_pct=.3, excess_return_pct=.2)
+    newer = ui.FUNDS_DIR / "test-backtest-newer.json"
+    newer.write_text(json.dumps(receipt))
+    os.utime(newer, (2000, 2000))
+    newer_summary = ui._summarize(newer, 2000)
+    assert ui._last_score("test") == (.3, .2, "SPY")
+    detail = _render(ui._fund_detail(spec, [newer_summary, older_summary]))
+    headline = detail.split("RUNS & BACKTESTS")[0]
+    assert "LATEST BACKTEST" in headline and "30.0%" in headline
+    assert older.read_bytes() == original

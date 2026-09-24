@@ -31,6 +31,8 @@ class PEADModel(QuantModel):
     future enhancement.
     """
 
+    investment_approach = "long_short"
+
     def __init__(
         self,
         *,

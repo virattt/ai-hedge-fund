@@ -12,6 +12,6 @@ models:
   - name: lynch
   - name: druckenmiller
 blend:
+  mode: dollar_neutral
   method: conviction_weighted
   gross_target: 1.0
-  market_neutral: true

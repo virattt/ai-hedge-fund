@@ -267,11 +267,14 @@ def test_cli_jev_cycle_and_saved_replay(tmp_path, monkeypatch, http, capsys):
     monkeypatch.setattr(run, "CachedDataClient", lambda raw: raw)
     monkeypatch.setattr(llm_agent, "PromptCache", lambda: PromptCache(tmp_path / "llm"))
     mandate = tmp_path / "fund.yaml"
-    mandate.write_text("""name: jev-test
+    mandate.write_text("""schema_version: 2
+name: jev-test
 strategies:
   - name: value
+    blend:
+      mode: long_short
     models:
-      - name: buffett
+      - name: druckenmiller
 risk:
   max_position_pct: 0.25
   max_gross_exposure: 1.0

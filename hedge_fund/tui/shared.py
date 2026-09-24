@@ -8,7 +8,6 @@ rich renderables (which Textual Statics render natively).
 
 from __future__ import annotations
 
-import json
 from datetime import date as _date
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _version
@@ -16,10 +15,13 @@ from pathlib import Path
 
 from rich.text import Text
 
-from hedge_fund.fund import FundSpec, StrategySpec
+from hedge_fund.fund import FundSpec, PortfolioMode, StrategySpec
 from hedge_fund.llm import is_supported, load_api_models  # noqa: F401  (re-export)
-from hedge_fund.paths import MANDATES_DIR, ensure_mandates_dir  # noqa: F401  (re-export)
-from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent
+from hedge_fund.paths import (  # noqa: F401  (re-export)
+    ensure_mandates_dir,
+    MANDATES_DIR,
+)
+from hedge_fund.signals import ALPHA_MODEL_REGISTRY, get_investment_approach, LLMAgent
 
 try:
     VERSION = _version("aihf")
@@ -52,6 +54,9 @@ _SHORT_NAMES = {
     "pead": "PEAD",
 }
 
+MODE_LABELS: dict[PortfolioMode, str] = {"long_only": "Long-only", "long_short": "Long/short", "dollar_neutral": "Dollar-neutral"}
+
+
 # The LLM the investor agents reason with. Picked once, upfront; make_llm()
 # reads HEDGE_FUND_LLM_MODEL (hedge_fund/llm/client.py) and routes to the right provider, so
 # setting that env var steers every agent instance — the warm roster AND the
@@ -72,6 +77,22 @@ _WARM_CHUNK = 10      # dates per warm task — small enough that one stock stil
 _CHART_HEIGHT = 8
 
 
+def strategy_description(strategy: StrategySpec) -> str:
+    """Explain permissions without treating every negative view as a short."""
+    label = MODE_LABELS[strategy.blend.mode]
+    short_names = [_SHORT_NAMES.get(m.name, m.name) for m in strategy.models
+                   if get_investment_approach(m.name) == "long_short"]
+    if strategy.blend.mode == "long_only":
+        return f"{label}: buy stocks or hold cash; no shorts."
+    prefix = ("balance long and short dollar exposure (not market risk). "
+              if strategy.blend.mode == "dollar_neutral" else "buy and short stocks. ")
+    support = (f"Short ideas must be supported by {', '.join(short_names)}."
+               if short_names else "No selected analyst can support short ideas.")
+    if len(short_names) < len(strategy.models):
+        support += " Long-only analysts contribute ownership views."
+    return f"{label}: {prefix}{support}"
+
+
 def _valid_date(text: str):
     try:
         _date.fromisoformat(text.strip())
@@ -82,7 +103,7 @@ def _valid_date(text: str):
 
 def _fund_label(spec: FundSpec) -> str:
     """One aligned line per fund: name, staff, cadence."""
-    staff = ", ".join(s.title for s in spec.strategies[:3])
+    staff = ", ".join(f"{s.title} ({MODE_LABELS[s.blend.mode]})" for s in spec.strategies[:3])
     if len(spec.strategies) > 3:
         staff += ", …"
     return f"{spec.name:<18} {staff} · {spec.rebalance}"

@@ -6,5 +6,6 @@ display_name: Earnings Drift
 models:
   - name: pead
 blend:
+  mode: long_short
   method: conviction_weighted
   gross_target: 1.0

@@ -7,5 +7,6 @@ models:
   - name: druckenmiller
   - name: lynch
 blend:
+  mode: long_short
   method: conviction_weighted
   gross_target: 1.0

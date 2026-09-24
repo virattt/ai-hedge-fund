@@ -1,3 +1,6 @@
+# This example can be saved and inspected, but its long-only Deep Value
+# strategy is not supported for execution. An Earnings Drift-only fund can run.
+#
 # An example mandate. Specs are data: the fund builder (aihf),
 # a chat LLM, and the strategy generator all emit this same format.
 #
@@ -8,9 +11,11 @@
 #   aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
 #   aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
 #
+schema_version: 2
 name: example-fund
 strategies:
-  - name: deep-value          # discretionary pod: Graham-led, long-biased
+  - name: deep-value          # discretionary pod: Graham-led, long-only
+    blend: {mode: long_only}
     weight: 0.6               # capital slice, relative to sibling strategies
     models:
       - name: graham
@@ -18,6 +23,7 @@ strategies:
       - name: buffett
       - name: munger
   - name: earnings-drift      # systematic pod: post-earnings drift
+    blend: {mode: long_short}
     weight: 0.4
     models:
       - name: pead

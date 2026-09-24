@@ -14,6 +14,8 @@ from hedge_fund.signals.llm_agent import LLMAgent
 class BuffettAgent(LLMAgent):
     """Reasons over fundamentals in Warren Buffett's voice."""
 
+    investment_approach = "long_only"
+
     @property
     def name(self) -> str:
         return "buffett"

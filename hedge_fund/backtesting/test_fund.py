@@ -31,6 +31,8 @@ class FakeDataClient:
 class FakeAnalyst:
     """Fixed conviction per ticker, on every date."""
 
+    investment_approach = "long_short"
+
     def __init__(self, name, views=None):
         self._name = name
         self._views = views or {}
@@ -44,10 +46,18 @@ class FakeAnalyst:
                       value=self._views.get(ticker, 0.0))
 
 
+@pytest.fixture(autouse=True)
+def registered_fakes(monkeypatch):
+    from hedge_fund.signals import ALPHA_MODEL_REGISTRY
+    for name in ("a", "b"):
+        monkeypatch.setitem(ALPHA_MODEL_REGISTRY, name, FakeAnalyst)
+
+
 def _spec(**overrides):
     base = dict(
+        schema_version=2,
         name="test-fund",
-        strategies=[{"name": "solo", "models": [{"name": "a"}]}],
+        strategies=[{"name": "solo", "models": [{"name": "a"}], "blend": {"mode": "long_short"}}],
         risk={"max_position_pct": 1.0, "max_gross_exposure": 1.0},
         capital=100_000.0,
         rebalance="weekly",
@@ -115,6 +125,7 @@ def test_happy_path_hand_computed():
     result = _run()
 
     assert result.dates == FRIDAYS
+    assert result.schema_version == 2
     assert len(result.records) == 3
     # Week 1: buy 500 @ 200 (full conviction, 100% cap). Weeks 2-3: the
     # closes are chosen so the target stays exactly 500 shares — no churn.

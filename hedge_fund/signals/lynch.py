@@ -14,6 +14,8 @@ from hedge_fund.signals.llm_agent import LLMAgent
 class LynchAgent(LLMAgent):
     """Reasons over fundamentals in Peter Lynch's voice."""
 
+    investment_approach = "long_only"
+
     @property
     def name(self) -> str:
         return "lynch"

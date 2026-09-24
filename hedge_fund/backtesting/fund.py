@@ -22,14 +22,14 @@ backtest_fund runs the whole shop).
 from __future__ import annotations
 
 from datetime import date as _date
-from typing import Callable
+from typing import Callable, Literal
 
 import numpy as np
 from pydantic import BaseModel
 
 from hedge_fund.brokers.sim import SimBroker
 from hedge_fund.data.protocol import DataClient
-from hedge_fund.fund.spec import Fund, normalize_universe
+from hedge_fund.fund import Fund, normalize_universe, require_executable
 from hedge_fund.pipeline.models import CycleRecord
 from hedge_fund.pipeline.run_cycle import run_cycle
 
@@ -54,6 +54,7 @@ class FundBacktestResult(BaseModel):
     tick is a CycleRecord — every thesis, clamp, order, and fill behind it.
     `model_dump_json()` round-trips; this is the receipts file."""
 
+    schema_version: Literal[2] = 2
     fund: str
     start: str                        # first grid date actually traded
     end: str                          # last grid date actually traded
@@ -89,6 +90,7 @@ def backtest_fund(
     trading grid is an infrastructure problem, not an empty result.
     """
     spec = fund.spec
+    require_executable(spec)
     universe = normalize_universe(universe)
     bars = data_client.get_prices(spec.benchmark, start, end)
     closes = {b.time[:10]: b.close for b in bars if start <= b.time[:10] <= end}

@@ -1,23 +1,9 @@
-"""Alpha models — the components that form views on what to hold.
-
-An *alpha model* (Rishi Narang's term, *Inside the Black Box*) is anything
-that produces a forecast / view on an asset. It's the "edge" component of a
-quant fund. In v2, both quant signals (PEAD, regime) and LLM investor agents
-(Buffett, Druckenmiller) are alpha models — they all implement this interface
-and produce a `Signal` (a conviction in [-1, +1] + reasoning).
-
-    AlphaModel (ABC)
-      ├─ QuantModel   — pure Python math (this file)
-      └─ LLMAgent     — LLM reasons over features (added in Week 5)
-
-The alpha model only forms a *view*. It does NOT decide position mechanics
-(timing, sizing, holding period) — that's the job of portfolio construction
-and execution. This separation (views vs positions) is deliberate.
-"""
+"""Interfaces for models that produce investment views, independent of sizing."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import ClassVar, Literal, TypeAlias
 
 import numpy as np
 import pandas as pd
@@ -25,9 +11,15 @@ import pandas as pd
 from hedge_fund.data.protocol import DataClient
 from hedge_fund.models import Signal
 
+InvestmentApproach: TypeAlias = Literal["long_only", "long_short"]
+
 
 class AlphaModel(ABC):
     """Abstract base for all alpha models. Forms a view, returns a Signal."""
+
+    # Every concrete registered analyst declares its own approach. This is
+    # permission metadata, independent of its signed opinion or LLM prompt.
+    investment_approach: ClassVar[InvestmentApproach]
 
     @property
     @abstractmethod
@@ -44,9 +36,9 @@ class AlphaModel(ABC):
     ) -> Signal:
         """Form a point-in-time view on *ticker* as of *date*.
 
-        MUST be point-in-time: only use data with date <= *date* (no
-        lookahead). Return a Signal with conviction in [-1, +1] — use
-        0.0 to express "no view" (abstain).
+        Use only information available on or before *date*. Return conviction
+        in [-1, +1]; zero is neutral. Set metadata["abstained"] to True when
+        the model cannot form a view.
         """
         ...
 
