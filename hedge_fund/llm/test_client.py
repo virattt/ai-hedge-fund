@@ -253,8 +253,9 @@ def test_cli_jev_cycle_and_saved_replay(tmp_path, monkeypatch, http, capsys):
             return None
 
         def get_prices(self, ticker, start_date, end_date, **kwargs):
+            day = start_date if ticker == "SPY" else end_date
             return [Price(open=100, high=100, low=100, close=100,
-                          volume=1000, time=f"{end_date}T00:00:00Z")]
+                          volume=1000, time=f"{day}T00:00:00Z")]
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(keys, "ENV_PATH", tmp_path / "saved.env")

@@ -402,3 +402,91 @@ def test_portfolio_report_explains_rounding_scaling_and_flat_strategies():
     assert "no eligible shorts to balance the longs" in text
     assert "Allocated capital remains unused" in text
     assert "flat — no positions" in text
+
+
+@pytest.mark.parametrize("size", [(120, 45), (80, 24)])
+@pytest.mark.parametrize("pending", [False, True])
+def test_reports_distinguish_pending_and_executed_timing(size, pending, tmp_path):
+    from hedge_fund.pipeline.models import DecisionRecord, PendingRunResult
+    record = _record(_signal())
+    decision = DecisionRecord.model_validate(record.model_dump())
+    decision.final_weights = {"TEST": .25}
+    record.original_assessment = decision.model_copy(deep=True)
+    record.refreshed_assessment = decision.model_copy(deep=True)
+    record.refreshed_assessment.as_of = "2025-01-19"
+    record.execution_as_of = "2025-01-20"
+    record.execution_policy = "next_close"
+    result = PendingRunResult(fund=record.fund, as_of=record.as_of, proposal=decision,
+                              reason="No subsequent completed benchmark session is available.") if pending else record
+    path = tmp_path / "receipt.json"
+    path.write_text(result.model_dump_json())
+    summary = ui._summarize(path, 0)
+    assert summary["kind"] == ("pending" if pending else "run")
+    assert "pending" in _render(ui._fund_detail(record.spec, [summary])) if pending else summary["as_of"] == record.execution_as_of
+
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=size) as pilot:
+            await app.push_screen(ui.RunScreen(record.spec))
+            screen = app.screen
+            screen._show_report(result, path)
+            await pilot.pause()
+            head = _render(screen.query_one("#report-head", Static).content)
+            footer = _render(screen.query_one("#report-foot", Static).content)
+            menu = screen.query_one("#report-nav", OptionList)
+            ids = [menu.get_option_at_index(i).id for i in range(menu.option_count)]
+            if pending:
+                assert "Pending" in head
+                assert "analysis cutoff 2025-01-15" in head
+                assert "sec:orders" not in ids
+                assert "NAV" not in footer
+            else:
+                assert "initial 2025-01-15" in head
+                assert "refreshed 2025-01-19" in head
+                assert "executed 2025-01-20" in head
+            menu.highlighted = menu.get_option_index("sec:portfolio")
+            await pilot.pause()
+            detail = _render(screen.query_one("#detail-pane", Static).content)
+            if pending:
+                assert "PROPOSED ALLOCATIONS" in detail
+                assert "TEST: +25.00%" in detail
+            else:
+                assert "Target net" in detail and "Actual net" in detail
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("size", [(120, 45), (80, 24)])
+def test_backtest_daily_board_matches_final_metrics_and_uses_fill_dates(size, tmp_path):
+    from hedge_fund.backtesting.fund import DailyValuation, performance_metrics, FundBacktestResult
+    from hedge_fund.brokers.models import Fill
+    record = _record(_signal())
+    record.execution_as_of = "2025-01-16"
+    record.fills = [Fill(ticker="TEST", side="buy", quantity=1, price=100)]
+    dates = ["2025-01-15", "2025-01-16", "2025-01-17"]
+    nav = [100000, 100000, 90000]
+    benchmark_nav = [100000, 101000, 102000]
+    metrics = performance_metrics(100000, dates, nav, benchmark_nav, [record], 1)
+    result = FundBacktestResult(fund=record.fund, start=dates[0], end=dates[-1], rebalance="weekly",
+                                benchmark="SPY", universe=["TEST"], capital=100000, dates=dates,
+                                nav=nav, benchmark_nav=benchmark_nav, records=[record], metrics=metrics)
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=size) as pilot:
+            await app.push_screen(ui.BacktestScreen(record.spec))
+            screen = app.screen
+            screen.query_one("#bt-panes", ContentSwitcher).current = "bt-run"
+            screen._begin_replay(record.spec, dict(zip(dates, [100, 101, 102])), 3)
+            screen._board_valuation(DailyValuation(as_of=dates[0], nav=nav[0], benchmark_nav=benchmark_nav[0]))
+            screen._board_tick(record)
+            for i in (1, 2):
+                screen._board_valuation(DailyValuation(as_of=dates[i], nav=nav[i], benchmark_nav=benchmark_nav[i]))
+            await pilot.pause()
+            before = {name: _render(screen.query_one(f"#stat-{name}", Static).content)
+                      for name in ("nav", "return", "sharpe", "dd")}
+            assert screen._tape[0][0] == "2025-01-16"
+            assert "session 3/3" in _render(screen.query_one("#cycle-line", Static).content)
+            screen._finish(result, tmp_path / "backtest.json")
+            after = {name: _render(screen.query_one(f"#stat-{name}", Static).content) for name in before}
+            assert before == after
+            assert "1 pending proposals" in _render(screen.query_one("#phase-line", Static).content)
+    asyncio.run(scenario())

@@ -1,23 +1,4 @@
-"""Backtest a fund — run_cycle in a loop over history.
-
-`run_cycle`'s docstring makes the promise: "a backtest is run_cycle in a
-loop over history with a SimBroker; paper trading is the same loop on a
-live clock." This module is that loop. Nothing here re-implements pipeline
-mechanics — every tick is the real run_cycle against a persistent broker,
-so anything true of one cycle (point-in-time data, fail-loud pricing,
-master risk on the netted book) is true of every backtested tick by
-construction.
-
-Nothing here assumes what the fund trades on. The rebalance cadence comes
-from the mandate (FundSpec.rebalance): a fundamentals fund says weekly, a
-news-driven fund can say daily. The trading-day grid derives from the
-mandate's benchmark's actual bars — holidays and half-weeks fall out
-naturally, no exchange calendar math.
-
-This is the fund-level counterpart to the per-model harness in engine.py
-(BacktestEngine simulates one alpha model's views with fixed mechanics;
-backtest_fund runs the whole shop).
-"""
+"""Daily fund replay with assessments followed by next-close execution."""
 
 from __future__ import annotations
 
@@ -25,15 +6,45 @@ from datetime import date as _date
 from typing import Callable, Literal
 
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from hedge_fund.brokers.sim import SimBroker
 from hedge_fund.data.protocol import DataClient
+from hedge_fund.data.sessions import previous_day, session_closes
 from hedge_fund.fund import Fund, normalize_universe
-from hedge_fund.pipeline.models import CycleRecord
-from hedge_fund.pipeline.run_cycle import run_cycle
+from hedge_fund.pipeline.models import CycleRecord, DecisionRecord, PendingRunResult
+from hedge_fund.pipeline.run_cycle import assess_fund, exact_marks, execute_decision
 
-_PERIODS_PER_YEAR = {"daily": 252, "weekly": 52, "monthly": 12}
+
+class ReplaySchedule(BaseModel):
+    """Observed sessions and the assessment dates required for replay and warming."""
+
+    closes: dict[str, float]
+    execution_dates: dict[str, str | None]
+
+    @property
+    def assessment_dates(self) -> list[str]:
+        return sorted(set(self.execution_dates) | {
+            previous_day(session) for session in self.execution_dates.values()
+            if session is not None
+        })
+
+
+def build_schedule(data: DataClient, benchmark: str, start: str, end: str, cadence: str) -> ReplaySchedule:
+    closes = session_closes(data, benchmark, start, end)
+    if not closes:
+        raise ValueError(f"no {benchmark} bars in [{start}, {end}] — cannot build the trading grid")
+    days = list(closes)
+    following = dict(zip(days, days[1:]))
+    return ReplaySchedule(closes=closes, execution_dates={
+        day: following.get(day) for day in rebalance_grid(days, cadence)
+    })
+
+
+class DailyValuation(BaseModel):
+    as_of: str
+    nav: float
+    benchmark_nav: float
 
 
 class FundBacktestMetrics(BaseModel):
@@ -47,6 +58,7 @@ class FundBacktestMetrics(BaseModel):
     excess_return_pct: float          # fund total minus benchmark total
     n_cycles: int
     n_orders: int
+    n_pending: int = 0
 
 
 class FundBacktestResult(BaseModel):
@@ -56,77 +68,72 @@ class FundBacktestResult(BaseModel):
 
     schema_version: Literal[2] = 2
     fund: str
-    start: str                        # first grid date actually traded
-    end: str                          # last grid date actually traded
+    start: str                        # first valuation session
+    end: str                          # last valuation session
     rebalance: str
     benchmark: str
     universe: list[str]               # the tickers this backtest was run over
     capital: float
     dates: list[str]
-    nav: list[float]                  # NAV after each cycle, one per date
+    nav: list[float]                  # closing NAV for every observed session
     benchmark_nav: list[float]        # benchmark scaled to the same capital
     metrics: FundBacktestMetrics
     records: list[CycleRecord]
+    pending: list[PendingRunResult] = Field(default_factory=list)
 
 
 def backtest_fund(
-    fund: Fund,
-    start: str,
-    end: str,
-    data_client: DataClient,
-    universe: list[str],
-    *,
+    fund: Fund, start: str, end: str, data_client: DataClient, universe: list[str], *,
     on_cycle: Callable[[int, int, CycleRecord], None] | None = None,
+    on_valuation: Callable[[int, int, DailyValuation], None] | None = None,
 ) -> FundBacktestResult:
-    """Run *fund* over *universe* through history from *start* to *end*.
+    """Replay daily marks, executing assessments only on later observed sessions.
 
-    One run_cycle per grid date against a persistent SimBroker — positions
-    and cash carry across ticks, so the fund rebalances rather than
-    restarts. `on_cycle(i, n, record)` fires after each tick (progress UIs).
-    The universe is the study's input, not the mandate's: the same fund can
-    be backtested over different names.
-
-    Fail loud: no benchmark bars in the window raises — a backtest with no
-    trading grid is an infrastructure problem, not an empty result.
+    Callbacks receive a zero-based index, the total count, and a record.
+    Executed-cycle and valuation counts are independent; the final proposal
+    can remain pending without extending the requested window.
     """
     spec = fund.spec
     universe = normalize_universe(universe)
-    bars = data_client.get_prices(spec.benchmark, start, end)
-    closes = {b.time[:10]: b.close for b in bars if start <= b.time[:10] <= end}
-    if not closes:
-        raise ValueError(
-            f"{spec.name}: no {spec.benchmark} bars in [{start}, {end}] — "
-            "cannot build the trading grid"
-        )
-    grid = rebalance_grid(sorted(closes), spec.rebalance)
-
+    schedule = build_schedule(data_client, spec.benchmark, start, end, spec.rebalance)
+    dates = list(schedule.closes)
     broker = SimBroker(cash=spec.capital)
     records: list[CycleRecord] = []
+    pending: list[PendingRunResult] = []
+    due: dict[str, DecisionRecord] = {}
     nav: list[float] = []
     benchmark_nav: list[float] = []
-    base_close = closes[grid[0]]
-    for i, as_of in enumerate(grid):
-        record = run_cycle(fund, as_of, broker, data_client, universe)
-        records.append(record)
-        nav.append(record.nav)
-        benchmark_nav.append(spec.capital * closes[as_of] / base_close)
-        if on_cycle is not None:
-            on_cycle(i, len(grid), record)
-
+    n_cycles = sum(day is not None for day in schedule.execution_dates.values())
+    for i, session in enumerate(dates):
+        if session in due:
+            record = execute_decision(fund, due.pop(session), session, broker, data_client)
+            records.append(record)
+            if on_cycle is not None:
+                on_cycle(len(records) - 1, n_cycles, record)
+        held = broker.positions()
+        marks = exact_marks(list(held), session, data_client)
+        nav.append(broker.cash() + sum(p.shares * marks[t] for t, p in held.items()))
+        benchmark_nav.append(spec.capital * schedule.closes[session] / schedule.closes[dates[0]])
+        if on_valuation is not None:
+            on_valuation(i, len(dates), DailyValuation(
+                as_of=session, nav=nav[-1], benchmark_nav=benchmark_nav[-1],
+            ))
+        if session in schedule.execution_dates:
+            proposal = assess_fund(fund, session, data_client, universe)
+            execution = schedule.execution_dates[session]
+            if execution is None:
+                pending.append(PendingRunResult(
+                    fund=spec.name, as_of=session, proposal=proposal,
+                    reason="No subsequent completed benchmark session exists inside the backtest window.",
+                ))
+            else:
+                due[execution] = proposal
     return FundBacktestResult(
-        fund=spec.name,
-        start=grid[0],
-        end=grid[-1],
-        rebalance=spec.rebalance,
-        benchmark=spec.benchmark,
-        universe=universe,
-        capital=spec.capital,
-        dates=grid,
-        nav=nav,
-        benchmark_nav=benchmark_nav,
-        metrics=_metrics(spec.capital, grid, nav, benchmark_nav,
-                         spec.rebalance, records),
-        records=records,
+        fund=spec.name, start=dates[0], end=dates[-1], rebalance=spec.rebalance,
+        benchmark=spec.benchmark, universe=universe, capital=spec.capital,
+        dates=dates, nav=nav, benchmark_nav=benchmark_nav,
+        metrics=performance_metrics(spec.capital, dates, nav, benchmark_nav, records, len(pending)),
+        records=records, pending=pending,
     )
 
 
@@ -153,32 +160,25 @@ def rebalance_grid(days: list[str], cadence: str) -> list[str]:
     return sorted(last_of_period.values())
 
 
-# ---------------------------------------------------------------------------
-# Private helpers
-# ---------------------------------------------------------------------------
-
-def _metrics(
+def performance_metrics(
     capital: float,
-    grid: list[str],
+    dates: list[str],
     nav: list[float],
     benchmark_nav: list[float],
-    cadence: str,
     records: list[CycleRecord],
+    n_pending: int = 0,
 ) -> FundBacktestMetrics:
+    """Closing-value performance over the full window, with daily-return Sharpe."""
     total = nav[-1] / capital - 1
 
-    calendar_days = (_date.fromisoformat(grid[-1]) - _date.fromisoformat(grid[0])).days
-    years = max(calendar_days / 365.25, 0.01)
-    annualized = (1 + total) ** (1 / years) - 1
+    calendar_days = (_date.fromisoformat(dates[-1]) - _date.fromisoformat(dates[0])).days
+    years = calendar_days / 365.25
+    annualized = (1 + total) ** (1 / years) - 1 if years > 0 else 0.0
 
-    # Per-period returns over the curve including the starting capital, so
-    # the first tick's move counts too.
-    curve = np.array([capital] + nav)
+    curve = np.array(nav)
     returns = curve[1:] / curve[:-1] - 1
     if len(returns) > 1 and float(returns.std(ddof=1)) > 0:
-        sharpe = float(returns.mean() / returns.std(ddof=1)) * np.sqrt(
-            _PERIODS_PER_YEAR[cadence]
-        )
+        sharpe = float(returns.mean() / returns.std(ddof=1)) * np.sqrt(252)
     else:
         sharpe = 0.0
 
@@ -200,6 +200,7 @@ def _metrics(
         max_drawdown_pct=round(float(max_dd), 6),
         benchmark_return_pct=round(benchmark_return, 6),
         excess_return_pct=round(total - benchmark_return, 6),
-        n_cycles=len(nav),
+        n_cycles=len(records),
+        n_pending=n_pending,
         n_orders=sum(len(r.orders) for r in records),
     )

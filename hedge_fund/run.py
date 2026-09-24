@@ -9,13 +9,13 @@ Usage::
         against its benchmark.
 
     aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
-        With a mandate: run one cycle non-interactively. The full CycleRecord
-        prints to stdout as JSON (pipe it anywhere); a short human summary
+        With a mandate: assess and execute at the next completed close, or
+        return a pending proposal. JSON prints to stdout; a short human summary
         goes to stderr. Add --out record.json to also write it to a file.
 
     aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
-        Backtest the mandate: run_cycle looped over history at the mandate's
-        rebalance cadence; the full result JSON prints to stdout.
+        Backtest the mandate with daily valuations and next-close execution;
+        the full result JSON prints to stdout.
 
 A mandate is the desk — strategies, staff, risk, capital, cadence — and never
 names tickers; --tickers says what to point it at for this run.
@@ -41,6 +41,7 @@ from hedge_fund.data import CachedDataClient, FDClient
 from hedge_fund.fund import Fund, load_spec, normalize_universe
 from hedge_fund.paths import ensure_mandates_dir
 from hedge_fund.pipeline import run_cycle
+from hedge_fund.pipeline.models import PendingRunResult
 from hedge_fund.tui.keys import apply_credentials
 from hedge_fund.tui.shared import _BACKTEST_WEEKS
 
@@ -67,13 +68,13 @@ def main() -> None:
     parser.add_argument(
         "--date",
         default=_date.today().isoformat(),
-        help="as-of date YYYY-MM-DD (default: today); models only see data "
-        "filed by this date",
+        help="analysis date YYYY-MM-DD (default: today), capped at yesterday "
+        "in New York; execution uses the next completed session close",
     )
     parser.add_argument(
         "--backtest", action="store_true",
-        help="backtest the mandate instead of running one cycle: one run_cycle "
-        "per rebalance date from --start to --date, full result JSON on stdout",
+        help="backtest from --start to --date with daily valuation and next-close "
+        "execution; full result JSON on stdout",
     )
     parser.add_argument(
         "--start",
@@ -130,7 +131,7 @@ def main() -> None:
         m = result.metrics
         console.print(
             f"[bold]{spec.name}[/] {result.start} → {result.end}  ·  "
-            f"{m.n_cycles} cycles  ·  return {m.total_return_pct:+.1%} "
+            f"{m.n_cycles} executed cycles  ·  {m.n_pending} pending proposals  ·  return {m.total_return_pct:+.1%} "
             f"vs {spec.benchmark} {m.benchmark_return_pct:+.1%}  ·  "
             f"sharpe {m.sharpe_ratio:.2f}  ·  max drawdown {m.max_drawdown_pct:.1%}"
         )
@@ -153,6 +154,13 @@ def main() -> None:
     if args.out:
         Path(args.out).write_text(record.model_dump_json(indent=2))
 
+    if isinstance(record, PendingRunResult):
+        console.print(f"[bold]{spec.name}[/] · Pending · analysis cutoff {record.as_of}")
+        console.print(record.reason)
+        for ticker, weight in record.proposal.final_weights.items():
+            console.print(f"  {ticker}: proposed {weight:+.2%}")
+        return
+
     for sr in record.strategies:
         abstained = sum(1 for s in sr.signals if s.metadata.get("abstained") is True)
         console.print(
@@ -161,7 +169,8 @@ def main() -> None:
         )
     n_signals = sum(len(sr.signals) for sr in record.strategies)
     console.print(
-        f"[bold]{spec.name}[/] @ {record.as_of}  ·  "
+        f"[bold]{spec.name}[/] · initial {record.as_of} · refreshed "
+        f"{record.refreshed_assessment.as_of} · executed {record.execution_as_of}  ·  "
         f"{len(record.strategies)} strategies  ·  {n_signals} signals  ·  "
         f"{len(record.clamps)} risk clamps  ·  "
         f"{len(record.orders)} orders  ·  NAV ${record.nav:,.2f}"

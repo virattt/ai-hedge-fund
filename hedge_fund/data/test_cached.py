@@ -85,3 +85,39 @@ def test_scalar_cached(tmp_path):
     assert fd.get_market_cap("AAPL", "2024-12-31") == 3.0e12
     assert fd.get_market_cap("AAPL", "2024-12-31") == 3.0e12
     assert inner.calls == 1
+
+
+def test_daily_price_entries_without_fetch_metadata_are_refreshed(tmp_path):
+    import json
+    inner = CountingClient()
+    fd = CachedDataClient(inner, cache_dir=tmp_path)
+    fd.get_prices("AAPL", "2024-01-01", "2024-01-01")
+    path = next(tmp_path.glob("*.json"))
+    payload = json.loads(path.read_text())
+    payload.pop("fetched_at")
+    path.write_text(json.dumps(payload))
+    fd.get_prices("AAPL", "2024-01-01", "2024-01-01")
+    assert inner.calls == 2
+
+
+def test_incomplete_daily_price_cache_is_refreshed_after_date_ends(tmp_path, monkeypatch):
+    from datetime import datetime
+    from hedge_fund.data import cached
+    class Clock:
+        day = 1
+        @classmethod
+        def now(cls, tz):
+            return datetime(2024, 1, cls.day, 23, 0, tzinfo=tz)
+    monkeypatch.setattr(cached, "datetime", Clock)
+    # Parsing remains the standard library's responsibility.
+    Clock.fromisoformat = datetime.fromisoformat
+    inner = CountingClient()
+    fd = CachedDataClient(inner, cache_dir=tmp_path)
+    fd.get_prices("AAPL", "2024-01-01", "2024-01-01")
+    fd.get_prices("AAPL", "2024-01-01", "2024-01-01")
+    assert inner.calls == 2
+    Clock.day = 2
+    fd.get_prices("AAPL", "2024-01-01", "2024-01-01")
+    assert inner.calls == 3
+    fd.get_prices("AAPL", "2024-01-01", "2024-01-01")
+    assert inner.calls == 3

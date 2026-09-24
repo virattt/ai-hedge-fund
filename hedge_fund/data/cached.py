@@ -1,8 +1,8 @@
 """Disk-cached DataClient wrapper.
 
 Wraps any DataClient with a JSON file cache under ~/.hedge-fund/cache/data/. A warm
-cache makes backtest reruns instant, free, and network-independent — the
-same (endpoint, params) request never hits the API twice.
+cache reuses completed historical responses. Daily prices are reusable only
+when fetched after the requested end date has ended in New York.
 
     fd = CachedDataClient(FDClient())
     prices = fd.get_prices("AAPL", "2024-01-01", "2024-12-31")  # API call
@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
@@ -30,6 +31,7 @@ from hedge_fund.data.models import (
     Price,
 )
 from hedge_fund.data.protocol import DataClient
+from hedge_fund.data.sessions import NEW_YORK
 from hedge_fund.paths import CACHE_DIR
 
 DEFAULT_CACHE_DIR = CACHE_DIR / "data"
@@ -133,10 +135,24 @@ class CachedDataClient:
     def _cached_list(self, method: str, model_cls, params: dict, fetch: Callable) -> list:
         key = self._key(method, params)
         hit = self._read(key)
+        if hit is not None and method == "get_prices" and params.get("interval") == "day":
+            try:
+                fetched = datetime.fromisoformat(hit["fetched_at"])
+                complete = fetched.tzinfo is not None and (
+                    fetched.astimezone(NEW_YORK).date().isoformat() > params["end_date"]
+                )
+            except (KeyError, TypeError, ValueError):
+                complete = False
+            if not complete:
+                hit = None
         if hit is not None:
             return [model_cls(**row) for row in hit["data"]]
+        fetched_at = datetime.now(NEW_YORK).isoformat()
         result = fetch()
-        self._write(key, {"data": [r.model_dump() for r in result]})
+        payload = {"data": [r.model_dump() for r in result]}
+        if method == "get_prices":
+            payload["fetched_at"] = fetched_at
+        self._write(key, payload)
         return result
 
     def _cached_item(self, method: str, model_cls, params: dict, fetch: Callable):

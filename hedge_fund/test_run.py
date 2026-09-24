@@ -42,7 +42,8 @@ def test_cli_rejects_invalid_configuration_before_clients(tmp_path, monkeypatch,
 
 @pytest.mark.parametrize("backtest", [False, True])
 @pytest.mark.parametrize("mode", ["long_only", "long_short", "dollar_neutral"])
-def test_cli_executes_all_modes_with_offline_clients(tmp_path, monkeypatch, capsys, mode, backtest):
+@pytest.mark.parametrize("as_of", ["2025-01-10", "2025-01-13"])
+def test_cli_executes_all_modes_with_offline_clients(tmp_path, monkeypatch, capsys, mode, backtest, as_of):
     import json
 
     from hedge_fund.backtesting.test_fund import FakeAnalyst, FakeDataClient
@@ -54,7 +55,7 @@ def test_cli_executes_all_modes_with_offline_clients(tmp_path, monkeypatch, caps
     path.write_text(yaml.safe_dump(spec.model_dump()))
     class OfflineClient(FakeDataClient):
         def __init__(self):
-            super().__init__({ticker: {"2025-01-03": 100, "2025-01-10": 100} for ticker in ("AAPL", "MSFT", "SPY")})
+            super().__init__({ticker: {"2025-01-03": 100, "2025-01-10": 100, "2025-01-13": 100} for ticker in ("AAPL", "MSFT", "SPY")})
         def __enter__(self):
             return self
         def __exit__(self, *args):
@@ -66,10 +67,18 @@ def test_cli_executes_all_modes_with_offline_clients(tmp_path, monkeypatch, caps
     monkeypatch.setattr(run, "Fund", build_fund)
     monkeypatch.setattr(run, "FDClient", OfflineClient)
     monkeypatch.setattr(run, "CachedDataClient", lambda client: client)
-    monkeypatch.setattr(sys, "argv", ["aihf", str(path), "--tickers", "AAPL,MSFT", "--date", "2025-01-10"] +
+    monkeypatch.setattr(sys, "argv", ["aihf", str(path), "--tickers", "AAPL,MSFT", "--date", as_of] +
                         (["--backtest", "--start", "2025-01-03"] if backtest else []))
     run.main()
-    result = json.loads(capsys.readouterr().out)
+    output = capsys.readouterr()
+    result = json.loads(output.out)
+    if not backtest and as_of == "2025-01-13":
+        assert result["status"] == "pending"
+        assert result["proposal"]["final_weights"]["AAPL"] > 0
+        assert "Pending" in output.err
+        assert "NAV" not in output.err
+        return
+    assert "executed cycles" in output.err if backtest else "refreshed" in output.err
     records = result["records"] if backtest else [result]
     for record in records:
         assert record["positions"]["AAPL"] > 0

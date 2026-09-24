@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import json
 import os
-import time
 from concurrent.futures import as_completed, ThreadPoolExecutor
 from datetime import date as _date
 from datetime import datetime, timedelta
-from math import isfinite, sqrt
+from math import isfinite
 from pathlib import Path
-from statistics import mean, stdev
 
 import yaml
 from rich import box
@@ -37,10 +35,15 @@ from textual.widgets import (
 from textual.widgets.option_list import Option
 from textual.widgets.selection_list import Selection
 
-from hedge_fund.backtesting import backtest_fund, FundBacktestResult, rebalance_grid
-from hedge_fund.backtesting.fund import _PERIODS_PER_YEAR
+from hedge_fund.backtesting import backtest_fund, FundBacktestResult
+from hedge_fund.backtesting.fund import (
+    build_schedule,
+    DailyValuation,
+    performance_metrics,
+)
 from hedge_fund.brokers import Fill, SimBroker
 from hedge_fund.data import CachedDataClient, FDClient
+from hedge_fund.data.sessions import completed_through
 from hedge_fund.fund import (
     custom_strategy,
     discover_funds,
@@ -53,7 +56,7 @@ from hedge_fund.fund import (
 )
 from hedge_fund.llm import make_llm, provider_for, ThesisStream
 from hedge_fund.models import Signal
-from hedge_fund.pipeline import CycleRecord, run_cycle
+from hedge_fund.pipeline import CycleRecord, DecisionRecord, PendingRunResult, run_cycle
 from hedge_fund.pipeline.run_cycle import _MARK_LOOKBACK_DAYS
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, get_investment_approach, LLMAgent
 from hedge_fund.tui.keys import (
@@ -68,7 +71,6 @@ from hedge_fund.tui.shared import (
     _agent_names,
     _BACKTEST_WEEKS,
     _BOARD_REFRESH,
-    _CYCLE_DWELL,
     _DEFAULT_MODEL_LABEL,
     _fund_label,
     _render_area_chart,
@@ -499,7 +501,7 @@ class ConfirmDeleteScreen(ModalScreen[str | None]):
         super().__init__()
         self._path = path
         self._spec = spec
-        self._runs = sum(1 for h in history if h["kind"] == "run")
+        self._runs = sum(1 for h in history if h["kind"] in ("run", "pending"))
         self._backtests = sum(1 for h in history if h["kind"] == "backtest")
 
     def compose(self) -> ComposeResult:
@@ -566,9 +568,12 @@ def _summarize(path: Path, mtime: float) -> dict | None:
                 "benchret": m["benchmark_return_pct"],
                 "excess": m["excess_return_pct"], "n_cycles": m["n_cycles"],
             }
+        if d.get("status") == "pending":
+            return {"kind": "pending", "mtime": mtime, "as_of": d["as_of"],
+                    "universe": d["proposal"]["universe"], "reason": d["reason"]}
         return {  # a single cycle
             "kind": "run", "mtime": mtime, "universe": universe,
-            "as_of": d["as_of"], "nav": d["nav"],
+            "as_of": d.get("execution_as_of") or d["as_of"], "nav": d["nav"],
             "n_orders": len(d.get("orders", [])),
         }
     except (json.JSONDecodeError, KeyError, OSError, TypeError, UnicodeError):
@@ -675,6 +680,9 @@ def _fund_detail(spec: FundSpec, history: list[dict]) -> Group:
                 Text("backtest", style=MUTED), when,
                 Text(f"{h['total']:+.1%}", style=GREEN if up else RED),
             )
+        elif h["kind"] == "pending":
+            log.add_row(Text("pending", style=CYAN), Text(h["as_of"], style=MUTED),
+                        Text("Proposed allocations", style=MUTED))
         else:
             when = Text(h["as_of"], style=MUTED)
             if h["universe"]:
@@ -893,7 +901,7 @@ def _live_thesis(desk: _Desk) -> Text:
     return Text(" ".join(text.split()), style=TEXT)
 
 
-def _report_nav(record: CycleRecord) -> list[Option]:
+def _report_nav(record: CycleRecord | DecisionRecord) -> list[Option]:
     """The report's left rail: every signal as ONE line, then the book.
 
     A thesis runs paragraphs — rendering them inline made a table where a
@@ -933,13 +941,14 @@ def _report_nav(record: CycleRecord) -> list[Option]:
     if record.clamps:
         options.append(Option(
             Text(f" Risk limits ({len(record.clamps)})", style=TEXT), id="sec:risk"))
-    options.append(Option(
-        Text(f" Orders ({len(record.orders)})", style=TEXT), id="sec:orders"))
-    options.append(Option(Text(" Portfolio", style=TEXT), id="sec:portfolio"))
+    if isinstance(record, CycleRecord):
+        options.append(Option(
+            Text(f" Orders ({len(record.orders)})", style=TEXT), id="sec:orders"))
+    options.append(Option(Text(" Portfolio" if isinstance(record, CycleRecord) else " Proposed allocations", style=TEXT), id="sec:portfolio"))
     return options
 
 
-def _signal_detail(record: CycleRecord, si: int, sj: int) -> Group:
+def _signal_detail(record: CycleRecord | DecisionRecord, si: int, sj: int) -> Group:
     """One analyst's full view: who, what, and the whole written thesis."""
     sr = record.strategies[si]
     signal = sr.signals[sj]
@@ -988,7 +997,7 @@ def _jev_details(metadata: dict) -> Text:
     return details
 
 
-def _risk_detail(record: CycleRecord) -> Group:
+def _risk_detail(record: CycleRecord | DecisionRecord) -> Group:
     table = Table(box=box.SQUARE, header_style="bold", border_style="#1f2b25")
     table.add_column("Scope", style=f"bold {CYAN}")
     table.add_column("Requested", justify="right")
@@ -1030,6 +1039,17 @@ def _orders_detail(record: CycleRecord) -> Group:
             f"${o.price:,.2f}",
         )
     return Group(Text("ORDERS", style=f"bold {BRIGHT}"), Text(""), table)
+
+
+def _proposal_detail(record: DecisionRecord) -> Group:
+    return Group(
+        Text("PROPOSED ALLOCATIONS", style=f"bold {BRIGHT}"),
+        Text("Targets only; no orders or fills have occurred.", style=MUTED),
+        *(Text(f"{ticker}: {weight:+.2%}", style=TEXT)
+          for ticker, weight in sorted(record.final_weights.items())),
+        *(Text(f"{strategy.name}: zero exposure — {strategy.flat_reason.replace('_', ' ')}", style=MUTED)
+          for strategy in record.strategies if strategy.flat_reason),
+    )
 
 
 def _portfolio_detail(record: CycleRecord) -> Group:
@@ -1124,11 +1144,7 @@ def _tape_table(tape: list[tuple[str, Fill, int]]) -> Table:
 
 
 class RunScreen(Screen):
-    """Run a fund as of today — the primary verb. Warm the roster, run one
-    cycle on today's data, then reveal the fund's thinking: signals, risk
-    clamps, orders, and the target book. Backtest is the side option (ctrl+b),
-    offered before a run and again from the finished report.
-    """
+    """Assess completed data and display either execution receipts or a pending proposal."""
 
     # ctrl+b, not plain b: the ticker Input owns letter keys (BABA, BRK.B),
     # and priority so the shortcut still fires while it has focus.
@@ -1140,10 +1156,10 @@ class RunScreen(Screen):
     def __init__(self, spec: FundSpec) -> None:
         super().__init__()
         self._spec = spec
-        self._as_of = _date.today().isoformat()
+        self._as_of = completed_through()
         self._phase = "ready"
         self._universe: list[str] = []
-        self._record: CycleRecord | None = None
+        self._record: CycleRecord | DecisionRecord | None = None
         self._desks: list[_Desk] = []
         self._painter: Timer | None = None
 
@@ -1151,7 +1167,7 @@ class RunScreen(Screen):
         with ContentSwitcher(initial="run-ready", id="run-panes"):
             with Vertical(id="run-ready", classes="pane"):
                 yield Static("", id="run-hero")
-                yield Label("What should it trade today?", classes="q")
+                yield Label("Which stocks should it assess?", classes="q")
                 yield Input(
                     placeholder=f"e.g. {', '.join(UNIVERSE_PRESETS[:5])}",
                     id="run-tickers",
@@ -1223,7 +1239,7 @@ class RunScreen(Screen):
         self.query_one("#run-phase", Static).update(Text.assemble(
             ("Agents analyzing as of ", f"bold {BRIGHT}"),
             (self._as_of, f"bold {RED}"),
-            ("  ·  today's data → today's target book", MUTED),
+            ("  ·  completed data → proposed allocations", MUTED),
         ))
         self._desks = [_Desk(DISPLAY_NAMES.get(n, n))
                        for n in _agent_names(self._spec)]
@@ -1249,7 +1265,8 @@ class RunScreen(Screen):
         elif oid == "sec:orders":
             detail.update(_orders_detail(self._record))
         elif oid == "sec:portfolio":
-            detail.update(_portfolio_detail(self._record))
+            detail.update(_portfolio_detail(self._record) if isinstance(self._record, CycleRecord)
+                          else _proposal_detail(self._record))
         self.query_one("#report-detail", VerticalScroll).scroll_home(animate=False)
 
     @work(thread=True, exclusive=True)
@@ -1307,23 +1324,25 @@ class RunScreen(Screen):
             self._painter = None
         self._paint_board()
 
-    def _show_report(self, record: CycleRecord, path: Path) -> None:
+    def _show_report(self, result: CycleRecord | PendingRunResult, path: Path) -> None:
         self._stop_painting()
         self._phase = "done"
+        pending = isinstance(result, PendingRunResult)
+        record = result.proposal if pending else result
         self._record = record
         n_signals = sum(len(sr.signals) for sr in record.strategies)
+        timing = (f"Pending · analysis cutoff {record.as_of}" if pending else
+                  f"initial {record.as_of} · refreshed "
+                  f"{record.refreshed_assessment.as_of if record.refreshed_assessment else record.as_of} "
+                  f"· executed {record.execution_as_of or record.as_of}")
         self.query_one("#report-head", Static).update(Text.assemble(
             (record.fund, f"bold {BRIGHT}"),
-            (f"  ·  {record.as_of}  ·  {n_signals} signals  ·  "
-             f"{len(record.orders)} orders", MUTED),
+            (f"  ·  {timing}  ·  {n_signals} signals", MUTED),
         ))
         self.query_one("#report-foot", Static).update(Group(
-            _book_summary(record),
-            Text.assemble(("✓ ", f"bold {GREEN}"), ("Saved run to ", MUTED),
-                          (str(path), MUTED)),
-            Text.assemble(("▶ ", f"bold {GREEN}"),
-                          ("Backtest this fund over history", f"bold {GREEN}"),
-                          ("  ·  ctrl+b", MUTED)),
+            Text(result.reason, style=MUTED) if pending else _book_summary(record),
+            Text.assemble(("✓ ", f"bold {GREEN}"), ("Saved run to ", MUTED), (str(path), MUTED)),
+            Text("Backtest this fund over history · ctrl+b", style=GREEN),
         ))
         self.refresh_bindings()  # phase changed: ctrl+b is offered again
         nav = self.query_one("#report-nav", OptionList)
@@ -1849,34 +1868,25 @@ class BacktestScreen(Screen):
         app = self.app
         try:
             with FDClient() as raw:
-                bars = CachedDataClient(raw).get_prices(spec.benchmark, start, end)
-            closes = {b.time[:10]: b.close for b in bars
-                      if start <= b.time[:10] <= end}
-            if not closes:
-                raise ValueError(
-                    f"no {spec.benchmark} bars in [{start}, {end}] — "
-                    "cannot build the trading grid"
-                )
-            grid = rebalance_grid(sorted(closes), spec.rebalance)
-
+                schedule = build_schedule(CachedDataClient(raw), spec.benchmark, start, end, spec.rebalance)
+            grid = schedule.assessment_dates
             app.call_from_thread(self._begin_warm, spec, universe, len(grid))
             self._warm_market(spec, universe, grid)
             app.call_from_thread(self._begin_agents, spec)
             self._warm_agents(spec, universe, grid)
-            app.call_from_thread(self._begin_replay, spec, closes, len(grid))
+            app.call_from_thread(self._begin_replay, spec, schedule.closes, len(schedule.closes))
 
             fund = Fund(spec)
 
             def tick(i: int, n: int, record: CycleRecord) -> None:
-                started = time.time()
                 app.call_from_thread(self._board_tick, record)
-                dwell = _CYCLE_DWELL - (time.time() - started)
-                if dwell > 0:
-                    time.sleep(dwell)
+
+            def valuation(i: int, n: int, value: DailyValuation) -> None:
+                app.call_from_thread(self._board_valuation, value)
 
             with FDClient() as raw:
                 result = backtest_fund(fund, start, end, CachedDataClient(raw),
-                                       universe, on_cycle=tick)
+                                       universe, on_cycle=tick, on_valuation=valuation)
 
             FUNDS_DIR.mkdir(exist_ok=True)
             stamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
@@ -1995,7 +2005,7 @@ class BacktestScreen(Screen):
         self._tape = []
         self.query_one("#phase-line", Static).update(Text.assemble(
             ("Replaying the fund", f"bold {BRIGHT}"),
-            ("  ·  one run_cycle per rebalance date, off the warm cache",
+            ("  ·  daily valuations and next-close execution",
              MUTED),
         ))
         box_widget = self.query_one("#curve-box", Vertical)
@@ -2010,54 +2020,27 @@ class BacktestScreen(Screen):
         tape_box.remove_class("hidden")
 
     def _board_tick(self, record: CycleRecord) -> None:
-        """One cycle landed: update the stat tiles, redraw the curve.
-        Same math as run.py `_BacktestBoard._render`."""
+        for fill in record.fills:
+            self._tape.append((record.execution_as_of or record.as_of, fill,
+                               record.positions.get(fill.ticker, 0)))
+        self.query_one("#tape", Static).update(_tape_table(self._tape))
+
+    def _board_valuation(self, value: DailyValuation) -> None:
         assert self._spec is not None
-        self._dates.append(record.as_of)
-        self._nav.append(record.nav)
-
+        self._dates.append(value.as_of)
+        self._nav.append(value.nav)
         capital = self._spec.capital
-        nav = self._nav[-1]
-        fund_return = nav / capital - 1
-        benchmark_return = (
-            self._closes[self._dates[-1]] / self._closes[self._dates[0]] - 1
-        )
-        curve = [capital] + self._nav
-        peak = curve[0]
-        max_dd = 0.0
-        for value in curve:
-            if value > peak:
-                peak = value
-            max_dd = max(max_dd, (peak - value) / peak)
-
-        # Running Sharpe, same math as the engine's final _metrics: per-cycle
-        # returns over the curve, sample stdev, annualized by cadence.
-        returns = [b / a - 1 for a, b in zip(curve, curve[1:])]
-        if len(returns) > 1 and stdev(returns) > 0:
-            sharpe = (mean(returns) / stdev(returns)
-                      * sqrt(_PERIODS_PER_YEAR[self._spec.rebalance]))
-        else:
-            sharpe = 0.0
-        self._update_stats(nav, fund_return, benchmark_return,
-                           fund_return - benchmark_return, sharpe, max_dd)
-
-        benchmark_curve = [capital] + [
-            capital * self._closes[d] / self._closes[self._dates[0]]
-            for d in self._dates
-        ]
+        benchmark_curve = [capital * self._closes[d] / self._closes[self._dates[0]]
+                           for d in self._dates]
+        metrics = performance_metrics(capital, self._dates, self._nav, benchmark_curve, [])
+        self._update_stats(value.nav, metrics.total_return_pct, metrics.benchmark_return_pct,
+                           metrics.excess_return_pct, metrics.sharpe_ratio, metrics.max_drawdown_pct)
         curve_widget = self.query_one("#curve", Static)
         width = curve_widget.content_size.width or 80
-        curve_widget.update(Group(
-            *_render_area_chart(curve, benchmark_curve, capital, min(width, 100))
-        ))
-        for fill in record.fills:
-            self._tape.append(
-                (record.as_of, fill, record.positions.get(fill.ticker, 0)))
-        self.query_one("#tape", Static).update(_tape_table(self._tape))
+        curve_widget.update(Group(*_render_area_chart(
+            self._nav, benchmark_curve, capital, min(width, 100))))
         self.query_one("#cycle-line", Static).update(Text(
-            f"cycle {len(self._nav)}/{self._n_cycles} · {self._dates[-1]}",
-            style=MUTED,
-        ))
+            f"session {len(self._nav)}/{self._n_cycles} · {value.as_of}", style=MUTED))
 
     def _update_stats(self, nav: float, fund_return: float,
                       benchmark_return: float, excess: float,
@@ -2099,12 +2082,12 @@ class BacktestScreen(Screen):
             ("BACKTEST RESULTS  ", f"bold {BRIGHT}"),
             (result.fund, f"bold {CYAN}"),
             (f"  {result.start} → {result.end} · {result.rebalance} "
-             f"rebalance · {m.n_cycles} cycles · {m.n_orders} orders · "
+             f"rebalance · {m.n_cycles} executed cycles · {m.n_pending} pending proposals · {m.n_orders} orders · "
              f"{m.annualized_return_pct:+.1%} annualized",
              MUTED),
         ))
         self._update_stats(
-            self._nav[-1] if self._nav else self._spec.capital,
+            result.nav[-1],
             m.total_return_pct, m.benchmark_return_pct,
             m.excess_return_pct, m.sharpe_ratio, m.max_drawdown_pct,
         )

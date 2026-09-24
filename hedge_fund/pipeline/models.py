@@ -39,6 +39,36 @@ class StrategyRecord(BaseModel):
     final_contribution: dict[str, float] = Field(default_factory=dict)  # fraction of fund equity
 
 
+class DecisionRecord(BaseModel):
+    """An auditable assessment, without orders or broker accounting."""
+
+    schema_version: Literal[2] = 2
+    fund: str
+    as_of: str
+    spec: FundSpec
+    universe: list[str]
+    marks: dict[str, float]
+    skipped: list[TickerSkip]
+    strategies: list[StrategyRecord]
+    target_weights: dict[str, float]
+    clamps: list[ClampEvent]
+    final_weights: dict[str, float]
+    risk_scale_factor: float | None = None
+
+
+class PendingRunResult(BaseModel):
+    """A saved proposal awaiting an explicit run with completed session data."""
+
+    schema_version: Literal[2] = 2
+    status: Literal["pending"] = "pending"
+    execution_policy: Literal["next_close"] = "next_close"
+    fund: str
+    as_of: str
+    proposal: DecisionRecord
+    reason: str
+    scheduled_execution_date: str | None = None
+
+
 class CycleRecord(BaseModel):
     """One tick of the fund, fully serialized — every stage's inputs and
     outputs. `model_dump_json()` round-trips; nothing about a decision
@@ -63,3 +93,7 @@ class CycleRecord(BaseModel):
     cash: float
     nav: float                          # cash + sum(shares * mark)
     risk_scale_factor: float | None = None
+    original_assessment: DecisionRecord | None = None
+    refreshed_assessment: DecisionRecord | None = None
+    execution_as_of: str | None = None
+    execution_policy: Literal["next_close"] | None = None

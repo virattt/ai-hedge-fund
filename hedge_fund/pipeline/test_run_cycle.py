@@ -20,6 +20,9 @@ class FakeDataClient:
         self._closes = closes
 
     def get_prices(self, ticker, start_date, end_date, **kwargs):
+        if ticker == "SPY":
+            return [Price(open=100, close=100, high=100, low=100, volume=1000,
+                          time=f"{start_date}T00:00:00Z")]
         close = self._closes.get(ticker)
         if close is None:
             return []
