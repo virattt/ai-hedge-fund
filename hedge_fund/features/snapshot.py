@@ -76,20 +76,34 @@ class FundamentalsSnapshot(BaseModel):
         canonical = self.model_dump_json(exclude={"as_of"})
         return hashlib.sha256(canonical.encode()).hexdigest()[:24]
 
-    def render(self) -> str:
+    def render(self, blind: bool = False) -> str:
         """Compact text block for the LLM prompt.
 
         Deliberately date-free (no `as_of`): the prompt cache keys on exact
         prompt text, so the same fundamentals must render identically on any
         date. It also keeps the LLM from anchoring on a calendar date it
         could associate with post-date world events.
+
+        `blind=True` goes one step further, for backtests: the ticker and
+        industry are withheld (the sector stays) and the periods are
+        labelled t-0 (latest), t-1, ... instead of report and filing dates.
+        Without that, a model that remembers how a named company did after
+        a given quarter can recall the outcome it is being scored on. Blind
+        mode reduces that recall rather than removing it (distinctive
+        numbers can still give a large company away), and the personas lose
+        company-specific knowledge.
         """
         lines = [
-            f"Company: {self.ticker}"
+            f"Company: {'(withheld)' if blind else self.ticker}"
             + (f"  |  Sector: {self.sector}" if self.sector else "")
-            + (f"  |  Industry: {self.industry}" if self.industry else ""),
-            "All figures below were publicly filed by their filing dates. "
-            "Treat the most recent filing shown as the present.",
+            + (f"  |  Industry: {self.industry}" if self.industry and not blind else ""),
+            (
+                "Periods are labelled relative to the latest filing (t-0); "
+                "calendar dates are withheld. Treat t-0 as the present."
+                if blind else
+                "All figures below were publicly filed by their filing dates. "
+                "Treat the most recent filing shown as the present."
+            ),
             "",
             "Summary:",
             f"  Market cap (latest filed): {_fmt(self.market_cap_latest)}",
@@ -99,12 +113,14 @@ class FundamentalsSnapshot(BaseModel):
             f"  Debt/equity (latest): {_fmt(self.debt_to_equity_latest)}",
             "",
             "History (trailing-twelve-month periods, newest first):",
-            "period | filed | mktcap | P/E | ROE | gross_m | op_m | net_m | D/E "
+            ("period" if blind else "period | filed")
+            + " | mktcap | P/E | ROE | gross_m | op_m | net_m | D/E "
             "| curr | rev_gr | EPS | BVPS | FCF/sh",
         ]
-        for p in self.periods:
+        for i, p in enumerate(self.periods):
+            when = f"t-{i}" if blind else f"{p.report_period} | {p.filing_date or '?'}"
             lines.append(
-                f"{p.report_period} | {p.filing_date or '?'} | {_fmt(p.market_cap)} "
+                f"{when} | {_fmt(p.market_cap)} "
                 f"| {_fmt(p.price_to_earnings_ratio)} | {_fmt(p.return_on_equity)} "
                 f"| {_fmt(p.gross_margin)} | {_fmt(p.operating_margin)} "
                 f"| {_fmt(p.net_margin)} | {_fmt(p.debt_to_equity)} "

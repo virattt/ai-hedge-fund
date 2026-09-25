@@ -120,3 +120,25 @@ def test_render_contains_the_facts():
     assert "2025-01-15" not in text  # as_of must never leak into the prompt
     assert "2024-12-31" in text
     assert "publicly filed" in text
+
+
+def test_blind_render_withholds_ticker_and_dates():
+    """Blind mode keeps the numbers but drops what lets a model recall the
+    outcome: the ticker and every report/filing date."""
+    facts = CompanyFacts(ticker="TEST", sector="Tech", industry="Widgets")
+    snap = build_snapshot("TEST", "2025-01-15", MockDataClient(metrics=_history(), facts=facts))
+    text = snap.render(blind=True)
+
+    assert "TEST" not in text
+    assert "Widgets" not in text  # industry narrows it down too much
+    assert "Sector: Tech" in text
+    for q in ("2024-12-31", "2024-06-30", "2023-03-31"):
+        assert q not in text
+    assert "t-0 | " in text and "t-7 | " in text
+    assert len(text.splitlines()) == len(snap.render().splitlines())  # same rows
+
+
+def test_blind_render_is_opt_in():
+    snap = build_snapshot("TEST", "2025-01-15", MockDataClient(metrics=_history()))
+    assert snap.render() == snap.render(blind=False)
+    assert "Company: TEST" in snap.render()

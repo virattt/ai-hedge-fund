@@ -74,6 +74,8 @@ Backtest the mandate over history at its rebalance cadence:
 aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
 ```
 
+An LLM trained after your backtest window may remember how those companies did, and that memory ends up in the results. Add `--blind` to withhold the ticker, industry and calendar dates from the investor agents' prompts (in the interactive app, set `HEDGE_FUND_BLIND=1` before launching). It reduces the recall without removing it, and the personas lose company-specific knowledge. A window after the model's training cutoff is the cleanest read.
+
 A mandate is the desk — strategies, staff, risk, capital, cadence — and never names tickers; `--tickers` says what to point it at for this run.
 
 ## Development
