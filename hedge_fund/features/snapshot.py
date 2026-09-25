@@ -84,14 +84,14 @@ class FundamentalsSnapshot(BaseModel):
         date. It also keeps the LLM from anchoring on a calendar date it
         could associate with post-date world events.
 
-        `blind=True` goes one step further, for backtests: the ticker and
-        industry are withheld (the sector stays) and the periods are
-        labelled t-0 (latest), t-1, ... instead of report and filing dates.
-        Without that, a model that remembers how a named company did after
-        a given quarter can recall the outcome it is being scored on. Blind
-        mode reduces that recall rather than removing it (distinctive
+        `blind=True` goes one step further, and is what backtests use: the
+        ticker and industry are withheld (the sector stays) and the periods
+        are labelled t-0 (latest), t-1, ... instead of report and filing
+        dates. Without that, a model that remembers how a named company did
+        after a given quarter can recall the outcome it is being scored on.
+        Blind mode reduces that recall rather than removing it (distinctive
         numbers can still give a large company away), and the personas lose
-        company-specific knowledge.
+        company-specific knowledge. Live runs render unblinded.
         """
         lines = [
             f"Company: {'(withheld)' if blind else self.ticker}"

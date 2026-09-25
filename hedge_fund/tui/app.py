@@ -1876,7 +1876,7 @@ class BacktestScreen(Screen):
             self._warm_agents(spec, universe, grid)
             app.call_from_thread(self._begin_replay, spec, schedule.closes, len(schedule.closes))
 
-            fund = Fund(spec)
+            fund = Fund(spec, blind=True)  # same prompts _warm_agents cached
 
             def tick(i: int, n: int, record: CycleRecord) -> None:
                 app.call_from_thread(self._board_tick, record)
@@ -1936,13 +1936,18 @@ class BacktestScreen(Screen):
     def _warm_agents(self, spec: FundSpec, universe: list[str],
                      grid: list[str]) -> None:
         """Every agent replays the window, warming prompt caches and
-        model-specific data (e.g. PEAD's earnings history)."""
+        model-specific data (e.g. PEAD's earnings history).
+
+        LLM agents run blind, as they do in the backtest itself: a warm with
+        a different prompt would fill the cache with entries the backtest
+        never looks up."""
         app = self.app
         display = {n: DISPLAY_NAMES.get(n, n) for n in _agent_names(spec)}
 
         def warm(agent_name: str) -> None:
             who = display[agent_name]
-            model = ALPHA_MODEL_REGISTRY[agent_name]()  # own instance per thread
+            cls = ALPHA_MODEL_REGISTRY[agent_name]  # own instance per thread
+            model = cls(blind=True) if issubclass(cls, LLMAgent) else cls()
             with FDClient() as raw:
                 fd = CachedDataClient(raw)
                 for as_of in grid:

@@ -23,7 +23,6 @@ Failure contract (locked decisions):
 from __future__ import annotations
 
 import logging
-import os
 
 from hedge_fund.data.protocol import DataClient
 from hedge_fund.features.snapshot import FundamentalsSnapshot, InsufficientData, build_snapshot
@@ -37,11 +36,6 @@ logger = logging.getLogger(__name__)
 _SIGNAL_TO_SIGN = {"bullish": 1.0, "neutral": 0.0, "bearish": -1.0}
 
 
-def blind_from_env() -> bool:
-    """HEDGE_FUND_BLIND=1 makes agents render blind prompts (the CLI's --blind sets it)."""
-    return os.environ.get("HEDGE_FUND_BLIND", "").strip().lower() in {"1", "true", "yes", "on"}
-
-
 class LLMAgent(AlphaModel):
     """Base for persona agents. Subclasses define `name` and `get_system_prompt`."""
 
@@ -49,13 +43,14 @@ class LLMAgent(AlphaModel):
         self,
         llm: LLMClient | None = None,
         cache: PromptCache | None = None,
-        blind: bool | None = None,
+        blind: bool = False,
     ) -> None:
         self._llm = llm if llm is not None else make_llm()
         self._cache = cache if cache is not None else PromptCache()
-        # Blind prompts withhold the ticker and calendar dates, so a backtest
-        # can't lean on what the LLM remembers (FundamentalsSnapshot.render).
-        self._blind = blind_from_env() if blind is None else blind
+        # Blind prompts withhold the ticker, industry and calendar dates so a
+        # backtest can't lean on what the LLM remembers about the company
+        # (FundamentalsSnapshot.render). Backtests set this; live runs don't.
+        self._blind = blind
 
     # ------------------------------------------------------------------
     # AlphaModel interface

@@ -87,19 +87,11 @@ def main() -> None:
         "(default: HEDGE_FUND_LLM_MODEL env, else the built-in default); quant models "
         "ignore it",
     )
-    parser.add_argument(
-        "--blind", action="store_true",
-        help="withhold the ticker, industry and calendar dates from the investor agents' "
-        "prompts, so a backtest can't lean on what the LLM remembers about the "
-        "company (the personas also lose company-specific knowledge)",
-    )
     parser.add_argument("--out", help="also write the record JSON to this file")
     args = parser.parse_args()
 
     if args.model:
         os.environ["HEDGE_FUND_LLM_MODEL"] = args.model
-    if args.blind:
-        os.environ["HEDGE_FUND_BLIND"] = "1"
 
     if args.mandate is None:
         # The interactive experience is the Textual app. Import it lazily so
@@ -118,7 +110,10 @@ def main() -> None:
         spec = load_spec(args.mandate)
     except ValueError as exc:
         parser.error(str(exc))
-    fund = Fund(spec)
+    # A backtest blinds the investor agents' prompts (no ticker, industry or
+    # calendar dates): the LLM may have been trained on what those companies
+    # did over the window, and that memory would otherwise score as skill.
+    fund = Fund(spec, blind=args.backtest)
 
     if args.backtest:
         start = args.start or (

@@ -9,7 +9,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, ValidationError
 
 from hedge_fund.risk.limits import RiskLimits
-from hedge_fund.signals import ALPHA_MODEL_REGISTRY, get_investment_approach
+from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent, get_investment_approach
 from hedge_fund.signals.base import AlphaModel
 
 PortfolioMode: TypeAlias = Literal["long_only", "long_short", "dollar_neutral"]
@@ -173,12 +173,17 @@ class Fund:
 
     Models are constructed once so their caches survive successive cycles.
     Callers may supply instances keyed by strategy name, including test doubles.
+
+    `blind=True` is for backtests: the LLM agents render prompts without
+    the ticker, industry or calendar dates, so the result can't lean on
+    what the model remembers about the company. Quant models are unaffected.
     """
 
     def __init__(
         self,
         spec: FundSpec,
         models: dict[str, list[AlphaModel]] | None = None,
+        blind: bool = False,
     ) -> None:
         self.spec = spec
         self.strategies: list[tuple[StrategySpec, list[AlphaModel]]] = []
@@ -190,5 +195,7 @@ class Fund:
             for m in strategy.models:
                 if m.name not in ALPHA_MODEL_REGISTRY:
                     raise ValueError(f"unknown model {m.name!r} in strategy " f"{strategy.name!r}; available: {sorted(ALPHA_MODEL_REGISTRY)}")
-                staff.append(ALPHA_MODEL_REGISTRY[m.name](**m.params))
+                cls = ALPHA_MODEL_REGISTRY[m.name]
+                params = {**m.params, "blind": True} if blind and issubclass(cls, LLMAgent) else m.params
+                staff.append(cls(**params))
             self.strategies.append((strategy, staff))

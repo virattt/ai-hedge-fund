@@ -193,11 +193,14 @@ def test_blind_agent_prompt_withholds_ticker_and_dates(tmp_path):
     assert signal.ticker == "TEST"  # the Signal still names the ticker
 
 
-def test_blind_defaults_from_env(tmp_path, monkeypatch):
-    monkeypatch.setenv("HEDGE_FUND_BLIND", "1")
-    assert _agent(tmp_path, FakeLLM(BULLISH))._blind is True
-    monkeypatch.setenv("HEDGE_FUND_BLIND", "0")
-    assert _agent(tmp_path, FakeLLM(BULLISH))._blind is False
+def test_agents_are_not_blind_unless_asked(tmp_path):
+    """A live run names the company; only a backtest passes blind=True."""
+    agent = _agent(tmp_path, FakeLLM(BULLISH))
+    agent.predict("TEST", "2025-01-15", MockDataClient(metrics=_history()))
+
+    record = json.loads(next((tmp_path / "llm").glob("*.json")).read_text())
+    assert "Company: TEST" in record["user"]
+    assert "2024-12-31" in record["user"]
 
 
 def test_failed_parse_still_persists_response(tmp_path):
