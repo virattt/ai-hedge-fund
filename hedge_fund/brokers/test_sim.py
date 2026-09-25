@@ -43,6 +43,15 @@ def test_nonpositive_price_raises():
         broker.place_order(Order(ticker="AAPL", side="buy", quantity=1, price=0.0))
 
 
+@pytest.mark.parametrize("price", [float("nan"), float("inf"), float("-inf")])
+def test_nonfinite_price_raises_without_mutating_book(price):
+    broker = SimBroker(cash=1_000.0)
+    with pytest.raises(ValueError):
+        broker.place_order(Order(ticker="AAPL", side="buy", quantity=1, price=price))
+    assert broker.cash() == 1_000.0
+    assert broker.positions() == {}
+
+
 def test_positions_returns_a_copy():
     broker = SimBroker(cash=1_000.0)
     broker.place_order(Order(ticker="AAPL", side="buy", quantity=5, price=100.0))

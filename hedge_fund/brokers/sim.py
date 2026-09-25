@@ -13,6 +13,8 @@ pretends to enforce it.
 
 from __future__ import annotations
 
+from math import isfinite
+
 from hedge_fund.brokers.models import Fill, Order, Position
 
 
@@ -34,7 +36,7 @@ class SimBroker:
         return self._cash
 
     def place_order(self, order: Order) -> Fill:
-        if order.price <= 0:
+        if not isfinite(order.price) or order.price <= 0:
             raise ValueError(
                 f"cannot fill {order.ticker} at price {order.price} — "
                 "the caller must price every order"
