@@ -182,6 +182,27 @@ def test_prompt_and_response_persisted(tmp_path):
     assert record["parsed"]["signal"] == "bullish"
 
 
+def test_blind_agent_prompt_withholds_ticker_and_dates(tmp_path):
+    agent = BuffettAgent(llm=FakeLLM(BULLISH), cache=PromptCache(tmp_path / "llm"), blind=True)
+    signal = agent.predict("TEST", "2025-01-15", MockDataClient(metrics=_history()))
+
+    record = json.loads(next((tmp_path / "llm").glob("*.json")).read_text())
+    assert "TEST" not in record["user"]
+    assert "2024-12-31" not in record["user"]
+    assert "t-0 | " in record["user"]
+    assert signal.ticker == "TEST"  # the Signal still names the ticker
+
+
+def test_agents_are_not_blind_unless_asked(tmp_path):
+    """A live run names the company; only a backtest passes blind=True."""
+    agent = _agent(tmp_path, FakeLLM(BULLISH))
+    agent.predict("TEST", "2025-01-15", MockDataClient(metrics=_history()))
+
+    record = json.loads(next((tmp_path / "llm").glob("*.json")).read_text())
+    assert "Company: TEST" in record["user"]
+    assert "2024-12-31" in record["user"]
+
+
 def test_failed_parse_still_persists_response(tmp_path):
     agent = _agent(tmp_path, FakeLLM("garbage"))
     agent.predict("TEST", "2025-01-15", MockDataClient(metrics=_history()))

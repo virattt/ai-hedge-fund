@@ -235,3 +235,21 @@ def test_all_modes_construct_without_execution_gates(monkeypatch, names, mode):
     fund = Fund(spec)
     assert [s.name for s, _ in fund.strategies] == ["event", "custom"]
     assert len(fund.strategies[1][1]) == len(names)
+
+
+@pytest.mark.parametrize("blind", [False, True])
+def test_blind_reaches_llm_agents_only(monkeypatch, blind):
+    """Fund(blind=True) is the backtest's seam: every LLM persona renders
+    blind prompts, quant models are constructed exactly as before."""
+    seen = {}
+    for name, cls in ALPHA_MODEL_REGISTRY.items():
+        monkeypatch.setattr(cls, "__init__", lambda self, _name=name, **kwargs: seen.__setitem__(_name, kwargs))
+    strategy = custom_strategy(["buffett", "druckenmiller"])
+    spec = FundSpec(**{**MINIMAL, "strategies": [MINIMAL["strategies"][0], strategy]})
+
+    Fund(spec, blind=blind)
+
+    assert seen["pead"] == {}
+    expected = {"blind": True} if blind else {}
+    assert seen["buffett"] == expected
+    assert seen["druckenmiller"] == expected

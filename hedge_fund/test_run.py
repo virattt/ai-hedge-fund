@@ -60,7 +60,8 @@ def test_cli_executes_all_modes_with_offline_clients(tmp_path, monkeypatch, caps
             return self
         def __exit__(self, *args):
             return False
-    def build_fund(spec):
+    def build_fund(spec, blind):
+        assert blind is backtest  # backtests blind the agents' prompts; live runs don't
         return Fund(spec, models={"custom": [FakeAnalyst(name, {"AAPL": .8, "MSFT": -.6}) for name in ("buffett", "druckenmiller")]})
     monkeypatch.setattr(run, "apply_credentials", lambda: None)
     monkeypatch.setattr(run, "ensure_mandates_dir", lambda: tmp_path)

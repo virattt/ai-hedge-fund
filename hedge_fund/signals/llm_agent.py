@@ -43,9 +43,14 @@ class LLMAgent(AlphaModel):
         self,
         llm: LLMClient | None = None,
         cache: PromptCache | None = None,
+        blind: bool = False,
     ) -> None:
         self._llm = llm if llm is not None else make_llm()
         self._cache = cache if cache is not None else PromptCache()
+        # Blind prompts withhold the ticker, industry and calendar dates so a
+        # backtest can't lean on what the LLM remembers about the company
+        # (FundamentalsSnapshot.render). Backtests set this; live runs don't.
+        self._blind = blind
 
     # ------------------------------------------------------------------
     # AlphaModel interface
@@ -122,7 +127,7 @@ class LLMAgent(AlphaModel):
 
     def build_user_prompt(self, snapshot: FundamentalsSnapshot) -> str:
         """Default user prompt: the rendered snapshot. Override to enrich."""
-        return snapshot.render()
+        return snapshot.render(blind=self._blind)
 
     # ------------------------------------------------------------------
     # Private helpers

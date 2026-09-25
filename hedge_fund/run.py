@@ -110,7 +110,10 @@ def main() -> None:
         spec = load_spec(args.mandate)
     except ValueError as exc:
         parser.error(str(exc))
-    fund = Fund(spec)
+    # A backtest blinds the investor agents' prompts (no ticker, industry or
+    # calendar dates): the LLM may have been trained on what those companies
+    # did over the window, and that memory would otherwise score as skill.
+    fund = Fund(spec, blind=args.backtest)
 
     if args.backtest:
         start = args.start or (
