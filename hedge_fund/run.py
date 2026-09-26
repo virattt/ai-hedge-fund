@@ -46,6 +46,12 @@ from hedge_fund.tui.keys import apply_credentials
 from hedge_fund.tui.shared import _BACKTEST_WEEKS
 
 
+def _write_output(path: str, payload: str) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(payload, encoding="utf-8")
+
+
 def main() -> None:
     apply_credentials()
     ensure_mandates_dir()
@@ -128,9 +134,10 @@ def main() -> None:
                 spinner="dots",
             ):
                 result = backtest_fund(fund, start, args.date, fd, universe)
-        print(result.model_dump_json(indent=2))
+        payload = result.model_dump_json(indent=2)
+        print(payload)
         if args.out:
-            Path(args.out).write_text(result.model_dump_json(indent=2))
+            _write_output(args.out, payload)
         m = result.metrics
         console.print(
             f"[bold]{spec.name}[/] {result.start} → {result.end}  ·  "
@@ -153,9 +160,10 @@ def main() -> None:
         ):
             record = run_cycle(fund, args.date, broker, fd, universe)
 
-    print(record.model_dump_json(indent=2))
+    payload = record.model_dump_json(indent=2)
+    print(payload)
     if args.out:
-        Path(args.out).write_text(record.model_dump_json(indent=2))
+        _write_output(args.out, payload)
 
     if isinstance(record, PendingRunResult):
         console.print(f"[bold]{spec.name}[/] · Pending · analysis cutoff {record.as_of}")
