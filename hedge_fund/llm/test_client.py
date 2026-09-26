@@ -33,7 +33,7 @@ from hedge_fund.llm import (
 from hedge_fund.llm.client import _flatten, JevLLM
 from hedge_fund.llm.registry import PROVIDER_ENV_VARS
 from hedge_fund.llm.test_contract import _response
-from hedge_fund.signals import ALPHA_MODEL_REGISTRY, BuffettAgent, LLMAgent, MungerAgent
+from hedge_fund.signals import ALPHA_MODEL_REGISTRY, BuffettAgent, LLMAgent, MungerAgent, NewsAnalystAgent
 from hedge_fund.signals.test_llm_agents import (
     _history,
     BULLISH,
@@ -465,7 +465,9 @@ def test_echoed_key_is_redacted_from_success_and_failure_metadata(http):
     assert caught.value.diagnostic_record["raw_response"] == "Invalid key: [REDACTED]"
 
 
-@pytest.mark.parametrize("persona", [cls for cls in ALPHA_MODEL_REGISTRY.values() if issubclass(cls, LLMAgent)], ids=lambda cls: cls.__name__)
+# Fundamentals personas only: this replays one unchanged snapshot five weeks
+# later, which a 7-day news window can't do (news replay: test_news_analyst.py).
+@pytest.mark.parametrize("persona", [cls for cls in ALPHA_MODEL_REGISTRY.values() if issubclass(cls, LLMAgent) and cls is not NewsAnalystAgent], ids=lambda cls: cls.__name__)
 @pytest.mark.parametrize("direction,strength,expected", [("bullish", 3.2, 0.8), ("bearish", 1.6, -0.4), ("neutral", 4, 0), ("bullish", 0, 0), ("bearish", 0, 0)])
 def test_every_agent_maps_and_replays_native_metadata(persona, direction, strength, expected, tmp_path, http):
     native = _response(direction, bullish=strength, bearish=strength)

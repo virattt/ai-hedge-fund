@@ -232,13 +232,15 @@ def test_registry_names_match_keys(tmp_path):
 
 def test_llm_personas_share_the_contract(tmp_path):
     """Every persona prompt keeps the PIT rule and the JSON schema."""
-    from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent
+    from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent, NewsAnalystAgent
 
     for cls in ALPHA_MODEL_REGISTRY.values():
         if not issubclass(cls, LLMAgent):
             continue
         prompt = cls(llm=FakeLLM(), cache=PromptCache(tmp_path / "llm")).get_system_prompt()
-        assert "most recent filing date" in prompt  # the point-in-time hard rule
+        # the point-in-time hard rule (the news agent has headlines, not filings)
+        pit = "newest date shown" if cls is NewsAnalystAgent else "most recent filing date"
+        assert pit in prompt
         assert '"signal"' in prompt and '"confidence"' in prompt  # the schema
 
 
