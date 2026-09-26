@@ -29,6 +29,12 @@ class PEADModel(QuantModel):
     surprise was filed within `signal_window_days` of `date`, else 0.0 (no view).
     Conviction magnitude is fixed ±1 for v0 — scaling by surprise size is a
     future enhancement.
+
+    By default only 8-K rows qualify. A 10-Q/10-K filing date is the
+    statutory filing, not the announcement, so treating it as a fresh
+    surprise fires days to weeks after the market already priced the
+    beat or miss. Set ``announcement_only=False`` to restore the old
+    10-Q/K fallback.
     """
 
     investment_approach = "long_short"
@@ -38,9 +44,11 @@ class PEADModel(QuantModel):
         *,
         earnings_limit: int = 8,
         signal_window_days: int = 4,
+        announcement_only: bool = True,
     ) -> None:
         self._earnings_limit = earnings_limit
         self._signal_window_days = signal_window_days
+        self._announcement_only = announcement_only
         # Cache earnings history per ticker — predict is called once per
         # trading day during a backtest, so we fetch each ticker only once.
         self._cache: dict[str, list[EarningsRecord]] = {}
@@ -95,11 +103,16 @@ class PEADModel(QuantModel):
     def _qualifying_events(self, ticker: str, data_client: DataClient) -> list[dict]:
         """Return BEAT/MISS events for a ticker, deduped + retrospective-filtered.
 
-        Mirrors the Week 3 PEAD cleaning: one event per (report_period),
-        preferring the 8-K (the actual announcement) over later 10-Q/K
-        filings, and dropping retrospective rows whose filing date is far
-        after the report period (the extractor sometimes parses prior-quarter
-        comparison data from a current 8-K).
+        One event per report_period. Default is 8-K only: a 10-Q/10-K
+        filing date is not the announcement date, so using it as the
+        event date fires after the market has already priced the
+        surprise. With ``announcement_only=False``, 10-Q/K rows are
+        kept as a fallback and 8-K still wins when both exist.
+
+        Duplicate 8-Ks for the same period keep the earliest filing
+        date. Retrospective rows whose filing date is far after the
+        report period are dropped (the extractor sometimes parses
+        prior-quarter comparison data from a current 8-K).
         """
         if ticker in self._cache:
             records = self._cache[ticker]
@@ -107,12 +120,14 @@ class PEADModel(QuantModel):
             records = data_client.get_earnings_history(ticker, limit=self._earnings_limit)
             self._cache[ticker] = records
 
-        best: dict[str, tuple[int, EarningsRecord]] = {}
+        best: dict[str, tuple[int, str, EarningsRecord]] = {}
         for r in records:
             if not r.filing_date or not r.quarterly:
                 continue
             surprise = r.quarterly.eps_surprise
             if surprise not in ("BEAT", "MISS"):
+                continue
+            if self._announcement_only and r.source_type != "8-K":
                 continue
 
             # 45-day retrospective filter
@@ -120,10 +135,12 @@ class PEADModel(QuantModel):
             if lag >= _RETROSPECTIVE_CUTOFF_DAYS:
                 continue
 
-            # Keep the highest-priority filing per report period (8-K wins)
+            # Highest-priority filing per period (8-K wins); earliest date
+            # breaks ties so a later 8-K for the same quarter is ignored.
             priority = _SOURCE_PRIORITY.get(r.source_type, 99)
-            if r.report_period not in best or priority < best[r.report_period][0]:
-                best[r.report_period] = (priority, r)
+            key = (priority, r.filing_date)
+            if r.report_period not in best or key < best[r.report_period][:2]:
+                best[r.report_period] = (priority, r.filing_date, r)
 
         return [
             {
@@ -132,7 +149,7 @@ class PEADModel(QuantModel):
                 "source_type": r.source_type,
                 "surprise": r.quarterly.eps_surprise,
             }
-            for _, r in best.values()
+            for _, _, r in best.values()
         ]
 
 
