@@ -6,6 +6,7 @@ from typing import cast
 
 from hedge_fund.signals.base import AlphaModel, InvestmentApproach, QuantModel
 from hedge_fund.signals.buffett import BuffettAgent
+from hedge_fund.signals.burry import BurryAgent
 from hedge_fund.signals.druckenmiller import DruckenmillerAgent
 from hedge_fund.signals.graham import GrahamAgent
 from hedge_fund.signals.llm_agent import LLMAgent
@@ -22,6 +23,7 @@ ALPHA_MODEL_REGISTRY: dict[str, type[AlphaModel]] = {
     "graham": GrahamAgent,
     "lynch": LynchAgent,
     "druckenmiller": DruckenmillerAgent,
+    "burry": BurryAgent,
 }
 
 
@@ -49,6 +51,7 @@ __all__ = [
     "GrahamAgent",
     "LynchAgent",
     "DruckenmillerAgent",
+    "BurryAgent",
     "PEADModel",
     "ALPHA_MODEL_REGISTRY",
     "get_investment_approach",

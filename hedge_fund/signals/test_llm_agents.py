@@ -9,7 +9,7 @@ from hedge_fund.data.models import FinancialMetrics
 from hedge_fund.llm import PromptCache, extract_json
 from hedge_fund.llm.client import LLMParseError
 from hedge_fund.models import Signal
-from hedge_fund.signals import BuffettAgent
+from hedge_fund.signals import BuffettAgent, BurryAgent
 
 
 # ---------------------------------------------------------------------------
@@ -67,6 +67,10 @@ def _agent(tmp_path, llm):
     return BuffettAgent(llm=llm, cache=PromptCache(tmp_path / "llm"))
 
 
+def _burry_agent(tmp_path, llm):
+    return BurryAgent(llm=llm, cache=PromptCache(tmp_path / "llm"))
+
+
 # ---------------------------------------------------------------------------
 # Signal folding
 # ---------------------------------------------------------------------------
@@ -86,6 +90,71 @@ def test_value_folding(tmp_path, signal, confidence, expected):
     assert sig.model_name == "buffett"
     assert sig.value == pytest.approx(expected)
     assert sig.metadata["abstained"] is False
+
+
+# ---------------------------------------------------------------------------
+# Burry persona - bullish / bearish / invalid input
+# ---------------------------------------------------------------------------
+
+def test_burry_bullish_signal(tmp_path):
+    """Cash-generative, trading below book, clean leverage -> bullish."""
+    response = json.dumps({
+        "signal": "bullish", "confidence": 75,
+        "reasoning": "Trading below tangible book with free cash flow intact.",
+    })
+    agent = _burry_agent(tmp_path, FakeLLM(response))
+
+    sig = agent.predict("TEST", "2025-01-15", MockDataClient(metrics=_history()))
+
+    assert isinstance(sig, Signal)
+    assert sig.model_name == "burry"
+    assert sig.value == pytest.approx(0.75)
+    assert sig.metadata["abstained"] is False
+
+
+def test_burry_bearish_signal(tmp_path):
+    """Leverage building while burning cash on a perfect-story price -> bearish."""
+    response = json.dumps({
+        "signal": "bearish", "confidence": 65,
+        "reasoning": "Debt/equity climbing while the price assumes flawless growth.",
+    })
+    agent = _burry_agent(tmp_path, FakeLLM(response))
+
+    sig = agent.predict("TEST", "2025-01-15", MockDataClient(metrics=_history()))
+
+    assert isinstance(sig, Signal)
+    assert sig.model_name == "burry"
+    assert sig.value == pytest.approx(-0.65)
+    assert sig.metadata["abstained"] is False
+
+
+def test_burry_invalid_signal_value_abstains(tmp_path):
+    """An out-of-vocabulary signal must abstain, never silently coerce."""
+    response = json.dumps({"signal": "short", "confidence": 80, "reasoning": "Overleveraged."})
+    agent = _burry_agent(tmp_path, FakeLLM(response))
+
+    sig = agent.predict("TEST", "2025-01-15", MockDataClient(metrics=_history()))
+
+    assert sig.value == 0.0
+    assert sig.metadata["abstained"] is True
+
+
+def test_burry_invalid_confidence_abstains(tmp_path):
+    """Confidence outside [0, 100] is invalid input from the LLM -> abstain."""
+    response = json.dumps({"signal": "bearish", "confidence": 140, "reasoning": "Way overleveraged."})
+    agent = _burry_agent(tmp_path, FakeLLM(response))
+
+    sig = agent.predict("TEST", "2025-01-15", MockDataClient(metrics=_history()))
+
+    assert sig.value == 0.0
+    assert sig.metadata["abstained"] is True
+
+
+def test_burry_insufficient_data_abstains(tmp_path):
+    agent = _burry_agent(tmp_path, FakeLLM(BULLISH))
+    sig = agent.predict("TEST", "2025-01-15", MockDataClient(metrics=_history(2)))
+    assert sig.value == 0.0
+    assert sig.metadata["abstained"] is True
 
 
 # ---------------------------------------------------------------------------
