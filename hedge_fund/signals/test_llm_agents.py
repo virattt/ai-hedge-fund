@@ -6,6 +6,7 @@ import pytest
 
 from hedge_fund.data.client import FDClientError
 from hedge_fund.data.models import FinancialMetrics
+from hedge_fund.features.breakpoints import MEBreakpoints
 from hedge_fund.llm import PromptCache, extract_json
 from hedge_fund.llm.client import LLMParseError
 from hedge_fund.models import Signal
@@ -183,17 +184,22 @@ def test_prompt_and_response_persisted(tmp_path):
 
 
 def test_blind_agent_prompt_withholds_ticker_and_dates(tmp_path):
-    agent = BuffettAgent(llm=FakeLLM(BULLISH), cache=PromptCache(tmp_path / "llm"), blind=True)
+    # Nov 2024 thresholds 100M..2000M; the $1B history lands on the 50th.
+    table = MEBreakpoints({"202411": tuple(100.0 * i for i in range(1, 21))})
+    agent = BuffettAgent(llm=FakeLLM(BULLISH), cache=PromptCache(tmp_path / "llm"),
+                         blind=True, breakpoints=table)
     signal = agent.predict("TEST", "2025-01-15", MockDataClient(metrics=_history()))
 
     record = json.loads(next((tmp_path / "llm").glob("*.json")).read_text())
     assert "TEST" not in record["user"]
     assert "2024-12-31" not in record["user"]
     assert "t-0 | " in record["user"]
-    # Absolute size and the raw per-share print stay out of the prompt.
-    # Book value is $10 on every row, so the blind column is the index 100.0.
+    # Absolute size and the raw per-share print stay out of the prompt; size
+    # is a percentile. Book value is $10 on every row, so the blind
+    # column is the index 100.0.
     assert "Market cap" not in record["user"]
     assert "1.0B" not in record["user"]
+    assert "Size: market cap at or above the 50th percentile of US stocks" in record["user"]
     assert "10.00" not in record["user"]
     assert "bvps_idx" in record["user"]
     assert "100.0" in record["user"]
@@ -208,6 +214,7 @@ def test_agents_are_not_blind_unless_asked(tmp_path):
     record = json.loads(next((tmp_path / "llm").glob("*.json")).read_text())
     assert "Company: TEST" in record["user"]
     assert "2024-12-31" in record["user"]
+    assert "percentile" not in record["user"]  # live prompts never load breakpoints
 
 
 def test_failed_parse_still_persists_response(tmp_path):

@@ -20,6 +20,7 @@ import hashlib
 from pydantic import BaseModel
 
 from hedge_fund.data.protocol import DataClient
+from hedge_fund.features.breakpoints import MEBreakpoints
 
 # An agent can't say anything defensible about a company with less history
 # than this (one year of ttm rows).
@@ -68,6 +69,10 @@ class FundamentalsSnapshot(BaseModel):
     # t-0 EPS versus t-4 (one year of quarter-spaced ttm rows). None when
     # either print is missing or the year-ago EPS is not positive.
     eps_growth_yoy: float | None = None
+    # Size as a market-cap percentile of US stocks (steps of 5) as of the t-0
+    # filing. Set only when build_snapshot is given a breakpoints table; None
+    # means the blind prompt shows no size at all.
+    size_percentile: int | None = None
 
     @property
     def content_hash(self) -> str:
@@ -90,13 +95,14 @@ class FundamentalsSnapshot(BaseModel):
         `blind=True` goes one step further, and is what backtests use: the
         ticker, industry, calendar dates, absolute size, and per-share dollar
         values are withheld (the sector stays). Periods are labelled t-0
-        (latest), t-1, ... and per-share series are indexed to the oldest
-        period shown (= 100). Without that, a model that remembers how a
-        named company did after a given quarter can recall the outcome it is
-        being scored on. Blind mode reduces that recall rather than removing
-        it (distinctive ratio profiles can still give a large company away),
-        and the personas lose company-specific knowledge. Live runs render
-        unblinded.
+        (latest), t-1, ..., per-share series are indexed to the oldest
+        period shown (= 100), and size appears only as a market-cap
+        percentile when a breakpoints table was supplied. Without that, a
+        model that remembers how a named company did after a given quarter
+        can recall the outcome it is being scored on. Blind mode reduces
+        that recall rather than removing it (distinctive ratio profiles can
+        still give a large company away), and the personas lose
+        company-specific knowledge. Live runs render unblinded.
         """
         if blind:
             return self._render_blind()
@@ -142,6 +148,10 @@ class FundamentalsSnapshot(BaseModel):
             "Treat t-0 as the present.",
             "",
             "Summary:",
+        ]
+        if self.size_percentile is not None:
+            lines.append(f"  Size: {_size_label(self.size_percentile)}")
+        lines += [
             f"  ROE avg: {_fmt(self.roe_avg)}  |  Net margin avg: {_fmt(self.net_margin_avg)}",
             f"  Gross margin trend (latest-oldest): {_fmt(self.gross_margin_trend)}",
             f"  Book value/share CAGR: {_fmt(self.bvps_cagr)}",
@@ -170,8 +180,13 @@ def build_snapshot(
     as_of: str,
     data_client: DataClient,
     periods: int = 20,
+    breakpoints: MEBreakpoints | None = None,
 ) -> FundamentalsSnapshot:
     """Build the point-in-time snapshot for (ticker, as_of).
+
+    `breakpoints`, when given, places the t-0 filed market cap on the size
+    distribution of US stocks as of that filing (blind prompts show the
+    percentile instead of dollars). Without it `size_percentile` stays None.
 
     Raises InsufficientData if fewer than MIN_PERIODS filed periods exist.
     Data-layer failures propagate (fail loud) — a broken snapshot must never
@@ -196,6 +211,10 @@ def build_snapshot(
         for m in metrics
     ]
 
+    size_percentile = None
+    if breakpoints is not None and rows[0].filing_date is not None:
+        size_percentile = breakpoints.size_percentile(rows[0].market_cap, rows[0].filing_date)
+
     return FundamentalsSnapshot(
         ticker=ticker,
         as_of=as_of,
@@ -211,12 +230,19 @@ def build_snapshot(
         debt_to_equity_latest=metrics[0].debt_to_equity,
         market_cap_latest=metrics[0].market_cap,
         eps_growth_yoy=_eps_growth_yoy(rows),
+        size_percentile=size_percentile,
     )
 
 
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+def _size_label(percentile: int) -> str:
+    if percentile <= 0:
+        return "market cap below the 5th percentile of US stocks"
+    return f"market cap at or above the {percentile}th percentile of US stocks"
+
 
 def _per_share_index(value: float | None, base: float | None) -> str:
     """Scale a per-share series to the oldest period (= 100).

@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 
 from hedge_fund.data.protocol import DataClient
+from hedge_fund.features.breakpoints import MEBreakpoints, shared_breakpoints
 from hedge_fund.features.snapshot import FundamentalsSnapshot, InsufficientData, build_snapshot
 from hedge_fund.llm import LLMCallError, LLMClient, PromptCache, extract_json, make_llm, prompt_key
 from hedge_fund.models import Signal
@@ -44,13 +45,18 @@ class LLMAgent(AlphaModel):
         llm: LLMClient | None = None,
         cache: PromptCache | None = None,
         blind: bool = False,
+        breakpoints: MEBreakpoints | None = None,
     ) -> None:
         self._llm = llm if llm is not None else make_llm()
         self._cache = cache if cache is not None else PromptCache()
-        # Blind prompts withhold the ticker, industry and calendar dates so a
-        # backtest can't lean on what the LLM remembers about the company
-        # (FundamentalsSnapshot.render). Backtests set this; live runs don't.
+        # Blind prompts withhold the ticker, industry, calendar dates and
+        # dollar values so a backtest can't lean on what the LLM remembers
+        # about the company (FundamentalsSnapshot.render). Size survives only
+        # as a market-cap percentile from a breakpoints table, loaded once per
+        # process on first use unless one is injected (tests). Backtests set
+        # blind; live runs don't and never touch the breakpoints.
         self._blind = blind
+        self._breakpoints = breakpoints
 
     # ------------------------------------------------------------------
     # AlphaModel interface
@@ -123,7 +129,12 @@ class LLMAgent(AlphaModel):
         (macro, news); when a second snapshot TYPE exists, extract the
         implicit interface (ticker/as_of/content_hash/render) into a
         Protocol — not before."""
-        return build_snapshot(ticker, date, data_client)
+        breakpoints = None
+        if self._blind:
+            if self._breakpoints is None:
+                self._breakpoints = shared_breakpoints()
+            breakpoints = self._breakpoints
+        return build_snapshot(ticker, date, data_client, breakpoints=breakpoints)
 
     def build_user_prompt(self, snapshot: FundamentalsSnapshot) -> str:
         """Default user prompt: the rendered snapshot. Override to enrich."""

@@ -5,7 +5,12 @@ import re
 import pytest
 
 from hedge_fund.data.models import CompanyFacts, FinancialMetrics
+from hedge_fund.features.breakpoints import MEBreakpoints
 from hedge_fund.features.snapshot import InsufficientData, build_snapshot
+
+# One published month (Nov 2024) with thresholds 100M, 200M, ..., 2000M. The
+# canned history files t-0 on 2024-12-31, so this is the row it lands on.
+BREAKPOINTS = MEBreakpoints({"202411": tuple(100.0 * i for i in range(1, 21))})
 
 
 class MockDataClient:
@@ -162,6 +167,43 @@ def test_blind_render_withholds_ticker_dates_and_dollars():
     assert t0[9:13] == ["250.0", "100.0", "100.0", "1.00"]  # eps yoy only on t-0
     assert t7[9:13] == ["100.0", "100.0", "100.0", "-"]
     assert "Market cap (latest filed): 3200.0B" in shown
+
+
+def test_blind_size_is_a_percentile_only_when_breakpoints_are_given():
+    """$1.5B against 100M..2000M thresholds meets 15 of 20 -> 75th percentile.
+    The live prompt never shows the percentile; without a table the blind
+    prompt shows no size at all."""
+    metrics = _history()
+    for metric in metrics:
+        metric.market_cap = 1_500_000_000
+    with_table = build_snapshot("TEST", "2025-01-15", MockDataClient(metrics=metrics),
+                                breakpoints=BREAKPOINTS)
+    without = build_snapshot("TEST", "2025-01-15", MockDataClient(metrics=metrics))
+
+    assert with_table.size_percentile == 75
+    assert "Size: market cap at or above the 75th percentile of US stocks" in with_table.render(blind=True)
+    assert "1.5B" not in with_table.render(blind=True)
+    assert "percentile" not in with_table.render()
+    assert "Market cap (latest filed): 1.5B" in with_table.render()
+
+    assert without.size_percentile is None
+    assert "Size:" not in without.render(blind=True)
+
+
+def test_blind_size_below_the_fifth_percentile_and_missing_cap():
+    tiny = _history()
+    for metric in tiny:
+        metric.market_cap = 10_000_000
+    snap = build_snapshot("TEST", "2025-01-15", MockDataClient(metrics=tiny), breakpoints=BREAKPOINTS)
+    assert snap.size_percentile == 0
+    assert "Size: market cap below the 5th percentile of US stocks" in snap.render(blind=True)
+
+    unknown = _history()
+    for metric in unknown:
+        metric.market_cap = None
+    snap = build_snapshot("TEST", "2025-01-15", MockDataClient(metrics=unknown), breakpoints=BREAKPOINTS)
+    assert snap.size_percentile is None
+    assert "Size:" not in snap.render(blind=True)
 
 
 def test_eps_growth_yoy():
