@@ -190,6 +190,13 @@ def test_blind_agent_prompt_withholds_ticker_and_dates(tmp_path):
     assert "TEST" not in record["user"]
     assert "2024-12-31" not in record["user"]
     assert "t-0 | " in record["user"]
+    # Absolute size and the raw per-share print stay out of the prompt.
+    # Book value is $10 on every row, so the blind column is the index 100.0.
+    assert "Market cap" not in record["user"]
+    assert "1.0B" not in record["user"]
+    assert "10.00" not in record["user"]
+    assert "bvps_idx" in record["user"]
+    assert "100.0" in record["user"]
     assert signal.ticker == "TEST"  # the Signal still names the ticker
 
 

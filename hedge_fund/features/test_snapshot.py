@@ -1,5 +1,7 @@
 """FundamentalsSnapshot tests — mocked data client, no network."""
 
+import re
+
 import pytest
 
 from hedge_fund.data.models import CompanyFacts, FinancialMetrics
@@ -112,6 +114,7 @@ def test_same_data_different_as_of_same_render_and_hash():
     assert snap_jan.as_of != snap_feb.as_of  # the field itself still differs
     assert snap_jan.content_hash == snap_feb.content_hash
     assert snap_jan.render() == snap_feb.render()
+    assert snap_jan.render(blind=True) == snap_feb.render(blind=True)
 
 
 def test_render_contains_the_facts():
@@ -122,20 +125,79 @@ def test_render_contains_the_facts():
     assert "publicly filed" in text
 
 
-def test_blind_render_withholds_ticker_and_dates():
-    """Blind mode keeps the numbers but drops what lets a model recall the
-    outcome: the ticker and every report/filing date."""
+def test_blind_render_withholds_ticker_dates_and_dollars():
+    """Blind mode drops what lets a model recall the outcome: the ticker,
+    every report/filing date, absolute size, and per-share dollar values.
+    The per-share series survive as an index on the oldest period."""
     facts = CompanyFacts(ticker="TEST", sector="Tech", industry="Widgets")
-    snap = build_snapshot("TEST", "2025-01-15", MockDataClient(metrics=_history(), facts=facts))
+    # Newest first. t-0 EPS 5.00 vs t-4 EPS 2.50 is +100% yoy. Oldest EPS is
+    # 2.00, so t-0 indexes to 250. BVPS and FCF/sh are flat, so they index
+    # to 100. Market cap would render as 3200.0B if it leaked.
+    earnings = [5.0, 4.5, 4.0, 3.5, 2.5, 2.2, 2.0, 2.0]
+    metrics = _history()
+    for metric, earning in zip(metrics, earnings):
+        metric.market_cap = 3_200_000_000_000
+        metric.earnings_per_share = earning
+        metric.book_value_per_share = 40.0
+        metric.free_cash_flow_per_share = 3.25
+    snap = build_snapshot("TEST", "2025-01-15", MockDataClient(metrics=metrics, facts=facts))
     text = snap.render(blind=True)
+    shown = snap.render()
 
     assert "TEST" not in text
     assert "Widgets" not in text  # industry narrows it down too much
     assert "Sector: Tech" in text
-    for q in ("2024-12-31", "2024-06-30", "2023-03-31"):
-        assert q not in text
+    for quarter in ("2024-12-31", "2024-06-30", "2023-03-31"):
+        assert quarter not in text
     assert "t-0 | " in text and "t-7 | " in text
-    assert len(text.splitlines()) == len(snap.render().splitlines())  # same rows
+    assert "Market cap" not in text
+    assert "mktcap" not in text
+    assert re.search(r"\d+(?:\.\d+)?[BM]\b", text) is None
+    for raw in ("5.00", "40.00", "3.25", "3200.0B"):
+        assert raw not in text
+        assert raw in shown  # the live prompt still names the dollars
+    assert "eps_idx" in text and "bvps_idx" in text and "fcf_idx" in text
+    t0 = _cells(next(line for line in text.splitlines() if line.startswith("t-0 |")))
+    t7 = _cells(next(line for line in text.splitlines() if line.startswith("t-7 |")))
+    assert t0[9:13] == ["250.0", "100.0", "100.0", "1.00"]  # eps yoy only on t-0
+    assert t7[9:13] == ["100.0", "100.0", "100.0", "-"]
+    assert "Market cap (latest filed): 3200.0B" in shown
+
+
+def test_eps_growth_yoy():
+    growing = _history(8)
+    for i, metric in enumerate(growing):
+        metric.earnings_per_share = float(8 - i)  # t-0 = 8, t-4 = 4
+    snap = build_snapshot("TEST", "2025-01-15", MockDataClient(metrics=growing))
+    assert snap.eps_growth_yoy == pytest.approx(1.0)
+
+    # Four periods have no t-4 to compare against.
+    short = _history(4)
+    for metric in short:
+        metric.earnings_per_share = 2.0
+    assert build_snapshot("TEST", "2025-01-15", MockDataClient(metrics=short)).eps_growth_yoy is None
+
+    # A non-positive year-ago EPS has no meaningful growth rate.
+    loss = _history(8)
+    for metric in loss:
+        metric.earnings_per_share = 2.0
+    loss[4].earnings_per_share = -1.0
+    assert build_snapshot("TEST", "2025-01-15", MockDataClient(metrics=loss)).eps_growth_yoy is None
+
+
+def test_blind_index_dashes_without_a_positive_base_and_keeps_sign():
+    metrics = _history(4)
+    for metric in metrics:
+        metric.earnings_per_share = 2.0
+        metric.book_value_per_share = -5.0  # non-positive base -> dashed
+    metrics[0].earnings_per_share = -1.0  # sign survives: -1 / 2 * 100
+    text = build_snapshot("TEST", "2025-01-15", MockDataClient(metrics=metrics)).render(blind=True)
+    t0 = _cells(next(line for line in text.splitlines() if line.startswith("t-0 |")))
+    assert t0[9:12] == ["-50.0", "-", "-"]
+
+
+def _cells(line: str) -> list[str]:
+    return [cell.strip() for cell in line.split("|")]
 
 
 def test_blind_render_is_opt_in():
