@@ -63,7 +63,8 @@ can be backtested and combined — is a great first contribution:
 |-------|--------|
 | Warren Buffett | ✅ |
 | Charlie Munger · Benjamin Graham · Peter Lynch · Stanley Druckenmiller | ✅ |
-| Cathie Wood · Michael Burry · Bill Ackman · Aswath Damodaran | ⬜ |
+| Michael Burry | ✅ |
+| Cathie Wood · Bill Ackman · Aswath Damodaran | ⬜ |
 | Phil Fisher · Mohnish Pabrai · Nassim Taleb · Rakesh Jhunjhunwala | ⬜ |
 | *Your agent here* | ⬜ |
 
