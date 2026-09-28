@@ -9,6 +9,19 @@ import httpx
 
 FXMACRODATA_BASE_URL = "https://api.fxmacrodata.com/v1"
 FXMACRODATA_API_KEY_ENV_VARS = ("FXMACRODATA_API_KEY", "FXMD_API_KEY")
+# List endpoints return at most 100 rows per request, newest first.
+FXMACRODATA_PAGE_SIZE = 100
+FXMACRODATA_MAX_PAGES = 100
+FXMACRODATA_PAGED_DATASETS = {
+    "announcements",
+    "predictions",
+    "forex",
+    "cot",
+    "commodity",
+    "rate_differentials",
+    "forward_differentials",
+    "risk_sentiment",
+}
 FXMACRODATA_ENDPOINTS = {
     "data_catalogue": (
         "data_catalogue/{currency}",
@@ -180,7 +193,8 @@ class FXMacroDataClient:
         base_url: str | None = None,
     ) -> None:
         self._api_key = api_key or _env_api_key()
-        self._client = httpx.Client(timeout=timeout)
+        headers = {"X-API-Key": self._api_key} if self._api_key else {}
+        self._client = httpx.Client(timeout=timeout, headers=headers)
         self._base_url = (base_url or FXMACRODATA_BASE_URL).rstrip("/")
 
     def __enter__(self) -> "FXMacroDataClient":
@@ -200,8 +214,8 @@ class FXMacroDataClient:
             )
         path_template, query_keys = FXMACRODATA_ENDPOINTS[dataset]
         query = _clean({key: kwargs.get(key) for key in query_keys})
-        if self._api_key and "api_key" not in query:
-            query["api_key"] = self._api_key
+        if dataset in FXMACRODATA_PAGED_DATASETS and "limit" in query:
+            query["limit"] = min(int(query["limit"]), FXMACRODATA_PAGE_SIZE)
         path = _format_path(path_template, kwargs)
         try:
             response = self._client.get(
@@ -222,6 +236,45 @@ class FXMacroDataClient:
 
     def rows(self, payload: Any) -> list[dict[str, Any]]:
         return _rows(payload)
+
+    def fetch_rows(
+        self,
+        dataset: str,
+        limit: int | None = None,
+        max_pages: int = FXMACRODATA_MAX_PAGES,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        """Page through a list endpoint and return up to ``limit`` rows.
+
+        Rows come back newest first, at most 100 per request, so the window is
+        read with ``offset`` until ``pagination.has_more`` is false. With
+        ``limit=None`` the whole window is read, up to ``max_pages`` requests.
+        """
+        kwargs.pop("page", None)
+        offset = int(kwargs.pop("offset", None) or 0)
+        limit = None if limit is None else max(1, int(limit))
+        rows: list[dict[str, Any]] = []
+        for _ in range(max(1, int(max_pages))):
+            page_size = FXMACRODATA_PAGE_SIZE
+            if limit is not None:
+                page_size = min(page_size, limit - len(rows))
+            payload = self.fetch_dataset(
+                dataset, limit=page_size, offset=offset, **kwargs
+            )
+            page = payload.get("data") if isinstance(payload, dict) else payload
+            if not isinstance(page, list) or not page:
+                break
+            rows.extend(page)
+            if limit is not None and len(rows) >= limit:
+                break
+            pagination = (
+                payload.get("pagination") if isinstance(payload, dict) else None
+            )
+            if not isinstance(pagination, dict) or not pagination.get("has_more"):
+                break
+            next_offset = pagination.get("next_offset")
+            offset = int(next_offset) if next_offset is not None else offset + len(page)
+        return rows
 
     def graphql(
         self, query: str, variables: dict[str, Any] | None = None
