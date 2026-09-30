@@ -2,7 +2,9 @@
 
 Wraps any DataClient with a JSON file cache under ~/.hedge-fund/cache/data/. A warm
 cache reuses completed historical responses. Daily prices are reusable only
-when fetched after the requested end date has ended in New York.
+when fetched after the requested end date has ended in New York. Earnings
+history takes no date (it is the latest filings at fetch time), so it is
+reusable only on the New York day it was fetched.
 
     fd = CachedDataClient(FDClient())
     prices = fd.get_prices("AAPL", "2024-01-01", "2024-12-31")  # API call
@@ -17,7 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -135,11 +137,12 @@ class CachedDataClient:
     def _cached_list(self, method: str, model_cls, params: dict, fetch: Callable) -> list:
         key = self._key(method, params)
         hit = self._read(key)
-        if hit is not None and method == "get_prices" and params.get("interval") == "day":
+        complete_after = _complete_after(method, params)
+        if hit is not None and complete_after is not None:
             try:
                 fetched = datetime.fromisoformat(hit["fetched_at"])
                 complete = fetched.tzinfo is not None and (
-                    fetched.astimezone(NEW_YORK).date().isoformat() > params["end_date"]
+                    fetched.astimezone(NEW_YORK).date().isoformat() > complete_after
                 )
             except (KeyError, TypeError, ValueError):
                 complete = False
@@ -150,7 +153,7 @@ class CachedDataClient:
         fetched_at = datetime.now(NEW_YORK).isoformat()
         result = fetch()
         payload = {"data": [r.model_dump() for r in result]}
-        if method == "get_prices":
+        if method in ("get_prices", "get_earnings_history"):
             payload["fetched_at"] = fetched_at
         self._write(key, payload)
         return result
@@ -172,3 +175,13 @@ class CachedDataClient:
         result = fetch()
         self._write(key, {"data": result})
         return result
+
+
+def _complete_after(method: str, params: dict) -> str | None:
+    """The New York date a cached list must be fetched after, else None (never expires)."""
+    if method == "get_prices" and params.get("interval") == "day":
+        return params["end_date"]
+    if method == "get_earnings_history":
+        # No date parameter: a copy fetched before today can miss an 8-K filed since.
+        return (datetime.now(NEW_YORK).date() - timedelta(days=1)).isoformat()
+    return None
