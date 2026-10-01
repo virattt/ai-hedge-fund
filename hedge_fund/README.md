@@ -69,6 +69,7 @@ poetry run aihf backtest ~/.hedge-fund/mandates/example.yaml \
 # after every close, and a week away takes a week of ticks to catch up.
 poetry run aihf paper create alpha --mandate ~/.hedge-fund/mandates/example.yaml --universe AAPL,MSFT
 poetry run aihf paper tick alpha
+poetry run aihf paper tick alpha --again   # redo the latest session; the old record moves to ledger/superseded/
 poetry run aihf paper status alpha
 poetry run aihf paper list
 poetry run aihf paper halt alpha --reason "..."     # the kill switch

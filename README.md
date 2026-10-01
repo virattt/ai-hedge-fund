@@ -57,29 +57,7 @@ With no arguments, this launches the interactive terminal app. It has two modes:
 - **Paper trading** — your funds, each with a ledger of real market days and fake money. Highlight a fund to see what its next run will do; press enter to run it through the next completed session (an approval step shows the exact decision about to execute before anything trades), `s` for its full session history, `h`/`r` for the kill switch. Build a new fund from the same list: strategies, capital, cadence, tickers, and it is live. Every session is appended to a hash-chained ledger in `~/.hedge-fund/paper/<name>/`, so NAV is a track record, not a reset.
 - **Backtesting** — replay a fund over history and watch its equity curve draw against its benchmark. Results are saved to `~/.hedge-fund/research/`. Fund definitions live in `~/.hedge-fund/mandates/` and carry no tickers; you pick the universe per backtest.
 
-### Non-interactive
 
-Backtest a mandate over a window. The full result JSON (every session's record) prints to stdout; a short human summary goes to stderr:
-
-```bash
-aihf backtest ~/.hedge-fund/mandates/example.yaml --universe AAPL,MSFT --start 2024-01-02 --end 2024-06-28
-```
-
-Deploy a paper fund, then advance it. Each `tick` records exactly the next unrecorded session and is safe to call from cron; calling it twice does nothing the second time:
-
-```bash
-aihf paper create alpha --mandate ~/.hedge-fund/mandates/example.yaml --universe AAPL,MSFT
-aihf paper tick alpha          # after each close
-aihf paper status alpha        # NAV, last session, pending decision, halt state
-aihf paper halt alpha --reason "vendor outage"
-aihf paper resume alpha
-```
-
-Run either with Jev after configuring `TYPESAFE_API_KEY`:
-
-```bash
-aihf --model jev-1.13.0 backtest ~/.hedge-fund/mandates/example.yaml --universe AAPL,MSFT
-```
 
 ## Development
 
