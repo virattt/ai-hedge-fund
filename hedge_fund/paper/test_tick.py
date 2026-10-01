@@ -18,6 +18,7 @@ from hedge_fund.paper import (
     load_deployed,
     next_session,
     NothingDue,
+    redo,
     tick,
     validate_fund_name,
 )
@@ -151,6 +152,59 @@ def test_explicit_session_is_idempotent_and_must_be_the_next_one(tmp_path, clock
     with pytest.raises(ValueError, match="not the next unrecorded session \\(2024-06-06\\)"):
         _tick(directory, session="2024-06-10")
     assert _tick(directory, session="2024-06-06").session == "2024-06-06"
+
+
+def test_redo_runs_the_latest_session_again_and_replaces_its_record(tmp_path, clock, SPEC):
+    spec = SPEC.model_copy(update={"rebalance": "daily"})
+    clock("2024-06-04")
+    directory = deploy("alpha", spec, ["AAPL"], root=tmp_path)
+    ledger = Ledger(directory)
+    with pytest.raises(NothingDue, match="nothing to run again"):
+        redo(directory, FakeDataClient(SERIES), build_fund=build_fund)
+    _tick(directory)                         # 06-03: decided, long AAPL
+    clock("2024-06-05")
+    tuesday = _tick(directory)               # 06-04: bought 500 AAPL, decided again
+    assert tuesday.positions == {"AAPL": 500} and tuesday.decision.final_weights == {"AAPL": 1.0}
+    book_before = json.loads((directory / "broker.json").read_text())
+
+    # Same analysts, same close: the redo reproduces the session exactly. The
+    # point is the book — without the restore, the broker would still hold
+    # Tuesday's 500 shares going in and the reconciliation would halt the fund.
+    same = redo(directory, FakeDataClient(SERIES), build_fund=build_fund)
+    assert same == tuesday
+    assert json.loads((directory / "broker.json").read_text()) == book_before
+    kept = sorted((directory / "ledger" / "superseded").glob("*.json"))
+    assert [p.name for p in kept] == [f"2024-06-04.{tuesday.hash[:12]}.json"]
+    assert json.loads(kept[0].read_text())["hash"] == tuesday.hash
+
+    # The analysts changed their minds by the evening: the 06-03 decision is
+    # still what gets executed, but the new decision is different.
+    bearish = redo(directory, FakeDataClient(SERIES),
+                   build_fund=lambda s: Fund(s, models={"solo": [FakeAnalyst("a", {"AAPL": -1})]}))
+    assert bearish.session == "2024-06-04" and bearish.prev_hash == tuesday.prev_hash
+    assert bearish.positions == {"AAPL": 500}                    # executed the same pending decision
+    assert bearish.decision.final_weights == {"AAPL": -1.0}      # but decided differently
+    assert bearish.hash != tuesday.hash
+    assert ledger.sessions() == ["2024-06-03", "2024-06-04"] and ledger.latest() == bearish
+    assert ledger.replay(spec.capital).pending == bearish.decision  # the chain still verifies
+    assert [e["kind"] for e in ledger.events()] == ["tick", "tick", "redo", "tick", "redo", "tick"]
+
+    # The next real tick still finds 06-05 due and executes the redone decision.
+    clock("2024-06-06")
+    wednesday = _tick(directory)
+    assert wednesday.session == "2024-06-05" and wednesday.executed.as_of == "2024-06-04"
+    assert wednesday.positions == {"AAPL": -500}
+
+
+def test_redo_refuses_a_halted_fund_and_leaves_it_untouched(tmp_path, clock, SPEC):
+    clock("2024-06-04")
+    directory = deploy("alpha", SPEC, ["AAPL"], root=tmp_path)
+    first = _tick(directory)
+    Ledger(directory).halt("looking into it")
+    with pytest.raises(FundHalted):
+        redo(directory, FakeDataClient(SERIES), build_fund=build_fund)
+    assert Ledger(directory).latest() == first
+    assert not (directory / "ledger" / "superseded").exists()
 
 
 def test_failure_inside_advance_halts_the_fund_and_a_resume_clears_it(tmp_path, clock, SPEC):

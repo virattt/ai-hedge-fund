@@ -294,7 +294,7 @@ def test_builder_existing_name_and_save_race_never_overwrite():
             screen = app.screen
             screen.query_one("#name-input", Input).value = "existing"
             await pilot.press("enter")
-            assert isinstance(app.screen, ui.ConfirmReplaceScreen)  # taken: offered a replace
+            assert isinstance(app.screen, ui.ConfirmWipeScreen)  # taken: offered a replace
             await pilot.press("escape")  # declined
             assert app.screen is screen
             assert screen.query_one("#panes", ContentSwitcher).current == "step-name"
@@ -450,7 +450,8 @@ def test_run_plan_says_exactly_what_the_run_will_do():
     assert "flat — no eligible shorts to balance the longs" in overview
     # Nothing due: when the next close is, Friday rolling to Monday.
     plan = ui._run_plan("alpha", _state(last_session="2025-01-17"), None, spec).plain
-    assert plan == "Up to date through 2025-01-17.  Next session closes 2025-01-20 at 4pm ET."
+    assert plan.startswith("Up to date through 2025-01-17.  Next session closes 2025-01-20 at 4pm ET.")
+    assert "Run 2025-01-17 again?" in plan and "recorded session is replaced" in plan
     assert ui._run_plan("alpha", _state(), None, spec).plain == "No completed SPY session to run yet."
 
 
@@ -495,17 +496,24 @@ def test_paper_screen_runs_through_the_approval_step(monkeypatch):
             app.screen._phase = "done"
             await pilot.press("escape")
             assert app.screen is screen
-            # Nothing due: the modal says when, and enter does nothing.
+            # Nothing due: the modal says when the next close is and offers
+            # to run the last session again; enter does that, esc does nothing.
             due["value"] = None
             await pilot.press("enter")
             await pilot.pause()
             modal = app.screen
-            assert isinstance(modal, ui.RunConfirmScreen) and not modal.check_action("confirm", ())
-            assert "Up to date through 2025-01-17" in _render(modal.query_one("#run-body", Static).content)
-            await pilot.press("enter")
-            assert app.screen is modal
+            assert isinstance(modal, ui.RunConfirmScreen) and modal.check_action("confirm", ())
+            body = _render(modal.query_one("#run-body", Static).content)
+            assert "Up to date through 2025-01-17" in body and "Run 2025-01-17 again?" in body
+            assert "run again" in _render(modal.query_one("#run-keys", Static).content)
             await pilot.press("escape")
             assert app.screen is screen and started == [directory]
+            await pilot.press("enter")
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            assert isinstance(app.screen, ui.RunSessionScreen) and app.screen._redo
+            assert started == [directory, directory]
     asyncio.run(scenario())
 
 
@@ -701,6 +709,23 @@ def test_paper_screen_works_the_kill_switch_and_sessions_reads_the_ledger(tmp_pa
             await pilot.press("escape")
             await pilot.press("escape")
             assert app.screen is screen
+
+            # d deletes the fund — ledger, book, definition and backtests — after a yes.
+            (ui.MANDATES_DIR / "alpha.yaml").write_text(yaml.safe_dump(spec.model_dump()))
+            await pilot.press("d")
+            modal = app.screen
+            assert isinstance(modal, ui.ConfirmWipeScreen)
+            manifest = _render(modal.query_one("#confirm-files", Static).content)
+            assert "2 sessions of ledger" in manifest and "alpha.yaml" in manifest and "name is free again" in manifest
+            await pilot.press("escape")  # no
+            assert app.screen is screen and directory.exists()
+            await pilot.press("d")
+            await pilot.press("enter")  # yes
+            await pilot.pause()
+            assert app.screen is screen
+            assert not directory.exists() and not (ui.MANDATES_DIR / "alpha.yaml").exists()
+            assert [menu.get_option_at_index(i).id for i in range(menu.option_count)] == ["build"]
+            assert not screen.check_action("delete", ()) and not screen.check_action("halt", ())
     asyncio.run(scenario())
 
 
@@ -720,7 +745,7 @@ def test_builder_paper_mode_builds_a_live_fund_and_refuses_taken_names():
             for taken in ("taken", "saved"):  # paper funds and saved definitions both count
                 screen.query_one("#name-input", Input).value = taken
                 await pilot.press("enter")
-                assert isinstance(app.screen, ui.ConfirmReplaceScreen)
+                assert isinstance(app.screen, ui.ConfirmWipeScreen)
                 await pilot.press("escape")
                 assert screen.query_one("#panes", ContentSwitcher).current == "step-name"
             screen.query_one("#name-input", Input).value = "alpha"
@@ -775,7 +800,7 @@ def test_builder_replaces_a_taken_name_only_after_yes_and_only_at_the_end():
             screen.query_one("#name-input", Input).value = "alpha"
             await pilot.press("enter")
             modal = app.screen
-            assert isinstance(modal, ui.ConfirmReplaceScreen)
+            assert isinstance(modal, ui.ConfirmWipeScreen)
             manifest = _render(modal.query_one("#confirm-files", Static).content)
             assert "alpha.yaml" in manifest and "1 backtest" in manifest and "1 session of ledger" in manifest
             await pilot.press("enter")  # yes, replace
@@ -794,7 +819,7 @@ def test_builder_replaces_a_taken_name_only_after_yes_and_only_at_the_end():
             await pilot.press("escape")
             screen.query_one("#name-input", Input).value = "alpha"
             await pilot.press("enter")
-            assert isinstance(app.screen, ui.ConfirmReplaceScreen)
+            assert isinstance(app.screen, ui.ConfirmWipeScreen)
             await pilot.press("enter")
             screen.query_one("#strategy-list", SelectionList).select(ui._CUSTOM)
             await pilot.press("enter")

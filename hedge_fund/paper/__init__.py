@@ -2,6 +2,7 @@
 
     paper/<name>/fund.yaml        the DeployedFund: mandate snapshot + universe
     paper/<name>/ledger/          one SessionRecord per session, hash-chained
+    paper/<name>/ledger/superseded/   records replaced by a redo, off the chain
     paper/<name>/broker.json      the PaperBroker's own book
     paper/<name>/control.json     the kill switch
     paper/<name>/events.jsonl     halts, failures, resumes
@@ -20,7 +21,7 @@ from hedge_fund.paper.deployed import (
     validate_fund_name,
 )
 from hedge_fund.paper.ledger import Ledger, LedgerError
-from hedge_fund.paper.tick import next_session, NothingDue, tick
+from hedge_fund.paper.tick import next_session, NothingDue, redo, tick
 
 __all__ = [
     "DeployedFund",
@@ -32,6 +33,7 @@ __all__ = [
     "list_deployed",
     "load_deployed",
     "next_session",
+    "redo",
     "tick",
     "validate_fund_name",
 ]

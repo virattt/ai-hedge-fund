@@ -267,7 +267,7 @@ ModelPickerScreen {
 
 /* Red border, and only here: these are the screens where something is
    destroyed. The dimmed backdrop keeps the screen behind visible. */
-ConfirmDeleteScreen, ConfirmReplaceScreen {
+ConfirmDeleteScreen, ConfirmWipeScreen {
     align: center middle;
     background: #0b100e 70%;
 }

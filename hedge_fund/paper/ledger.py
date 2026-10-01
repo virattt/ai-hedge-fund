@@ -21,6 +21,7 @@ from hedge_fund.pipeline.session import FundState, next_state, SessionRecord
 from hedge_fund.paths import write_atomic
 
 LEDGER_SUBDIR = "ledger"
+SUPERSEDED_SUBDIR = "superseded"  # records taken off the chain by a redo, kept
 CONTROL_FILE = "control.json"
 EVENTS_FILE = "events.jsonl"
 
@@ -89,10 +90,27 @@ class Ledger:
         write_atomic(path, record.model_dump_json(indent=2))
         return path
 
-    def replay(self, capital: float) -> FundState:
-        """Fold the chain into the fund's current state, verifying every link."""
+    def rewind(self) -> SessionRecord:
+        """Take the latest record off the chain so its session can be run
+        again. The record is not destroyed: it moves to ledger/superseded/,
+        named with its hash, where it no longer counts but can still be read.
+        The broker's book is the caller's to restore."""
+        latest = self.latest()
+        if latest is None:
+            raise LedgerError(f"{self.directory.name}: nothing recorded to rewind")
+        keep = self.records_dir / SUPERSEDED_SUBDIR
+        keep.mkdir(exist_ok=True)
+        self.path(latest.session).rename(keep / f"{latest.session}.{latest.hash[:12]}.json")
+        return latest
+
+    def replay(self, capital: float, *, before: str | None = None) -> FundState:
+        """Fold the chain into the fund's current state, verifying every link.
+        With *before*, stop short of that session: the state the fund was in
+        going into it."""
         state = FundState.initial(capital)
         for session in self.sessions():
+            if before is not None and session >= before:
+                break
             record = self.read(session)
             if record.session != session:
                 raise LedgerError(f"{self.path(session)}: file is named {session} but records {record.session}")

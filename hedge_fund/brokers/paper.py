@@ -48,6 +48,16 @@ class PaperBroker(SimBroker):
         write_atomic(path, json.dumps({"cash": cash, "shares": {}}, indent=2))
         return cls(path)
 
+    @classmethod
+    def restore(cls, path: str | Path, cash: float, shares: dict[str, int]) -> PaperBroker:
+        """Rewrite the book wholesale to a known state. Only a redo does this,
+        to put the book back where the ledger says it was before the session
+        being run again; the fills of that session are discarded with it."""
+        write_atomic(Path(path), json.dumps({
+            "cash": cash, "shares": {t: s for t, s in sorted(shares.items()) if s != 0},
+        }, indent=2))
+        return cls(path)
+
     @property
     def path(self) -> Path:
         return self._path

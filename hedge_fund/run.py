@@ -58,6 +58,7 @@ from hedge_fund.paper import (
     list_deployed,
     load_deployed,
     NothingDue,
+    redo,
     tick,
     validate_fund_name,
 )
@@ -137,6 +138,8 @@ def _parser() -> argparse.ArgumentParser:
     advance = actions.add_parser("tick", help="advance the fund by one completed session")
     advance.add_argument("name")
     advance.add_argument("--session", help="the session to record, YYYY-MM-DD; must be the next unrecorded one")
+    advance.add_argument("--again", action="store_true",
+                         help="run the latest recorded session again and replace its record")
 
     status = actions.add_parser("status", help="NAV, last session, pending decision, halt state")
     status.add_argument("name")
@@ -253,11 +256,12 @@ def _paper(args, parser: argparse.ArgumentParser, console: Console) -> None:
         deployed = load_deployed(directory)
         with FDClient() as raw:
             fd = CachedDataClient(raw)
+            verb = "running the latest session again" if args.again else "advancing one session"
             with console.status(
-                f"[cyan]{deployed.name}: advancing one session over "
-                f"{', '.join(deployed.universe)}…", spinner="dots",
+                f"[cyan]{deployed.name}: {verb} over {', '.join(deployed.universe)}…", spinner="dots",
             ):
-                record = tick(directory, fd, session=args.session)
+                record = (redo(directory, fd, build_fund=None) if args.again
+                          else tick(directory, fd, session=args.session))
         print(record.model_dump_json(indent=2))
         console.print(_tick_summary(deployed.name, record))
         return

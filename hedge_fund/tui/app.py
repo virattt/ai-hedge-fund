@@ -67,6 +67,7 @@ from hedge_fund.paper import (
     load_deployed,
     next_session,
     NothingDue,
+    redo,
     tick,
     validate_fund_name,
 )
@@ -527,19 +528,19 @@ def _delete_fund(path: Path, name: str, *, with_history: bool) -> int:
     return len(targets)
 
 
-def _replace_fund(name: str) -> None:
-    """Clear everything that answers to *name* so a new fund can take it:
-    the saved definition, its backtest results, and the paper fund — ledger,
-    book, events — if one was deployed. The builder calls this only after
-    the user has said yes to `ConfirmReplaceScreen`."""
+def _wipe_fund(name: str) -> None:
+    """Remove everything that answers to *name*: the saved definition, its
+    backtest results, and the paper fund — ledger, book, events — if one was
+    deployed. Called only after the user has said yes to `ConfirmWipeScreen`,
+    whether to delete the fund or to let a new one take its name."""
     (MANDATES_DIR / f"{name}.yaml").unlink(missing_ok=True)
     for receipt in _receipts(name):
         receipt.unlink(missing_ok=True)
     shutil.rmtree(PAPER_DIR / name, ignore_errors=True)
 
 
-def _replace_manifest(name: str) -> Text:
-    """What replacing *name* destroys, named exactly."""
+def _wipe_manifest(name: str, then: str) -> Text:
+    """What wiping *name* destroys, named exactly, and what *then* follows."""
     lines = Text()
     if (MANDATES_DIR / f"{name}.yaml").exists():
         lines.append(f"{name}.yaml\n", style=TEXT)
@@ -557,42 +558,47 @@ def _replace_manifest(name: str) -> Text:
             what = "its ledger"
         lines.append("paper fund\n", style=RED)
         lines.append(f"  {what}, the book, and every event — the track record\n", style=MUTED)
-    lines.append("\nThe new fund takes the name. None of this can be recovered.", style=MUTED)
+    lines.append(f"\n{then} None of this can be recovered.", style=MUTED)
     return lines
 
 
-class ConfirmReplaceScreen(ModalScreen[bool]):
-    """The builder was given a name that already belongs to a fund. Replacing
-    it is the other irreversible thing this app does, so it gets the same
-    treatment as delete: what goes, named exactly, and one key to say yes.
+class ConfirmWipeScreen(ModalScreen[bool]):
+    """Everything with a name is about to go — because the user pressed `d`
+    on the fund, or gave the builder a name that already belongs to one.
+    The irreversible things in this app all look the same: what goes, named
+    exactly, and one key to say yes.
     """
 
     BINDINGS = [
         Binding("escape", "cancel", "keep it"),
-        Binding("enter", "replace", "replace it", priority=True),
+        Binding("enter", "confirm", "yes", priority=True),
     ]
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, *, replacing: bool = False) -> None:
         super().__init__()
         self._name = name
+        self._replacing = replacing
 
     def compose(self) -> ComposeResult:
+        verb = "Replace" if self._replacing else "Delete"
+        then = "The new fund takes the name." if self._replacing else "The name is free again."
+        yes = ("replace it — the new fund starts from nothing" if self._replacing else "delete it")
+        no = "keep it and pick another name" if self._replacing else "keep it"
         with Vertical(id="confirm"):
             yield Static(Text.assemble(
-                ("Replace ", f"bold {BRIGHT}"),
-                (self._name, f"bold {RED}"),
-                ("?", f"bold {BRIGHT}")), id="confirm-q")
-            yield Static(_replace_manifest(self._name), id="confirm-files")
+                (f"{verb} ", f"bold {BRIGHT}"), (self._name, f"bold {RED}"), ("?", f"bold {BRIGHT}")),
+                id="confirm-q")
+            yield Static(_wipe_manifest(self._name, then), id="confirm-files")
             yield Static(Text.assemble(
-                ("enter", f"bold {RED}"), ("  replace it — the new fund starts from nothing\n", MUTED),
-                ("esc", f"bold {BRIGHT}"), ("    keep it and pick another name", MUTED)),
+                ("enter", f"bold {RED}"), (f"  {yes}\n", MUTED),
+                ("esc", f"bold {BRIGHT}"), (f"    {no}", MUTED)),
                 id="confirm-keys")
         yield Footer()
 
     def action_cancel(self) -> None:
         self.dismiss(False)
 
-    def action_replace(self) -> None:
+    def action_confirm(self) -> None:
         self.dismiss(True)
 
 
@@ -1619,18 +1625,25 @@ def _run_plan(name: str, state: FundState, due: str | None, spec: FundSpec) -> T
     the session that is due. Pure: the confirm modal renders it, tests read it.
 
     Three shapes when a session is due — execute then decide, execute then
-    mark, or mark only — and one when nothing is due yet.
+    mark, or mark only. When nothing is due, enter runs the last session
+    again instead, and the body says what that replaces.
     """
     body = Text()
     if due is None:
         if state.last_session is None:
             body.append(f"No completed {spec.benchmark} session to run yet.", style=TEXT)
-        else:
-            body.append("Up to date through ", style=TEXT)
-            body.append(state.last_session, style=f"bold {BRIGHT}")
-            body.append(".  Next session closes ", style=TEXT)
-            body.append(_next_weekday(state.last_session), style=f"bold {BRIGHT}")
-            body.append(" at 4pm ET.", style=TEXT)
+            return body
+        body.append("Up to date through ", style=TEXT)
+        body.append(state.last_session, style=f"bold {BRIGHT}")
+        body.append(".  Next session closes ", style=TEXT)
+        body.append(_next_weekday(state.last_session), style=f"bold {BRIGHT}")
+        body.append(" at 4pm ET.\n\n", style=TEXT)
+        body.append("Run ", style=TEXT)
+        body.append(state.last_session, style=f"bold {BRIGHT}")
+        body.append(" again?  ", style=TEXT)
+        body.append("The analysts look again and the book is sized again at the same close. "
+                    "The recorded session is replaced; the old record is kept aside, off the chain.",
+                    style=MUTED)
         return body
     if state.pending is not None:
         body.append("Execute the ", style=TEXT)
@@ -1667,11 +1680,14 @@ def _resolve_next_session(directory: Path) -> tuple[DeployedFund, FundState, str
     return deployed, state, due
 
 
-class RunConfirmScreen(ModalScreen[bool]):
+class RunConfirmScreen(ModalScreen[str | None]):
     """The approval step. Enter on a fund is "run", so before anything trades
     the user sees exactly what this run will do — the decision about to be
     executed, its targets, whether a new decision follows — and says yes.
     Nothing has touched the ledger or the broker until they do.
+
+    Dismisses with "run" when a session is due, "redo" when nothing is due
+    but the last session can be run again, None when the user backs out.
     """
 
     BINDINGS = [
@@ -1682,7 +1698,7 @@ class RunConfirmScreen(ModalScreen[bool]):
     def __init__(self, directory: Path) -> None:
         super().__init__()
         self._directory = directory
-        self._due: str | None = None
+        self._verdict: str | None = None  # what enter will do once resolved
         self._ready = False
 
     def compose(self) -> ComposeResult:
@@ -1700,14 +1716,14 @@ class RunConfirmScreen(ModalScreen[bool]):
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
         if action == "confirm":
-            return self._ready and self._due is not None
+            return self._ready and self._verdict is not None
         return True
 
     def action_cancel(self) -> None:
-        self.dismiss(False)
+        self.dismiss(None)
 
     def action_confirm(self) -> None:
-        self.dismiss(True)
+        self.dismiss(self._verdict)
 
     @work(thread=True, exclusive=True)
     def _resolve(self) -> None:
@@ -1720,16 +1736,18 @@ class RunConfirmScreen(ModalScreen[bool]):
         app.call_from_thread(self._show, deployed, state, due)
 
     def _show(self, deployed: DeployedFund, state: FundState, due: str | None) -> None:
-        self._due = due
+        self._verdict = "run" if due is not None else "redo" if state.last_session else None
         self._ready = True
         self.query_one("#run-q", Static).update(Text.assemble(
             ("Run ", f"bold {BRIGHT}"), (deployed.name, f"bold {GREEN}"),
-            (f" through {due}?" if due else "?", f"bold {BRIGHT}")))
+            (f" through {due}?" if due else
+             f" again through {state.last_session}?" if self._verdict == "redo" else "?",
+             f"bold {BRIGHT}")))
         self.query_one("#run-body", Static).update(_run_plan(deployed.name, state, due, deployed.spec))
         keys = Text()
-        if due is not None:
+        if self._verdict is not None:
             keys.append("enter", style=f"bold {GREEN}")
-            keys.append("  run   ", style=MUTED)
+            keys.append("  run   " if self._verdict == "run" else "  run again   ", style=MUTED)
         keys.append("esc", style=f"bold {BRIGHT}")
         keys.append("  cancel", style=MUTED)
         self.query_one("#run-keys", Static).update(keys)
@@ -1755,6 +1773,7 @@ class PaperScreen(Screen):
         Binding("s", "sessions", "sessions"),
         Binding("h", "halt", "halt"),
         Binding("r", "resume", "resume"),
+        Binding("d", "delete", "delete"),
     ]
 
     def __init__(self, select: str | None = None, run: bool = False) -> None:
@@ -1853,7 +1872,11 @@ class PaperScreen(Screen):
         if action in ("back", "run"):
             return True  # run also handles the build row
         snap = self._current()
-        if snap is None or snap.error:
+        if snap is None:
+            return False
+        if action == "delete":
+            return True  # a fund with a broken ledger can still be deleted
+        if snap.error:
             return False
         if action == "halt":
             return snap.halted is None
@@ -1882,12 +1905,12 @@ class PaperScreen(Screen):
         def resume() -> None:
             if _demand_run_keys(self.app, resume):
                 self.app.push_screen(RunConfirmScreen(directory),
-                                     lambda ok: self._after_confirm(directory, ok))
+                                     lambda verdict: self._after_confirm(directory, verdict))
         resume()
 
-    def _after_confirm(self, directory: Path, ok: bool | None) -> None:
-        if ok:
-            self.app.push_screen(RunSessionScreen(directory))
+    def _after_confirm(self, directory: Path, verdict: str | None) -> None:
+        if verdict is not None:
+            self.app.push_screen(RunSessionScreen(directory, redo=verdict == "redo"))
 
     def action_sessions(self) -> None:
         snap = self._current()
@@ -1909,6 +1932,20 @@ class PaperScreen(Screen):
         snap.ledger.resume()
         self.notify(f"{snap.deployed.name} resumed")
         self._populate(snap.deployed.name)
+
+    def action_delete(self) -> None:
+        snap = self._current()
+        if snap is None:
+            return
+        name = snap.deployed.name
+        self.app.push_screen(ConfirmWipeScreen(name), lambda yes: self._finish_delete(name, yes))
+
+    def _finish_delete(self, name: str, yes: bool | None) -> None:
+        if not yes:
+            return
+        _wipe_fund(name)
+        self.notify(f"Deleted {name}", severity="warning")
+        self._populate(None)
 
 
 class SessionsScreen(Screen):
@@ -2116,9 +2153,10 @@ class RunSessionScreen(Screen):
 
     BINDINGS = [Binding("escape", "back", "back")]
 
-    def __init__(self, directory: Path) -> None:
+    def __init__(self, directory: Path, *, redo: bool = False) -> None:
         super().__init__()
         self._directory = directory
+        self._redo = redo  # run the last recorded session again, replacing it
         self._phase = "running"
         self._record: SessionRecord | None = None
         self._desks: list[_Desk] = []
@@ -2167,12 +2205,21 @@ class RunSessionScreen(Screen):
         try:
             deployed = load_deployed(directory)
             spec = deployed.spec
-            state = Ledger(directory).replay(spec.capital)
+            ledger = Ledger(directory)
+            state = ledger.replay(spec.capital)
             with FDClient() as raw:
                 data = CachedDataClient(raw)
-                due = next_session(data, spec.benchmark, state.last_session)
-                if due is None:  # the close slipped out from under the approval step
-                    raise NothingDue(f"no completed {spec.benchmark} session after {state.last_session}")
+                if self._redo:
+                    if state.last_session is None:
+                        raise NothingDue("no session recorded yet, nothing to run again")
+                    # The board is told about the state going into the session,
+                    # which is what `redo` will advance from.
+                    due = state.last_session
+                    state = ledger.replay(spec.capital, before=due)
+                else:
+                    due = next_session(data, spec.benchmark, state.last_session)
+                    if due is None:  # the close slipped out from under the approval step
+                        raise NothingDue(f"no completed {spec.benchmark} session after {state.last_session}")
                 # The dates the analysts will be asked about: the refresh before
                 # executing a pending decision, and the new decision itself.
                 dates: list[str] = []
@@ -2183,7 +2230,7 @@ class RunSessionScreen(Screen):
                 app.call_from_thread(self._begin_board, deployed, due, dates, state.pending)
                 if dates:
                     self._warm(spec, deployed.universe, dates)
-                record = tick(directory, data)
+                record = redo(directory, data) if self._redo else tick(directory, data)
             app.call_from_thread(self._show_report, deployed, record)
         except Exception as exc:  # fail loud, in the UI
             app.call_from_thread(self._fail, exc)
@@ -2226,7 +2273,7 @@ class RunSessionScreen(Screen):
         if not doing:
             doing.append("marking the book")
         self.query_one("#run-phase", Static).update(Text.assemble(
-            (f"Running {deployed.name} through ", f"bold {BRIGHT}"),
+            (f"Running {deployed.name} {'again through' if self._redo else 'through'} ", f"bold {BRIGHT}"),
             (due, f"bold {RED}"),
             ("  ·  " + " · ".join(doing), MUTED),
         ))
@@ -2492,7 +2539,7 @@ class BuilderScreen(Screen):
             # Taken. Offer to replace it; nothing is removed until the new
             # fund is fully specified, so backing out of the wizard is free.
             self.app.push_screen(
-                ConfirmReplaceScreen(name),
+                ConfirmWipeScreen(name, replacing=True),
                 lambda ok: self._accept_name(name, replace=True) if ok else None)
             return
         self._accept_name(name, replace=self._state.get("replace") == name)
@@ -2578,7 +2625,7 @@ class BuilderScreen(Screen):
         # it now, at the last moment, so an abandoned wizard costs nothing.
         replaced = self._state.get("replace") == spec.name
         if replaced:
-            _replace_fund(spec.name)
+            _wipe_fund(spec.name)
         # Otherwise both modes refuse to overwrite: the name was checked on
         # the way in, but something may have taken it since. Paper mode needs
         # both the saved definition and the fund directory to be free.

@@ -83,21 +83,65 @@ def tick(
         raise ValueError(
             f"{deployed.name}: session {session} is not the next unrecorded session ({due})"
         )
+    return _run(directory, deployed, ledger, state, due, data_client, build_fund)
 
+
+def redo(
+    directory: str | Path,
+    data_client: DataClient,
+    *,
+    build_fund: Callable[[FundSpec], Fund] | None = None,
+) -> SessionRecord:
+    """Run the latest recorded session again and replace its record.
+
+    For when the fund already ran today and you want it to look again:
+    the analysts are asked afresh, the book is sized afresh, all at the same
+    close. The old record leaves the chain for ledger/superseded/ (a redo is
+    an event, not an erasure), the broker's book is put back to where it
+    stood going into that session, and the session is advanced as if for
+    the first time. Raises NothingDue when nothing has been recorded yet,
+    FundHalted when the kill switch is set.
+    """
+    directory = Path(directory)
+    deployed = load_deployed(directory)
+    ledger = Ledger(directory)
+    state = ledger.replay(deployed.spec.capital)  # verifies the whole chain first
+    if state.halted is not None:
+        raise FundHalted(f"{deployed.name} is halted: {state.halted}")
+    if state.last_session is None:
+        raise NothingDue(f"{deployed.name}: no session recorded yet, nothing to run again")
+
+    before = ledger.replay(deployed.spec.capital, before=state.last_session)
+    superseded = ledger.rewind()
+    PaperBroker.restore(directory / BROKER_FILE, before.cash, before.positions)
+    ledger.log_event("redo", session=superseded.session, superseded=superseded.hash)
+    return _run(directory, deployed, ledger, before, superseded.session, data_client, build_fund)
+
+
+def _run(
+    directory: Path,
+    deployed,
+    ledger: Ledger,
+    state,
+    session: str,
+    data_client: DataClient,
+    build_fund: Callable[[FundSpec], Fund] | None,
+) -> SessionRecord:
+    """Advance one session from *state* and record it, halting on failure."""
     broker = PaperBroker(directory / BROKER_FILE)
     fund = (build_fund or Fund)(deployed.spec)
     try:
-        record = advance(fund, state, due, broker, data_client, deployed.universe)
+        record = advance(fund, state, session, broker, data_client, deployed.universe)
         ledger.append(record)
     except FundHalted:
         raise
     except Exception as exc:
-        reason = f"tick {due} failed: {type(exc).__name__}: {exc}"
-        ledger.log_event("tick_failed", session=due, error=f"{type(exc).__name__}: {exc}")
+        reason = f"tick {session} failed: {type(exc).__name__}: {exc}"
+        ledger.log_event("tick_failed", session=session, error=f"{type(exc).__name__}: {exc}")
         ledger.halt(reason)
         raise
     ledger.log_event(
-        "tick", session=due, nav=record.nav,
+        "tick", session=session, nav=record.nav,
         executed=record.executed is not None, decided=record.decision is not None,
     )
     return record
