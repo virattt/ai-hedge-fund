@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from concurrent.futures import as_completed, ThreadPoolExecutor
 from datetime import date as _date
 from datetime import datetime, timedelta
@@ -524,6 +525,75 @@ def _delete_fund(path: Path, name: str, *, with_history: bool) -> int:
     for target in targets:
         target.unlink(missing_ok=True)
     return len(targets)
+
+
+def _replace_fund(name: str) -> None:
+    """Clear everything that answers to *name* so a new fund can take it:
+    the saved definition, its backtest results, and the paper fund — ledger,
+    book, events — if one was deployed. The builder calls this only after
+    the user has said yes to `ConfirmReplaceScreen`."""
+    (MANDATES_DIR / f"{name}.yaml").unlink(missing_ok=True)
+    for receipt in _receipts(name):
+        receipt.unlink(missing_ok=True)
+    shutil.rmtree(PAPER_DIR / name, ignore_errors=True)
+
+
+def _replace_manifest(name: str) -> Text:
+    """What replacing *name* destroys, named exactly."""
+    lines = Text()
+    if (MANDATES_DIR / f"{name}.yaml").exists():
+        lines.append(f"{name}.yaml\n", style=TEXT)
+        lines.append("  the saved definition — strategies, staff, risk, capital\n", style=MUTED)
+    backtests = len(_receipts(name))
+    if backtests:
+        lines.append(f"{backtests} {'backtest' if backtests == 1 else 'backtests'}\n", style=CYAN)
+        lines.append("  saved results\n", style=MUTED)
+    directory = PAPER_DIR / name
+    if directory.exists():
+        try:
+            sessions = len(Ledger(directory).records())
+            what = f"{sessions} {'session' if sessions == 1 else 'sessions'} of ledger"
+        except (LedgerError, OSError, ValueError):
+            what = "its ledger"
+        lines.append("paper fund\n", style=RED)
+        lines.append(f"  {what}, the book, and every event — the track record\n", style=MUTED)
+    lines.append("\nThe new fund takes the name. None of this can be recovered.", style=MUTED)
+    return lines
+
+
+class ConfirmReplaceScreen(ModalScreen[bool]):
+    """The builder was given a name that already belongs to a fund. Replacing
+    it is the other irreversible thing this app does, so it gets the same
+    treatment as delete: what goes, named exactly, and one key to say yes.
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "keep it"),
+        Binding("enter", "replace", "replace it", priority=True),
+    ]
+
+    def __init__(self, name: str) -> None:
+        super().__init__()
+        self._name = name
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="confirm"):
+            yield Static(Text.assemble(
+                ("Replace ", f"bold {BRIGHT}"),
+                (self._name, f"bold {RED}"),
+                ("?", f"bold {BRIGHT}")), id="confirm-q")
+            yield Static(_replace_manifest(self._name), id="confirm-files")
+            yield Static(Text.assemble(
+                ("enter", f"bold {RED}"), ("  replace it — the new fund starts from nothing\n", MUTED),
+                ("esc", f"bold {BRIGHT}"), ("    keep it and pick another name", MUTED)),
+                id="confirm-keys")
+        yield Footer()
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+    def action_replace(self) -> None:
+        self.dismiss(True)
 
 
 class ConfirmDeleteScreen(ModalScreen[str | None]):
@@ -1171,14 +1241,9 @@ def _portfolio_detail(record: CycleRecord) -> Group:
         details.append(Text("Dollar-neutral rules apply to strategy targets. Whole-share holdings can differ; other strategies can add net exposure.", style=MUTED))
     if record.risk_scale_factor is not None and record.risk_scale_factor < 1:
         details.append(Text(f"Risk limits scaled all strategy targets to {record.risk_scale_factor:.1%} of their requested exposure.", style=MUTED))
-    flat_reasons = {
-        "no_eligible_positions": "no eligible positions",
-        "missing_long_side": "no eligible longs to balance the shorts",
-        "missing_short_side": "no eligible shorts to balance the longs",
-    }
     for strategy in record.strategies:
         if strategy.flat_reason:
-            details.append(Text(f"{strategy.name}: zero exposure — {flat_reasons[strategy.flat_reason]}. Allocated capital remains unused.", style=MUTED))
+            details.append(Text(f"{strategy.name}: zero exposure — {_FLAT_REASONS[strategy.flat_reason]}. Allocated capital remains unused.", style=MUTED))
     if not record.positions:
         return Group(*details, Text("flat — no positions", style=MUTED))
     table = Table(box=box.SQUARE, header_style="bold", border_style="#1f2b25")
@@ -1325,31 +1390,59 @@ class _PaperSnapshot:
             line.append(f"last session {self.last_session}", style=TEXT)
         return line
 
+    def badge(self) -> Text:
+        """The state as a colored glyph and a quiet word, for a header line.
+        The reason behind a halt or an error is told where there is room."""
+        glyph, word, tone = (
+            ("✗", "ledger error", RED) if self.error else
+            ("■", "halted", RED) if self.halted else
+            ("●", "new", CYAN) if self.last_session is None else
+            ("●", "live", GREEN))
+        return Text.assemble((f"{glyph} ", tone), (word, MUTED))
+
 
 def _paper_slot(index: int, snap: _PaperSnapshot) -> Text:
-    """One fund in the paper rail: name, state glyph, return on top; the
-    definition and universe beneath."""
+    """One fund in the paper rail: number, name, and how it is doing. One
+    line; everything else about the fund belongs to the detail pane."""
     card = Text()
-    card.append(f" {index + 1:02d}  ", style=f"bold {CYAN}")
-    card.append(snap.deployed.name, style="bold")
+    card.append(f" {index + 1:02d}  ", style=MUTED)
+    card.append(snap.deployed.name, style=TEXT)
     if snap.error:
-        card.append("   ✗ ledger", style=f"bold {RED}")
+        card.append("   ✗ ledger", style=RED)
     elif snap.halted:
-        card.append("   ■ halted", style=f"bold {RED}")
+        card.append("   ■ halted", style=RED)
     elif snap.records:
         ret = snap.nav / snap.spec.capital - 1
-        card.append(f"   {'▲' if ret >= 0 else '▼'} {ret:+.1%}",
-                    style=f"bold {GREEN if ret >= 0 else RED}")
+        card.append(f"   {ret:+.1%}", style=GREEN if ret >= 0 else RED)
+        card.append("  ● live", style=GREEN)
     else:
-        card.append("   ● new", style=f"bold {CYAN}")
-    card.append(f"\n     {snap.spec.rebalance}"
-                f"  ·  {len(snap.records)} {'session' if len(snap.records) == 1 else 'sessions'}",
-                style=MUTED)
-    card.append(f"\n     {_short_tickers(snap.deployed.universe, 4)}", style=MUTED)
+        card.append("   ● new", style=CYAN)
     return card
 
 
 _PERIOD_WORD = {"daily": "day", "weekly": "week", "monthly": "month"}
+
+# The reason the app's `h` writes to the kill switch. The ledger wants one for
+# `aihf paper status` and the event log; the app does not ask, so it is not shown.
+_APP_HALT = "halted in the app"
+
+_FLAT_REASONS = {
+    "no_eligible_positions": "no eligible positions",
+    "missing_long_side": "no eligible longs to balance the shorts",
+    "missing_short_side": "no eligible shorts to balance the longs",
+}
+
+
+def _flat_line(decision: DecisionRecord) -> str:
+    """Why a decision has no targets, in the blender's own words. A
+    dollar-neutral desk with conviction but no short to balance it is the
+    common case, and "no conviction" would be the wrong story to tell."""
+    reasons = [(s.name, _FLAT_REASONS[s.flat_reason]) for s in decision.strategies if s.flat_reason]
+    if not reasons:
+        return "flat — no conviction cleared the bar"
+    if len(decision.strategies) == 1:
+        return f"flat — {reasons[0][1]}"
+    return "flat — " + "; ".join(f"{name}: {why}" for name, why in reasons)
 
 
 def _weights_line(decision: DecisionRecord, limit: int = 6) -> Text:
@@ -1357,76 +1450,101 @@ def _weights_line(decision: DecisionRecord, limit: int = 6) -> Text:
     targets = sorted(((t, w) for t, w in decision.final_weights.items() if w),
                      key=lambda x: -abs(x[1]))
     if not targets:
-        return Text("flat — no conviction cleared the bar", style=MUTED)
+        return Text(_flat_line(decision), style=MUTED)
     line = Text()
     for i, (ticker, weight) in enumerate(targets[:limit]):
         if i:
             line.append("  ·  ", style=MUTED)
-        line.append(ticker, style=f"bold {CYAN}")
+        line.append(ticker, style=TEXT)
         line.append(f" {weight:+.0%}", style=GREEN if weight > 0 else RED)
     if len(targets) > limit:
         line.append(f"  ·  +{len(targets) - limit} more", style=MUTED)
     return line
 
 
-def _next_run_block(snap: _PaperSnapshot) -> list:
+def _section(title: str) -> Text:
+    """A block title in the detail pane: quiet, so the values carry the weight."""
+    return Text(title, style=MUTED)
+
+
+def _facts(rows: list[tuple[str, Text | str]]) -> Table:
+    """Label/value rows with the values in one aligned column — easier to
+    scan than a sentence strung together with dots."""
+    grid = Table.grid(padding=(0, 3))
+    grid.add_column(style=MUTED, no_wrap=True)
+    grid.add_column(style=TEXT)
+    for label, value in rows:
+        grid.add_row(f"  {label}" if label else "", value)
+    return grid
+
+
+def _next_run_rows(snap: _PaperSnapshot) -> list[tuple[str, Text | str]]:
     """What the next run will do, from the ledger alone — no network on a
-    highlight. The exact session date is resolved when the user asks to run."""
-    parts: list = [Text("NEXT RUN", style=f"bold {BRIGHT}")]
+    highlight. Two steps: what happens to the pending decision, then
+    whether a new one is made. The exact date is resolved when the user
+    asks to run."""
     if snap.halted:
-        parts.append(Text("halted — r to resume before it can run", style=RED))
-        return parts
+        rows: list[tuple[str, Text | str]] = [("Halted", Text("r to resume before it can run", style=RED))]
+        if snap.halted not in (_APP_HALT, "halted"):  # a reason given from the CLI
+            rows.append(("", Text(snap.halted, style=MUTED)))
+        return rows
+    rows: list[tuple[str, Text | str]] = []
     if snap.pending is not None:
-        parts.append(Text.assemble(
-            ("executes the ", TEXT), (snap.pending.as_of, f"bold {BRIGHT}"), (" decision", TEXT)))
-        parts.append(_weights_line(snap.pending))
-        parts.append(Text("views refreshed before sizing", style=MUTED))
+        rows.append(("First", Text.assemble(
+            "execute the ", (snap.pending.as_of, BRIGHT), " decision")))
+        rows.append(("", _weights_line(snap.pending)))
     elif snap.last_session is None:
-        parts.append(Text("marks the book at the latest completed close", style=TEXT))
+        rows.append(("First", "mark the book at the latest completed close"))
     else:
-        parts.append(Text("no decision pending — marks the book", style=TEXT))
+        rows.append(("First", "mark the book"))
     cadence = snap.spec.rebalance
-    if snap.last_session is None or cadence == "daily":
-        parts.append(Text("then makes a new decision", style=TEXT))
+    if snap.last_session is None:
+        rows.append(("Then", "make the first decision"))
+    elif cadence == "daily":
+        rows.append(("Then", "make a new decision"))
     else:
-        parts.append(Text(f"then makes a new decision if it opens a new {_PERIOD_WORD[cadence]}",
-                          style=TEXT))
-    return parts
+        rows.append(("Then", f"make a new decision if it opens a new {_PERIOD_WORD[cadence]}"))
+    return rows
 
 
 def _paper_detail(snap: _PaperSnapshot, width: int = 60) -> Group:
-    """The right pane: who the fund is, where it stands, what the next run
-    does, the curve so far, and its last few sessions."""
+    """The right pane, top to bottom: who the fund is, what the next run
+    does, how it has done, its last few sessions. One bold line (the name);
+    color only where it means something — gains, losses, state."""
     spec = snap.spec
     staff = ", ".join(s.title for s in spec.strategies)
     parts: list = [
-        Text(snap.deployed.name, style=f"bold {BRIGHT}"),
-        Text(f"{staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}", style=MUTED),
-        Text(f"{' '.join(snap.deployed.universe)}  ·  since {snap.deployed.created}", style=MUTED),
-        Text(""),
-        snap.status(),
+        Text.assemble((snap.deployed.name, f"bold {BRIGHT}"), "   ", snap.badge()),
+        Text(f"{staff} · {spec.rebalance} · ${spec.capital:,.0f} · {' '.join(snap.deployed.universe)}",
+             style=MUTED),
         Text(""),
     ]
     if snap.error:
+        parts.append(Text(snap.error, style=RED))
         return Group(*parts)
-    parts.extend(_next_run_block(snap))
+    parts += [_section("NEXT RUN"), _facts(_next_run_rows(snap))]
     if snap.records:
         m = snap.metrics()
         _, nav, bench = snap.curves()
-        parts.append(Text(""))
-        parts.append(Text.assemble(
-            ("SO FAR  ", f"bold {BRIGHT}"),
-            (f"${snap.nav:,.0f}  ·  ", TEXT),
-            (f"{m.total_return_pct:+.1%}", f"bold {GREEN if m.total_return_pct >= 0 else RED}"),
-            (f" vs {spec.benchmark} {m.benchmark_return_pct:+.1%}  ·  "
-             f"{m.n_cycles} cycles  ·  {m.n_orders} orders", MUTED)))
-        parts.extend(_render_area_chart(nav, bench, spec.capital, width))
-        parts.append(Text(""))
-        parts.append(Text("RECENT SESSIONS", style=f"bold {BRIGHT}"))
+        n = len(snap.records)
+        ret, bench_ret = m.total_return_pct, m.benchmark_return_pct
+        parts += [Text(""), _section("PERFORMANCE"), _facts([
+            ("Value", f"${snap.nav:,.0f}"),
+            ("Return", Text.assemble((f"{ret:+.1%}", GREEN if ret >= 0 else RED),
+                                     (f"   {spec.benchmark} {bench_ret:+.1%}", MUTED))),
+            ("Since", Text(f"{snap.records[0].session} · {n} {'session' if n == 1 else 'sessions'}"
+                           f" · {m.n_orders} {'order' if m.n_orders == 1 else 'orders'}", style=MUTED)),
+        ])]
+        if n >= 2:  # one point is a flat block, not a curve
+            parts.append(Text(""))
+            parts.extend(_render_area_chart(nav, bench, spec.capital, width))
+        parts += [Text(""), _section("SESSIONS")]
         navs = [spec.capital, *(r.nav for r in snap.records)]
-        for i in range(len(snap.records) - 1, max(-1, len(snap.records) - 4), -1):
-            parts.append(_session_row(snap.records[i], navs[i]))
-        parts.append(Text("s for every session", style=MUTED))
+        shown = min(n, 3)
+        for i in range(n - 1, n - 1 - shown, -1):
+            parts.append(Text(" ").append_text(_session_row(snap.records[i], navs[i])))
+        if n > shown:
+            parts.append(Text(f"   … {n - shown} more · s for all", style=MUTED))
     return Group(*parts)
 
 
@@ -1438,7 +1556,7 @@ def _session_row(record: SessionRecord, prev_nav: float) -> Text:
     row.append(f"  {change:+.2%}", style=GREEN if change >= 0 else RED)
     if record.executed is not None:
         n = len(record.executed.fills)
-        row.append(f"  {n} {'fill' if n == 1 else 'fills'}", style=CYAN)
+        row.append(f"  {n} {'fill' if n == 1 else 'fills'}", style=MUTED)
     if record.decision is not None:
         row.append("  decided", style=MUTED)
     return row
@@ -1479,7 +1597,7 @@ def _session_overview(record: SessionRecord) -> Group:
                 (f"  {ticker:<6}", f"bold {CYAN}"),
                 (f"{weight:+.1%}", GREEN if weight > 0 else RED)))
         if not targets:
-            parts.append(Text("  flat — no conviction cleared the bar", style=MUTED))
+            parts.append(Text(f"  {_flat_line(d)}", style=MUTED))
         parts.append(Text(""))
     parts.append(Text("enter for the full report", style=MUTED))
     return Group(*parts)
@@ -1683,8 +1801,7 @@ class PaperScreen(Screen):
         if self._snaps:
             menu.add_option(None)
         menu.add_option(Option(Text.assemble(
-            ("  +  ", f"bold {GREEN}"), ("Build a new fund", "bold"),
-            ("\n     strategies, capital, cadence, tickers — then it's live", MUTED)), id="build"))
+            ("  +  ", GREEN), ("Build a new fund", TEXT)), id="build"))
         # Options added after mount leave `highlighted` unset — pin it to the
         # asked-for fund, else the first readable one, else the build row.
         wanted = next((f"paper:{i}" for i, s in enumerate(self._snaps)
@@ -1781,13 +1898,8 @@ class PaperScreen(Screen):
         snap = self._current()
         if snap is None:
             return
-        self.app.push_screen(HaltPromptScreen(), lambda reason: self._finish_halt(snap, reason))
-
-    def _finish_halt(self, snap: _PaperSnapshot, reason: str | None) -> None:
-        if reason is None:
-            return
-        snap.ledger.halt(reason)
-        self.notify(f"{snap.deployed.name} halted: {reason}", severity="warning")
+        snap.ledger.halt(_APP_HALT)
+        self.notify(f"{snap.deployed.name} halted · r to resume", severity="warning")
         self._populate(snap.deployed.name)
 
     def action_resume(self) -> None:
@@ -1797,36 +1909,6 @@ class PaperScreen(Screen):
         snap.ledger.resume()
         self.notify(f"{snap.deployed.name} resumed")
         self._populate(snap.deployed.name)
-
-
-class HaltPromptScreen(ModalScreen[str | None]):
-    """The kill switch wants a reason: it is written to control.json and the
-    event log, and it is what `aihf paper status` shows to whoever finds the
-    fund stopped."""
-
-    BINDINGS = [Binding("escape", "cancel", "cancel")]
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="halt"):
-            yield Static(Text("Halt the fund?", style=f"bold {BRIGHT}"), id="halt-q")
-            yield Static(Text("Runs refuse to trade until it is resumed. Say why:", style=MUTED),
-                         id="halt-blurb")
-            yield Input(placeholder="e.g. data vendor outage", id="halt-reason")
-            yield Static(Text("enter to halt · esc to cancel", style=MUTED), classes="hint")
-
-    def on_mount(self) -> None:
-        self.query_one("#halt-reason", Input).focus()
-
-    def action_cancel(self) -> None:
-        self.dismiss(None)
-
-    @on(Input.Submitted, "#halt-reason")
-    def _submit(self, event: Input.Submitted) -> None:
-        reason = event.value.strip()
-        if not reason:
-            self.notify("A reason is required.", severity="error")
-            return
-        self.dismiss(reason)
 
 
 class SessionsScreen(Screen):
@@ -2406,11 +2488,18 @@ class BuilderScreen(Screen):
         except ValueError as exc:
             self.notify(str(exc), severity="error")
             return
-        if _fund_name_taken(name):
-            self.notify("A fund with that name already exists. Choose a different name.",
-                        severity="error")
+        if _fund_name_taken(name) and self._state.get("replace") != name:
+            # Taken. Offer to replace it; nothing is removed until the new
+            # fund is fully specified, so backing out of the wizard is free.
+            self.app.push_screen(
+                ConfirmReplaceScreen(name),
+                lambda ok: self._accept_name(name, replace=True) if ok else None)
             return
+        self._accept_name(name, replace=self._state.get("replace") == name)
+
+    def _accept_name(self, name: str, *, replace: bool) -> None:
         self._state["name"] = name
+        self._state["replace"] = name if replace else None
         self._goto("step-strategies")
 
     def action_toggle_all(self) -> None:
@@ -2485,9 +2574,14 @@ class BuilderScreen(Screen):
             capital=self._state["capital"],
             rebalance=self._state["rebalance"],
         )
-        # Both modes refuse to overwrite: the name was checked on the way in,
-        # but something may have taken it since. Paper mode needs both the
-        # saved definition and the fund directory to be free.
+        # The user said yes to replacing the fund that held this name: clear
+        # it now, at the last moment, so an abandoned wizard costs nothing.
+        replaced = self._state.get("replace") == spec.name
+        if replaced:
+            _replace_fund(spec.name)
+        # Otherwise both modes refuse to overwrite: the name was checked on
+        # the way in, but something may have taken it since. Paper mode needs
+        # both the saved definition and the fund directory to be free.
         if self.mode == "paper" and (PAPER_DIR / spec.name).exists():
             self.notify("A paper fund with that name already exists. Choose a different name.",
                         severity="error")
@@ -2510,6 +2604,8 @@ class BuilderScreen(Screen):
             (spec.name, f"bold {BRIGHT}"),
             (f"  ·  {staff}  ·  ${spec.capital:,.0f}  ·  {spec.rebalance}", MUTED),
         )
+        if replaced:
+            self.notify(f"Replaced the previous {spec.name}.", severity="warning")
         if self.mode == "paper":
             universe = self._state["universe"]
             directory = deploy(spec.name, spec, universe, root=PAPER_DIR)

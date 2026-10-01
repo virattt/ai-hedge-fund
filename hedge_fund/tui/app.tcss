@@ -265,9 +265,9 @@ ModelPickerScreen {
 
 /* ---------------- confirm delete ---------------- */
 
-/* Red border, and only here: this is the one screen where something is
-   destroyed. The dimmed backdrop keeps the fund list visible behind it. */
-ConfirmDeleteScreen {
+/* Red border, and only here: these are the screens where something is
+   destroyed. The dimmed backdrop keeps the screen behind visible. */
+ConfirmDeleteScreen, ConfirmReplaceScreen {
     align: center middle;
     background: #0b100e 70%;
 }
@@ -312,30 +312,6 @@ RunConfirmScreen {
 }
 
 #run-body {
-    margin-bottom: 1;
-}
-
-/* ---------------- paper: halt prompt ---------------- */
-
-HaltPromptScreen {
-    align: center middle;
-    background: #0b100e 70%;
-}
-
-#halt {
-    width: 62;
-    max-width: 90%;
-    height: auto;
-    padding: 1 3;
-    background: #101613;
-    border: round #f87171;
-}
-
-#halt-q {
-    margin-bottom: 1;
-}
-
-#halt-blurb {
     margin-bottom: 1;
 }
 

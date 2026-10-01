@@ -294,6 +294,9 @@ def test_builder_existing_name_and_save_race_never_overwrite():
             screen = app.screen
             screen.query_one("#name-input", Input).value = "existing"
             await pilot.press("enter")
+            assert isinstance(app.screen, ui.ConfirmReplaceScreen)  # taken: offered a replace
+            await pilot.press("escape")  # declined
+            assert app.screen is screen
             assert screen.query_one("#panes", ContentSwitcher).current == "step-name"
             assert path.read_text() == original
             screen.query_one("#name-input", Input).value = "save-race"
@@ -398,7 +401,7 @@ def test_all_modes_can_be_backtested_and_paper_traded(mode, size):
             assert menu.highlighted == menu.get_option_index("paper:0")
             assert app.screen.check_action("halt", ()) and app.screen.check_action("sessions", ())
             detail = _render(app.screen.query_one("#detail-body", Static).content)
-            assert "● NEW" in detail and "NEXT RUN" in detail
+            assert "● new" in detail and "NEXT RUN" in detail
             assert ui.load_deployed(directory).spec == spec
     asyncio.run(scenario())
 
@@ -434,9 +437,17 @@ def test_run_plan_says_exactly_what_the_run_will_do():
     # A brand-new fund: mark, then its first decision.
     plan = ui._run_plan("alpha", _state(), "2025-01-21", spec).plain
     assert "Mark the book at the 2025-01-21 close" in plan and "first decision" in plan
-    # A pending decision that went flat says so rather than listing nothing.
-    plan = ui._run_plan("alpha", _state(last_session="2025-01-20", pending=_pending("2025-01-20", {})), "2025-01-21", spec).plain
+    # A pending decision that went flat says so rather than listing nothing,
+    # and says why when the blender recorded a reason: a dollar-neutral desk
+    # with conviction but no short to balance it is not "no conviction".
+    flat = _pending("2025-01-20", {})
+    plan = ui._run_plan("alpha", _state(last_session="2025-01-20", pending=flat), "2025-01-21", spec).plain
     assert "flat — no conviction cleared the bar" in plan
+    flat.strategies[0].flat_reason = "missing_short_side"
+    plan = ui._run_plan("alpha", _state(last_session="2025-01-20", pending=flat), "2025-01-21", spec).plain
+    assert "flat — no eligible shorts to balance the longs" in plan
+    overview = _render(ui._session_overview(_session("2025-01-20", decision=flat)))
+    assert "flat — no eligible shorts to balance the longs" in overview
     # Nothing due: when the next close is, Friday rolling to Monday.
     plan = ui._run_plan("alpha", _state(last_session="2025-01-17"), None, spec).plain
     assert plan == "Up to date through 2025-01-17.  Next session closes 2025-01-20 at 4pm ET."
@@ -464,8 +475,8 @@ def test_paper_screen_runs_through_the_approval_step(monkeypatch):
             await app.push_screen(ui.PaperScreen())
             screen = app.screen
             detail = _render(screen.query_one("#detail-body", Static).content)
-            assert "NEXT RUN" in detail and "executes the 2025-01-20 decision" in detail
-            assert "TEST +25%" in detail and "RECENT SESSIONS" in detail and "2025-01-17" in detail
+            assert "NEXT RUN" in detail and "execute the 2025-01-20 decision" in detail
+            assert "TEST +25%" in detail and "SESSIONS" in detail and "2025-01-17" in detail
             await pilot.press("enter")
             await pilot.pause()
             modal = app.screen
@@ -638,18 +649,16 @@ def test_paper_screen_works_the_kill_switch_and_sessions_reads_the_ledger(tmp_pa
             assert [menu.get_option_at_index(i).id for i in range(menu.option_count)] == ["paper:0", "build"]
             assert "alpha" in _render(menu.get_option("paper:0").prompt)
             detail = _render(screen.query_one("#detail-body", Static).content)
-            assert "● NEW" in detail and "marks the book at the latest completed close" in detail
+            assert "● new" in detail and "mark the book at the latest completed close" in detail
             assert screen.check_action("halt", ()) and not screen.check_action("resume", ())
 
-            await pilot.press("h")
-            assert isinstance(app.screen, ui.HaltPromptScreen)
-            app.screen.query_one("#halt-reason", Input).value = "vendor outage"
-            await pilot.press("enter")
+            await pilot.press("h")  # no prompt: halts at once
             await pilot.pause()
-            assert ledger.halted() == "vendor outage"
+            assert app.screen is screen
+            assert ledger.halted() == ui._APP_HALT
             assert menu.highlighted == menu.get_option_index("paper:0")  # re-highlighted after the reload
             detail = _render(screen.query_one("#detail-body", Static).content)
-            assert "HALTED" in detail and "vendor outage" in detail and "r to resume" in detail
+            assert "■ halted" in detail and "r to resume" in detail and ui._APP_HALT not in detail
             assert not screen.check_action("halt", ()) and screen.check_action("resume", ())
             await pilot.press("enter")  # halted funds do not run
             await pilot.pause()
@@ -671,8 +680,8 @@ def test_paper_screen_works_the_kill_switch_and_sessions_reads_the_ledger(tmp_pa
             await pilot.press("escape")
             await pilot.pause()
             detail = _render(screen.query_one("#detail-body", Static).content)
-            assert "last session 2025-01-20" in detail and "no decision pending" in detail
-            assert "RECENT SESSIONS" in detail and "2025-01-20" in detail and "1 fill" in detail
+            assert "● live" in detail and "mark the book" in detail and "2025-01-17 · 2 sessions" in detail
+            assert "SESSIONS" in detail and "2025-01-20" in detail and "1 fill" in detail
             assert "+1.0%" in _render(menu.get_option("paper:0").prompt)
 
             await pilot.press("s")
@@ -711,6 +720,8 @@ def test_builder_paper_mode_builds_a_live_fund_and_refuses_taken_names():
             for taken in ("taken", "saved"):  # paper funds and saved definitions both count
                 screen.query_one("#name-input", Input).value = taken
                 await pilot.press("enter")
+                assert isinstance(app.screen, ui.ConfirmReplaceScreen)
+                await pilot.press("escape")
                 assert screen.query_one("#panes", ContentSwitcher).current == "step-name"
             screen.query_one("#name-input", Input).value = "alpha"
             await pilot.press("enter")
@@ -740,6 +751,66 @@ def test_builder_paper_mode_builds_a_live_fund_and_refuses_taken_names():
             rail = paper.query_one("#paper-menu", OptionList)
             assert rail.get_option_at_index(rail.highlighted).id == "paper:0"
             assert "alpha" in _render(rail.get_option("paper:0").prompt)
+    asyncio.run(scenario())
+
+
+def test_builder_replaces_a_taken_name_only_after_yes_and_only_at_the_end():
+    old = _spec(["buffett"], "alpha")
+    old.rebalance = "monthly"
+    (ui.MANDATES_DIR / "alpha.yaml").write_text(yaml.safe_dump(old.model_dump()))
+    receipt = ui.RESEARCH_DIR / "alpha-backtest-2025-01-01.json"
+    receipt.write_text(json.dumps({"fund": "alpha", "universe": ["NVDA"], "metrics": {
+        "total_return_pct": .1, "annualized_return_pct": .1, "sharpe_ratio": 1, "max_drawdown_pct": -.1,
+        "benchmark_return_pct": 0, "excess_return_pct": .1, "n_cycles": 1}}))
+    directory = ui.deploy("alpha", old, ["NVDA"], root=ui.PAPER_DIR)
+    ledger = Ledger(directory)
+    ledger.append(_session("2025-01-17", nav=100000))
+    untouched = ui.deploy("beta", old, ["AMD"], root=ui.PAPER_DIR)
+
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=(120, 45)) as pilot:
+            await app.push_screen(ui.BuilderScreen(mode="paper"))
+            screen = app.screen
+            screen.query_one("#name-input", Input).value = "alpha"
+            await pilot.press("enter")
+            modal = app.screen
+            assert isinstance(modal, ui.ConfirmReplaceScreen)
+            manifest = _render(modal.query_one("#confirm-files", Static).content)
+            assert "alpha.yaml" in manifest and "1 backtest" in manifest and "1 session of ledger" in manifest
+            await pilot.press("enter")  # yes, replace
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-strategies"
+            # Nothing has gone yet: an abandoned wizard costs nothing.
+            assert receipt.exists() and len(ledger.records()) == 1
+            await pilot.press("escape")
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-name"
+            # Re-submitting the same name does not ask twice; a different name forgets the yes.
+            await pilot.press("enter")
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-strategies"
+            await pilot.press("escape")
+            screen.query_one("#name-input", Input).value = "gamma"
+            await pilot.press("enter")
+            assert screen._state["replace"] is None
+            await pilot.press("escape")
+            screen.query_one("#name-input", Input).value = "alpha"
+            await pilot.press("enter")
+            assert isinstance(app.screen, ui.ConfirmReplaceScreen)
+            await pilot.press("enter")
+            screen.query_one("#strategy-list", SelectionList).select(ui._CUSTOM)
+            await pilot.press("enter")
+            screen.query_one("#agent-list", SelectionList).select("pead")
+            await pilot.press("enter", "enter", "enter")
+            screen.query_one("#tickers-input", Input).value = "TEST"
+            await pilot.press("enter")
+            await pilot.pause()
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-done"
+            fresh = ui.load_deployed(ui.PAPER_DIR / "alpha")
+            assert fresh.universe == ["TEST"] and fresh.spec.rebalance == "weekly"
+            assert fresh.spec.strategies[0].models[0].name == "pead"
+            assert Ledger(ui.PAPER_DIR / "alpha").records() == []  # a new track record
+            assert load_spec(ui.MANDATES_DIR / "alpha.yaml") == fresh.spec
+            assert not receipt.exists()
+            assert ui.load_deployed(untouched).universe == ["AMD"]  # neighbours untouched
     asyncio.run(scenario())
 
 
