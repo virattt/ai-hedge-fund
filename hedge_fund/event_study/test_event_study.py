@@ -121,6 +121,13 @@ class TestRetrospectiveFilter:
         assert len(result) == 1
         assert result[0].report_period == "2026-03-31"
 
+    def test_drops_records_without_filing_date(self):
+        from hedge_fund.data.models import EarningsRecord
+        from hedge_fund.event_study.engine import _filter_retrospective
+
+        undated = EarningsRecord(ticker="GS", report_period="2026-03-31", source_type="8-K")
+        assert _filter_retrospective([undated]) == []
+
 
 # ---------------------------------------------------------------------------
 # Unit tests — plot (smoke test, no visual assertion)

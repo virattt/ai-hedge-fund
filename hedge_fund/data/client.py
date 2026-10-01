@@ -205,10 +205,10 @@ class FDClient:
     # ------------------------------------------------------------------
 
     def get_market_cap(self, ticker: str, end_date: str) -> float | None:
-        """Return market cap from company facts or financial metrics."""
-        facts = self.get_company_facts(ticker)
-        if facts is not None and facts.market_cap is not None:
-            return facts.market_cap
+        """Return market cap from the latest financial metrics filed by end_date.
+
+        /company/facts has no market_cap field, so metrics are the only source.
+        """
         metrics = self.get_financial_metrics(ticker, end_date, limit=1)
         if metrics and metrics[0].market_cap is not None:
             return metrics[0].market_cap

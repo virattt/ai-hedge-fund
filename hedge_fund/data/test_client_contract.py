@@ -202,3 +202,20 @@ def test_financial_metrics_parses_filing_metadata(client):
     assert m.filing_date == "2024-05-02"
     assert m.filing_datetime == "2024-05-02T16:31:00-04:00"
     assert m.report_period == "2024-03-30"
+
+
+def test_market_cap_comes_from_financial_metrics_when_company_facts_exist(client):
+    def fake_request(method, url, **kwargs):
+        if url.endswith("/company/facts/"):
+            return _FakeResponse(200, {"company_facts": {"ticker": "AAPL", "sector": "Tech"}})
+        return _FakeResponse(200, {"financial_metrics": [{
+            "ticker": "AAPL",
+            "report_period": "2024-03-30",
+            "period": "ttm",
+            "filing_date": "2024-05-02",
+            "market_cap": 3.0e12,
+        }]})
+
+    client._session.request = fake_request
+
+    assert client.get_market_cap("AAPL", "2024-06-30") == 3.0e12
