@@ -246,20 +246,6 @@
       "severity": "error"
     },
     {
-      "column": 34,
-      "path": "hedge_fund/data/client.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `CompanyFacts` has no attribute `market_cap`",
-      "severity": "error"
-    },
-    {
-      "column": 20,
-      "path": "hedge_fund/data/client.py",
-      "name": "bad-return",
-      "concise_description": "Returned type `object` is not assignable to declared return type `float | None`",
-      "severity": "error"
-    },
-    {
       "column": 20,
       "path": "hedge_fund/data/models.py",
       "name": "bad-assignment",
