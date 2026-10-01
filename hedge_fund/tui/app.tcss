@@ -289,9 +289,29 @@ ConfirmDeleteScreen {
     margin-bottom: 1;
 }
 
-/* ---------------- paper: deploy ---------------- */
+/* ---------------- paper: run confirm ---------------- */
 
-#dp-hero {
+/* Green border: this is where the user says yes to a run. Same shape as
+   the delete prompt, so the two approval steps feel like siblings. */
+RunConfirmScreen {
+    align: center middle;
+    background: #0b100e 70%;
+}
+
+#run-confirm {
+    width: 72;
+    max-width: 90%;
+    height: auto;
+    padding: 1 3;
+    background: #101613;
+    border: round #2bd97c;
+}
+
+#run-q {
+    margin-bottom: 1;
+}
+
+#run-body {
     margin-bottom: 1;
 }
 

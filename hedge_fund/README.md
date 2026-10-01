@@ -52,7 +52,9 @@ poetry install                          # dependencies
 #   ANTHROPIC_API_KEY=...               # only for LLM agents (Buffett)
 
 # THE command. No arguments: launch the interactive app (a Textual TUI).
-# Backtest a mandate, paper trade one, or build a new mandate.
+# Two modes: paper trading (your funds — run the next session behind an
+# approval step, see history, halt/resume, build a new fund) and
+# backtesting (replay a fund over history).
 poetry run aihf       # or, equivalently: python -m hedge_fund.tui
 
 # Backtest a mandate over a window: `advance` looped over every benchmark

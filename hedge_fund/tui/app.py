@@ -1,4 +1,4 @@
-"""Terminal screens: build a mandate, backtest it, deploy and advance a paper fund."""
+"""Terminal screens: paper trade a fund a session at a time, or backtest one over history."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from datetime import date as _date
 from datetime import datetime, timedelta
 from math import isfinite
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from rich import box
@@ -71,7 +72,7 @@ from hedge_fund.paper import (
 from hedge_fund.pipeline import (
     CycleRecord,
     DecisionRecord,
-    FundHalted,
+    FundState,
     is_rebalance_session,
     SessionRecord,
 )
@@ -125,9 +126,8 @@ _CUSTOM = "custom"  # sentinel value in the strategy list for "build your own"
 
 class HomeScreen(Screen):
     """The clean landing: wordmark, the two modes, the reasoning-model picker.
-    Backtest a mandate over history, or paper trade one — deploy it against
-    a universe and advance it a session at a time. Building a mandate is the
-    third verb; it feeds the other two.
+    Paper trading runs a fund on real market days; backtesting replays one
+    over history. Building a fund lives inside each mode, not up here.
     """
 
     BINDINGS = [
@@ -144,21 +144,15 @@ class HomeScreen(Screen):
             yield OptionList(
                 Option(
                     Text.assemble(
-                        ("Backtest a mandate\n", "bold"),
-                        ("replay a saved mandate over history", MUTED)),
-                    id="backtest"),
-                None,
-                Option(
-                    Text.assemble(
-                        ("Paper trade a fund\n", "bold"),
-                        ("deploy a mandate and advance it one session at a time", MUTED)),
+                        ("Paper trading\n", "bold"),
+                        ("run a fund on real market days", MUTED)),
                     id="paper"),
                 None,
                 Option(
                     Text.assemble(
-                        ("Build a mandate\n", "bold"),
-                        ("compose agents into strategies from scratch", MUTED)),
-                    id="build"),
+                        ("Backtesting\n", "bold"),
+                        ("test a fund over history", MUTED)),
+                    id="backtest"),
                 id="home-menu",
             )
             yield Static("", id="model-line")
@@ -222,12 +216,10 @@ class HomeScreen(Screen):
 
     @on(OptionList.OptionSelected, "#home-menu")
     def _choose(self, event: OptionList.OptionSelected) -> None:
-        if event.option.id == "backtest":
+        if event.option.id == "paper":
+            self.app.push_screen(PaperScreen())
+        elif event.option.id == "backtest":
             self.app.push_screen(FundSelectScreen())
-        elif event.option.id == "paper":
-            self.app.push_screen(PaperSelectScreen())
-        elif event.option.id == "build":
-            self.app.push_screen(BuilderScreen())
 
 
 class KeyPromptScreen(ModalScreen[bool]):
@@ -412,7 +404,8 @@ class FundSelectScreen(Screen):
         menu.clear_options()
         if not self._slots:
             self.query_one("#detail-body", Static).update(
-                Text("No mandates yet — go back and build one first.", style=MUTED))
+                Text("No funds yet — build one under Paper trading and it shows up here too.",
+                     style=MUTED))
             return
         for i, entry in enumerate(self._slots):
             if entry.spec is None:
@@ -501,6 +494,26 @@ class FundSelectScreen(Screen):
 def _saved_funds() -> list[SavedFund]:
     """Valid and unavailable saved mandates, shared by both pickers."""
     return discover_funds(MANDATES_DIR)
+
+
+def _fund_name_taken(name: str) -> bool:
+    """A name is taken if a saved definition or a paper fund already owns it;
+    the builder refuses both so one name means one fund everywhere."""
+    return (MANDATES_DIR / f"{name}.yaml").exists() or (PAPER_DIR / name).exists()
+
+
+def _newest_paper_universe() -> list[str] | None:
+    """The tickers of the most recently created paper fund — the builder's
+    ticker step prefills from it, so a returning user just presses enter."""
+    newest: DeployedFund | None = None
+    for directory in list_deployed(PAPER_DIR):
+        try:
+            deployed = load_deployed(directory)
+        except ValueError:
+            continue
+        if newest is None or deployed.created > newest.created:
+            newest = deployed
+    return newest.universe if newest else None
 
 
 def _delete_fund(path: Path, name: str, *, with_history: bool) -> int:
@@ -1248,14 +1261,11 @@ class _PaperSnapshot:
         self.deployed = load_deployed(directory)
         self.ledger = Ledger(directory)
         self.records: list[SessionRecord] = []
-        self.halted: str | None = None
-        self.pending: DecisionRecord | None = None
+        self.state: FundState | None = None
         self.error: str | None = None
         try:
             self.records = self.ledger.records()
-            state = self.ledger.replay(self.deployed.spec.capital)
-            self.halted = state.halted
-            self.pending = state.pending
+            self.state = self.ledger.replay(self.deployed.spec.capital)
         except LedgerError as exc:
             self.error = str(exc)
 
@@ -1264,12 +1274,24 @@ class _PaperSnapshot:
         return self.deployed.spec
 
     @property
+    def halted(self) -> str | None:
+        return self.state.halted if self.state is not None else None
+
+    @property
+    def pending(self) -> DecisionRecord | None:
+        return self.state.pending if self.state is not None else None
+
+    @property
     def nav(self) -> float:
         return self.records[-1].nav if self.records else self.spec.capital
 
     @property
     def last_session(self) -> str | None:
         return self.records[-1].session if self.records else None
+
+    @property
+    def runnable(self) -> bool:
+        return self.error is None and self.halted is None
 
     def curves(self) -> tuple[list[str], list[float], list[float]]:
         """Dates, NAV, and the benchmark scaled to the fund's capital."""
@@ -1285,7 +1307,7 @@ class _PaperSnapshot:
         return performance_metrics(self.spec.capital, dates, nav, bench, cycles)
 
     def status(self) -> Text:
-        """One line: halted, pending, or ready — the same facts as `aihf paper status`."""
+        """One line: the same facts as `aihf paper status`."""
         line = Text()
         if self.error:
             line.append("✗ LEDGER ERROR  ", style=f"bold {RED}")
@@ -1294,7 +1316,6 @@ class _PaperSnapshot:
         if self.halted:
             line.append("■ HALTED  ", style=f"bold {RED}")
             line.append(self.halted, style=RED)
-            line.append("   r to resume", style=MUTED)
             return line
         if self.last_session is None:
             line.append("● NEW  ", style=f"bold {CYAN}")
@@ -1302,16 +1323,12 @@ class _PaperSnapshot:
         else:
             line.append("● LIVE  ", style=f"bold {GREEN}")
             line.append(f"last session {self.last_session}", style=TEXT)
-        if self.pending is not None:
-            line.append(f"   ·   decision from {self.pending.as_of} pending — executes on the next tick",
-                        style=CYAN)
-        line.append("   ·   a to advance one session", style=MUTED)
         return line
 
 
 def _paper_slot(index: int, snap: _PaperSnapshot) -> Text:
-    """One deployed fund in the paper rail: name, state glyph, NAV and
-    return on top; the mandate and universe beneath."""
+    """One fund in the paper rail: name, state glyph, return on top; the
+    definition and universe beneath."""
     card = Text()
     card.append(f" {index + 1:02d}  ", style=f"bold {CYAN}")
     card.append(snap.deployed.name, style="bold")
@@ -1325,38 +1342,91 @@ def _paper_slot(index: int, snap: _PaperSnapshot) -> Text:
                     style=f"bold {GREEN if ret >= 0 else RED}")
     else:
         card.append("   ● new", style=f"bold {CYAN}")
-    card.append(f"\n     {snap.spec.name}  ·  {snap.spec.rebalance}"
+    card.append(f"\n     {snap.spec.rebalance}"
                 f"  ·  {len(snap.records)} {'session' if len(snap.records) == 1 else 'sessions'}",
                 style=MUTED)
     card.append(f"\n     {_short_tickers(snap.deployed.universe, 4)}", style=MUTED)
     return card
 
 
-def _paper_detail(snap: _PaperSnapshot) -> Group:
-    """The right pane of the paper picker: identity, status, headline numbers."""
+_PERIOD_WORD = {"daily": "day", "weekly": "week", "monthly": "month"}
+
+
+def _weights_line(decision: DecisionRecord, limit: int = 6) -> Text:
+    """A decision's non-zero targets on one line, largest first."""
+    targets = sorted(((t, w) for t, w in decision.final_weights.items() if w),
+                     key=lambda x: -abs(x[1]))
+    if not targets:
+        return Text("flat — no conviction cleared the bar", style=MUTED)
+    line = Text()
+    for i, (ticker, weight) in enumerate(targets[:limit]):
+        if i:
+            line.append("  ·  ", style=MUTED)
+        line.append(ticker, style=f"bold {CYAN}")
+        line.append(f" {weight:+.0%}", style=GREEN if weight > 0 else RED)
+    if len(targets) > limit:
+        line.append(f"  ·  +{len(targets) - limit} more", style=MUTED)
+    return line
+
+
+def _next_run_block(snap: _PaperSnapshot) -> list:
+    """What the next run will do, from the ledger alone — no network on a
+    highlight. The exact session date is resolved when the user asks to run."""
+    parts: list = [Text("NEXT RUN", style=f"bold {BRIGHT}")]
+    if snap.halted:
+        parts.append(Text("halted — r to resume before it can run", style=RED))
+        return parts
+    if snap.pending is not None:
+        parts.append(Text.assemble(
+            ("executes the ", TEXT), (snap.pending.as_of, f"bold {BRIGHT}"), (" decision", TEXT)))
+        parts.append(_weights_line(snap.pending))
+        parts.append(Text("views refreshed before sizing", style=MUTED))
+    elif snap.last_session is None:
+        parts.append(Text("marks the book at the latest completed close", style=TEXT))
+    else:
+        parts.append(Text("no decision pending — marks the book", style=TEXT))
+    cadence = snap.spec.rebalance
+    if snap.last_session is None or cadence == "daily":
+        parts.append(Text("then makes a new decision", style=TEXT))
+    else:
+        parts.append(Text(f"then makes a new decision if it opens a new {_PERIOD_WORD[cadence]}",
+                          style=TEXT))
+    return parts
+
+
+def _paper_detail(snap: _PaperSnapshot, width: int = 60) -> Group:
+    """The right pane: who the fund is, where it stands, what the next run
+    does, the curve so far, and its last few sessions."""
     spec = snap.spec
     staff = ", ".join(s.title for s in spec.strategies)
     parts: list = [
         Text(snap.deployed.name, style=f"bold {BRIGHT}"),
-        Text(f"mandate {spec.name}  ·  {staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}",
-             style=MUTED),
-        Text(f"{' '.join(snap.deployed.universe)}  ·  deployed {snap.deployed.created}", style=MUTED),
-        Text(str(snap.directory), style=MUTED),
+        Text(f"{staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}", style=MUTED),
+        Text(f"{' '.join(snap.deployed.universe)}  ·  since {snap.deployed.created}", style=MUTED),
         Text(""),
         snap.status(),
+        Text(""),
     ]
+    if snap.error:
+        return Group(*parts)
+    parts.extend(_next_run_block(snap))
     if snap.records:
         m = snap.metrics()
+        _, nav, bench = snap.curves()
         parts.append(Text(""))
-        parts.append(Text("SO FAR", style=f"bold {BRIGHT}"))
-        parts.append(Text(f"{snap.records[0].session} → {snap.last_session}"
-                          f"  ·  {m.n_cycles} cycles  ·  {m.n_orders} orders", style=MUTED))
-        parts.append(_stat_list({
-            "total": m.total_return_pct, "annualized": m.annualized_return_pct,
-            "sharpe": m.sharpe_ratio, "maxdd": m.max_drawdown_pct,
-            "benchmark": spec.benchmark, "benchret": m.benchmark_return_pct,
-            "excess": m.excess_return_pct,
-        }))
+        parts.append(Text.assemble(
+            ("SO FAR  ", f"bold {BRIGHT}"),
+            (f"${snap.nav:,.0f}  ·  ", TEXT),
+            (f"{m.total_return_pct:+.1%}", f"bold {GREEN if m.total_return_pct >= 0 else RED}"),
+            (f" vs {spec.benchmark} {m.benchmark_return_pct:+.1%}  ·  "
+             f"{m.n_cycles} cycles  ·  {m.n_orders} orders", MUTED)))
+        parts.extend(_render_area_chart(nav, bench, spec.capital, width))
+        parts.append(Text(""))
+        parts.append(Text("RECENT SESSIONS", style=f"bold {BRIGHT}"))
+        navs = [spec.capital, *(r.nav for r in snap.records)]
+        for i in range(len(snap.records) - 1, max(-1, len(snap.records) - 4), -1):
+            parts.append(_session_row(snap.records[i], navs[i]))
+        parts.append(Text("s for every session", style=MUTED))
     return Group(*parts)
 
 
@@ -1415,37 +1485,188 @@ def _session_overview(record: SessionRecord) -> Group:
     return Group(*parts)
 
 
-class PaperSelectScreen(Screen):
-    """'Paper trade a fund', master-detail: deployed funds on the left, the
-    highlighted fund's status and running numbers on the right. Enter opens
-    the fund; the last slot deploys a new one. Refreshes on resume.
+# ---- running a session ----------------------------------------------------
+
+def _next_weekday(after: str) -> str:
+    """The first Monday–Friday strictly after *after* (YYYY-MM-DD). Holidays
+    are not consulted; this is a hint, not a schedule."""
+    day = _date.fromisoformat(after) + timedelta(days=1)
+    while day.weekday() >= 5:
+        day += timedelta(days=1)
+    return day.isoformat()
+
+
+def _run_plan(name: str, state: FundState, due: str | None, spec: FundSpec) -> Text:
+    """What pressing enter will do, in plain words, from the ledger state and
+    the session that is due. Pure: the confirm modal renders it, tests read it.
+
+    Three shapes when a session is due — execute then decide, execute then
+    mark, or mark only — and one when nothing is due yet.
+    """
+    body = Text()
+    if due is None:
+        if state.last_session is None:
+            body.append(f"No completed {spec.benchmark} session to run yet.", style=TEXT)
+        else:
+            body.append("Up to date through ", style=TEXT)
+            body.append(state.last_session, style=f"bold {BRIGHT}")
+            body.append(".  Next session closes ", style=TEXT)
+            body.append(_next_weekday(state.last_session), style=f"bold {BRIGHT}")
+            body.append(" at 4pm ET.", style=TEXT)
+        return body
+    if state.pending is not None:
+        body.append("Execute the ", style=TEXT)
+        body.append(state.pending.as_of, style=f"bold {BRIGHT}")
+        body.append(" decision at the ", style=TEXT)
+        body.append(due, style=f"bold {BRIGHT}")
+        body.append(" close\n  ", style=TEXT)
+        body.append_text(_weights_line(state.pending))
+        body.append("\n  views refreshed before sizing\n", style=MUTED)
+        then = "Then "
+    else:
+        body.append("Mark the book at the ", style=TEXT)
+        body.append(due, style=f"bold {BRIGHT}")
+        body.append(" close.  No trades.\n", style=TEXT)
+        then = ""
+    if is_rebalance_session(due, state.last_session, spec.rebalance):
+        why = ("the fund's first decision" if state.last_session is None
+               else "every session" if spec.rebalance == "daily"
+               else f"first session of the {_PERIOD_WORD[spec.rebalance]}")
+        body.append(f"{then}make a new decision", style=TEXT)
+        body.append(f"  ({why})", style=MUTED)
+    elif then:
+        body.append("Then mark the book.", style=TEXT)
+    return body
+
+
+def _resolve_next_session(directory: Path) -> tuple[DeployedFund, FundState, str | None]:
+    """Load the fund, replay its ledger, and ask the market which session is
+    due. The one place the confirm modal touches the network."""
+    deployed = load_deployed(directory)
+    state = Ledger(directory).replay(deployed.spec.capital)
+    with FDClient() as raw:
+        due = next_session(CachedDataClient(raw), deployed.spec.benchmark, state.last_session)
+    return deployed, state, due
+
+
+class RunConfirmScreen(ModalScreen[bool]):
+    """The approval step. Enter on a fund is "run", so before anything trades
+    the user sees exactly what this run will do — the decision about to be
+    executed, its targets, whether a new decision follows — and says yes.
+    Nothing has touched the ledger or the broker until they do.
     """
 
-    BINDINGS = [Binding("escape", "back", "back")]
+    BINDINGS = [
+        Binding("escape", "cancel", "cancel"),
+        Binding("enter", "confirm", "run", priority=True),
+    ]
 
-    def __init__(self) -> None:
+    def __init__(self, directory: Path) -> None:
+        super().__init__()
+        self._directory = directory
+        self._due: str | None = None
+        self._ready = False
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="run-confirm"):
+            yield Static("", id="run-q")
+            yield Static(Text("finding the next session…", style=MUTED), id="run-body")
+            yield Static("", id="run-keys")
+
+    def on_mount(self) -> None:
+        self.query_one("#run-q", Static).update(
+            Text.assemble(("Run ", f"bold {BRIGHT}"), (self._directory.name, f"bold {GREEN}"),
+                          ("?", f"bold {BRIGHT}")))
+        self.query_one("#run-keys", Static).update(Text("esc  cancel", style=MUTED))
+        self._resolve()
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
+        if action == "confirm":
+            return self._ready and self._due is not None
+        return True
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+    def action_confirm(self) -> None:
+        self.dismiss(True)
+
+    @work(thread=True, exclusive=True)
+    def _resolve(self) -> None:
+        app = self.app
+        try:
+            deployed, state, due = _resolve_next_session(self._directory)
+        except Exception as exc:
+            app.call_from_thread(self._show_error, exc)
+            return
+        app.call_from_thread(self._show, deployed, state, due)
+
+    def _show(self, deployed: DeployedFund, state: FundState, due: str | None) -> None:
+        self._due = due
+        self._ready = True
+        self.query_one("#run-q", Static).update(Text.assemble(
+            ("Run ", f"bold {BRIGHT}"), (deployed.name, f"bold {GREEN}"),
+            (f" through {due}?" if due else "?", f"bold {BRIGHT}")))
+        self.query_one("#run-body", Static).update(_run_plan(deployed.name, state, due, deployed.spec))
+        keys = Text()
+        if due is not None:
+            keys.append("enter", style=f"bold {GREEN}")
+            keys.append("  run   ", style=MUTED)
+        keys.append("esc", style=f"bold {BRIGHT}")
+        keys.append("  cancel", style=MUTED)
+        self.query_one("#run-keys", Static).update(keys)
+        self.refresh_bindings()
+
+    def _show_error(self, exc: Exception) -> None:
+        self._ready = True
+        self.query_one("#run-body", Static).update(
+            Text.assemble(("✗ ", f"bold {RED}"), (f"{type(exc).__name__}: {exc}", RED)))
+        self.refresh_bindings()
+
+
+class PaperScreen(Screen):
+    """Paper trading. The fund list is the home of the fund: every deployed
+    fund on the left, the highlighted one's state and its next run on the
+    right. Enter runs it (through the approval step); `s` opens its history;
+    `h`/`r` work the kill switch; the last row builds a new fund.
+    """
+
+    BINDINGS = [
+        Binding("escape", "back", "back"),
+        Binding("enter", "run", "run next session", priority=True),
+        Binding("s", "sessions", "sessions"),
+        Binding("h", "halt", "halt"),
+        Binding("r", "resume", "resume"),
+    ]
+
+    def __init__(self, select: str | None = None, run: bool = False) -> None:
         super().__init__()
         self._snaps: list[_PaperSnapshot | None] = []
+        self._select = select   # highlight this fund on first paint
+        self._run_on_mount = run  # ...and open its approval step right away
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="select"):
             with Vertical(id="select-rail"):
-                yield Static(Text("PAPER FUNDS", style=MUTED), classes="rail-title")
+                yield Static(Text("PAPER TRADING", style=MUTED), classes="rail-title")
                 yield OptionList(id="paper-menu")
             with VerticalScroll(id="select-detail"):
                 yield Static("", id="detail-body")
         yield Footer()
 
     def on_mount(self) -> None:
-        self._populate()
+        self._populate(self._select)
+        if self._run_on_mount:
+            self._run_on_mount = False
+            self.call_after_refresh(self.action_run)
 
     def on_screen_resume(self) -> None:
-        self._populate()
+        current = self._current()
+        self._populate(current.deployed.name if current else None)
 
-    def action_back(self) -> None:
-        self.app.pop_screen()
+    # ---- the list ---------------------------------------------------------
 
-    def _populate(self) -> None:
+    def _populate(self, select: str | None) -> None:
         menu = self.query_one("#paper-menu", OptionList)
         menu.clear_options()
         self._snaps = []
@@ -1462,173 +1683,120 @@ class PaperSelectScreen(Screen):
         if self._snaps:
             menu.add_option(None)
         menu.add_option(Option(Text.assemble(
-            ("  +  ", f"bold {GREEN}"), ("Deploy a new fund", "bold"),
-            ("\n     point a mandate at a universe", MUTED)), id="deploy"))
+            ("  +  ", f"bold {GREEN}"), ("Build a new fund", "bold"),
+            ("\n     strategies, capital, cadence, tickers — then it's live", MUTED)), id="build"))
         # Options added after mount leave `highlighted` unset — pin it to the
-        # first readable fund (or the deploy slot) so Enter works right away,
-        # and paint its detail now rather than waiting on the highlight event.
-        first = next((f"paper:{i}" for i, s in enumerate(self._snaps) if s is not None), "deploy")
+        # asked-for fund, else the first readable one, else the build row.
+        wanted = next((f"paper:{i}" for i, s in enumerate(self._snaps)
+                       if s is not None and s.deployed.name == select), None)
+        first = wanted or next((f"paper:{i}" for i, s in enumerate(self._snaps) if s is not None), "build")
         menu.highlighted = menu.get_option_index(first)
         menu.focus()
         self._show_detail(first)
+        self.refresh_bindings()
+
+    def _current(self) -> _PaperSnapshot | None:
+        menu = self.query_one("#paper-menu", OptionList)
+        if menu.highlighted is None:
+            return None
+        oid = menu.get_option_at_index(menu.highlighted).id or ""
+        if not oid.startswith("paper:"):
+            return None
+        return self._snaps[int(oid.split(":")[1])]
 
     @on(OptionList.OptionHighlighted, "#paper-menu")
     def _highlight(self, event: OptionList.OptionHighlighted) -> None:
         oid = (event.option.id or "") if event.option else ""
         if oid:
             self._show_detail(oid)
+        self.refresh_bindings()
 
     def _show_detail(self, oid: str) -> None:
         detail = self.query_one("#detail-body", Static)
         if oid.startswith("paper:"):
             snap = self._snaps[int(oid.split(":")[1])]
             if snap is not None:
-                detail.update(_paper_detail(snap))
-        elif oid == "deploy":
+                width = detail.content_size.width or 60
+                detail.update(_paper_detail(snap, min(width, 100)))
+        elif oid == "build":
             blurb = Text()
             if not self._snaps:
-                blurb.append("No paper funds yet — deploy a mandate to start one.\n\n", style=TEXT)
+                blurb.append("No funds yet.\n\n", style=f"bold {BRIGHT}")
             blurb.append(
-                "A paper fund is a mandate fixed to a universe, with a ledger, a broker "
-                "book and a kill switch of its own, under\n" + str(PAPER_DIR) + "\n\n"
-                "Advance it here a session at a time, or from a scheduler with "
+                "Build a fund here and it starts paper trading at once: pick its "
+                "strategies, capital, cadence and tickers, and it gets a ledger, a "
+                "book and a kill switch of its own under\n" + str(PAPER_DIR) + "\n\n"
+                "Then run it a session at a time with enter, or from a scheduler with "
                 "`aihf paper tick <name>`.", style=MUTED)
             detail.update(blurb)
 
-    @on(OptionList.OptionSelected, "#paper-menu")
-    def _choose(self, event: OptionList.OptionSelected) -> None:
-        oid = event.option.id or ""
-        if oid.startswith("paper:"):
-            snap = self._snaps[int(oid.split(":")[1])]
-            if snap is not None:
-                self.app.push_screen(PaperFundScreen(snap.directory))
-        elif oid == "deploy":
-            self.app.push_screen(DeployScreen())
+    # ---- actions ----------------------------------------------------------
 
-
-class DeployScreen(Screen):
-    """Pick a mandate → name the fund → fix its universe → deploy.
-
-    The mandate is snapshotted into the fund's directory: the paper fund's
-    rules do not drift when the mandate file is edited later.
-    """
-
-    BINDINGS = [Binding("escape", "back", "back")]
-
-    def __init__(self, spec: FundSpec | None = None) -> None:
-        super().__init__()
-        self._spec = spec  # preselected by the builder's "Paper trade it"
-        self._preselected = spec is not None
-        self._specs: list[FundSpec | None] = []
-
-    def compose(self) -> ComposeResult:
-        with ContentSwitcher(initial="dp-pick", id="dp-panes"):
-            with Vertical(id="dp-pick", classes="pane"):
-                yield Label("Which mandate?", classes="q")
-                yield OptionList(id="dp-mandates")
-                yield Static("", id="dp-no-mandates", classes="hint")
-            with Vertical(id="dp-form", classes="pane"):
-                yield Static("", id="dp-hero")
-                yield Label("Name the paper fund", classes="q")
-                yield Input(id="dp-name")
-                yield Static(Text("tickers it will trade", style=MUTED))
-                yield Input(placeholder=f"e.g. {', '.join(UNIVERSE_PRESETS[:5])}", id="dp-tickers")
-                yield Static(Text("enter to deploy · esc to go back", style=MUTED), classes="hint")
-        yield Footer()
-
-    def on_mount(self) -> None:
-        if self._spec is not None:
-            self._begin_form()
-            return
-        entries = _saved_funds()
-        self._specs = [entry.spec for entry in entries]
-        menu = self.query_one("#dp-mandates", OptionList)
-        if not self._specs:
-            self.query_one("#dp-no-mandates", Static).update(
-                Text("No mandates yet — build one first. Esc to go back.", style=MUTED))
-            return
-        for entry in entries:
-            if entry.spec is None:
-                menu.add_option(Option(
-                    Text(f"{entry.path.name} — Unavailable\n{entry.error}"), disabled=True))
-            else:
-                menu.add_option(Option(Text(_fund_label(entry.spec))))
-        menu.highlighted = _first_selectable(menu)
-        menu.focus()
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
+        if action in ("back", "run"):
+            return True  # run also handles the build row
+        snap = self._current()
+        if snap is None or snap.error:
+            return False
+        if action == "halt":
+            return snap.halted is None
+        if action == "resume":
+            return snap.halted is not None
+        return True
 
     def action_back(self) -> None:
-        pane = self.query_one("#dp-panes", ContentSwitcher).current
-        if pane == "dp-form" and not self._preselected:
-            self.query_one("#dp-panes", ContentSwitcher).current = "dp-pick"
-            self.query_one("#dp-mandates", OptionList).focus()
-        else:
-            self.app.pop_screen()
+        self.app.pop_screen()
 
-    @on(OptionList.OptionSelected, "#dp-mandates")
-    def _pick(self, event: OptionList.OptionSelected) -> None:
-        self._spec = self._specs[event.option_index]
-        if self._spec is None:
+    def action_run(self) -> None:
+        menu = self.query_one("#paper-menu", OptionList)
+        if menu.highlighted is None:
             return
-        self._begin_form()
-
-    def _begin_form(self) -> None:
-        assert self._spec is not None
-        spec = self._spec
-        staff = ", ".join(s.title for s in spec.strategies)
-        self.query_one("#dp-hero", Static).update(Group(
-            Text(spec.name, style=f"bold {BRIGHT}"),
-            Text(f"{staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}", style=MUTED),
-            Text(""),
-        ))
-        name = self.query_one("#dp-name", Input)
-        if not name.value:
-            name.value = _free_paper_name(spec.name)
-        tickers = self.query_one("#dp-tickers", Input)
-        if not tickers.value:
-            last = _last_universe(spec.name)
-            if last:
-                tickers.value = ", ".join(last)
-        self.query_one("#dp-panes", ContentSwitcher).current = "dp-form"
-        name.focus()
-
-    @on(Input.Submitted, "#dp-name")
-    def _submit_name(self, event: Input.Submitted) -> None:
-        self.query_one("#dp-tickers", Input).focus()
-
-    @on(Input.Submitted, "#dp-tickers")
-    def _submit(self, event: Input.Submitted) -> None:
-        assert self._spec is not None
-        name = self.query_one("#dp-name", Input).value.strip()
-        try:
-            validate_fund_name(name)
-        except ValueError as exc:
-            self.notify(str(exc), severity="error")
-            self.query_one("#dp-name", Input).focus()
+        if (menu.get_option_at_index(menu.highlighted).id or "") == "build":
+            self.app.push_screen(BuilderScreen(mode="paper"))
             return
-        try:
-            universe = normalize_universe(event.value.replace(",", " ").split())
-        except ValueError:
-            self.notify("Enter at least one ticker.", severity="error")
+        snap = self._current()
+        if snap is None or snap.error:
             return
-        try:
-            directory = deploy(name, self._spec, universe, root=PAPER_DIR)
-        except FileExistsError:
-            self.notify(f"A paper fund named {name} already exists.", severity="error")
-            self.query_one("#dp-name", Input).focus()
+        if snap.halted:
+            self.notify(f"{snap.deployed.name} is halted — r to resume first.", severity="warning")
             return
-        self.notify(f"Deployed {name} to {directory}")
-        self.app.switch_screen(PaperFundScreen(directory))
+        directory = snap.directory
 
+        def resume() -> None:
+            if _demand_run_keys(self.app, resume):
+                self.app.push_screen(RunConfirmScreen(directory),
+                                     lambda ok: self._after_confirm(directory, ok))
+        resume()
 
-def _free_paper_name(base: str) -> str:
-    """The mandate's name, or the first `name-2`, `name-3`… not yet deployed."""
-    taken = {p.name for p in list_deployed(PAPER_DIR)}
-    if base not in taken:
-        return base
-    n = 2
-    while f"{base}-{n}" in taken:
-        n += 1
-    return f"{base}-{n}"
+    def _after_confirm(self, directory: Path, ok: bool | None) -> None:
+        if ok:
+            self.app.push_screen(RunSessionScreen(directory))
+
+    def action_sessions(self) -> None:
+        snap = self._current()
+        if snap is not None:
+            self.app.push_screen(SessionsScreen(snap.directory))
+
+    def action_halt(self) -> None:
+        snap = self._current()
+        if snap is None:
+            return
+        self.app.push_screen(HaltPromptScreen(), lambda reason: self._finish_halt(snap, reason))
+
+    def _finish_halt(self, snap: _PaperSnapshot, reason: str | None) -> None:
+        if reason is None:
+            return
+        snap.ledger.halt(reason)
+        self.notify(f"{snap.deployed.name} halted: {reason}", severity="warning")
+        self._populate(snap.deployed.name)
+
+    def action_resume(self) -> None:
+        snap = self._current()
+        if snap is None:
+            return
+        snap.ledger.resume()
+        self.notify(f"{snap.deployed.name} resumed")
+        self._populate(snap.deployed.name)
 
 
 class HaltPromptScreen(ModalScreen[str | None]):
@@ -1641,7 +1809,7 @@ class HaltPromptScreen(ModalScreen[str | None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="halt"):
             yield Static(Text("Halt the fund?", style=f"bold {BRIGHT}"), id="halt-q")
-            yield Static(Text("Ticks refuse to trade until it is resumed. Say why:", style=MUTED),
+            yield Static(Text("Runs refuse to trade until it is resumed. Say why:", style=MUTED),
                          id="halt-blurb")
             yield Input(placeholder="e.g. data vendor outage", id="halt-reason")
             yield Static(Text("enter to halt · esc to cancel", style=MUTED), classes="hint")
@@ -1661,19 +1829,13 @@ class HaltPromptScreen(ModalScreen[str | None]):
         self.dismiss(reason)
 
 
-class PaperFundScreen(Screen):
-    """One deployed fund: status, running numbers, the equity curve, and every
-    session it has recorded. `a` advances it by one session, `h`/`r` work the
-    kill switch, enter on a session opens its full report. Re-reads the
-    ledger whenever it comes back to the top of the stack.
+class SessionsScreen(Screen):
+    """One fund's history: the running numbers, the equity curve, and every
+    session it has recorded. Enter on a session opens its full report.
+    Running and the kill switch live on the fund list, not here.
     """
 
-    BINDINGS = [
-        Binding("escape", "back", "back"),
-        Binding("a", "advance", "advance one session"),
-        Binding("h", "halt", "halt"),
-        Binding("r", "resume", "resume"),
-    ]
+    BINDINGS = [Binding("escape", "back", "back")]
 
     def __init__(self, directory: Path) -> None:
         super().__init__()
@@ -1708,45 +1870,8 @@ class PaperFundScreen(Screen):
     def on_screen_resume(self) -> None:
         self._load()
 
-    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
-        snap = self._snap
-        if snap is None or snap.error:
-            return action == "back"
-        if action == "halt":
-            return snap.halted is None
-        if action == "resume":
-            return snap.halted is not None
-        if action == "advance":
-            return snap.halted is None
-        return True
-
     def action_back(self) -> None:
         self.app.pop_screen()
-
-    def action_advance(self) -> None:
-        def resume() -> None:
-            if _demand_run_keys(self.app, resume):
-                self.app.push_screen(TickScreen(self._directory))
-        resume()
-
-    def action_halt(self) -> None:
-        self.app.push_screen(HaltPromptScreen(), self._finish_halt)
-
-    def _finish_halt(self, reason: str | None) -> None:
-        if reason is None or self._snap is None:
-            return
-        self._snap.ledger.halt(reason)
-        self.notify(f"{self._snap.deployed.name} halted: {reason}", severity="warning")
-        self._load()
-
-    def action_resume(self) -> None:
-        if self._snap is None:
-            return
-        self._snap.ledger.resume()
-        self.notify(f"{self._snap.deployed.name} resumed")
-        self._load()
-
-    # ---- rendering --------------------------------------------------------
 
     def _load(self) -> None:
         try:
@@ -1755,21 +1880,18 @@ class PaperFundScreen(Screen):
             self._snap = None
             self.query_one("#pf-head", Static).update(Text(str(self._directory), style=f"bold {BRIGHT}"))
             self.query_one("#pf-status", Static).update(Text.assemble(("✗ ", f"bold {RED}"), (str(exc), RED)))
-            self.refresh_bindings()
             return
         self._snap = snap
         spec = snap.spec
         staff = ", ".join(s.title for s in spec.strategies)
         self.query_one("#pf-head", Static).update(Group(
-            Text.assemble((snap.deployed.name, f"bold {BRIGHT}"),
-                          (f"  ·  paper  ·  mandate {spec.name}", MUTED)),
+            Text.assemble((snap.deployed.name, f"bold {BRIGHT}"), ("  ·  paper", MUTED)),
             Text(f"{staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}"
                  f"  ·  {' '.join(snap.deployed.universe)}", style=MUTED),
         ))
         self.query_one("#pf-status", Static).update(snap.status())
         self._render_numbers(snap)
         self._render_sessions(snap)
-        self.refresh_bindings()
 
     def _render_numbers(self, snap: _PaperSnapshot) -> None:
         curve_box = self.query_one("#curve-box", Vertical)
@@ -1778,7 +1900,7 @@ class PaperFundScreen(Screen):
         if not snap.records:
             self.query_one("#stats", Horizontal).add_class("hidden")
             self.query_one("#curve", Static).update(
-                Text("The curve starts with the first session. Press a to advance.", style=MUTED))
+                Text("The curve starts with the first session.", style=MUTED))
             return
         self.query_one("#stats", Horizontal).remove_class("hidden")
         m = snap.metrics()
@@ -1796,8 +1918,8 @@ class PaperFundScreen(Screen):
         self._shown = list(reversed(snap.records))
         if not self._shown:
             self.query_one("#detail-pane", Static).update(Text(
-                "No sessions recorded yet.\n\nThe first tick values the book at the most "
-                "recent completed close and makes the first decision; the tick after "
+                "No sessions recorded yet.\n\nThe first run values the book at the most "
+                "recent completed close and makes the first decision; the run after "
                 "executes it.", style=MUTED))
             return
         navs = [snap.spec.capital, *(r.nav for r in snap.records)]
@@ -1899,12 +2021,14 @@ class SessionReportScreen(Screen):
             self.query_one("#report-detail", VerticalScroll).scroll_home(animate=False)
 
 
-class TickScreen(Screen):
-    """Advance a paper fund by one session, with the analysts' live board
-    while they think, then the session's report.
+class RunSessionScreen(Screen):
+    """Run a paper fund through its next session, with the analysts' live
+    board while they think, then the session's report. Reached only through
+    the approval step, which has already checked the fund is runnable and
+    that a session is due.
 
     The board is a best-effort warm: each analyst streams its thesis for the
-    dates the tick will assess, filling the caches `tick` reads a moment
+    dates the run will assess, filling the caches `tick` reads a moment
     later. `tick` is the source of truth; it writes the ledger.
     """
 
@@ -1935,11 +2059,11 @@ class TickScreen(Screen):
 
     def on_mount(self) -> None:
         self.query_one("#run-phase", Static).update(
-            Text("Reading the ledger and finding the next session…", style=MUTED))
+            Text(f"Starting {self._directory.name}…", style=MUTED))
         self._run()
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
-        # No leaving mid-tick: the worker is writing the ledger.
+        # No leaving mid-run: the worker is writing the ledger.
         return not (action == "back" and self._phase == "running")
 
     def action_back(self) -> None:
@@ -1962,14 +2086,11 @@ class TickScreen(Screen):
             deployed = load_deployed(directory)
             spec = deployed.spec
             state = Ledger(directory).replay(spec.capital)
-            if state.halted is not None:
-                raise FundHalted(f"{deployed.name} is halted: {state.halted}")
             with FDClient() as raw:
                 data = CachedDataClient(raw)
                 due = next_session(data, spec.benchmark, state.last_session)
-                if due is None:
-                    after = f"after {state.last_session}" if state.last_session else "yet"
-                    raise NothingDue(f"no completed {spec.benchmark} session {after}")
+                if due is None:  # the close slipped out from under the approval step
+                    raise NothingDue(f"no completed {spec.benchmark} session after {state.last_session}")
                 # The dates the analysts will be asked about: the refresh before
                 # executing a pending decision, and the new decision itself.
                 dates: list[str] = []
@@ -2023,7 +2144,7 @@ class TickScreen(Screen):
         if not doing:
             doing.append("marking the book")
         self.query_one("#run-phase", Static).update(Text.assemble(
-            (f"Advancing {deployed.name} to ", f"bold {BRIGHT}"),
+            (f"Running {deployed.name} through ", f"bold {BRIGHT}"),
             (due, f"bold {RED}"),
             ("  ·  " + " · ".join(doing), MUTED),
         ))
@@ -2070,26 +2191,26 @@ class TickScreen(Screen):
         if isinstance(exc, NothingDue):
             phase.update(Text.assemble(
                 ("Nothing due  ", f"bold {BRIGHT}"), (f"{exc}", MUTED),
-                ("\n\nThe fund is up to date. Tick again after the next close. esc to go back.", MUTED)))
+                ("\n\nThe fund is up to date. Run it again after the next close. esc to go back.", MUTED)))
         else:
             phase.update(Text.assemble(
                 ("✗ ", f"bold {RED}"), (f"{type(exc).__name__}: {exc}", RED),
                 ("\n\nesc to go back", MUTED)))
-            self.notify(str(exc), title="Tick failed", severity="error")
+            self.notify(str(exc), title="Run failed", severity="error")
         self.refresh_bindings()
 
 
 class BuilderScreen(Screen):
     """The fund wizard: a step rail on the left, the active step on the right.
+    Esc rewinds one step. The output is a FundSpec YAML — the same definition
+    the engine reads — and, in paper mode, a deployed fund ready to run.
 
-    Four steps, Esc rewinds one, and the output is a FundSpec YAML — the same
-    mandate the engine reads. No tickers here: a fund is its desk, and what it
-    trades is chosen per run. The rail shows where you are and what you've
-    already chosen at every step.
+    Backtest mode asks four things (name, strategies, capital, cadence) and
+    offers to backtest the result; what it trades is chosen per run. Paper
+    mode adds the tickers as a fifth step, because a paper fund trades the
+    same universe every session, and ends with "Run its first session".
     """
 
-    STEP_IDS = ["step-name", "step-strategies", "step-capital", "step-cadence"]
-    STEP_TITLES = ["Name", "Strategies", "Capital", "Cadence"]
     CADENCES = ["daily", "weekly", "monthly"]
 
     BINDINGS = [
@@ -2098,8 +2219,14 @@ class BuilderScreen(Screen):
         Binding("a", "toggle_all", "toggle all"),
     ]
 
-    def __init__(self) -> None:
+    def __init__(self, mode: Literal["paper", "backtest"] = "backtest") -> None:
         super().__init__()
+        self.mode = mode
+        self.STEP_IDS = ["step-name", "step-strategies", "step-capital", "step-cadence"]
+        self.STEP_TITLES = ["Name", "Strategies", "Capital", "Cadence"]
+        if mode == "paper":
+            self.STEP_IDS.append("step-tickers")
+            self.STEP_TITLES.append("Tickers")
         # Library sorted like the CLI: discretionary pods first, then by name.
         self._library = sorted(
             (load_strategy(p) for p in STRATEGY_DIR.glob("*.yaml")),
@@ -2112,12 +2239,12 @@ class BuilderScreen(Screen):
     def compose(self) -> ComposeResult:
         with Horizontal(id="builder"):
             with Vertical(id="rail"):
-                yield Static(Text("BUILD A MANDATE", style=MUTED), classes="rail-title")
+                yield Static(Text("BUILD A FUND", style=MUTED), classes="rail-title")
                 for i in range(len(self.STEP_IDS)):
                     yield Static("", id=f"rail-{i}", classes="rail-step")
             with ContentSwitcher(initial="step-name", id="panes"):
                 with Vertical(id="step-name", classes="pane"):
-                    yield Label("Name your mandate", classes="q")
+                    yield Label("Name your fund", classes="q")
                     yield Input(value="ai-hedge-fund", id="name-input")
                 with Vertical(id="step-strategies", classes="pane"):
                     yield Label("Select your strategies", classes="q")
@@ -2175,15 +2302,32 @@ class BuilderScreen(Screen):
                             ("slow-turn — the fewest LLM calls", MUTED))),
                         id="cadence-list",
                     )
+                with Vertical(id="step-tickers", classes="pane"):
+                    yield Label("What does it trade?", classes="q")
+                    yield Input(
+                        placeholder=f"e.g. {', '.join(UNIVERSE_PRESETS[:5])}",
+                        id="tickers-input",
+                    )
+                    yield Static(
+                        Text("the same tickers every session · enter to build", style=MUTED),
+                        classes="hint",
+                    )
                 with VerticalScroll(id="step-done", classes="pane"):
                     yield Static("", id="done-summary")
-                    yield OptionList(
-                        Option("▶  Backtest it over history", id="go-backtest"),
-                        Option("▶  Paper trade it", id="go-paper"),
-                        None,
-                        Option("Back to home", id="go-home"),
-                        id="done-menu",
-                    )
+                    if self.mode == "paper":
+                        yield OptionList(
+                            Option("▶  Run its first session", id="go-run"),
+                            None,
+                            Option("Back", id="go-back"),
+                            id="done-menu",
+                        )
+                    else:
+                        yield OptionList(
+                            Option("▶  Backtest it", id="go-backtest"),
+                            None,
+                            Option("Back", id="go-back"),
+                            id="done-menu",
+                        )
         yield Footer()
 
     def on_mount(self) -> None:
@@ -2205,6 +2349,7 @@ class BuilderScreen(Screen):
             "step-agents": "#agent-list",
             "step-capital": "#capital-input",
             "step-cadence": "#cadence-list",
+            "step-tickers": "#tickers-input",
             "step-done": "#done-menu",
         }[pane_id]
         self.query_one(focus).focus()
@@ -2213,6 +2358,12 @@ class BuilderScreen(Screen):
             self.query_one("#cadence-list", OptionList).highlighted = (
                 self.CADENCES.index(picked)
             )
+        if pane_id == "step-tickers":
+            tickers = self.query_one("#tickers-input", Input)
+            if not tickers.value:
+                last = _newest_paper_universe()
+                if last:
+                    tickers.value = ", ".join(last)
         if pane_id == "step-capital":
             self.query_one("#strategy-summary", Static).update(Group(*(
                 Text(f"{s.title}: {strategy_description(s)}", style=MUTED)
@@ -2239,22 +2390,25 @@ class BuilderScreen(Screen):
         elif pane == "step-capital" and self._state.get("custom_selected"):
             self._goto("step-agents")
         elif pane == "step-done":
-            self._goto("step-cadence")
+            self._goto(self.STEP_IDS[-1])
         else:
             self._goto(self.STEP_IDS[self._step - 1])
 
-    # ---- the four steps ---------------------------------------------------
+    # ---- the steps --------------------------------------------------------
 
     @on(Input.Submitted, "#name-input")
     def _submit_name(self, event: Input.Submitted) -> None:
         name = (
             event.value.strip().replace(" ", "-").lower() or "ai-hedge-fund"
         )
-        if "/" in name or "\\" in name or name in (".", ".."):
-            self.notify("Use a fund name without path separators.", severity="error")
+        try:
+            validate_fund_name(name)
+        except ValueError as exc:
+            self.notify(str(exc), severity="error")
             return
-        if (MANDATES_DIR / f"{name}.yaml").exists():
-            self.notify("That mandate name already exists. Choose a different name.", severity="error")
+        if _fund_name_taken(name):
+            self.notify("A fund with that name already exists. Choose a different name.",
+                        severity="error")
             return
         self._state["name"] = name
         self._goto("step-strategies")
@@ -2305,6 +2459,18 @@ class BuilderScreen(Screen):
     @on(OptionList.OptionSelected, "#cadence-list")
     def _submit_cadence(self, event: OptionList.OptionSelected) -> None:
         self._state["rebalance"] = self.CADENCES[event.option_index]
+        if self.mode == "paper":
+            self._goto("step-tickers")
+        else:
+            self._finish_build()
+
+    @on(Input.Submitted, "#tickers-input")
+    def _submit_tickers(self, event: Input.Submitted) -> None:
+        try:
+            self._state["universe"] = normalize_universe(event.value.replace(",", " ").split())
+        except ValueError:
+            self.notify("Enter at least one ticker.", severity="error")
+            return
         self._finish_build()
 
     # ---- finish -----------------------------------------------------------
@@ -2319,41 +2485,68 @@ class BuilderScreen(Screen):
             capital=self._state["capital"],
             rebalance=self._state["rebalance"],
         )
+        # Both modes refuse to overwrite: the name was checked on the way in,
+        # but something may have taken it since. Paper mode needs both the
+        # saved definition and the fund directory to be free.
+        if self.mode == "paper" and (PAPER_DIR / spec.name).exists():
+            self.notify("A paper fund with that name already exists. Choose a different name.",
+                        severity="error")
+            self._goto("step-name")
+            return
         MANDATES_DIR.mkdir(parents=True, exist_ok=True)
         path = MANDATES_DIR / f"{spec.name}.yaml"
         try:
             with path.open("x") as output:
                 output.write(yaml.safe_dump(spec.model_dump(), sort_keys=False))
         except FileExistsError:
-            self.notify("That mandate name already exists. Choose a different name.", severity="error")
+            self.notify("A fund with that name already exists. Choose a different name.",
+                        severity="error")
             self._goto("step-name")
             return
         self._built = (spec, path)
 
         staff = ", ".join(s.title for s in self._state["strategies"])
-        self.query_one("#done-summary", Static).update(Group(
-            Text.assemble(("✓ ", f"bold {GREEN}"), ("Saved fund to ", TEXT),
-                          (str(path), f"bold {BRIGHT}")),
-            Text(""),
-            Text.assemble(
-                (spec.name, f"bold {BRIGHT}"),
-                (f"  ·  {staff}  ·  ${spec.capital:,.0f}  ·  {spec.rebalance}",
-                 MUTED),
-            ),
-            Text(""),
-            Text("Pick the tickers when you backtest or deploy it — a mandate carries no watchlist.",
-                 style=MUTED),
-            *(Text(f"{s.title}: {strategy_description(s)}", style=MUTED) for s in spec.strategies),
-        ))
+        identity = Text.assemble(
+            (spec.name, f"bold {BRIGHT}"),
+            (f"  ·  {staff}  ·  ${spec.capital:,.0f}  ·  {spec.rebalance}", MUTED),
+        )
+        if self.mode == "paper":
+            universe = self._state["universe"]
+            directory = deploy(spec.name, spec, universe, root=PAPER_DIR)
+            self.query_one("#done-summary", Static).update(Group(
+                Text.assemble((spec.name, f"bold {GREEN}"), (" is live.", f"bold {BRIGHT}")),
+                Text(""),
+                identity,
+                Text(" ".join(universe), style=MUTED),
+                Text(""),
+                Text.assemble(("✓ ", f"bold {GREEN}"), ("Ledger and book at ", MUTED),
+                              (str(directory), MUTED)),
+                Text.assemble(("✓ ", f"bold {GREEN}"), ("Definition saved to ", MUTED),
+                              (str(path), MUTED)),
+                Text(""),
+                Text("Its first session marks the book at the latest completed close and "
+                     "makes the first decision; the session after executes it.", style=MUTED),
+            ))
+        else:
+            self.query_one("#done-summary", Static).update(Group(
+                Text.assemble(("✓ ", f"bold {GREEN}"), ("Saved fund to ", TEXT),
+                              (str(path), f"bold {BRIGHT}")),
+                Text(""),
+                identity,
+                Text(""),
+                Text("Pick the tickers and the window when you backtest it.", style=MUTED),
+                *(Text(f"{s.title}: {strategy_description(s)}", style=MUTED) for s in spec.strategies),
+            ))
         self._goto("step-done")
 
     @on(OptionList.OptionSelected, "#done-menu")
     def _after_build(self, event: OptionList.OptionSelected) -> None:
         assert self._built is not None
+        spec = self._built[0]
         if event.option.id == "go-backtest":
-            self.app.switch_screen(BacktestScreen(self._built[0]))
-        elif event.option.id == "go-paper":
-            self.app.switch_screen(DeployScreen(self._built[0]))
+            self.app.switch_screen(BacktestScreen(spec))
+        elif event.option.id == "go-run":
+            self.app.switch_screen(PaperScreen(select=spec.name, run=True))
         else:
             self.app.pop_screen()
 
@@ -2366,6 +2559,8 @@ class BuilderScreen(Screen):
             2: (f"${self._state['capital']:,.0f}"
                 if "capital" in self._state else None),
             3: self._state.get("rebalance"),
+            4: (_short_tickers(self._state["universe"], 3)
+                if "universe" in self._state else None),
         }
         active = self._step if self._pane() != "step-done" else -1
         for i, title in enumerate(self.STEP_TITLES):

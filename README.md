@@ -52,11 +52,10 @@ Keys exported in your shell always win over the saved file.
 aihf
 ```
 
-With no arguments, this launches the interactive terminal app. It has two modes and a builder:
+With no arguments, this launches the interactive terminal app. It has two modes:
 
-- **Backtest** a mandate over history and watch its equity curve draw against its benchmark. Results are saved to `~/.hedge-fund/research/`.
-- **Paper trade** a mandate: deploy it against a universe and advance it one completed session at a time. Every session is appended to a hash-chained ledger in `~/.hedge-fund/paper/<name>/`, so NAV is a track record, not a reset.
-- **Build a mandate** — pick strategies, capital, rebalance cadence. Mandates are saved to `~/.hedge-fund/mandates/` and carry no tickers; you pick the universe when you backtest or deploy.
+- **Paper trading** — your funds, each with a ledger of real market days and fake money. Highlight a fund to see what its next run will do; press enter to run it through the next completed session (an approval step shows the exact decision about to execute before anything trades), `s` for its full session history, `h`/`r` for the kill switch. Build a new fund from the same list: strategies, capital, cadence, tickers, and it is live. Every session is appended to a hash-chained ledger in `~/.hedge-fund/paper/<name>/`, so NAV is a track record, not a reset.
+- **Backtesting** — replay a fund over history and watch its equity curve draw against its benchmark. Results are saved to `~/.hedge-fund/research/`. Fund definitions live in `~/.hedge-fund/mandates/` and carry no tickers; you pick the universe per backtest.
 
 ### Non-interactive
 
