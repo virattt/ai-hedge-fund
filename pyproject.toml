@@ -33,6 +33,7 @@ pydantic = "^2.4.2"
 scipy = "^1.11.0"
 pyyaml = "^6.0.3"
 textual = "^8.2.8"
+yfinance = "^1.7.0"
 
 [tool.poetry.scripts]
 aihf = "hedge_fund.run:main"

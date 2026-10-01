@@ -16,6 +16,7 @@ must produce an identical prompt (a cache hit), not two paid LLM calls.
 from __future__ import annotations
 
 import hashlib
+from datetime import date
 
 from pydantic import BaseModel
 
@@ -173,7 +174,7 @@ def build_snapshot(
         roe_avg=_avg([m.return_on_equity for m in metrics]),
         net_margin_avg=_avg([m.net_margin for m in metrics]),
         gross_margin_trend=_trend([m.gross_margin for m in metrics]),
-        bvps_cagr=_cagr([m.book_value_per_share for m in metrics]),
+        bvps_cagr=_cagr([(m.report_period, m.book_value_per_share) for m in metrics]),
         debt_to_equity_latest=metrics[0].debt_to_equity,
         market_cap_latest=metrics[0].market_cap,
     )
@@ -204,12 +205,16 @@ def _trend(values: list[float | None]) -> float | None:
     return round(xs[0] - xs[-1], 4) if len(xs) >= 2 else None
 
 
-def _cagr(values: list[float | None]) -> float | None:
-    """Annualized growth from oldest to latest (ttm rows are quarter-spaced)."""
-    xs = [v for v in values if v is not None]
-    if len(xs) < 2 or xs[-1] is None or xs[-1] <= 0 or xs[0] <= 0:
+def _cagr(points: list[tuple[str, float | None]]) -> float | None:
+    """Annualized growth from oldest to latest (points arrive newest first).
+
+    Years come from the report periods, not the row count: rows are not
+    always quarter-spaced (yfinance mixes quarterly-TTM and fiscal-year rows).
+    """
+    xs = [(p, v) for p, v in points if v is not None]
+    if len(xs) < 2 or xs[-1][1] <= 0 or xs[0][1] <= 0:
         return None
-    years = (len(xs) - 1) / 4  # quarter-spaced ttm periods
+    years = (date.fromisoformat(xs[0][0][:10]) - date.fromisoformat(xs[-1][0][:10])).days / 365.25
     if years <= 0:
         return None
-    return round((xs[0] / xs[-1]) ** (1 / years) - 1, 4)
+    return round((xs[0][1] / xs[-1][1]) ** (1 / years) - 1, 4)

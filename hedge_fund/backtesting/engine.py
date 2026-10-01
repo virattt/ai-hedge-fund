@@ -12,11 +12,11 @@ this harness with real position sizing and risk-aware weighting.
 
 Usage:
     from datetime import date
-    from hedge_fund.data import FDClient
+    from hedge_fund.data import open_data_client
     from hedge_fund.backtesting import BacktestEngine
     from hedge_fund.signals import PEADModel
 
-    with FDClient() as fd:
+    with open_data_client() as fd:
         engine = BacktestEngine(capital=100_000, per_trade=10_000)
         result = engine.run_alpha(
             PEADModel(), ["AAPL", "MSFT"], fd,

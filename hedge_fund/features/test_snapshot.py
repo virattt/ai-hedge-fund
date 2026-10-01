@@ -65,7 +65,7 @@ def test_aggregates():
     metrics = _history(4)
     # oldest gross margin 0.30, newest 0.40 -> trend +0.10
     metrics[-1] = _metric("2024-03-31", gross_margin=0.30)
-    # BVPS oldest 8.0 -> newest 10.0 over 3 quarters (0.75y)
+    # BVPS oldest 8.0 -> newest 10.0 over 2024-03-31..2024-12-31 (275 days)
     metrics[-1].book_value_per_share = 8.0
     client = MockDataClient(metrics=metrics)
 
@@ -75,7 +75,18 @@ def test_aggregates():
     assert snap.gross_margin_trend == pytest.approx(0.10)
     assert snap.debt_to_equity_latest == pytest.approx(0.5)
     assert snap.market_cap_latest == pytest.approx(1e9)
-    assert snap.bvps_cagr == pytest.approx((10.0 / 8.0) ** (1 / 0.75) - 1, abs=1e-4)
+    assert snap.bvps_cagr == pytest.approx((10.0 / 8.0) ** (365.25 / 275) - 1, abs=1e-4)
+
+
+def test_bvps_cagr_uses_dates_not_row_count():
+    # yfinance-style history: two quarterly-TTM rows, then fiscal-year rows.
+    # Counting rows as quarters would call this 1.25y instead of 3.75y.
+    periods = ["2024-12-31", "2024-09-30", "2023-09-30", "2022-09-30", "2021-03-31"]
+    metrics = [_metric(p) for p in periods]
+    metrics[-1].book_value_per_share = 5.0
+    snap = build_snapshot("TEST", "2025-01-15", MockDataClient(metrics=metrics))
+    years = 1371 / 365.25  # 2021-03-31 -> 2024-12-31
+    assert snap.bvps_cagr == pytest.approx((10.0 / 5.0) ** (1 / years) - 1, abs=1e-4)
 
 
 def test_market_cap_comes_from_pit_metrics_not_facts():

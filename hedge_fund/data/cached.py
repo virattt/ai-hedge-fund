@@ -47,7 +47,9 @@ class CachedDataClient:
         refresh: bool = False,
     ) -> None:
         self._client = client
-        self._dir = Path(cache_dir)
+        # Providers disagree on the same request (e.g. FD vs yfinance metrics),
+        # so a provider may claim its own subdirectory instead of sharing keys.
+        self._dir = Path(cache_dir) / getattr(client, "cache_namespace", "")
         self._refresh = refresh
 
     # ------------------------------------------------------------------

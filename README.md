@@ -39,7 +39,7 @@ aihf
 
 The app asks for keys the first time it needs them and saves them to `~/.hedge-fund/.env` — nothing to configure up front. It needs:
 
-- A [Financial Datasets](https://financialdatasets.ai) API key, for prices, fundamentals, and earnings.
+- Nothing for market data by default: prices, fundamentals, and earnings come from Yahoo Finance via yfinance. Set `HEDGE_FUND_DATA_SOURCE=financialdatasets` plus a [Financial Datasets](https://financialdatasets.ai) API key for deeper point-in-time history (needed for fundamentals backtests more than about a year back).
 - One model API key for the investor agents. Supported providers: Anthropic, OpenAI, DeepSeek, Google, xAI, Kimi, TypeSafe (Jev).
 
 Keys exported in your shell always win over the saved file.
