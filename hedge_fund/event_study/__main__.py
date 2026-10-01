@@ -8,7 +8,7 @@ from __future__ import annotations
 import sys
 import time
 
-from hedge_fund.data import FDClient
+from hedge_fund.data import open_data_client
 from hedge_fund.event_study import compute_car
 
 
@@ -83,7 +83,7 @@ def main() -> None:
 
     # Fetch with progress
     progress(f"Fetching data... [0/{n}]")
-    with FDClient() as fd:
+    with open_data_client() as fd:
         from datetime import date
         spy_prices = fd.get_prices("SPY", "2023-01-01", date.today().isoformat())
         spy_closes = {p.time[:10]: p.close for p in spy_prices}

@@ -39,7 +39,8 @@ construction: it's the fund, replayed, not a separate simulator.
 poetry install                          # dependencies
 
 # .env needs (at repo root):
-#   FINANCIAL_DATASETS_API_KEY=...      # market/fundamentals data
+#   (market data: yfinance by default, no key; or HEDGE_FUND_DATA_SOURCE=financialdatasets
+#    + FINANCIAL_DATASETS_API_KEY=...)
 #   ANTHROPIC_API_KEY=...               # only for LLM agents (Buffett)
 
 # THE command. No arguments: launch the interactive app (a Textual TUI).

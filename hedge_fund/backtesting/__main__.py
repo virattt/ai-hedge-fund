@@ -10,7 +10,7 @@ import sys
 import time
 from datetime import date
 
-from hedge_fund.data import FDClient
+from hedge_fund.data import open_data_client
 from hedge_fund.backtesting import BacktestEngine
 from hedge_fund.signals import PEADModel
 
@@ -134,7 +134,7 @@ def main() -> None:
     sys.stdout.flush()
 
     trades = []
-    with FDClient() as fd:
+    with open_data_client() as fd:
         for i, ticker in enumerate(TICKERS):
             sys.stdout.write(f"\r  Backtesting PEAD alpha... [{i + 1}/{n}] {ticker:<6}")
             sys.stdout.flush()

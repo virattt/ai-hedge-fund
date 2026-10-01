@@ -16,10 +16,10 @@ This is the main orchestration module. The pipeline:
     4. Return EventStudyResult with per-event detail + aggregate stats.
 
 Usage:
-    from hedge_fund.data import FDClient
+    from hedge_fund.data import open_data_client
     from hedge_fund.event_study import compute_car
 
-    with FDClient() as fd:
+    with open_data_client() as fd:
         result = compute_car(["AAPL", "MSFT"], fd, earnings_limit=12)
 """
 
@@ -84,7 +84,7 @@ def compute_car(
 
     Args:
         tickers:              List of stock ticker symbols.
-        data_client:            Data provider (any DataClient; FDClient in production).
+        data_client:            Data provider (any DataClient; open_data_client() in production).
         earnings_limit:       Max earnings periods to fetch per ticker.
         market_ticker:        Market benchmark ticker (default "SPY").
         n_bootstrap:          Number of bootstrap resamples for CIs.

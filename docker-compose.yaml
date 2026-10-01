@@ -1,0 +1,10 @@
+services:
+  hedge-fund:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: guestros/ai-hedge-fund:latest
+    env_file: .env
+    # Image default: one cycle of deploy/mandate.yaml. Override CMD here to change tickers.
+    tty: true
+    stdin_open: true

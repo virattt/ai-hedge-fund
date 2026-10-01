@@ -27,7 +27,7 @@ def test_cli_rejects_invalid_configuration_before_clients(tmp_path, monkeypatch,
     monkeypatch.setattr(run, "apply_credentials", lambda: None)
     monkeypatch.setattr(run, "ensure_mandates_dir", lambda: tmp_path)
     monkeypatch.setattr(run, "Fund", forbidden)
-    monkeypatch.setattr(run, "FDClient", forbidden)
+    monkeypatch.setattr(run, "open_data_client", forbidden)
     monkeypatch.setattr(run, "SimBroker", forbidden)
     monkeypatch.setattr(sys, "argv", ["aihf", str(path), "--tickers", "AAPL"] + (["--backtest"] if backtest else []))
     with pytest.raises(SystemExit) as exc:
@@ -66,7 +66,7 @@ def test_cli_executes_all_modes_with_offline_clients(tmp_path, monkeypatch, caps
     monkeypatch.setattr(run, "apply_credentials", lambda: None)
     monkeypatch.setattr(run, "ensure_mandates_dir", lambda: tmp_path)
     monkeypatch.setattr(run, "Fund", build_fund)
-    monkeypatch.setattr(run, "FDClient", OfflineClient)
+    monkeypatch.setattr(run, "open_data_client", OfflineClient)
     monkeypatch.setattr(run, "CachedDataClient", lambda client: client)
     monkeypatch.setattr(sys, "argv", ["aihf", str(path), "--tickers", "AAPL,MSFT", "--date", as_of] +
                         (["--backtest", "--start", "2025-01-03"] if backtest else []))
