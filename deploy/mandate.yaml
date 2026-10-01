@@ -1,0 +1,26 @@
+# Mandate the container runs by default (the v1 `--analysts-all` equivalent):
+# every LLM investor agent in one long-only pod, plus the post-earnings-drift
+# quant pod. Tickers stay a run-time input (--tickers).
+schema_version: 2
+name: all-analysts
+strategies:
+  - name: all-agents
+    blend: {mode: long_only}
+    weight: 0.7
+    models:
+      - name: buffett
+      - name: munger
+      - name: graham
+      - name: lynch
+      - name: druckenmiller
+  - name: earnings-drift
+    blend: {mode: long_short}
+    weight: 0.3
+    models:
+      - name: pead
+risk:
+  max_position_pct: 0.25
+  max_gross_exposure: 1.0
+capital: 100000
+rebalance: weekly
+benchmark: SPY

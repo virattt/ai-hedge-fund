@@ -1,15 +1,10 @@
 services:
-  backtester:
+  hedge-fund:
     build:
       context: .
       dockerfile: Dockerfile
     image: guestros/ai-hedge-fund:latest
-    volumes:
-      - ./.env:/app/.env
-    command: poetry run python -m hedge_fund.backtesting --help  # v1 src/backtester.py was removed upstream; set real args
-    environment:
-      PYTHONUNBUFFERED: "1"
-      PYTHONPATH: /app
+    env_file: .env
+    # Image default: one cycle of deploy/mandate.yaml. Override CMD here to change tickers.
     tty: true
     stdin_open: true
-

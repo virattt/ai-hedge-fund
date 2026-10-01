@@ -2,21 +2,19 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Set PYTHONPATH to include the app directory
-ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1 \
+    POETRY_VIRTUALENVS_CREATE=false
 
-# Install Poetry
-RUN pip install poetry==1.7.1
+RUN pip install --no-cache-dir poetry==1.8.5
 
-# Copy only dependency files first for better caching
-COPY pyproject.toml poetry.lock* /app/
+# Dependencies first for layer caching; the root package is installed after the copy.
+COPY pyproject.toml poetry.lock README.md /app/
+RUN poetry install --no-interaction --no-ansi --only main --no-root
 
-# Configure Poetry to not use a virtual environment
-RUN poetry config virtualenvs.create false \
-    && poetry install --no-interaction --no-ansi
-
-# Copy rest of the source code
 COPY . /app/
+RUN poetry install --no-interaction --no-ansi --only main
 
-# Default command (will be overridden by Docker Compose)
-CMD ["aihf"]
+# One cycle of the all-analysts mandate; JSON record on stdout, summary on stderr.
+# Override CMD to change tickers/mandate, or pass --backtest.
+ENTRYPOINT ["aihf"]
+CMD ["/app/deploy/mandate.yaml", "--tickers", "AAPL,MSFT,NVDA,GOOGL,TSLA", "--model", "auto"]

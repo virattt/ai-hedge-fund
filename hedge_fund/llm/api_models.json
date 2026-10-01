@@ -10,6 +10,11 @@
     "provider": "Anthropic"
   },
   {
+    "display_name": "DF AI Router (auto)",
+    "model_name": "auto",
+    "provider": "OpenAI"
+  },
+  {
     "display_name": "GPT-6 Sol",
     "model_name": "gpt-6-sol",
     "provider": "OpenAI"
