@@ -2,11 +2,12 @@
 # a chat LLM, and the strategy generator all emit this same format.
 #
 # Note there are no tickers here. A mandate is the DESK — its strategies,
-# staff, risk, capital, and cadence — and can be pointed at any names; what
-# to trade is a run-time input (--tickers).
+# staff, risk, capital, and cadence — and can be pointed at any names; the
+# universe is fixed when you backtest or deploy it (--universe).
 #
-#   aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
-#   aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
+#   aihf backtest ~/.hedge-fund/mandates/example.yaml --universe AAPL,MSFT
+#   aihf paper create alpha --mandate ~/.hedge-fund/mandates/example.yaml --universe AAPL,MSFT
+#   aihf paper tick alpha
 #
 schema_version: 2
 name: example-fund

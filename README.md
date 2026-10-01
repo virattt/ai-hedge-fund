@@ -52,26 +52,34 @@ Keys exported in your shell always win over the saved file.
 aihf
 ```
 
-With no arguments, this launches the interactive terminal app. Build a fund — pick stocks, strategies, rebalance cadence — or backtest a saved fund and watch its equity curve draw against its benchmark. Funds you build are saved as mandate files in `~/.hedge-fund/mandates/`.
+With no arguments, this launches the interactive terminal app. It has two modes and a builder:
+
+- **Backtest** a mandate over history and watch its equity curve draw against its benchmark. Results are saved to `~/.hedge-fund/research/`.
+- **Paper trade** a mandate: deploy it against a universe and advance it one completed session at a time. Every session is appended to a hash-chained ledger in `~/.hedge-fund/paper/<name>/`, so NAV is a track record, not a reset.
+- **Build a mandate** — pick strategies, capital, rebalance cadence. Mandates are saved to `~/.hedge-fund/mandates/` and carry no tickers; you pick the universe when you backtest or deploy.
 
 ### Non-interactive
 
-Run one fund cycle from a mandate file. The full cycle record prints to stdout as JSON; a short human summary goes to stderr:
+Backtest a mandate over a window. The full result JSON (every session's record) prints to stdout; a short human summary goes to stderr:
 
 ```bash
-aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
+aihf backtest ~/.hedge-fund/mandates/example.yaml --universe AAPL,MSFT --start 2024-01-02 --end 2024-06-28
 ```
 
-Run the same mandate with Jev after configuring `TYPESAFE_API_KEY`:
+Deploy a paper fund, then advance it. Each `tick` records exactly the next unrecorded session and is safe to call from cron; calling it twice does nothing the second time:
 
 ```bash
-aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --model jev-1.13.0
+aihf paper create alpha --mandate ~/.hedge-fund/mandates/example.yaml --universe AAPL,MSFT
+aihf paper tick alpha          # after each close
+aihf paper status alpha        # NAV, last session, pending decision, halt state
+aihf paper halt alpha --reason "vendor outage"
+aihf paper resume alpha
 ```
 
-Backtest the mandate over history at its rebalance cadence:
+Run either with Jev after configuring `TYPESAFE_API_KEY`:
 
 ```bash
-aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
+aihf --model jev-1.13.0 backtest ~/.hedge-fund/mandates/example.yaml --universe AAPL,MSFT
 ```
 
 ## Development

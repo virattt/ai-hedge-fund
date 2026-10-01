@@ -1,4 +1,12 @@
-"""Assess investment views and execute them at a subsequent completed close."""
+"""The pipeline's two stages: assess views, then execute them at a later close.
+
+`assess_fund` runs the analysts as of a completed session and turns their
+views into validated target weights (a DecisionRecord — no orders, no
+broker). `execute_decision` sizes that decision against the broker's book at
+a subsequent session's exact closing prices and returns the CycleRecord.
+`hedge_fund.pipeline.session.advance` sequences the two across sessions;
+nothing here knows about the clock.
+"""
 
 from __future__ import annotations
 
@@ -9,14 +17,13 @@ from math import isfinite
 from hedge_fund.brokers.models import Fill
 from hedge_fund.brokers.protocol import Broker
 from hedge_fund.data.protocol import DataClient
-from hedge_fund.data.sessions import completed_through, previous_day, session_closes
+from hedge_fund.data.sessions import completed_through, previous_day
 from hedge_fund.fund import Fund, normalize_universe
 from hedge_fund.models import Signal
 from hedge_fund.pipeline.execution import build_orders
 from hedge_fund.pipeline.models import (
     CycleRecord,
     DecisionRecord,
-    PendingRunResult,
     StrategyRecord,
     TickerSkip,
 )
@@ -157,23 +164,6 @@ def execute_decision(
         refreshed_assessment=effective.model_copy(deep=True),
         execution_as_of=session, execution_policy="next_close",
     )
-
-
-def run_cycle(
-    fund: Fund, as_of: str, broker: Broker, data_client: DataClient,
-    universe: list[str],
-) -> CycleRecord | PendingRunResult:
-    """Assess at the effective cutoff and execute only on a later completed session."""
-    as_of = min(_date.fromisoformat(as_of).isoformat(), completed_through())
-    proposal = assess_fund(fund, as_of, data_client, universe)
-    start = (_date.fromisoformat(as_of) + timedelta(days=1)).isoformat()
-    closes = session_closes(data_client, fund.spec.benchmark, start, completed_through())
-    if not closes:
-        return PendingRunResult(
-            fund=fund.spec.name, as_of=as_of, proposal=proposal,
-            reason="No subsequent completed benchmark session is available. Run again explicitly when data is available.",
-        )
-    return execute_decision(fund, proposal, min(closes), broker, data_client)
 
 
 # ---------------------------------------------------------------------------

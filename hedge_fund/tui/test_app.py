@@ -13,12 +13,15 @@ import yaml
 from rich.console import Console
 from textual.widgets import ContentSwitcher, Input, OptionList, SelectionList, Static
 
+from hedge_fund.brokers.models import Fill
 from hedge_fund.fund import custom_strategy, FundSpec, load_spec
 from hedge_fund.llm import PROVIDER_ENV_VARS
 from hedge_fund.llm.contract import normalize_jev_response
 from hedge_fund.llm.test_contract import _response
 from hedge_fund.models import Signal
-from hedge_fund.pipeline.models import CycleRecord
+from hedge_fund.paper import Ledger
+from hedge_fund.pipeline.models import CycleRecord, DecisionRecord
+from hedge_fund.pipeline.session import SessionRecord
 from hedge_fund.tui import app as ui
 from hedge_fund.tui import keys
 
@@ -30,7 +33,10 @@ def isolated_configuration(tmp_path, monkeypatch):
     saved.parent.mkdir()
     mandates = tmp_path / "mandates"
     mandates.mkdir()
-    monkeypatch.setattr(ui, "FUNDS_DIR", mandates)
+    monkeypatch.setattr(ui, "MANDATES_DIR", mandates)
+    monkeypatch.setattr(ui, "PAPER_DIR", tmp_path / "paper")
+    monkeypatch.setattr(ui, "RESEARCH_DIR", tmp_path / "research")
+    (tmp_path / "research").mkdir()
     monkeypatch.setattr(keys, "ENV_PATH", saved)
     monkeypatch.setattr(ui, "ENV_PATH", saved)
     monkeypatch.setattr(ui, "ensure_mandates_dir", lambda: mandates)
@@ -45,7 +51,9 @@ def isolated_configuration(tmp_path, monkeypatch):
 
 def _render(renderable):
     output = io.StringIO()
-    Console(file=output, width=140, color_system=None).print(renderable)
+    # soft_wrap: long header lines stay on one line, so assertions can match
+    # phrases without guessing where a wrap would land.
+    Console(file=output, width=140, color_system=None).print(renderable, soft_wrap=True)
     return output.getvalue()
 
 
@@ -75,6 +83,17 @@ def _record(signal):
         cash=100000,
         nav=100000,
     )
+
+
+def _session(session, *, executed=None, decision=None, nav=100000, positions=None, marks=None, prev_hash=None):
+    record = SessionRecord(
+        fund="test", session=session, universe=["TEST"], nav=nav, cash=nav - sum((positions or {}).get(t, 0) * (marks or {}).get(t, 0) for t in (positions or {})),
+        positions=positions or {}, marks=marks or {}, benchmark="SPY", benchmark_close=100.0,
+        rebalance=decision is not None, executed=executed, decision=decision,
+        prev_hash=prev_hash, code_version="test", mandate_hash="m",
+    )
+    record.hash = record.compute_hash()
+    return record
 
 
 @pytest.mark.parametrize("save", [True, False])
@@ -249,11 +268,13 @@ def test_builder_derives_rules_and_back_navigation_does_not_duplicate(names, mod
             await pilot.press("enter")
             await pilot.press("enter", "enter")
             assert screen.query_one("#panes", ContentSwitcher).current == "step-done"
-            saved = load_spec(ui.FUNDS_DIR / "new-fund.yaml")
+            saved = load_spec(ui.MANDATES_DIR / "new-fund.yaml")
             assert saved.schema_version == 2
             assert len(saved.strategies) == 1
             assert saved.strategies[0].blend.mode == mode
-            assert not screen.query_one("#done-menu", OptionList).get_option("go-run").disabled
+            menu = screen.query_one("#done-menu", OptionList)
+            assert not menu.get_option("go-backtest").disabled
+            assert not menu.get_option("go-paper").disabled
             await pilot.wait_for_scheduled_animations()
             await pilot.pause()
             assert screen.query_one("#done-menu", OptionList).region.intersection(screen.region).height > 0
@@ -264,7 +285,7 @@ def test_builder_derives_rules_and_back_navigation_does_not_duplicate(names, mod
 
 def test_builder_existing_name_and_save_race_never_overwrite():
     original = "name: old-user-fund\n"
-    path = ui.FUNDS_DIR / "existing.yaml"
+    path = ui.MANDATES_DIR / "existing.yaml"
     path.write_text(original)
 
     async def scenario():
@@ -284,7 +305,7 @@ def test_builder_existing_name_and_save_race_never_overwrite():
             await pilot.press("enter", "enter")
             assert screen.query_one("#panes", ContentSwitcher).current == "step-cadence"
             # Simulate another process saving the chosen name after validation.
-            competing_path = ui.FUNDS_DIR / "save-race.yaml"
+            competing_path = ui.MANDATES_DIR / "save-race.yaml"
             competing_path.write_text(original)
             await pilot.press("enter")
             assert screen.query_one("#panes", ContentSwitcher).current == "step-name"
@@ -297,7 +318,7 @@ def test_both_pickers_disable_only_invalid_configurations():
              "mixed.yaml": yaml.safe_dump(_spec().model_dump()),
              "valid.yaml": yaml.safe_dump(_spec(["pead"], "ready").model_dump())}
     for name, content in files.items():
-        (ui.FUNDS_DIR / name).write_text(content)
+        (ui.MANDATES_DIR / name).write_text(content)
 
     async def scenario():
         app = ui.HedgeFundApp()
@@ -309,55 +330,78 @@ def test_both_pickers_disable_only_invalid_configurations():
             assert any("old.yaml" in p and "older format" in p for p in prompts)
             assert sum(menu.get_option_at_index(i).disabled for i in range(4)) == 2
             await pilot.press("enter")
-            assert isinstance(app.screen, ui.RunScreen)
-            assert not app.screen.query_one("#run-tickers", Input).disabled
+            assert isinstance(app.screen, ui.BacktestScreen)
+            assert app.screen.query_one("#bt-panes", ContentSwitcher).current == "bt-dates"
+            assert not app.screen.query_one("#bt-tickers", Input).disabled
             await pilot.press("escape")
+            assert isinstance(app.screen, ui.FundSelectScreen)
             await app.push_screen(ui.BacktestScreen())
             menu = app.screen.query_one("#fund-list", OptionList)
             assert menu.option_count == 4
             assert sum(menu.get_option_at_index(i).disabled for i in range(4)) == 2
+            await app.push_screen(ui.DeployScreen())
+            menu = app.screen.query_one("#dp-mandates", OptionList)
+            assert menu.option_count == 4
+            assert sum(menu.get_option_at_index(i).disabled for i in range(4)) == 2
     asyncio.run(scenario())
-    assert {p.name: p.read_text() for p in ui.FUNDS_DIR.glob("*.yaml")} == files
+    assert {p.name: p.read_text() for p in ui.MANDATES_DIR.glob("*.yaml")} == files
 
 
 def test_all_invalid_funds_do_not_crash_home_picker():
-    (ui.FUNDS_DIR / "old.yaml").write_text("name: old\n")
+    (ui.MANDATES_DIR / "old.yaml").write_text("name: old\n")
     async def scenario():
         app = ui.HedgeFundApp()
         async with app.run_test() as pilot:
             await app.push_screen(ui.FundSelectScreen())
-            assert "Saved funds are unavailable" in _render(app.screen.query_one("#detail-body", Static).content)
+            assert "Saved mandates are unavailable" in _render(app.screen.query_one("#detail-body", Static).content)
+    asyncio.run(scenario())
+
+
+def test_home_offers_the_two_modes_and_the_builder():
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=(100, 35)) as pilot:
+            menu = app.screen.query_one("#home-menu", OptionList)
+            assert [menu.get_option_at_index(i).id for i in range(menu.option_count)] == ["backtest", "paper", "build"]
+            menu.highlighted = menu.get_option_index("paper")
+            await pilot.press("enter")
+            assert isinstance(app.screen, ui.PaperSelectScreen)
+            assert "No paper funds yet" in _render(app.screen.query_one("#detail-body", Static).content)
+            await pilot.press("enter")  # the only slot is "Deploy a new fund"
+            assert isinstance(app.screen, ui.DeployScreen)
+            assert "No mandates yet" in _render(app.screen.query_one("#dp-no-mandates", Static).content)
     asyncio.run(scenario())
 
 
 @pytest.mark.parametrize("mode", ["long_only", "long_short", "dollar_neutral"])
 @pytest.mark.parametrize("size", [(120, 45), (80, 24)])
-def test_all_modes_enable_run_and_backtest(mode, size):
+def test_all_modes_can_be_backtested_and_deployed(mode, size):
     spec = _spec()
     spec.strategies[0].blend.mode = mode
     async def scenario():
         app = ui.HedgeFundApp()
         async with app.run_test(size=size) as pilot:
-            await app.push_screen(ui.RunScreen(spec))
-            assert not app.screen.query_one("#run-tickers", Input).disabled
-            assert app.screen.check_action("backtest", ())
-            await pilot.press("ctrl+b")
-            assert isinstance(app.screen, ui.BacktestScreen)
+            await app.push_screen(ui.BacktestScreen(spec))
             assert app.screen.query_one("#bt-panes", ContentSwitcher).current == "bt-dates"
             assert not app.screen.query_one("#bt-tickers", Input).disabled
+            await pilot.press("escape")
+            await app.push_screen(ui.DeployScreen(spec))
+            assert app.screen.query_one("#dp-panes", ContentSwitcher).current == "dp-form"
+            assert app.screen.query_one("#dp-name", Input).value == "test"
+            assert not app.screen.query_one("#dp-tickers", Input).disabled
     asyncio.run(scenario())
 
 
 @pytest.mark.parametrize("newest_version", [None, 2])
 def test_latest_backtest_sets_headline_regardless_of_version(newest_version):
     spec = _spec(["pead"])
-    receipt = {"start": "2025-01-01", "end": "2025-02-01", "benchmark": "SPY",
+    receipt = {"fund": "test", "start": "2025-01-01", "end": "2025-02-01", "benchmark": "SPY",
                "metrics": {"total_return_pct": .5, "annualized_return_pct": .5,
                            "sharpe_ratio": 2, "max_drawdown_pct": .1,
                            "benchmark_return_pct": .1, "excess_return_pct": .4, "n_cycles": 5}}
     if newest_version is None:
         receipt["schema_version"] = 2
-    older = ui.FUNDS_DIR / "test-backtest-older.json"
+    older = ui.RESEARCH_DIR / "test-2025-01-01-2025-02-01-older.json"
     older.write_text(json.dumps(receipt))
     os.utime(older, (1000, 1000))
     original = older.read_bytes()
@@ -369,15 +413,26 @@ def test_latest_backtest_sets_headline_regardless_of_version(newest_version):
     if newest_version is not None:
         receipt["schema_version"] = newest_version
     receipt["metrics"].update(total_return_pct=.3, excess_return_pct=.2)
-    newer = ui.FUNDS_DIR / "test-backtest-newer.json"
+    newer = ui.RESEARCH_DIR / "test-2025-01-01-2025-02-01-newer.json"
     newer.write_text(json.dumps(receipt))
     os.utime(newer, (2000, 2000))
     newer_summary = ui._summarize(newer, 2000)
     assert ui._last_score("test") == (.3, .2, "SPY")
     detail = _render(ui._fund_detail(spec, [newer_summary, older_summary]))
-    headline = detail.split("RUNS & BACKTESTS")[0]
+    headline = detail.split("\nBACKTESTS")[0]
     assert "LATEST BACKTEST" in headline and "30.0%" in headline
     assert older.read_bytes() == original
+
+
+def test_research_history_is_matched_on_the_fund_field_not_the_filename_prefix():
+    """`alpha` must not pick up `alpha-2`'s backtests: names can be prefixes."""
+    receipt = {"fund": "alpha-2", "start": "2025-01-01", "end": "2025-02-01", "benchmark": "SPY",
+               "metrics": {"total_return_pct": .5, "annualized_return_pct": .5, "sharpe_ratio": 2,
+                           "max_drawdown_pct": .1, "benchmark_return_pct": .1, "excess_return_pct": .4, "n_cycles": 5}}
+    (ui.RESEARCH_DIR / "alpha-2-2025-01-01-2025-02-01-x.json").write_text(json.dumps(receipt))
+    assert ui._receipts("alpha") == []
+    assert len(ui._receipts("alpha-2")) == 1
+    assert ui._last_score("alpha") is None
 
 
 
@@ -404,10 +459,9 @@ def test_portfolio_report_explains_rounding_scaling_and_flat_strategies():
     assert "flat — no positions" in text
 
 
-@pytest.mark.parametrize("size", [(120, 45), (80, 24)])
-@pytest.mark.parametrize("pending", [False, True])
-def test_reports_distinguish_pending_and_executed_timing(size, pending, tmp_path):
-    from hedge_fund.pipeline.models import DecisionRecord, PendingRunResult
+def _executed_and_decided():
+    """A session that executed the 2025-01-15 decision (refreshed on the 19th,
+    filled at the 20th's close) and made the next decision at that close."""
     record = _record(_signal())
     decision = DecisionRecord.model_validate(record.model_dump())
     decision.final_weights = {"TEST": .25}
@@ -416,42 +470,141 @@ def test_reports_distinguish_pending_and_executed_timing(size, pending, tmp_path
     record.refreshed_assessment.as_of = "2025-01-19"
     record.execution_as_of = "2025-01-20"
     record.execution_policy = "next_close"
-    result = PendingRunResult(fund=record.fund, as_of=record.as_of, proposal=decision,
-                              reason="No subsequent completed benchmark session is available.") if pending else record
-    path = tmp_path / "receipt.json"
-    path.write_text(result.model_dump_json())
-    summary = ui._summarize(path, 0)
-    assert summary["kind"] == ("pending" if pending else "run")
-    assert "pending" in _render(ui._fund_detail(record.spec, [summary])) if pending else summary["as_of"] == record.execution_as_of
+    record.fills = [Fill(ticker="TEST", side="buy", quantity=10, price=100)]
+    decided = decision.model_copy(deep=True)
+    decided.as_of = "2025-01-20"
+    return record, decided
+
+
+@pytest.mark.parametrize("size", [(120, 45), (80, 24)])
+@pytest.mark.parametrize("what", ["executed", "decided", "both", "neither"])
+def test_session_report_separates_the_executed_cycle_from_the_new_decision(size, what):
+    record, decided = _executed_and_decided()
+    session = _session("2025-01-20",
+                       executed=record if what in ("executed", "both") else None,
+                       decision=decided if what in ("decided", "both") else None)
 
     async def scenario():
         app = ui.HedgeFundApp()
         async with app.run_test(size=size) as pilot:
-            await app.push_screen(ui.RunScreen(record.spec))
+            await app.push_screen(ui.SessionReportScreen("alpha", session))
             screen = app.screen
-            screen._show_report(result, path)
             await pilot.pause()
             head = _render(screen.query_one("#report-head", Static).content)
             footer = _render(screen.query_one("#report-foot", Static).content)
             menu = screen.query_one("#report-nav", OptionList)
             ids = [menu.get_option_at_index(i).id for i in range(menu.option_count)]
-            if pending:
-                assert "Pending" in head
-                assert "analysis cutoff 2025-01-15" in head
-                assert "sec:orders" not in ids
-                assert "NAV" not in footer
-            else:
-                assert "initial 2025-01-15" in head
-                assert "refreshed 2025-01-19" in head
-                assert "executed 2025-01-20" in head
-            menu.highlighted = menu.get_option_index("sec:portfolio")
+            assert "alpha" in head and "session 2025-01-20" in head
+            assert "NAV $100,000.00" in footer
+            if what in ("executed", "both"):
+                assert "executed the 2025-01-15 decision (refreshed 2025-01-19)" in head
+                assert "x:sec:orders" in ids and "x:sec:portfolio" in ids
+                menu.highlighted = menu.get_option_index("x:sec:portfolio")
+                await pilot.pause()
+                assert "Target net" in _render(screen.query_one("#detail-pane", Static).content)
+            if what in ("decided", "both"):
+                assert "executes next session" in head
+                assert "d:sec:portfolio" in ids and "d:sec:orders" not in ids
+                menu.highlighted = menu.get_option_index("d:sec:portfolio")
+                await pilot.pause()
+                detail = _render(screen.query_one("#detail-pane", Static).content)
+                assert "PROPOSED ALLOCATIONS" in detail and "TEST: +25.00%" in detail
+            if what == "neither":
+                assert "valuation only" in head
+                assert ids == [None, "book"]
+                menu.highlighted = menu.get_option_index("book")
+                await pilot.pause()
+                assert "flat — no positions" in _render(screen.query_one("#detail-pane", Static).content)
+    asyncio.run(scenario())
+
+
+def test_paper_fund_screen_reads_the_ledger_and_works_the_kill_switch(tmp_path):
+    spec = _spec(["pead"], "alpha")
+    directory = ui.deploy("alpha", spec, ["TEST"], root=ui.PAPER_DIR)
+    ledger = Ledger(directory)
+
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=(140, 50)) as pilot:
+            await app.push_screen(ui.PaperSelectScreen())
+            menu = app.screen.query_one("#paper-menu", OptionList)
+            assert not menu.get_option("paper:0").disabled
+            assert "alpha" in _render(menu.get_option("paper:0").prompt)
+            assert "● NEW" in _render(app.screen.query_one("#detail-body", Static).content)
+            await pilot.press("enter")
+            screen = app.screen
+            assert isinstance(screen, ui.PaperFundScreen)
+            assert "no sessions yet" in _render(screen.query_one("#pf-status", Static).content)
+            assert "No sessions recorded yet" in _render(screen.query_one("#detail-pane", Static).content)
+            assert screen.check_action("halt", ()) and not screen.check_action("resume", ())
+
+            await pilot.press("h")
+            assert isinstance(app.screen, ui.HaltPromptScreen)
+            app.screen.query_one("#halt-reason", Input).value = "vendor outage"
+            await pilot.press("enter")
             await pilot.pause()
-            detail = _render(screen.query_one("#detail-pane", Static).content)
-            if pending:
-                assert "PROPOSED ALLOCATIONS" in detail
-                assert "TEST: +25.00%" in detail
-            else:
-                assert "Target net" in detail and "Actual net" in detail
+            assert ledger.halted() == "vendor outage"
+            assert "HALTED" in _render(screen.query_one("#pf-status", Static).content)
+            assert not screen.check_action("advance", ()) and screen.check_action("resume", ())
+            await pilot.press("r")
+            await pilot.pause()
+            assert ledger.halted() is None
+            assert [e["kind"] for e in ledger.events()] == ["halt", "resume"]
+
+            # Two sessions land in the ledger behind the screen's back; coming
+            # back to the screen re-reads them.
+            record, decided = _executed_and_decided()
+            first = _session("2025-01-17", decision=decided, nav=100000)
+            second = _session("2025-01-20", executed=record, nav=101000, positions={"TEST": 10},
+                              marks={"TEST": 100}, prev_hash=first.hash)
+            ledger.append(first)
+            ledger.append(second)
+            await app.push_screen(ui.SessionReportScreen("alpha", first))
+            await pilot.press("escape")
+            await pilot.pause()
+            assert "last session 2025-01-20" in _render(screen.query_one("#pf-status", Static).content)
+            assert "+1.00%" in _render(screen.query_one("#stat-return", Static).content)
+            sessions = screen.query_one("#pf-sessions", OptionList)
+            rows = [_render(sessions.get_option_at_index(i).prompt) for i in range(sessions.option_count)]
+            assert rows[0].startswith(" 2025-01-20") and "1 fill" in rows[0]
+            assert rows[1].startswith(" 2025-01-17") and "decided" in rows[1]
+            overview = _render(screen.query_one("#detail-pane", Static).content)
+            assert "EXECUTED" in overview and "decision from 2025-01-15" in overview
+            await pilot.press("enter")
+            assert isinstance(app.screen, ui.SessionReportScreen)
+            assert "executed the 2025-01-15 decision" in _render(app.screen.query_one("#report-head", Static).content)
+    asyncio.run(scenario())
+
+
+def test_deploy_screen_creates_the_fund_and_refuses_duplicates():
+    spec = _spec(["pead"], "alpha")
+    (ui.MANDATES_DIR / "alpha.yaml").write_text(yaml.safe_dump(spec.model_dump()))
+
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=(120, 45)) as pilot:
+            await app.push_screen(ui.DeployScreen())
+            await pilot.press("enter")  # the one mandate
+            screen = app.screen
+            assert screen.query_one("#dp-panes", ContentSwitcher).current == "dp-form"
+            assert screen.query_one("#dp-name", Input).value == "alpha"
+            await pilot.press("enter")
+            screen.query_one("#dp-tickers", Input).value = "test, msft"
+            await pilot.press("enter")
+            await pilot.pause()
+            assert isinstance(app.screen, ui.PaperFundScreen)
+            deployed = ui.load_deployed(ui.PAPER_DIR / "alpha")
+            assert deployed.universe == ["TEST", "MSFT"] and deployed.spec == spec
+            await pilot.press("escape")
+            await app.push_screen(ui.DeployScreen(spec))
+            assert app.screen.query_one("#dp-name", Input).value == "alpha-2"
+            app.screen.query_one("#dp-name", Input).value = "alpha"
+            app.screen.query_one("#dp-tickers", Input).value = "TEST"
+            app.screen.query_one("#dp-tickers", Input).focus()
+            await pilot.press("enter")
+            await pilot.pause()
+            assert isinstance(app.screen, ui.DeployScreen)  # refused, still here
+            assert ui.list_deployed(ui.PAPER_DIR) == [ui.PAPER_DIR / "alpha"]
     asyncio.run(scenario())
 
 
@@ -465,10 +618,11 @@ def test_backtest_daily_board_matches_final_metrics_and_uses_fill_dates(size, tm
     dates = ["2025-01-15", "2025-01-16", "2025-01-17"]
     nav = [100000, 100000, 90000]
     benchmark_nav = [100000, 101000, 102000]
-    metrics = performance_metrics(100000, dates, nav, benchmark_nav, [record], 1)
+    metrics = performance_metrics(100000, dates, nav, benchmark_nav, [record])
+    sessions = [_session(dates[0]), _session(dates[1], executed=record), _session(dates[2], nav=90000)]
     result = FundBacktestResult(fund=record.fund, start=dates[0], end=dates[-1], rebalance="weekly",
                                 benchmark="SPY", universe=["TEST"], capital=100000, dates=dates,
-                                nav=nav, benchmark_nav=benchmark_nav, records=[record], metrics=metrics)
+                                nav=nav, benchmark_nav=benchmark_nav, records=sessions, metrics=metrics)
     async def scenario():
         app = ui.HedgeFundApp()
         async with app.run_test(size=size) as pilot:
@@ -488,5 +642,6 @@ def test_backtest_daily_board_matches_final_metrics_and_uses_fill_dates(size, tm
             screen._finish(result, tmp_path / "backtest.json")
             after = {name: _render(screen.query_one(f"#stat-{name}", Static).content) for name in before}
             assert before == after
-            assert "1 pending proposals" in _render(screen.query_one("#phase-line", Static).content)
+            phase = _render(screen.query_one("#phase-line", Static).content)
+            assert "1 executed cycles" in phase and "pending" not in phase
     asyncio.run(scenario())

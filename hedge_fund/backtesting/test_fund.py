@@ -8,7 +8,7 @@ from hedge_fund.fund.spec import Fund, FundSpec
 from hedge_fund.models import Signal
 
 # ---------------------------------------------------------------------------
-# Fakes (date-aware variants of the run_cycle test fakes)
+# Fakes (date-aware variants of the session test fakes)
 # ---------------------------------------------------------------------------
 
 class FakeDataClient:
@@ -64,15 +64,18 @@ def _spec(**overrides):
     return FundSpec(**{**base, **overrides})
 
 
-# Three trading weeks (Mon–Fri). Weekly grid = each Friday.
+# Three trading weeks (Mon–Fri). Weekly grid = each Monday (first session of
+# the ISO week), executed at Tuesday's close.
 WEEKDAYS = [
     "2024-06-03", "2024-06-04", "2024-06-05", "2024-06-06", "2024-06-07",
     "2024-06-10", "2024-06-11", "2024-06-12", "2024-06-13", "2024-06-14",
     "2024-06-17", "2024-06-18", "2024-06-19", "2024-06-20", "2024-06-21",
 ]
+MONDAYS = ["2024-06-03", "2024-06-10", "2024-06-17"]
+TUESDAYS = ["2024-06-04", "2024-06-11", "2024-06-18"]
 FRIDAYS = ["2024-06-07", "2024-06-14", "2024-06-21"]
 
-# Initial Friday views execute on Monday at 200; subsequent daily marks move NAV.
+# The first Monday's views execute on Tuesday at 200; later daily marks move NAV.
 SERIES = {
     "SPY": {day: (100.0 if i < 9 else 102.0 if i < 14 else 101.0)
             for i, day in enumerate(WEEKDAYS)},
@@ -96,18 +99,23 @@ def test_grid_daily_is_identity():
     assert rebalance_grid(WEEKDAYS, "daily") == WEEKDAYS
 
 
-def test_grid_weekly_takes_last_trading_day_of_each_iso_week():
-    # A short holiday week (no Friday) still contributes its last day.
+def test_grid_weekly_takes_first_trading_day_of_each_iso_week():
+    # A short holiday week (no Monday) still contributes its first day.
     days = ["2024-06-27", "2024-06-28", "2024-07-01", "2024-07-02", "2024-07-05"]
-    assert rebalance_grid(days, "weekly") == ["2024-06-28", "2024-07-05"]
-    assert rebalance_grid(WEEKDAYS, "weekly") == FRIDAYS
+    assert rebalance_grid(days, "weekly") == ["2024-06-27", "2024-07-01"]
+    assert rebalance_grid(WEEKDAYS, "weekly") == MONDAYS
 
 
 def test_grid_monthly_splits_where_weekly_does_not():
     # Dec 30 2024 – Jan 3 2025 is ONE ISO week but TWO calendar months.
     days = ["2024-12-30", "2024-12-31", "2025-01-02", "2025-01-03"]
-    assert rebalance_grid(days, "weekly") == ["2025-01-03"]
-    assert rebalance_grid(days, "monthly") == ["2024-12-31", "2025-01-03"]
+    assert rebalance_grid(days, "weekly") == ["2024-12-30"]
+    assert rebalance_grid(days, "monthly") == ["2024-12-30", "2025-01-02"]
+
+
+def test_grid_first_day_is_always_a_rebalance():
+    # Starting mid-week still rebalances on day one: the rule looks back, never forward.
+    assert rebalance_grid(WEEKDAYS[2:], "weekly") == ["2024-06-05", "2024-06-10", "2024-06-17"]
 
 
 def test_grid_unknown_cadence_raises():
@@ -124,9 +132,12 @@ def test_happy_path_hand_computed():
 
     assert result.dates == WEEKDAYS
     assert result.schema_version == 2
-    assert len(result.records) == 2
-    # Buy 500 at the following Monday close; later prices require no churn.
-    assert result.records[0].positions == {"AAPL": 500}
+    assert len(result.records) == len(WEEKDAYS)
+    assert [r.session for r in result.records] == WEEKDAYS
+    assert [r.session for r in result.records if r.rebalance] == MONDAYS
+    assert [r.session for r in result.records if r.executed] == TUESDAYS
+    # Buy 500 at the following Tuesday close; later prices require no churn.
+    assert result.cycles[0].positions == {"AAPL": 500}
     assert result.nav == [100_000.0] * 9 + [105_000.0] * 5 + [95_000.0]
     assert result.metrics.n_orders == 1
     # Benchmark scaled to starting capital off its first grid close.
@@ -138,16 +149,27 @@ def test_happy_path_hand_computed():
     assert m.excess_return_pct == pytest.approx(-0.06)
     # Peak 105k -> trough 95k.
     assert m.max_drawdown_pct == pytest.approx(10_000 / 105_000, abs=1e-6)
-    assert m.n_cycles == 2
-    assert m.n_pending == 1
-    assert result.pending[0].as_of == FRIDAYS[-1]
+    assert m.n_cycles == 3
+    # The book on each session record is the broker's book after that close.
+    assert result.records[0].positions == {}
+    assert result.records[1].positions == {"AAPL": 500}
+    assert result.records[-1].nav == 95_000.0
+    assert result.records[-1].decision is None  # Friday is not a rebalance session
 
 
 def test_positions_carry_across_cycles_not_restart():
     result = _run()
     # Positions persist across executions; only the marks moved.
-    assert [r.positions for r in result.records] == [{"AAPL": 500}] * 2
-    assert result.records[1].orders == []
+    assert [r.positions for r in result.cycles] == [{"AAPL": 500}] * 3
+    assert result.cycles[1].orders == []
+
+
+def test_records_are_hash_chained():
+    result = _run()
+    assert result.records[0].prev_hash is None
+    for earlier, later in zip(result.records, result.records[1:]):
+        assert later.prev_hash == earlier.hash
+        assert earlier.hash == earlier.compute_hash()
 
 
 def test_deterministic_json_round_trip():
@@ -157,14 +179,14 @@ def test_deterministic_json_round_trip():
     assert FundBacktestResult.model_validate_json(first.model_dump_json()) == first
 
 
-def test_on_cycle_fires_per_tick_in_order():
+def test_on_cycle_fires_per_execution_in_order():
     seen = []
     spec = _spec()
     fund = Fund(spec, models={"solo": [FakeAnalyst("a", views={"AAPL": 1.0})]})
     backtest_fund(fund, "2024-06-03", "2024-06-21", FakeDataClient(SERIES),
                   ["AAPL"],
-                  on_cycle=lambda i, n, record: seen.append((i, n, record.as_of)))
-    assert seen == [(0, 2, FRIDAYS[0]), (1, 2, FRIDAYS[1])]
+                  on_cycle=lambda i, n, record: seen.append((i, n, record.as_of, record.execution_as_of)))
+    assert seen == [(i, 3, MONDAYS[i], TUESDAYS[i]) for i in range(3)]
 
 
 def test_universe_round_trips_onto_the_result():
@@ -172,6 +194,7 @@ def test_universe_round_trips_onto_the_result():
     result = _run()
     assert result.universe == ["AAPL"]
     assert all(r.universe == ["AAPL"] for r in result.records)
+    assert all(r.universe == ["AAPL"] for r in result.cycles)
 
 
 def test_missing_benchmark_raises():
@@ -184,8 +207,9 @@ def test_grid_follows_mandate_cadence():
     spec = _spec(rebalance="monthly")
     result = _run(spec=spec)
     assert result.dates == WEEKDAYS
-    assert result.records == []
-    assert result.pending[0].as_of == "2024-06-21"
+    # One month, so one rebalance: the first session, executed the next day.
+    assert [r.session for r in result.records if r.rebalance] == ["2024-06-03"]
+    assert [r.execution_as_of for r in result.cycles] == ["2024-06-04"]
     assert result.rebalance == "monthly"
 
 
@@ -195,9 +219,9 @@ def test_backtest_enforces_each_mode_with_mixed_analysts(mode):
     fund = Fund(spec, models={"mixed": [FakeAnalyst(name, {"AAPL": .8, "MSFT": -.6}) for name in ("buffett", "druckenmiller")]})
     series = {"SPY": {day: 100 for day in FRIDAYS}, "AAPL": {day: 100 for day in FRIDAYS}, "MSFT": {day: 100 for day in FRIDAYS}}
     result = backtest_fund(fund, FRIDAYS[0], FRIDAYS[-1], FakeDataClient(series), ["AAPL", "MSFT"])
-    assert len(result.records) == 2
+    assert len(result.cycles) == 2  # three sessions in three ISO weeks: two executions
     assert result.nav == [100_000] * 3
-    for record in result.records:
+    for record in result.cycles:
         assert record.positions["AAPL"] > 0
         if mode == "long_only":
             assert record.positions.get("MSFT", 0) == 0
@@ -217,20 +241,22 @@ def test_daily_callbacks_capture_losses_between_rebalances_and_after_last_trade(
                            on_cycle=lambda i, n, r: cycles.append((i, n, r)),
                            on_valuation=lambda i, n, v: daily.append((i, n, v)))
     assert len(daily) == 15
-    assert len(cycles) == 2
+    assert len(cycles) == 3
     assert daily[7][2].nav == 50_000
     assert result.metrics.max_drawdown_pct == .5
     assert result.nav[-1] == 95_000
     assert [v.nav for _, _, v in daily] == result.nav
-    assert [r.execution_as_of for _, _, r in cycles] == ["2024-06-10", "2024-06-17"]
+    assert [r.execution_as_of for _, _, r in cycles] == TUESDAYS
 
 
-def test_single_session_window_is_cash_with_pending_proposal():
+def test_single_session_window_is_cash_with_an_unexecuted_decision():
     fund = Fund(_spec(), models={"solo": [FakeAnalyst("a", {"AAPL": 1})]})
     result = backtest_fund(fund, FRIDAYS[0], FRIDAYS[0], FakeDataClient(SERIES), ["AAPL"])
     assert result.nav == result.benchmark_nav == [100_000]
-    assert result.records == []
-    assert len(result.pending) == 1
+    assert result.cycles == []
+    assert result.records[0].decision is not None
+    assert result.records[0].decision.final_weights == {"AAPL": 1}
+    assert result.metrics.n_cycles == 0
     assert result.metrics.total_return_pct == 0
     assert result.metrics.annualized_return_pct == 0
     assert result.metrics.max_drawdown_pct == 0
@@ -255,12 +281,13 @@ def test_daily_sharpe_uses_consecutive_returns_without_initial_zero():
     assert result.n_cycles == 0
 
 
-def test_schedule_shares_deduplicated_initial_and_refresh_dates():
+def test_schedule_lists_rebalance_and_execution_sessions():
     from hedge_fund.backtesting.fund import build_schedule
     schedule = build_schedule(FakeDataClient(SERIES), "SPY", WEEKDAYS[0], WEEKDAYS[-1], "weekly")
-    assert schedule.execution_dates == {"2024-06-07": "2024-06-10", "2024-06-14": "2024-06-17", "2024-06-21": None}
-    assert schedule.assessment_dates == ["2024-06-07", "2024-06-09", "2024-06-14", "2024-06-16", "2024-06-21"]
+    assert schedule.execution_dates == dict(zip(MONDAYS, TUESDAYS))
+    assert schedule.assessment_dates == MONDAYS
     daily = build_schedule(FakeDataClient(SERIES), "SPY", "2024-06-03", "2024-06-04", "daily")
+    assert daily.execution_dates == {"2024-06-03": "2024-06-04", "2024-06-04": None}
     assert daily.assessment_dates == ["2024-06-03", "2024-06-04"]
 
 
@@ -274,21 +301,25 @@ def test_backtest_excludes_current_session_even_if_provider_returns_it(monkeypat
     monkeypatch.setattr(sessions, "datetime", Clock)
     result = _run()
     assert result.dates == WEEKDAYS[:5]
-    assert result.records == []
-    assert result.pending[0].as_of == "2024-06-07"
+    assert [r.execution_as_of for r in result.cycles] == ["2024-06-04"]
+    assert result.records[-1].decision is None
     assert result.nav == [100_000] * 5
 
 
-def test_daily_replay_executes_before_creating_next_assessment():
+def test_daily_replay_executes_the_prior_decision_then_assesses_anew():
     events = []
     class ObservedAnalyst(FakeAnalyst):
         def predict(self, ticker, date, data_client):
             events.append(("assessment", date))
             return super().predict(ticker, date, data_client)
     fund = Fund(_spec(rebalance="daily"), models={"solo": [ObservedAnalyst("a", {"AAPL": 1})]})
-    backtest_fund(fund, WEEKDAYS[0], WEEKDAYS[1], FakeDataClient(SERIES), ["AAPL"],
-                  on_cycle=lambda i, n, r: events.append(("execution", r.execution_as_of)),
-                  on_valuation=lambda i, n, v: events.append(("valuation", v.as_of)))
-    assert events == [("valuation", "2024-06-03"), ("assessment", "2024-06-03"),
-                      ("execution", "2024-06-04"), ("valuation", "2024-06-04"),
-                      ("assessment", "2024-06-04")]
+    result = backtest_fund(fund, WEEKDAYS[0], WEEKDAYS[1], FakeDataClient(SERIES), ["AAPL"],
+                           on_cycle=lambda i, n, r: events.append(("execution", r.execution_as_of)),
+                           on_valuation=lambda i, n, v: events.append(("valuation", v.as_of)))
+    assert events == [("assessment", "2024-06-03"), ("valuation", "2024-06-03"),
+                      ("assessment", "2024-06-04"), ("execution", "2024-06-04"),
+                      ("valuation", "2024-06-04")]
+    first, second = result.records
+    assert first.executed is None and first.decision.as_of == "2024-06-03"
+    assert second.executed.as_of == "2024-06-03" and second.executed.execution_as_of == "2024-06-04"
+    assert second.decision.as_of == "2024-06-04"  # made after the execution, still pending

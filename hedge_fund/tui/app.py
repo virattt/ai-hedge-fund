@@ -1,4 +1,4 @@
-"""Terminal screens for building, inspecting, running, and backtesting funds."""
+"""Terminal screens: build a mandate, backtest it, deploy and advance a paper fund."""
 
 from __future__ import annotations
 
@@ -41,9 +41,9 @@ from hedge_fund.backtesting.fund import (
     DailyValuation,
     performance_metrics,
 )
-from hedge_fund.brokers import Fill, SimBroker
+from hedge_fund.brokers import Fill
 from hedge_fund.data import CachedDataClient, FDClient
-from hedge_fund.data.sessions import completed_through
+from hedge_fund.data.sessions import previous_day
 from hedge_fund.fund import (
     custom_strategy,
     discover_funds,
@@ -56,8 +56,26 @@ from hedge_fund.fund import (
 )
 from hedge_fund.llm import make_llm, provider_for, ThesisStream
 from hedge_fund.models import Signal
-from hedge_fund.pipeline import CycleRecord, DecisionRecord, PendingRunResult, run_cycle
-from hedge_fund.pipeline.run_cycle import _MARK_LOOKBACK_DAYS
+from hedge_fund.paper import (
+    deploy,
+    DeployedFund,
+    Ledger,
+    LedgerError,
+    list_deployed,
+    load_deployed,
+    next_session,
+    NothingDue,
+    tick,
+    validate_fund_name,
+)
+from hedge_fund.pipeline import (
+    CycleRecord,
+    DecisionRecord,
+    FundHalted,
+    is_rebalance_session,
+    SessionRecord,
+)
+from hedge_fund.pipeline.stages import _MARK_LOOKBACK_DAYS
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, get_investment_approach, LLMAgent
 from hedge_fund.tui.keys import (
     apply_credentials,
@@ -82,10 +100,12 @@ from hedge_fund.tui.shared import (
     DEFAULT_RISK,
     DISPLAY_NAMES,
     ensure_mandates_dir,
-    FUNDS_DIR,
     is_supported,
     load_api_models,
+    MANDATES_DIR,
     MODE_LABELS,
+    PAPER_DIR,
+    RESEARCH_DIR,
     strategy_description,
     STRATEGY_DIR,
     UNIVERSE_PRESETS,
@@ -104,9 +124,10 @@ _CUSTOM = "custom"  # sentinel value in the strategy list for "build your own"
 
 
 class HomeScreen(Screen):
-    """The clean landing: wordmark, two verbs, the reasoning-model picker.
-    Run an existing fund (→ pick a saved fund) or build a new one. Backtest
-    is a side option once a fund is in hand, not a top-level verb.
+    """The clean landing: wordmark, the two modes, the reasoning-model picker.
+    Backtest a mandate over history, or paper trade one — deploy it against
+    a universe and advance it a session at a time. Building a mandate is the
+    third verb; it feeds the other two.
     """
 
     BINDINGS = [
@@ -123,13 +144,19 @@ class HomeScreen(Screen):
             yield OptionList(
                 Option(
                     Text.assemble(
-                        ("Run an existing fund\n", "bold"),
-                        ("pick a saved fund and run it as of today", MUTED)),
-                    id="run"),
+                        ("Backtest a mandate\n", "bold"),
+                        ("replay a saved mandate over history", MUTED)),
+                    id="backtest"),
                 None,
                 Option(
                     Text.assemble(
-                        ("Build a new fund\n", "bold"),
+                        ("Paper trade a fund\n", "bold"),
+                        ("deploy a mandate and advance it one session at a time", MUTED)),
+                    id="paper"),
+                None,
+                Option(
+                    Text.assemble(
+                        ("Build a mandate\n", "bold"),
                         ("compose agents into strategies from scratch", MUTED)),
                     id="build"),
                 id="home-menu",
@@ -195,8 +222,10 @@ class HomeScreen(Screen):
 
     @on(OptionList.OptionSelected, "#home-menu")
     def _choose(self, event: OptionList.OptionSelected) -> None:
-        if event.option.id == "run":
+        if event.option.id == "backtest":
             self.app.push_screen(FundSelectScreen())
+        elif event.option.id == "paper":
+            self.app.push_screen(PaperSelectScreen())
         elif event.option.id == "build":
             self.app.push_screen(BuilderScreen())
 
@@ -341,14 +370,15 @@ class ModelPickerScreen(ModalScreen[str | None]):
 
 
 class FundSelectScreen(Screen):
-    """'Run an existing fund', master-detail: fund slots on the left, the
-    highlighted fund's latest stats and its backtest history (newest first)
-    on the right. Enter runs the fund as of today. Refreshes on resume.
+    """'Backtest a mandate', master-detail: mandate slots on the left, the
+    highlighted mandate's latest backtest stats and its backtest history
+    (newest first) on the right. Enter opens the backtest window picker.
+    Refreshes on resume.
     """
 
     BINDINGS = [
         Binding("escape", "back", "back"),
-        Binding("d", "delete", "delete fund"),
+        Binding("d", "delete", "delete mandate"),
     ]
 
     def __init__(self) -> None:
@@ -358,7 +388,7 @@ class FundSelectScreen(Screen):
     def compose(self) -> ComposeResult:
         with Horizontal(id="select"):
             with Vertical(id="select-rail"):
-                yield Static(Text("YOUR FUNDS", style=MUTED), classes="rail-title")
+                yield Static(Text("YOUR MANDATES", style=MUTED), classes="rail-title")
                 yield OptionList(id="select-menu")
             with VerticalScroll(id="select-detail"):
                 yield Static("", id="detail-body")
@@ -382,7 +412,7 @@ class FundSelectScreen(Screen):
         menu.clear_options()
         if not self._slots:
             self.query_one("#detail-body", Static).update(
-                Text("No funds yet — go back and build one first.", style=MUTED))
+                Text("No mandates yet — go back and build one first.", style=MUTED))
             return
         for i, entry in enumerate(self._slots):
             if entry.spec is None:
@@ -400,7 +430,7 @@ class FundSelectScreen(Screen):
             self._show_detail(first)
         else:
             self.query_one("#detail-body", Static).update(
-                Text("Saved funds are unavailable. Recreate them in the fund builder or update their configurations.", style=MUTED))
+                Text("Saved mandates are unavailable. Recreate them in the builder or update their configurations.", style=MUTED))
 
     @on(OptionList.OptionHighlighted, "#select-menu")
     def _hover(self, event: OptionList.OptionHighlighted) -> None:
@@ -415,7 +445,7 @@ class FundSelectScreen(Screen):
             spec = self._slots[int(oid.split(":")[1])].spec
             if spec is None:
                 return
-            self.app.push_screen(RunScreen(spec))
+            self.app.push_screen(BacktestScreen(spec))
 
     def action_delete(self) -> None:
         menu = self.query_one("#select-menu", OptionList)
@@ -453,31 +483,30 @@ class FundSelectScreen(Screen):
             _fund_detail(spec, self._history(spec.name)))
 
     def _history(self, name: str) -> list[dict]:
-        """Everything this fund has done — runs and backtests — newest first,
-        as light summaries. Cached by (path, mtime) so arrowing the list stays
-        instant."""
+        """Every backtest of this mandate, newest first, as light summaries.
+        Cached by (path, mtime) so arrowing the list stays instant."""
         out: list[dict] = []
-        for pattern in (f"{name}-run-*.json", f"{name}-backtest*.json"):
-            for p in FUNDS_DIR.glob(pattern):
-                mtime = p.stat().st_mtime
-                key = (str(p), mtime)
-                if key not in self._summaries:
-                    self._summaries[key] = _summarize(p, mtime)
-                summ = self._summaries[key]
-                if summ is not None:
-                    out.append(summ)
+        for p in _receipts(name):
+            mtime = p.stat().st_mtime
+            key = (str(p), mtime)
+            if key not in self._summaries:
+                self._summaries[key] = _summarize(p, mtime)
+            summ = self._summaries[key]
+            if summ is not None:
+                out.append(summ)
         out.sort(key=lambda s: s["mtime"], reverse=True)
         return out
 
 
 def _saved_funds() -> list[SavedFund]:
     """Valid and unavailable saved mandates, shared by both pickers."""
-    return discover_funds(FUNDS_DIR)
+    return discover_funds(MANDATES_DIR)
 
 
 def _delete_fund(path: Path, name: str, *, with_history: bool) -> int:
-    """Remove a fund's mandate, and its receipts too when asked. Returns how
-    many files went, so the caller can say so."""
+    """Remove a mandate, and its backtest results too when asked. Returns how
+    many files went, so the caller can say so. Paper funds deployed from it
+    are untouched: they carry their own snapshot of the mandate."""
     targets = [path, *(_receipts(name) if with_history else [])]
     for target in targets:
         target.unlink(missing_ok=True)
@@ -501,7 +530,6 @@ class ConfirmDeleteScreen(ModalScreen[str | None]):
         super().__init__()
         self._path = path
         self._spec = spec
-        self._runs = sum(1 for h in history if h["kind"] in ("run", "pending"))
         self._backtests = sum(1 for h in history if h["kind"] == "backtest")
 
     def compose(self) -> ComposeResult:
@@ -526,16 +554,17 @@ class ConfirmDeleteScreen(ModalScreen[str | None]):
         lines.append(f"{self._path.name}\n", style=TEXT)
         lines.append("  the mandate — strategies, staff, risk, capital\n\n",
                      style=MUTED)
-        if self._runs or self._backtests:
+        if self._backtests:
             lines.append(
-                f"{self._runs} {'run' if self._runs == 1 else 'runs'}"
-                f"  ·  {self._backtests} "
+                f"{self._backtests} "
                 f"{'backtest' if self._backtests == 1 else 'backtests'}\n",
                 style=CYAN)
-            lines.append("  saved receipts — kept unless you press ctrl+d",
+            lines.append("  saved results — kept unless you press ctrl+d",
                          style=MUTED)
         else:
-            lines.append("No saved runs or backtests.", style=MUTED)
+            lines.append("No saved backtests.", style=MUTED)
+        lines.append("\n\nPaper funds deployed from this mandate keep their own copy.",
+                     style=MUTED)
         return lines
 
     def action_cancel(self) -> None:
@@ -549,47 +578,43 @@ class ConfirmDeleteScreen(ModalScreen[str | None]):
 
 
 def _summarize(path: Path, mtime: float) -> dict | None:
-    """One saved receipt — a run's CycleRecord or a backtest's result — as the
-    light summary the history pane renders. None if the file is unreadable."""
+    """One saved backtest result as the light summary the history pane
+    renders. None if the file is unreadable or not a backtest."""
     try:
         d = json.loads(path.read_text())
-        if not isinstance(d, dict):
+        if not isinstance(d, dict) or "metrics" not in d:
             return None
-        universe = d.get("universe", [])
-        if "metrics" in d:  # a backtest
-            m = d["metrics"]
-            return {
-                "kind": "backtest", "mtime": mtime, "universe": universe,
-                "start": d.get("start", ""), "end": d.get("end", ""),
-                "benchmark": d.get("benchmark", "SPY"),
-                "total": m["total_return_pct"],
-                "annualized": m["annualized_return_pct"],
-                "sharpe": m["sharpe_ratio"], "maxdd": m["max_drawdown_pct"],
-                "benchret": m["benchmark_return_pct"],
-                "excess": m["excess_return_pct"], "n_cycles": m["n_cycles"],
-            }
-        if d.get("status") == "pending":
-            return {"kind": "pending", "mtime": mtime, "as_of": d["as_of"],
-                    "universe": d["proposal"]["universe"], "reason": d["reason"]}
-        return {  # a single cycle
-            "kind": "run", "mtime": mtime, "universe": universe,
-            "as_of": d.get("execution_as_of") or d["as_of"], "nav": d["nav"],
-            "n_orders": len(d.get("orders", [])),
+        m = d["metrics"]
+        return {
+            "kind": "backtest", "mtime": mtime, "fund": d.get("fund", ""),
+            "universe": d.get("universe", []),
+            "start": d.get("start", ""), "end": d.get("end", ""),
+            "benchmark": d.get("benchmark", "SPY"),
+            "total": m["total_return_pct"],
+            "annualized": m["annualized_return_pct"],
+            "sharpe": m["sharpe_ratio"], "maxdd": m["max_drawdown_pct"],
+            "benchret": m["benchmark_return_pct"],
+            "excess": m["excess_return_pct"], "n_cycles": m["n_cycles"],
         }
     except (json.JSONDecodeError, KeyError, OSError, TypeError, UnicodeError):
         return None
 
 
 def _receipts(name: str) -> list[Path]:
-    """Every saved receipt for a fund — runs and backtests — newest first."""
-    paths = [*FUNDS_DIR.glob(f"{name}-run-*.json"),
-             *FUNDS_DIR.glob(f"{name}-backtest*.json")]
+    """Every saved backtest of a mandate, newest first. Filenames start with
+    the mandate's name, but names can be prefixes of each other, so the
+    result's own `fund` field is what decides."""
+    paths = []
+    for p in RESEARCH_DIR.glob(f"{name}-*.json"):
+        summary = _summarize(p, 0.0)
+        if summary is not None and summary["fund"] == name:
+            paths.append(p)
     return sorted(paths, key=lambda p: p.stat().st_mtime, reverse=True)
 
 
 def _last_universe(name: str) -> list[str] | None:
-    """The tickers this fund was last pointed at — the ticker inputs prefill
-    from it, so a returning user just presses enter."""
+    """The tickers this mandate was last backtested over — the ticker inputs
+    prefill from it, so a returning user just presses enter."""
     for path in _receipts(name):
         summary = _summarize(path, 0.0)
         if summary and summary["universe"]:
@@ -598,12 +623,11 @@ def _last_universe(name: str) -> list[str] | None:
 
 
 def _last_score(name: str) -> tuple[float, float, str] | None:
-    """The fund's most recent BACKTEST result, if any: (total return, excess
-    return, benchmark). A quiet scoreboard on each slot — runs have no return
-    to show, only a NAV."""
+    """The mandate's most recent backtest result, if any: (total return,
+    excess return, benchmark). A quiet scoreboard on each slot."""
     for path in _receipts(name):
         summary = _summarize(path, 0.0)
-        if summary and summary["kind"] == "backtest":
+        if summary:
             return (summary["total"], summary["excess"], summary["benchmark"])
     return None
 
@@ -630,9 +654,8 @@ def _slot_card(index: int, spec: FundSpec, score: tuple | None) -> Text:
 
 
 def _fund_detail(spec: FundSpec, history: list[dict]) -> Group:
-    """The right pane: the fund's identity, its latest backtest stats, then
-    everything it has done — runs and backtests, newest first, each with the
-    tickers it was pointed at."""
+    """The right pane: the mandate's identity, its latest backtest stats, then
+    every backtest, newest first, each with the tickers it was run over."""
     staff = ", ".join(s.title for s in spec.strategies)
     parts: list = [
         Text(spec.name, style=f"bold {BRIGHT}"),
@@ -641,26 +664,21 @@ def _fund_detail(spec: FundSpec, history: list[dict]) -> Group:
     parts.extend(Text(f"{s.title}: {strategy_description(s)}", style=MUTED) for s in spec.strategies)
 
     if not history:
-        parts.append(Text("\nNo runs yet — this fund has never traded.", style=MUTED))
-        parts.append(Text("\nEnter to run it as of today · ctrl+b to backtest "
-                          "over history", style=MUTED))
+        parts.append(Text("\nNo backtests yet.", style=MUTED))
+        parts.append(Text("\nEnter to backtest this mandate over history",
+                          style=MUTED))
         return Group(*parts)
 
-    # The headline stats come from the most recent BACKTEST (a single run has
-    # no return to show, only a book).
-    latest = next((h for h in history if h["kind"] == "backtest"), None)
-    if latest is not None:
-        # A universe is only present on newer receipts — join what exists so an
-        # older backtest doesn't render a dangling separator.
-        facts = [f"{latest['start']} → {latest['end']}",
-                 f"{latest['n_cycles']} cycles"]
-        if latest["universe"]:
-            facts.append(" ".join(latest["universe"]))
-        parts.append(Text("\nLATEST BACKTEST", style=f"bold {BRIGHT}"))
-        parts.append(Text("  ·  ".join(facts), style=MUTED))
-        parts.append(_stat_list(latest))
+    latest = history[0]
+    facts = [f"{latest['start']} → {latest['end']}",
+             f"{latest['n_cycles']} cycles"]
+    if latest["universe"]:
+        facts.append(" ".join(latest["universe"]))
+    parts.append(Text("\nLATEST BACKTEST", style=f"bold {BRIGHT}"))
+    parts.append(Text("  ·  ".join(facts), style=MUTED))
+    parts.append(_stat_list(latest))
 
-    parts.append(Text("\nRUNS & BACKTESTS", style=f"bold {BRIGHT}"))
+    parts.append(Text("\nBACKTESTS", style=f"bold {BRIGHT}"))
     # Three columns, not four. The kind and the number are pinned with no_wrap
     # so a narrow pane can never drop the result — the tickers ride along in
     # the middle column and are the only thing allowed to ellipsize.
@@ -670,27 +688,14 @@ def _fund_detail(spec: FundSpec, history: list[dict]) -> Group:
     log.add_column(overflow="ellipsis", no_wrap=True)     # when · tickers
     log.add_column(justify="right", no_wrap=True)         # headline number
     for h in history[:12]:
-        tickers = _short_tickers(h["universe"])
-        if h["kind"] == "backtest":
-            up = h["total"] >= 0
-            when = Text(f"{h['start']} → {h['end']}", style=MUTED)
-            if h["universe"]:
-                when.append(f"  {tickers}", style=CYAN)
-            log.add_row(
-                Text("backtest", style=MUTED), when,
-                Text(f"{h['total']:+.1%}", style=GREEN if up else RED),
-            )
-        elif h["kind"] == "pending":
-            log.add_row(Text("pending", style=CYAN), Text(h["as_of"], style=MUTED),
-                        Text("Proposed allocations", style=MUTED))
-        else:
-            when = Text(h["as_of"], style=MUTED)
-            if h["universe"]:
-                when.append(f"  {tickers}", style=CYAN)
-            log.add_row(
-                Text("run", style=MUTED), when,
-                Text(f"NAV ${h['nav']:,.0f}", style=BRIGHT),
-            )
+        up = h["total"] >= 0
+        when = Text(f"{h['start']} → {h['end']}", style=MUTED)
+        if h["universe"]:
+            when.append(f"  {_short_tickers(h['universe'])}", style=CYAN)
+        log.add_row(
+            Text("backtest", style=MUTED), when,
+            Text(f"{h['total']:+.1%}", style=GREEN if up else RED),
+        )
     parts.append(log)
     return Group(*parts)
 
@@ -901,13 +906,16 @@ def _live_thesis(desk: _Desk) -> Text:
     return Text(" ".join(text.split()), style=TEXT)
 
 
-def _report_nav(record: CycleRecord | DecisionRecord) -> list[Option]:
+def _report_nav(record: CycleRecord | DecisionRecord, prefix: str = "") -> list[Option]:
     """The report's left rail: every signal as ONE line, then the book.
 
     A thesis runs paragraphs — rendering them inline made a table where a
     single signal filled the screen. Here each signal is a scannable row and
     the full thesis goes to the detail pane, so the fund's thinking stays
     navigable on a default-size terminal.
+
+    *prefix* namespaces the option ids when one rail carries two records
+    (a session that executed one decision and made the next).
     """
     options: list[Option] = []
     spec_by_name = {s.name: s for s in record.spec.strategies}
@@ -934,18 +942,105 @@ def _report_nav(record: CycleRecord | DecisionRecord) -> list[Option]:
             row.append(f"{glyph} ", style=f"bold {tone}")
             row.append(f"{confidence:.0f}%" if confidence is not None else "  —",
                        style=tone)
-            options.append(Option(row, id=f"sig:{si}:{sj}"))
+            options.append(Option(row, id=f"{prefix}sig:{si}:{sj}"))
 
     options.append(Option(Text(""), disabled=True))
     options.append(Option(Text("THE BOOK", style=f"bold {BRIGHT}"), disabled=True))
     if record.clamps:
         options.append(Option(
-            Text(f" Risk limits ({len(record.clamps)})", style=TEXT), id="sec:risk"))
+            Text(f" Risk limits ({len(record.clamps)})", style=TEXT), id=f"{prefix}sec:risk"))
     if isinstance(record, CycleRecord):
         options.append(Option(
-            Text(f" Orders ({len(record.orders)})", style=TEXT), id="sec:orders"))
-    options.append(Option(Text(" Portfolio" if isinstance(record, CycleRecord) else " Proposed allocations", style=TEXT), id="sec:portfolio"))
+            Text(f" Orders ({len(record.orders)})", style=TEXT), id=f"{prefix}sec:orders"))
+    options.append(Option(Text(" Portfolio" if isinstance(record, CycleRecord) else " Proposed allocations", style=TEXT), id=f"{prefix}sec:portfolio"))
     return options
+
+
+def _report_detail(record: CycleRecord | DecisionRecord, oid: str) -> Group | None:
+    """The right pane for one rail option (id without any prefix)."""
+    if oid.startswith("sig:"):
+        _, si, sj = oid.split(":")
+        return _signal_detail(record, int(si), int(sj))
+    if oid == "sec:risk":
+        return _risk_detail(record)
+    if oid == "sec:orders" and isinstance(record, CycleRecord):
+        return _orders_detail(record)
+    if oid == "sec:portfolio":
+        return (_portfolio_detail(record) if isinstance(record, CycleRecord)
+                else _proposal_detail(record))
+    return None
+
+
+# One session may carry two records: the decision executed at this close and
+# the decision made at it. The rail shows both, namespaced by these prefixes.
+_EXECUTED = "x:"
+_DECIDED = "d:"
+
+
+def _session_nav(record: SessionRecord) -> list[Option]:
+    """The rail for a whole session: the executed cycle first (that is what
+    moved the book), then the decision made at this close, then — when the
+    session did neither — just the marked book."""
+    options: list[Option] = []
+    if record.executed is not None:
+        options.append(Option(Text.assemble(
+            ("EXECUTED", f"bold {GREEN}"),
+            (f"  decided {record.executed.as_of}", MUTED)), disabled=True))
+        options.extend(_report_nav(record.executed, _EXECUTED))
+    if record.decision is not None:
+        if options:
+            options.append(Option(Text(""), disabled=True))
+        options.append(Option(Text.assemble(
+            ("DECIDED", f"bold {CYAN}"),
+            ("  executes next session", MUTED)), disabled=True))
+        options.extend(_report_nav(record.decision, _DECIDED))
+    if not options:
+        options.append(Option(Text("THE BOOK", style=f"bold {BRIGHT}"), disabled=True))
+        options.append(Option(Text(" Portfolio", style=TEXT), id="book"))
+    return options
+
+
+def _session_detail(record: SessionRecord, oid: str) -> Group | None:
+    if oid.startswith(_EXECUTED) and record.executed is not None:
+        return _report_detail(record.executed, oid[len(_EXECUTED):])
+    if oid.startswith(_DECIDED) and record.decision is not None:
+        return _report_detail(record.decision, oid[len(_DECIDED):])
+    if oid == "book":
+        return _session_book(record)
+    return None
+
+
+def _session_book(record: SessionRecord) -> Group:
+    """The marked book at a session's close, for sessions that only valued."""
+    head = [
+        Text("PORTFOLIO", style=f"bold {BRIGHT}"),
+        Text(f"marked at the {record.session} close · no orders this session", style=MUTED),
+    ]
+    if not record.positions:
+        return Group(*head, Text("flat — no positions", style=MUTED))
+    table = Table(box=box.SQUARE, header_style="bold", border_style="#1f2b25")
+    table.add_column("Ticker", style=f"bold {CYAN}")
+    table.add_column("Side", justify="center")
+    table.add_column("Shares", justify="right")
+    table.add_column("Value", justify="right")
+    table.add_column("Weight", justify="right")
+    for ticker in sorted(record.positions):
+        shares = record.positions[ticker]
+        value = shares * record.marks[ticker]
+        side = (Text("LONG", style=f"bold {GREEN}") if shares > 0
+                else Text("SHORT", style=f"bold {RED}"))
+        tone = GREEN if value >= 0 else RED
+        table.add_row(ticker, side, f"{shares:+d}",
+                      Text(f"${value:+,.0f}", style=tone),
+                      Text(f"{value / record.nav:+.1%}", style=tone))
+    return Group(*head, Text(""), table)
+
+
+def _first_selectable(nav: OptionList) -> int | None:
+    for i in range(nav.option_count):
+        if not nav.get_option_at_index(i).disabled:
+            return i
+    return None
 
 
 def _signal_detail(record: CycleRecord | DecisionRecord, si: int, sj: int) -> Group:
@@ -1093,7 +1188,7 @@ def _portfolio_detail(record: CycleRecord) -> Group:
     return Group(*details, Text(""), table)
 
 
-def _book_summary(record: CycleRecord) -> Text:
+def _book_summary(record: CycleRecord | SessionRecord) -> Text:
     """The always-visible bottom strip: what the book looks like after."""
     long_val = sum(max(s * record.marks[t], 0.0)
                    for t, s in record.positions.items())
@@ -1143,40 +1238,688 @@ def _tape_table(tape: list[tuple[str, Fill, int]]) -> Table:
     return table
 
 
-class RunScreen(Screen):
-    """Assess completed data and display either execution receipts or a pending proposal."""
+class _PaperSnapshot:
+    """Everything the paper screens show about one deployed fund, read once
+    from its directory. `error` is set when the ledger cannot be trusted
+    (broken chain, altered record); the fund is then display-only."""
 
-    # ctrl+b, not plain b: the ticker Input owns letter keys (BABA, BRK.B),
-    # and priority so the shortcut still fires while it has focus.
+    def __init__(self, directory: Path) -> None:
+        self.directory = directory
+        self.deployed = load_deployed(directory)
+        self.ledger = Ledger(directory)
+        self.records: list[SessionRecord] = []
+        self.halted: str | None = None
+        self.pending: DecisionRecord | None = None
+        self.error: str | None = None
+        try:
+            self.records = self.ledger.records()
+            state = self.ledger.replay(self.deployed.spec.capital)
+            self.halted = state.halted
+            self.pending = state.pending
+        except LedgerError as exc:
+            self.error = str(exc)
+
+    @property
+    def spec(self) -> FundSpec:
+        return self.deployed.spec
+
+    @property
+    def nav(self) -> float:
+        return self.records[-1].nav if self.records else self.spec.capital
+
+    @property
+    def last_session(self) -> str | None:
+        return self.records[-1].session if self.records else None
+
+    def curves(self) -> tuple[list[str], list[float], list[float]]:
+        """Dates, NAV, and the benchmark scaled to the fund's capital."""
+        dates = [r.session for r in self.records]
+        nav = [r.nav for r in self.records]
+        first = self.records[0].benchmark_close if self.records else 1.0
+        bench = [self.spec.capital * r.benchmark_close / first for r in self.records]
+        return dates, nav, bench
+
+    def metrics(self):
+        dates, nav, bench = self.curves()
+        cycles = [r.executed for r in self.records if r.executed is not None]
+        return performance_metrics(self.spec.capital, dates, nav, bench, cycles)
+
+    def status(self) -> Text:
+        """One line: halted, pending, or ready — the same facts as `aihf paper status`."""
+        line = Text()
+        if self.error:
+            line.append("✗ LEDGER ERROR  ", style=f"bold {RED}")
+            line.append(self.error, style=RED)
+            return line
+        if self.halted:
+            line.append("■ HALTED  ", style=f"bold {RED}")
+            line.append(self.halted, style=RED)
+            line.append("   r to resume", style=MUTED)
+            return line
+        if self.last_session is None:
+            line.append("● NEW  ", style=f"bold {CYAN}")
+            line.append("no sessions yet", style=MUTED)
+        else:
+            line.append("● LIVE  ", style=f"bold {GREEN}")
+            line.append(f"last session {self.last_session}", style=TEXT)
+        if self.pending is not None:
+            line.append(f"   ·   decision from {self.pending.as_of} pending — executes on the next tick",
+                        style=CYAN)
+        line.append("   ·   a to advance one session", style=MUTED)
+        return line
+
+
+def _paper_slot(index: int, snap: _PaperSnapshot) -> Text:
+    """One deployed fund in the paper rail: name, state glyph, NAV and
+    return on top; the mandate and universe beneath."""
+    card = Text()
+    card.append(f" {index + 1:02d}  ", style=f"bold {CYAN}")
+    card.append(snap.deployed.name, style="bold")
+    if snap.error:
+        card.append("   ✗ ledger", style=f"bold {RED}")
+    elif snap.halted:
+        card.append("   ■ halted", style=f"bold {RED}")
+    elif snap.records:
+        ret = snap.nav / snap.spec.capital - 1
+        card.append(f"   {'▲' if ret >= 0 else '▼'} {ret:+.1%}",
+                    style=f"bold {GREEN if ret >= 0 else RED}")
+    else:
+        card.append("   ● new", style=f"bold {CYAN}")
+    card.append(f"\n     {snap.spec.name}  ·  {snap.spec.rebalance}"
+                f"  ·  {len(snap.records)} {'session' if len(snap.records) == 1 else 'sessions'}",
+                style=MUTED)
+    card.append(f"\n     {_short_tickers(snap.deployed.universe, 4)}", style=MUTED)
+    return card
+
+
+def _paper_detail(snap: _PaperSnapshot) -> Group:
+    """The right pane of the paper picker: identity, status, headline numbers."""
+    spec = snap.spec
+    staff = ", ".join(s.title for s in spec.strategies)
+    parts: list = [
+        Text(snap.deployed.name, style=f"bold {BRIGHT}"),
+        Text(f"mandate {spec.name}  ·  {staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}",
+             style=MUTED),
+        Text(f"{' '.join(snap.deployed.universe)}  ·  deployed {snap.deployed.created}", style=MUTED),
+        Text(str(snap.directory), style=MUTED),
+        Text(""),
+        snap.status(),
+    ]
+    if snap.records:
+        m = snap.metrics()
+        parts.append(Text(""))
+        parts.append(Text("SO FAR", style=f"bold {BRIGHT}"))
+        parts.append(Text(f"{snap.records[0].session} → {snap.last_session}"
+                          f"  ·  {m.n_cycles} cycles  ·  {m.n_orders} orders", style=MUTED))
+        parts.append(_stat_list({
+            "total": m.total_return_pct, "annualized": m.annualized_return_pct,
+            "sharpe": m.sharpe_ratio, "maxdd": m.max_drawdown_pct,
+            "benchmark": spec.benchmark, "benchret": m.benchmark_return_pct,
+            "excess": m.excess_return_pct,
+        }))
+    return Group(*parts)
+
+
+def _session_row(record: SessionRecord, prev_nav: float) -> Text:
+    """One session in the fund's history rail: date, day change, what happened."""
+    change = record.nav / prev_nav - 1 if prev_nav else 0.0
+    row = Text()
+    row.append(f" {record.session}", style=TEXT)
+    row.append(f"  {change:+.2%}", style=GREEN if change >= 0 else RED)
+    if record.executed is not None:
+        n = len(record.executed.fills)
+        row.append(f"  {n} {'fill' if n == 1 else 'fills'}", style=CYAN)
+    if record.decision is not None:
+        row.append("  decided", style=MUTED)
+    return row
+
+
+def _session_overview(record: SessionRecord) -> Group:
+    """The detail pane for a highlighted session: what it did to the book,
+    in a few lines. Enter opens the full report."""
+    parts: list = [
+        Text.assemble((record.session, f"bold {BRIGHT}"),
+                      ("  ·  rebalance session" if record.rebalance else "  ·  valuation only", MUTED)),
+        _book_summary(record),
+        Text(""),
+    ]
+    if record.executed is not None:
+        x = record.executed
+        parts.append(Text.assemble(
+            ("EXECUTED  ", f"bold {GREEN}"),
+            (f"decision from {x.as_of} · {len(x.orders)} orders · {len(x.fills)} fills", MUTED)))
+        for fill in x.fills[:8]:
+            tone = GREEN if fill.side == "buy" else RED
+            parts.append(Text.assemble(
+                (f"  {fill.side.upper():<4} ", f"bold {tone}"),
+                (f"{fill.quantity:,} {fill.ticker}", TEXT),
+                (f" @ ${fill.price:,.2f}", MUTED)))
+        if len(x.fills) > 8:
+            parts.append(Text(f"  … {len(x.fills) - 8} more", style=MUTED))
+        parts.append(Text(""))
+    if record.decision is not None:
+        d = record.decision
+        n_signals = sum(len(sr.signals) for sr in d.strategies)
+        parts.append(Text.assemble(
+            ("DECIDED  ", f"bold {CYAN}"),
+            (f"{n_signals} signals · executes at the next session's close", MUTED)))
+        targets = sorted(((t, w) for t, w in d.final_weights.items() if w), key=lambda x: -abs(x[1]))
+        for ticker, weight in targets[:8]:
+            parts.append(Text.assemble(
+                (f"  {ticker:<6}", f"bold {CYAN}"),
+                (f"{weight:+.1%}", GREEN if weight > 0 else RED)))
+        if not targets:
+            parts.append(Text("  flat — no conviction cleared the bar", style=MUTED))
+        parts.append(Text(""))
+    parts.append(Text("enter for the full report", style=MUTED))
+    return Group(*parts)
+
+
+class PaperSelectScreen(Screen):
+    """'Paper trade a fund', master-detail: deployed funds on the left, the
+    highlighted fund's status and running numbers on the right. Enter opens
+    the fund; the last slot deploys a new one. Refreshes on resume.
+    """
+
+    BINDINGS = [Binding("escape", "back", "back")]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._snaps: list[_PaperSnapshot | None] = []
+
+    def compose(self) -> ComposeResult:
+        with Horizontal(id="select"):
+            with Vertical(id="select-rail"):
+                yield Static(Text("PAPER FUNDS", style=MUTED), classes="rail-title")
+                yield OptionList(id="paper-menu")
+            with VerticalScroll(id="select-detail"):
+                yield Static("", id="detail-body")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self._populate()
+
+    def on_screen_resume(self) -> None:
+        self._populate()
+
+    def action_back(self) -> None:
+        self.app.pop_screen()
+
+    def _populate(self) -> None:
+        menu = self.query_one("#paper-menu", OptionList)
+        menu.clear_options()
+        self._snaps = []
+        for i, directory in enumerate(list_deployed(PAPER_DIR)):
+            try:
+                snap = _PaperSnapshot(directory)
+            except ValueError as exc:
+                self._snaps.append(None)
+                menu.add_option(Option(
+                    Text(f" {directory.name} — Unavailable\n     {exc}", style=MUTED), disabled=True))
+                continue
+            self._snaps.append(snap)
+            menu.add_option(Option(_paper_slot(i, snap), id=f"paper:{i}"))
+        if self._snaps:
+            menu.add_option(None)
+        menu.add_option(Option(Text.assemble(
+            ("  +  ", f"bold {GREEN}"), ("Deploy a new fund", "bold"),
+            ("\n     point a mandate at a universe", MUTED)), id="deploy"))
+        # Options added after mount leave `highlighted` unset — pin it to the
+        # first readable fund (or the deploy slot) so Enter works right away,
+        # and paint its detail now rather than waiting on the highlight event.
+        first = next((f"paper:{i}" for i, s in enumerate(self._snaps) if s is not None), "deploy")
+        menu.highlighted = menu.get_option_index(first)
+        menu.focus()
+        self._show_detail(first)
+
+    @on(OptionList.OptionHighlighted, "#paper-menu")
+    def _highlight(self, event: OptionList.OptionHighlighted) -> None:
+        oid = (event.option.id or "") if event.option else ""
+        if oid:
+            self._show_detail(oid)
+
+    def _show_detail(self, oid: str) -> None:
+        detail = self.query_one("#detail-body", Static)
+        if oid.startswith("paper:"):
+            snap = self._snaps[int(oid.split(":")[1])]
+            if snap is not None:
+                detail.update(_paper_detail(snap))
+        elif oid == "deploy":
+            blurb = Text()
+            if not self._snaps:
+                blurb.append("No paper funds yet — deploy a mandate to start one.\n\n", style=TEXT)
+            blurb.append(
+                "A paper fund is a mandate fixed to a universe, with a ledger, a broker "
+                "book and a kill switch of its own, under\n" + str(PAPER_DIR) + "\n\n"
+                "Advance it here a session at a time, or from a scheduler with "
+                "`aihf paper tick <name>`.", style=MUTED)
+            detail.update(blurb)
+
+    @on(OptionList.OptionSelected, "#paper-menu")
+    def _choose(self, event: OptionList.OptionSelected) -> None:
+        oid = event.option.id or ""
+        if oid.startswith("paper:"):
+            snap = self._snaps[int(oid.split(":")[1])]
+            if snap is not None:
+                self.app.push_screen(PaperFundScreen(snap.directory))
+        elif oid == "deploy":
+            self.app.push_screen(DeployScreen())
+
+
+class DeployScreen(Screen):
+    """Pick a mandate → name the fund → fix its universe → deploy.
+
+    The mandate is snapshotted into the fund's directory: the paper fund's
+    rules do not drift when the mandate file is edited later.
+    """
+
+    BINDINGS = [Binding("escape", "back", "back")]
+
+    def __init__(self, spec: FundSpec | None = None) -> None:
+        super().__init__()
+        self._spec = spec  # preselected by the builder's "Paper trade it"
+        self._preselected = spec is not None
+        self._specs: list[FundSpec | None] = []
+
+    def compose(self) -> ComposeResult:
+        with ContentSwitcher(initial="dp-pick", id="dp-panes"):
+            with Vertical(id="dp-pick", classes="pane"):
+                yield Label("Which mandate?", classes="q")
+                yield OptionList(id="dp-mandates")
+                yield Static("", id="dp-no-mandates", classes="hint")
+            with Vertical(id="dp-form", classes="pane"):
+                yield Static("", id="dp-hero")
+                yield Label("Name the paper fund", classes="q")
+                yield Input(id="dp-name")
+                yield Static(Text("tickers it will trade", style=MUTED))
+                yield Input(placeholder=f"e.g. {', '.join(UNIVERSE_PRESETS[:5])}", id="dp-tickers")
+                yield Static(Text("enter to deploy · esc to go back", style=MUTED), classes="hint")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        if self._spec is not None:
+            self._begin_form()
+            return
+        entries = _saved_funds()
+        self._specs = [entry.spec for entry in entries]
+        menu = self.query_one("#dp-mandates", OptionList)
+        if not self._specs:
+            self.query_one("#dp-no-mandates", Static).update(
+                Text("No mandates yet — build one first. Esc to go back.", style=MUTED))
+            return
+        for entry in entries:
+            if entry.spec is None:
+                menu.add_option(Option(
+                    Text(f"{entry.path.name} — Unavailable\n{entry.error}"), disabled=True))
+            else:
+                menu.add_option(Option(Text(_fund_label(entry.spec))))
+        menu.highlighted = _first_selectable(menu)
+        menu.focus()
+
+    def action_back(self) -> None:
+        pane = self.query_one("#dp-panes", ContentSwitcher).current
+        if pane == "dp-form" and not self._preselected:
+            self.query_one("#dp-panes", ContentSwitcher).current = "dp-pick"
+            self.query_one("#dp-mandates", OptionList).focus()
+        else:
+            self.app.pop_screen()
+
+    @on(OptionList.OptionSelected, "#dp-mandates")
+    def _pick(self, event: OptionList.OptionSelected) -> None:
+        self._spec = self._specs[event.option_index]
+        if self._spec is None:
+            return
+        self._begin_form()
+
+    def _begin_form(self) -> None:
+        assert self._spec is not None
+        spec = self._spec
+        staff = ", ".join(s.title for s in spec.strategies)
+        self.query_one("#dp-hero", Static).update(Group(
+            Text(spec.name, style=f"bold {BRIGHT}"),
+            Text(f"{staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}", style=MUTED),
+            Text(""),
+        ))
+        name = self.query_one("#dp-name", Input)
+        if not name.value:
+            name.value = _free_paper_name(spec.name)
+        tickers = self.query_one("#dp-tickers", Input)
+        if not tickers.value:
+            last = _last_universe(spec.name)
+            if last:
+                tickers.value = ", ".join(last)
+        self.query_one("#dp-panes", ContentSwitcher).current = "dp-form"
+        name.focus()
+
+    @on(Input.Submitted, "#dp-name")
+    def _submit_name(self, event: Input.Submitted) -> None:
+        self.query_one("#dp-tickers", Input).focus()
+
+    @on(Input.Submitted, "#dp-tickers")
+    def _submit(self, event: Input.Submitted) -> None:
+        assert self._spec is not None
+        name = self.query_one("#dp-name", Input).value.strip()
+        try:
+            validate_fund_name(name)
+        except ValueError as exc:
+            self.notify(str(exc), severity="error")
+            self.query_one("#dp-name", Input).focus()
+            return
+        try:
+            universe = normalize_universe(event.value.replace(",", " ").split())
+        except ValueError:
+            self.notify("Enter at least one ticker.", severity="error")
+            return
+        try:
+            directory = deploy(name, self._spec, universe, root=PAPER_DIR)
+        except FileExistsError:
+            self.notify(f"A paper fund named {name} already exists.", severity="error")
+            self.query_one("#dp-name", Input).focus()
+            return
+        self.notify(f"Deployed {name} to {directory}")
+        self.app.switch_screen(PaperFundScreen(directory))
+
+
+def _free_paper_name(base: str) -> str:
+    """The mandate's name, or the first `name-2`, `name-3`… not yet deployed."""
+    taken = {p.name for p in list_deployed(PAPER_DIR)}
+    if base not in taken:
+        return base
+    n = 2
+    while f"{base}-{n}" in taken:
+        n += 1
+    return f"{base}-{n}"
+
+
+class HaltPromptScreen(ModalScreen[str | None]):
+    """The kill switch wants a reason: it is written to control.json and the
+    event log, and it is what `aihf paper status` shows to whoever finds the
+    fund stopped."""
+
+    BINDINGS = [Binding("escape", "cancel", "cancel")]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="halt"):
+            yield Static(Text("Halt the fund?", style=f"bold {BRIGHT}"), id="halt-q")
+            yield Static(Text("Ticks refuse to trade until it is resumed. Say why:", style=MUTED),
+                         id="halt-blurb")
+            yield Input(placeholder="e.g. data vendor outage", id="halt-reason")
+            yield Static(Text("enter to halt · esc to cancel", style=MUTED), classes="hint")
+
+    def on_mount(self) -> None:
+        self.query_one("#halt-reason", Input).focus()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    @on(Input.Submitted, "#halt-reason")
+    def _submit(self, event: Input.Submitted) -> None:
+        reason = event.value.strip()
+        if not reason:
+            self.notify("A reason is required.", severity="error")
+            return
+        self.dismiss(reason)
+
+
+class PaperFundScreen(Screen):
+    """One deployed fund: status, running numbers, the equity curve, and every
+    session it has recorded. `a` advances it by one session, `h`/`r` work the
+    kill switch, enter on a session opens its full report. Re-reads the
+    ledger whenever it comes back to the top of the stack.
+    """
+
     BINDINGS = [
         Binding("escape", "back", "back"),
-        Binding("ctrl+b", "backtest", "backtest instead", priority=True),
+        Binding("a", "advance", "advance one session"),
+        Binding("h", "halt", "halt"),
+        Binding("r", "resume", "resume"),
     ]
 
-    def __init__(self, spec: FundSpec) -> None:
+    def __init__(self, directory: Path) -> None:
         super().__init__()
-        self._spec = spec
-        self._as_of = completed_through()
-        self._phase = "ready"
-        self._universe: list[str] = []
-        self._record: CycleRecord | DecisionRecord | None = None
+        self._directory = directory
+        self._snap: _PaperSnapshot | None = None
+        self._shown: list[SessionRecord] = []  # newest first, as listed
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="pf"):
+            yield Static("", id="pf-head")
+            yield Static("", id="pf-status")
+            with Horizontal(id="stats"):
+                yield Static("", id="stat-nav")
+                yield Static("", id="stat-return")
+                yield Static("", id="stat-bench")
+                yield Static("", id="stat-excess")
+                yield Static("", id="stat-sharpe")
+                yield Static("", id="stat-dd")
+            with Vertical(id="curve-box"):
+                yield Static("", id="curve")
+            with Horizontal(id="pf-panes"):
+                with Vertical(id="report-rail"):
+                    yield Static(Text("SESSIONS", style=MUTED), classes="rail-title")
+                    yield OptionList(id="pf-sessions")
+                with VerticalScroll(id="report-detail"):
+                    yield Static("", id="detail-pane")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self._load()
+
+    def on_screen_resume(self) -> None:
+        self._load()
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
+        snap = self._snap
+        if snap is None or snap.error:
+            return action == "back"
+        if action == "halt":
+            return snap.halted is None
+        if action == "resume":
+            return snap.halted is not None
+        if action == "advance":
+            return snap.halted is None
+        return True
+
+    def action_back(self) -> None:
+        self.app.pop_screen()
+
+    def action_advance(self) -> None:
+        def resume() -> None:
+            if _demand_run_keys(self.app, resume):
+                self.app.push_screen(TickScreen(self._directory))
+        resume()
+
+    def action_halt(self) -> None:
+        self.app.push_screen(HaltPromptScreen(), self._finish_halt)
+
+    def _finish_halt(self, reason: str | None) -> None:
+        if reason is None or self._snap is None:
+            return
+        self._snap.ledger.halt(reason)
+        self.notify(f"{self._snap.deployed.name} halted: {reason}", severity="warning")
+        self._load()
+
+    def action_resume(self) -> None:
+        if self._snap is None:
+            return
+        self._snap.ledger.resume()
+        self.notify(f"{self._snap.deployed.name} resumed")
+        self._load()
+
+    # ---- rendering --------------------------------------------------------
+
+    def _load(self) -> None:
+        try:
+            snap = _PaperSnapshot(self._directory)
+        except ValueError as exc:
+            self._snap = None
+            self.query_one("#pf-head", Static).update(Text(str(self._directory), style=f"bold {BRIGHT}"))
+            self.query_one("#pf-status", Static).update(Text.assemble(("✗ ", f"bold {RED}"), (str(exc), RED)))
+            self.refresh_bindings()
+            return
+        self._snap = snap
+        spec = snap.spec
+        staff = ", ".join(s.title for s in spec.strategies)
+        self.query_one("#pf-head", Static).update(Group(
+            Text.assemble((snap.deployed.name, f"bold {BRIGHT}"),
+                          (f"  ·  paper  ·  mandate {spec.name}", MUTED)),
+            Text(f"{staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}"
+                 f"  ·  {' '.join(snap.deployed.universe)}", style=MUTED),
+        ))
+        self.query_one("#pf-status", Static).update(snap.status())
+        self._render_numbers(snap)
+        self._render_sessions(snap)
+        self.refresh_bindings()
+
+    def _render_numbers(self, snap: _PaperSnapshot) -> None:
+        curve_box = self.query_one("#curve-box", Vertical)
+        curve_box.border_title = "equity curve"
+        curve_box.border_subtitle = f"[{GREEN}]██[/] fund   [{CYAN}]──[/] {snap.spec.benchmark}"
+        if not snap.records:
+            self.query_one("#stats", Horizontal).add_class("hidden")
+            self.query_one("#curve", Static).update(
+                Text("The curve starts with the first session. Press a to advance.", style=MUTED))
+            return
+        self.query_one("#stats", Horizontal).remove_class("hidden")
+        m = snap.metrics()
+        _update_stat_tiles(self, snap.spec.benchmark, snap.nav, m.total_return_pct,
+                           m.benchmark_return_pct, m.excess_return_pct,
+                           m.sharpe_ratio, m.max_drawdown_pct)
+        _, nav, bench = snap.curves()
+        curve_widget = self.query_one("#curve", Static)
+        width = curve_widget.content_size.width or 80
+        curve_widget.update(Group(*_render_area_chart(nav, bench, snap.spec.capital, min(width, 100))))
+
+    def _render_sessions(self, snap: _PaperSnapshot) -> None:
+        menu = self.query_one("#pf-sessions", OptionList)
+        menu.clear_options()
+        self._shown = list(reversed(snap.records))
+        if not self._shown:
+            self.query_one("#detail-pane", Static).update(Text(
+                "No sessions recorded yet.\n\nThe first tick values the book at the most "
+                "recent completed close and makes the first decision; the tick after "
+                "executes it.", style=MUTED))
+            return
+        navs = [snap.spec.capital, *(r.nav for r in snap.records)]
+        for i, record in enumerate(self._shown):
+            index = len(snap.records) - 1 - i
+            menu.add_option(Option(_session_row(record, navs[index]), id=f"s:{i}"))
+        menu.highlighted = 0
+        menu.focus()
+
+    @on(OptionList.OptionHighlighted, "#pf-sessions")
+    def _highlight(self, event: OptionList.OptionHighlighted) -> None:
+        oid = (event.option.id or "") if event.option else ""
+        if oid.startswith("s:"):
+            record = self._shown[int(oid.split(":")[1])]
+            self.query_one("#detail-pane", Static).update(_session_overview(record))
+            self.query_one("#report-detail", VerticalScroll).scroll_home(animate=False)
+
+    @on(OptionList.OptionSelected, "#pf-sessions")
+    def _open(self, event: OptionList.OptionSelected) -> None:
+        oid = event.option.id or ""
+        if oid.startswith("s:") and self._snap is not None:
+            record = self._shown[int(oid.split(":")[1])]
+            self.app.push_screen(SessionReportScreen(self._snap.deployed.name, record))
+
+
+def _update_stat_tiles(screen: Screen, benchmark: str, nav: float, fund_return: float,
+                       benchmark_return: float, excess: float,
+                       sharpe: float, max_dd: float) -> None:
+    """One row of tallies, shared by the backtest board and the paper fund."""
+    def tile(label: str, value: str, style: str) -> Text:
+        return Text.assemble((f"{label}\n", MUTED), (value, f"bold {style}"), justify="center")
+
+    screen.query_one("#stat-nav", Static).update(tile("PORTFOLIO", f"${nav:,.0f}", BRIGHT))
+    screen.query_one("#stat-return", Static).update(
+        tile("RETURN", f"{fund_return:+.2%}", GREEN if fund_return >= 0 else RED))
+    screen.query_one("#stat-bench", Static).update(
+        tile(benchmark, f"{benchmark_return:+.2%}", GREEN if benchmark_return >= 0 else RED))
+    screen.query_one("#stat-excess", Static).update(
+        tile("EXCESS", f"{excess:+.2%}", GREEN if excess >= 0 else RED))
+    screen.query_one("#stat-sharpe", Static).update(
+        tile("SHARPE", f"{sharpe:.2f}", GREEN if sharpe > 1 else "yellow" if sharpe > 0 else RED))
+    screen.query_one("#stat-dd", Static).update(tile("MAX DRAWDOWN", f"{max_dd:.2%}", RED))
+
+
+def _session_headline(name: str, record: SessionRecord) -> Text:
+    """The report header for one session: what happened at this close."""
+    facts = [f"session {record.session}"]
+    if record.executed is not None:
+        x = record.executed
+        refreshed = x.refreshed_assessment.as_of if x.refreshed_assessment else x.as_of
+        facts.append(f"executed the {x.as_of} decision (refreshed {refreshed})")
+    if record.decision is not None:
+        n_signals = sum(len(sr.signals) for sr in record.decision.strategies)
+        facts.append(f"decided · {n_signals} signals · executes next session")
+    if record.executed is None and record.decision is None:
+        facts.append("valuation only")
+    return Text.assemble((name, f"bold {BRIGHT}"), ("  ·  " + "  ·  ".join(facts), MUTED))
+
+
+class SessionReportScreen(Screen):
+    """One recorded session, browsable: every signal on the rail, the full
+    thesis on the right. The same browser the tick lands on."""
+
+    BINDINGS = [Binding("escape", "back", "back")]
+
+    def __init__(self, name: str, record: SessionRecord) -> None:
+        super().__init__()
+        self._name = name
+        self._record = record
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="run-report"):
+            yield Static("", id="report-head")
+            with Horizontal(id="report-panes"):
+                with Vertical(id="report-rail"):
+                    yield OptionList(id="report-nav")
+                with VerticalScroll(id="report-detail"):
+                    yield Static("", id="detail-pane")
+            yield Static("", id="report-foot")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self.query_one("#report-head", Static).update(_session_headline(self._name, self._record))
+        self.query_one("#report-foot", Static).update(_book_summary(self._record))
+        nav = self.query_one("#report-nav", OptionList)
+        nav.add_options(_session_nav(self._record))
+        nav.highlighted = _first_selectable(nav)
+        nav.focus()
+
+    def action_back(self) -> None:
+        self.app.pop_screen()
+
+    @on(OptionList.OptionHighlighted, "#report-nav")
+    def _browse(self, event: OptionList.OptionHighlighted) -> None:
+        oid = (event.option.id or "") if event.option else ""
+        detail = _session_detail(self._record, oid)
+        if detail is not None:
+            self.query_one("#detail-pane", Static).update(detail)
+            self.query_one("#report-detail", VerticalScroll).scroll_home(animate=False)
+
+
+class TickScreen(Screen):
+    """Advance a paper fund by one session, with the analysts' live board
+    while they think, then the session's report.
+
+    The board is a best-effort warm: each analyst streams its thesis for the
+    dates the tick will assess, filling the caches `tick` reads a moment
+    later. `tick` is the source of truth; it writes the ledger.
+    """
+
+    BINDINGS = [Binding("escape", "back", "back")]
+
+    def __init__(self, directory: Path) -> None:
+        super().__init__()
+        self._directory = directory
+        self._phase = "running"
+        self._record: SessionRecord | None = None
         self._desks: list[_Desk] = []
         self._painter: Timer | None = None
 
     def compose(self) -> ComposeResult:
-        with ContentSwitcher(initial="run-ready", id="run-panes"):
-            with Vertical(id="run-ready", classes="pane"):
-                yield Static("", id="run-hero")
-                yield Label("Which stocks should it assess?", classes="q")
-                yield Input(
-                    placeholder=f"e.g. {', '.join(UNIVERSE_PRESETS[:5])}",
-                    id="run-tickers",
-                )
-                yield Static(
-                    Text("enter to run · ctrl+b to backtest instead · esc to go back",
-                         style=MUTED),
-                    classes="hint",
-                )
+        with ContentSwitcher(initial="run-live", id="run-panes"):
             with VerticalScroll(id="run-live", classes="pane"):
                 yield Static("", id="run-phase")
                 yield Static("", id="run-roster")
@@ -1191,174 +1934,149 @@ class RunScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
-        spec = self._spec
-        staff = ", ".join(s.title for s in spec.strategies)
-        self.query_one("#run-hero", Static).update(Group(
-            Text(spec.name, style=f"bold {BRIGHT}"),
-            Text(f"{staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}",
-                 style=MUTED),
-            *(Text(strategy_description(s), style=MUTED) for s in spec.strategies),
-        ))
-        tickers = self.query_one("#run-tickers", Input)
-        last = _last_universe(spec.name)
-        if last:
-            tickers.value = ", ".join(last)
-        tickers.focus()
+        self.query_one("#run-phase", Static).update(
+            Text("Reading the ledger and finding the next session…", style=MUTED))
+        self._run()
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
-        # No leaving or switching mid-run; backtest is offered from ready
-        # ("backtest instead") and from the finished report ("backtest it").
-        if self._phase == "running":
-            return action not in ("back", "backtest")
-        if action == "backtest":
-            return self._phase in ("ready", "done")
-        return True
+        # No leaving mid-tick: the worker is writing the ledger.
+        return not (action == "back" and self._phase == "running")
 
     def action_back(self) -> None:
         self.app.pop_screen()
-
-    def action_backtest(self) -> None:
-        self.app.push_screen(BacktestScreen(spec=self._spec))
-
-    @on(Input.Submitted, "#run-tickers")
-    def _start(self, event: Input.Submitted) -> None:
-        try:
-            self._universe = normalize_universe(
-                event.value.replace(",", " ").split())
-        except ValueError:
-            self.notify("Enter at least one ticker.", severity="error")
-            return
-        def resume() -> None:
-            if _demand_run_keys(self.app, resume):
-                self._begin()
-        resume()
-
-    def _begin(self) -> None:
-        self._phase = "running"
-        self.query_one("#run-panes", ContentSwitcher).current = "run-live"
-        self.query_one("#run-phase", Static).update(Text.assemble(
-            ("Agents analyzing as of ", f"bold {BRIGHT}"),
-            (self._as_of, f"bold {RED}"),
-            ("  ·  completed data → proposed allocations", MUTED),
-        ))
-        self._desks = [_Desk(DISPLAY_NAMES.get(n, n))
-                       for n in _agent_names(self._spec)]
-        self._paint_board()
-        # The worker threads mutate their own desk; this redraws all of them on
-        # one clock, so token rate never sets frame rate.
-        self._painter = self.set_interval(_BOARD_REFRESH, self._paint_board)
-        self._run()
-
-    def _paint_board(self) -> None:
-        self.query_one("#run-roster", Static).update(_desk_table(self._desks))
 
     @on(OptionList.OptionHighlighted, "#report-nav")
     def _browse(self, event: OptionList.OptionHighlighted) -> None:
         assert self._record is not None
         oid = (event.option.id or "") if event.option else ""
-        detail = self.query_one("#detail-pane", Static)
-        if oid.startswith("sig:"):
-            _, si, sj = oid.split(":")
-            detail.update(_signal_detail(self._record, int(si), int(sj)))
-        elif oid == "sec:risk":
-            detail.update(_risk_detail(self._record))
-        elif oid == "sec:orders":
-            detail.update(_orders_detail(self._record))
-        elif oid == "sec:portfolio":
-            detail.update(_portfolio_detail(self._record) if isinstance(self._record, CycleRecord)
-                          else _proposal_detail(self._record))
-        self.query_one("#report-detail", VerticalScroll).scroll_home(animate=False)
+        detail = _session_detail(self._record, oid)
+        if detail is not None:
+            self.query_one("#detail-pane", Static).update(detail)
+            self.query_one("#report-detail", VerticalScroll).scroll_home(animate=False)
 
     @work(thread=True, exclusive=True)
     def _run(self) -> None:
         app = self.app
-        spec = self._spec
-        as_of = self._as_of
-        universe = self._universe
+        directory = self._directory
         try:
-            desks = dict(zip(_agent_names(spec), self._desks, strict=True))
+            deployed = load_deployed(directory)
+            spec = deployed.spec
+            state = Ledger(directory).replay(spec.capital)
+            if state.halted is not None:
+                raise FundHalted(f"{deployed.name} is halted: {state.halted}")
+            with FDClient() as raw:
+                data = CachedDataClient(raw)
+                due = next_session(data, spec.benchmark, state.last_session)
+                if due is None:
+                    after = f"after {state.last_session}" if state.last_session else "yet"
+                    raise NothingDue(f"no completed {spec.benchmark} session {after}")
+                # The dates the analysts will be asked about: the refresh before
+                # executing a pending decision, and the new decision itself.
+                dates: list[str] = []
+                if state.pending is not None and previous_day(due) != state.pending.as_of:
+                    dates.append(previous_day(due))
+                if is_rebalance_session(due, state.last_session, spec.rebalance):
+                    dates.append(due)
+                app.call_from_thread(self._begin_board, deployed, due, dates, state.pending)
+                if dates:
+                    self._warm(spec, deployed.universe, dates)
+                record = tick(directory, data)
+            app.call_from_thread(self._show_report, deployed, record)
+        except Exception as exc:  # fail loud, in the UI
+            app.call_from_thread(self._fail, exc)
 
-            def warm(agent_name: str) -> None:
-                desk = desks[agent_name]
-                cls = ALPHA_MODEL_REGISTRY[agent_name]  # own instance per thread
-                # Only LLM agents have anything to stream; a quant model carries
-                # no client and simply runs.
-                model = (cls(llm=make_llm(on_token=desk.feed))
-                         if issubclass(cls, LLMAgent) else cls())
-                with FDClient() as raw:
-                    fd = CachedDataClient(raw)
+    def _warm(self, spec: FundSpec, universe: list[str], dates: list[str]) -> None:
+        desks = dict(zip(_agent_names(spec), self._desks, strict=True))
+
+        def warm(agent_name: str) -> None:
+            desk = desks[agent_name]
+            cls = ALPHA_MODEL_REGISTRY[agent_name]  # own instance per thread
+            # Only LLM agents have anything to stream; a quant model carries
+            # no client and simply runs.
+            model = (cls(llm=make_llm(on_token=desk.feed))
+                     if issubclass(cls, LLMAgent) else cls())
+            with FDClient() as raw:
+                fd = CachedDataClient(raw)
+                for as_of in dates:
                     for ticker in universe:
                         desk.begin(ticker)
                         try:
                             desk.settle(model.predict(ticker, as_of, fd))
                         except Exception:
-                            pass  # best-effort warm; run_cycle is the source of truth
-                desk.finish()
+                            pass  # best-effort warm; tick is the source of truth
+            desk.finish()
 
-            names = list(desks)
-            with ThreadPoolExecutor(max_workers=min(8, len(names))) as pool:
-                for future in as_completed([pool.submit(warm, n) for n in names]):
-                    future.result()
+        names = list(desks)
+        with ThreadPoolExecutor(max_workers=min(8, len(names))) as pool:
+            for future in as_completed([pool.submit(warm, n) for n in names]):
+                future.result()
 
-            fund = Fund(spec)
-            broker = SimBroker(cash=spec.capital)
-            with FDClient() as raw:
-                record = run_cycle(fund, as_of, broker, CachedDataClient(raw),
-                                   universe)
+    # ---- UI-thread updates ------------------------------------------------
 
-            # Receipts, same shape as a backtest's: the run is recoverable,
-            # and it's what the fund's history pane reads.
-            FUNDS_DIR.mkdir(exist_ok=True)
-            stamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-            path = FUNDS_DIR / f"{spec.name}-run-{stamp}.json"
-            path.write_text(record.model_dump_json(indent=2))
-            app.call_from_thread(self._show_report, record, path)
-        except Exception as exc:  # fail loud, in the UI
-            app.call_from_thread(self._fail, exc)
+    def _begin_board(self, deployed: DeployedFund, due: str, dates: list[str],
+                     pending: DecisionRecord | None) -> None:
+        doing = []
+        if pending is not None:
+            doing.append(f"executing the {pending.as_of} decision")
+        if due in dates:
+            doing.append("assessing the next decision")
+        if not doing:
+            doing.append("marking the book")
+        self.query_one("#run-phase", Static).update(Text.assemble(
+            (f"Advancing {deployed.name} to ", f"bold {BRIGHT}"),
+            (due, f"bold {RED}"),
+            ("  ·  " + " · ".join(doing), MUTED),
+        ))
+        if not dates:
+            return
+        self._desks = [_Desk(DISPLAY_NAMES.get(n, n)) for n in _agent_names(deployed.spec)]
+        self._paint_board()
+        # The worker threads mutate their own desk; this redraws all of them on
+        # one clock, so token rate never sets frame rate.
+        self._painter = self.set_interval(_BOARD_REFRESH, self._paint_board)
+
+    def _paint_board(self) -> None:
+        self.query_one("#run-roster", Static).update(_desk_table(self._desks))
 
     def _stop_painting(self) -> None:
-        """The board is only live while the analysts are. Leave the last frame
-        on screen — it is the finished roster."""
         if self._painter is not None:
             self._painter.stop()
             self._painter = None
-        self._paint_board()
+        if self._desks:
+            self._paint_board()
 
-    def _show_report(self, result: CycleRecord | PendingRunResult, path: Path) -> None:
+    def _show_report(self, deployed: DeployedFund, record: SessionRecord) -> None:
         self._stop_painting()
         self._phase = "done"
-        pending = isinstance(result, PendingRunResult)
-        record = result.proposal if pending else result
         self._record = record
-        n_signals = sum(len(sr.signals) for sr in record.strategies)
-        timing = (f"Pending · analysis cutoff {record.as_of}" if pending else
-                  f"initial {record.as_of} · refreshed "
-                  f"{record.refreshed_assessment.as_of if record.refreshed_assessment else record.as_of} "
-                  f"· executed {record.execution_as_of or record.as_of}")
-        self.query_one("#report-head", Static).update(Text.assemble(
-            (record.fund, f"bold {BRIGHT}"),
-            (f"  ·  {timing}  ·  {n_signals} signals", MUTED),
-        ))
+        self.query_one("#report-head", Static).update(_session_headline(deployed.name, record))
         self.query_one("#report-foot", Static).update(Group(
-            Text(result.reason, style=MUTED) if pending else _book_summary(record),
-            Text.assemble(("✓ ", f"bold {GREEN}"), ("Saved run to ", MUTED), (str(path), MUTED)),
-            Text("Backtest this fund over history · ctrl+b", style=GREEN),
+            _book_summary(record),
+            Text.assemble(("✓ ", f"bold {GREEN}"), ("Recorded ", MUTED),
+                          (str(Ledger(self._directory).path(record.session)), MUTED)),
         ))
-        self.refresh_bindings()  # phase changed: ctrl+b is offered again
+        self.refresh_bindings()  # phase changed: esc is offered again
         nav = self.query_one("#report-nav", OptionList)
         nav.clear_options()
-        nav.add_options(_report_nav(record))
+        nav.add_options(_session_nav(record))
         self.query_one("#run-panes", ContentSwitcher).current = "run-report"
-        # Land on the first signal (option 0 is a disabled strategy header).
-        nav.highlighted = 1
+        nav.highlighted = _first_selectable(nav)
         nav.focus()
 
     def _fail(self, exc: Exception) -> None:
         self._stop_painting()
         self._phase = "failed"
-        self.query_one("#run-phase", Static).update(Text.assemble(
-            ("✗ ", f"bold {RED}"), (f"{type(exc).__name__}: {exc}", RED)))
-        self.notify(str(exc), title="Run failed", severity="error")
+        phase = self.query_one("#run-phase", Static)
+        if isinstance(exc, NothingDue):
+            phase.update(Text.assemble(
+                ("Nothing due  ", f"bold {BRIGHT}"), (f"{exc}", MUTED),
+                ("\n\nThe fund is up to date. Tick again after the next close. esc to go back.", MUTED)))
+        else:
+            phase.update(Text.assemble(
+                ("✗ ", f"bold {RED}"), (f"{type(exc).__name__}: {exc}", RED),
+                ("\n\nesc to go back", MUTED)))
+            self.notify(str(exc), title="Tick failed", severity="error")
+        self.refresh_bindings()
 
 
 class BuilderScreen(Screen):
@@ -1394,12 +2112,12 @@ class BuilderScreen(Screen):
     def compose(self) -> ComposeResult:
         with Horizontal(id="builder"):
             with Vertical(id="rail"):
-                yield Static(Text("BUILD A FUND", style=MUTED), classes="rail-title")
+                yield Static(Text("BUILD A MANDATE", style=MUTED), classes="rail-title")
                 for i in range(len(self.STEP_IDS)):
                     yield Static("", id=f"rail-{i}", classes="rail-step")
             with ContentSwitcher(initial="step-name", id="panes"):
                 with Vertical(id="step-name", classes="pane"):
-                    yield Label("Name your fund", classes="q")
+                    yield Label("Name your mandate", classes="q")
                     yield Input(value="ai-hedge-fund", id="name-input")
                 with Vertical(id="step-strategies", classes="pane"):
                     yield Label("Select your strategies", classes="q")
@@ -1460,7 +2178,8 @@ class BuilderScreen(Screen):
                 with VerticalScroll(id="step-done", classes="pane"):
                     yield Static("", id="done-summary")
                     yield OptionList(
-                        Option("▶  Run it as of today", id="go-run"),
+                        Option("▶  Backtest it over history", id="go-backtest"),
+                        Option("▶  Paper trade it", id="go-paper"),
                         None,
                         Option("Back to home", id="go-home"),
                         id="done-menu",
@@ -1534,8 +2253,8 @@ class BuilderScreen(Screen):
         if "/" in name or "\\" in name or name in (".", ".."):
             self.notify("Use a fund name without path separators.", severity="error")
             return
-        if (FUNDS_DIR / f"{name}.yaml").exists():
-            self.notify("That fund name already exists. Choose a different name.", severity="error")
+        if (MANDATES_DIR / f"{name}.yaml").exists():
+            self.notify("That mandate name already exists. Choose a different name.", severity="error")
             return
         self._state["name"] = name
         self._goto("step-strategies")
@@ -1600,13 +2319,13 @@ class BuilderScreen(Screen):
             capital=self._state["capital"],
             rebalance=self._state["rebalance"],
         )
-        FUNDS_DIR.mkdir(exist_ok=True)
-        path = FUNDS_DIR / f"{spec.name}.yaml"
+        MANDATES_DIR.mkdir(parents=True, exist_ok=True)
+        path = MANDATES_DIR / f"{spec.name}.yaml"
         try:
             with path.open("x") as output:
                 output.write(yaml.safe_dump(spec.model_dump(), sort_keys=False))
         except FileExistsError:
-            self.notify("That fund name already exists. Choose a different name.", severity="error")
+            self.notify("That mandate name already exists. Choose a different name.", severity="error")
             self._goto("step-name")
             return
         self._built = (spec, path)
@@ -1622,7 +2341,7 @@ class BuilderScreen(Screen):
                  MUTED),
             ),
             Text(""),
-            Text("Pick the tickers when you run it — a fund carries no watchlist.",
+            Text("Pick the tickers when you backtest or deploy it — a mandate carries no watchlist.",
                  style=MUTED),
             *(Text(f"{s.title}: {strategy_description(s)}", style=MUTED) for s in spec.strategies),
         ))
@@ -1631,8 +2350,10 @@ class BuilderScreen(Screen):
     @on(OptionList.OptionSelected, "#done-menu")
     def _after_build(self, event: OptionList.OptionSelected) -> None:
         assert self._built is not None
-        if event.option.id == "go-run":
-            self.app.switch_screen(RunScreen(self._built[0]))
+        if event.option.id == "go-backtest":
+            self.app.switch_screen(BacktestScreen(self._built[0]))
+        elif event.option.id == "go-paper":
+            self.app.switch_screen(DeployScreen(self._built[0]))
         else:
             self.app.pop_screen()
 
@@ -1683,7 +2404,7 @@ class BuilderScreen(Screen):
 
 
 class BacktestScreen(Screen):
-    """Pick a fund → pick a window → warm → replay with a live equity curve.
+    """Pick a mandate → pick a window → warm → replay with a live equity curve.
 
     Warm-then-replay: threads only warm the disk caches (market data first,
     then every agent across the whole window); the sequential `backtest_fund`
@@ -1694,7 +2415,7 @@ class BacktestScreen(Screen):
 
     def __init__(self, spec: FundSpec | None = None) -> None:
         super().__init__()
-        self._spec = spec  # preselected by the builder's "Backtest it now"
+        self._spec = spec  # preselected by the mandate picker or the builder
         self._preselected = spec is not None
         self._specs: list[FundSpec | None] = []
         self._phase = "pick"
@@ -1709,7 +2430,7 @@ class BacktestScreen(Screen):
     def compose(self) -> ComposeResult:
         with ContentSwitcher(initial="bt-pick", id="bt-panes"):
             with Vertical(id="bt-pick", classes="pane"):
-                yield Label("Which fund?", classes="q")
+                yield Label("Which mandate?", classes="q")
                 yield OptionList(id="fund-list")
                 yield Static("", id="no-funds", classes="hint")
             with Vertical(id="bt-dates", classes="pane"):
@@ -1757,7 +2478,7 @@ class BacktestScreen(Screen):
         fund_list = self.query_one("#fund-list", OptionList)
         if not self._specs:
             self.query_one("#no-funds", Static).update(
-                Text("No funds yet — build one first. Esc to go back.",
+                Text("No mandates yet — build one first. Esc to go back.",
                      style=MUTED)
             )
             return
@@ -1766,6 +2487,7 @@ class BacktestScreen(Screen):
                 fund_list.add_option(Option(Text(f"{entry.path.name} — Unavailable\n{entry.error}"), disabled=True))
             else:
                 fund_list.add_option(Option(Text(_fund_label(entry.spec))))
+        fund_list.highlighted = _first_selectable(fund_list)
         fund_list.focus()
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
@@ -1855,8 +2577,7 @@ class BacktestScreen(Screen):
 
     @on(OptionList.OptionSelected, "#bt-done-menu")
     def _after_done(self, event: OptionList.OptionSelected) -> None:
-        # "Back to home" means home: a ctrl+b backtest sits on top of the run
-        # screen, so popping once would land on its stale ticker input.
+        # "Back to home" means home, however deep the stack got here.
         while not isinstance(self.app.screen, HomeScreen):
             self.app.pop_screen()
 
@@ -1888,9 +2609,11 @@ class BacktestScreen(Screen):
                 result = backtest_fund(fund, start, end, CachedDataClient(raw),
                                        universe, on_cycle=tick, on_valuation=valuation)
 
-            FUNDS_DIR.mkdir(exist_ok=True)
-            stamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-            path = FUNDS_DIR / f"{spec.name}-backtest-{stamp}.json"
+            # Same artifact, same place as `aihf backtest`: research/ is where
+            # backtests live, and the mandate picker's history reads it.
+            RESEARCH_DIR.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            path = RESEARCH_DIR / f"{spec.name}-{result.start}-{result.end}-{stamp}.json"
             path.write_text(result.model_dump_json(indent=2))
             app.call_from_thread(self._finish, result, path)
         except Exception as exc:  # fail loud, in the UI
@@ -2052,29 +2775,9 @@ class BacktestScreen(Screen):
                       sharpe: float, max_dd: float) -> None:
         """One row of running tallies, live during the replay and refreshed
         with the engine's authoritative numbers at the end."""
-        def tile(label: str, value: str, style: str) -> Text:
-            return Text.assemble(
-                (f"{label}\n", MUTED), (value, f"bold {style}"),
-                justify="center",
-            )
-
         assert self._spec is not None
-        self.query_one("#stat-nav", Static).update(
-            tile("PORTFOLIO", f"${nav:,.0f}", BRIGHT))
-        self.query_one("#stat-return", Static).update(
-            tile("RETURN", f"{fund_return:+.2%}",
-                 GREEN if fund_return >= 0 else RED))
-        self.query_one("#stat-bench", Static).update(
-            tile(self._spec.benchmark, f"{benchmark_return:+.2%}",
-                 GREEN if benchmark_return >= 0 else RED))
-        self.query_one("#stat-excess", Static).update(
-            tile("EXCESS", f"{excess:+.2%}",
-                 GREEN if excess >= 0 else RED))
-        self.query_one("#stat-sharpe", Static).update(
-            tile("SHARPE", f"{sharpe:.2f}",
-                 GREEN if sharpe > 1 else "yellow" if sharpe > 0 else RED))
-        self.query_one("#stat-dd", Static).update(
-            tile("MAX DRAWDOWN", f"{max_dd:.2%}", RED))
+        _update_stat_tiles(self, self._spec.benchmark, nav, fund_return,
+                           benchmark_return, excess, sharpe, max_dd)
 
     def _finish(self, result: FundBacktestResult, path: Path) -> None:
         self._phase = "done"
@@ -2087,7 +2790,7 @@ class BacktestScreen(Screen):
             ("BACKTEST RESULTS  ", f"bold {BRIGHT}"),
             (result.fund, f"bold {CYAN}"),
             (f"  {result.start} → {result.end} · {result.rebalance} "
-             f"rebalance · {m.n_cycles} executed cycles · {m.n_pending} pending proposals · {m.n_orders} orders · "
+             f"rebalance · {m.n_cycles} executed cycles · {m.n_orders} orders · "
              f"{m.annualized_return_pct:+.1%} annualized",
              MUTED),
         ))
@@ -2144,7 +2847,7 @@ _ANSI_THEME = TerminalTheme(
 
 
 class HedgeFundApp(App):
-    """The v2 terminal app. One screen stack: Home → Builder / Backtest."""
+    """The v2 terminal app. One screen stack: Home → Backtest / Paper / Builder."""
 
     TITLE = "AI Hedge Fund"
     SUB_TITLE = f"v{VERSION}"

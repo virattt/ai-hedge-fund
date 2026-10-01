@@ -74,44 +74,46 @@ Every layer is a place the community can contribute a new model.
 
 ## One engine, three modes
 
-There is a single pipeline (`run_cycle`) — `data → analysts → portfolio → risk →
-execution → ledger`. It runs in three modes, and **the only thing that changes is the
-clock and the broker:**
+There is a single verb, `advance` — one session of the fund: `reconcile the books →
+execute the pending decision → mark the book → assess the next decision`. It runs
+in three modes, and **the only thing that changes is the clock, the broker, and
+where the state lives:**
 
 ```
-  BACKTEST   =  historical clock  +  simulated broker   (the past, fake money)
-  PAPER      =  live clock        +  paper broker        (right now, fake money)
-  LIVE       =  live clock        +  real broker         (right now, real money)
+  BACKTEST   =  historical clock  +  simulated broker  +  state in memory    (the past, fake money)
+  PAPER      =  live clock        +  paper broker      +  state in a ledger  (right now, fake money)
+  LIVE       =  live clock        +  real broker       +  state in a ledger  (right now, real money)
 ```
 
 Because it's **one code path by design**, what you backtest is what trades — no
 separate "research" implementation that quietly diverges from production. (Two of
-the three modes exist today: the backtester is `run_cycle` looped over history with
-a simulated broker, and "run it as of today" is the same `run_cycle` as a single
-live-clock tick — so PIT, fail-loud, and master risk hold for every tick by
-construction. What separates run-today from true paper mode is the ledger's read
-half: today each run starts from the mandate's cash instead of carrying the book
-forward, so NAV has no memory yet. An older per-model harness remains for
-single-model studies.)
+the three modes ship today. The backtester is `advance` looped over history; a
+paper fund is `advance` called once per completed session, with its state replayed
+from an append-only, hash-chained ledger and its book reconciled against the paper
+broker first. Stepping a paper fund through the same sessions produces the same
+records as the backtest, byte for byte. Live is a broker away. An older per-model
+harness remains for single-model studies.)
 
-### One cycle
+### One session
 
-A "cycle" is one tick — one trading day in a backtest, or one scheduled run when live:
+A "session" is one tick — one completed trading day, in the past or just now. A
+decision made at session T's close is executed at T+1's close; nothing is assessed
+and executed against the same price.
 
 ```
-  point-in-time data        only what was actually filed by this date — no peeking
-        │                   at the future
+  reconcile                 the broker's book must match what the ledger implies —
+        │                   a mismatch is raised, never repaired
         ▼
-  analysts emit Signals     Buffett +0.7 "durable moat, fair price"
-        │                   PEAD    -1.0 "missed earnings"
+  execute                   the decision made last session: refresh the views,
+        │                   target vs. broker reality → orders → fills
         ▼
-  portfolio construction    blend views → target weights
+  mark                      value the book at today's close → NAV
         ▼
-  risk model                hard caps clamp or veto (conviction requests, risk disposes)
+  assess (rebalance days)   point-in-time data → analysts emit Signals →
+        │                   portfolio construction → risk clamps → target weights
         ▼
-  execution                 target vs. broker reality → the orders to place
-        ▼
-  ledger                    persist the decision, the thesis, the fills, the new NAV
+  record                    one SessionRecord: the book, the fills, the decision,
+                            every thesis — hash-chained to the record before it
 ```
 
 ## A fund and a research lab, side by side

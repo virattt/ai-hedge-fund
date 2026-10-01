@@ -10,30 +10,31 @@ read [VISION.md](./VISION.md).
 
 ✅ Shipped · 🚧 In progress · ⬜ Planned
 
-**Current focus:** the persistent ledger. Every run already writes a full receipt
-(positions, cash, NAV, every thesis) — the missing half is *reading* it: seed each
-run's broker from the newest receipt so the fund carries its book between runs and
-NAV becomes a track record instead of resetting to the mandate's capital. Then the
-paper broker, then the scheduler — that's the path from "run it by hand" to a fund
-that is genuinely always-on. In parallel: retiring the v1 CLI, which needs Ollama
-(the free, local, no-key path) and the remaining investor personas ported.
+**Current focus:** running paper funds for real. The fund now has two modes,
+backtest and paper, on one verb (`advance`), and a paper fund carries its book
+between sessions in a hash-chained ledger with a kill switch. `aihf paper tick` is
+idempotent and cron-safe, so the next step is the scheduler itself (market-calendar
+timing, notifications, a heartbeat) and observability over the event log. In
+parallel: retiring the v1 CLI, which needs Ollama (the free, local, no-key path) and
+the remaining investor personas ported.
 
 The tables below are a capability map, not a strict order; where items depend on
 each other, the dependency is noted.
 
 ## The engine
 
-The core: a **fund** as a persistent object, and one pipeline (`run_cycle`) that runs
-it in backtest, paper, or live mode (see [VISION.md](./VISION.md)).
+The core: a **fund** as a persistent object, and one verb (`advance`) that moves it
+through one session in backtest or paper mode, live later (see [VISION.md](./VISION.md)).
 
 | Item | Status |
 |------|--------|
 | `AlphaModel` / `Signal` interface — the contract every analyst implements | ✅ |
-| Backtesting engine — `backtest_fund`: the whole fund over history on `run_cycle`, equity curve vs the mandate's benchmark (plus the per-model harness) | ✅ |
+| Backtesting engine — `backtest_fund`: `advance` looped over history, equity curve vs the mandate's benchmark (plus the per-model harness) | ✅ |
 | Event-study engine — market-model abnormal returns (CARs) | ✅ |
-| `run_cycle` — one pipeline (data → analysts → portfolio → risk → execution → ledger), three modes | 🚧 (single cycle, run-today, and the backtest loop ship; a carried book + paper broker are what remain) |
-| Fund object — persistent mandate, staff, capital, books | 🚧 (mandates, staffing, and per-run receipts ship; tickers are a run-time input, not part of the mandate; the carried book is next) |
-| Persistent ledger — positions, every decision + thesis, orders, fills, NAV history | 🚧 (write half ships: every run and backtest saves a full `CycleRecord` receipt, and the TUI shows the history; read half next: seed the broker from the newest receipt so NAV moves between runs) |
+| `advance` — one session (reconcile → execute the pending decision → mark → assess), the same code path in every mode; decide at T, execute at T+1 | ✅ (backtest and paper ship; live is the broker away) |
+| Fund object — persistent mandate, staff, capital, books | ✅ (mandates carry no tickers; a *deployed* paper fund fixes the universe and carries its book in `~/.hedge-fund/paper/<name>/`) |
+| Persistent ledger — positions, every decision + thesis, orders, fills, NAV history | ✅ (append-only `SessionRecord`s, hash-chained; replay verifies the chain and rebuilds state; the broker book is reconciled against it before every tick) |
+| Kill switch — halt/resume a paper fund; any failure inside a tick halts it | ✅ |
 | LLM provider layer — one client factory (`make_llm`) routed by the model registry: Anthropic · OpenAI · DeepSeek · Google · xAI · Kimi | ✅ (Ollama next — the free local path, and the last blocker v1 holds over v2) |
 | Point-in-time data correctness — as-of / filing-date queries, no lookahead | 🚧 |
 | Validation gate — CPCV, probability of backtest overfitting (PBO) | ⬜ |
@@ -73,7 +74,7 @@ can be backtested and combined — is a great first contribution:
 |------|--------|
 | Strategy — bundle models + a blend policy + capital slice (a "pod") | ✅ (`StrategySpec` + library: fundamental-ls, deep-value, inflections, earnings-drift) |
 | Portfolio construction — blend model views → target weights | ✅ (conviction-weighted; optional market-neutral sleeves) |
-| Multi-strategy fund — many pods running at once, netted into one book | ✅ (`run_cycle` nets every sleeve into one target book, then master risk clamps it) |
+| Multi-strategy fund — many pods running at once, netted into one book | ✅ (`assess_fund` nets every sleeve into one target book, then master risk clamps it) |
 | Allocator (CIO) — pluggable capital allocation across strategies | 🚧 (static slices ship; the pluggable interface is next) |
 | ↳ Static (human-set dial) | ✅ (capital slices in the mandate) |
 | ↳ Risk-parity / inverse-vol | ⬜ |
@@ -87,15 +88,15 @@ can be backtested and combined — is a great first contribution:
 | Risk model — hard caps (pod-level budgets + fund-level limits) | 🚧 (fund-level position + gross caps ship; pod budgets with pods) |
 | Broker protocol — pluggable, mirrors the `DataClient` pattern | ✅ |
 | ↳ Simulated broker (backtest) | ✅ |
-| ↳ Paper broker | ⬜ |
+| ↳ Paper broker — the simulated book, persisted to `broker.json` | ✅ |
 | ↳ Live broker (Interactive Brokers / Alpaca) — opt-in plugin, off by default | ⬜ |
 
 ## Autonomy
 
 | Item | Status |
 |------|--------|
-| Scheduler / daemon — market-calendar cron, idempotent ticks, kill-switch | ⬜ |
-| Observability — per-cycle events, notifications, heartbeat | ⬜ |
+| Scheduler / daemon — market-calendar cron, idempotent ticks, kill-switch | 🚧 (`aihf paper tick` is idempotent, never skips a session, and honours the kill switch — point any cron at it; the built-in calendar-aware daemon is next) |
+| Observability — per-cycle events, notifications, heartbeat | 🚧 (`events.jsonl` records every tick, failure, halt and resume; notifications and a heartbeat are next) |
 | Research lab — backtest candidate strategies/allocators alongside the live fund | ⬜ |
 | Strategy generator — composes candidate strategies from the building blocks (analysts × policies × parameters), driven by the fund's mandate | ⬜ |
 | Auto-promotion — winners graduate into the live fund through the validation gate (CPCV/PBO), human-approved by default (depends: research lab, validation gate) | ⬜ |
@@ -106,8 +107,8 @@ Thin clients over the engine — pick the surface, the core stays the same.
 
 | Item | Status |
 |------|--------|
-| TUI — the main interface (Textual): build a fund, run it as of today, backtest it, browse every signal's thesis, fund history + delete, model picker, in-app API-key setup | 🚧 (ships and is the default `python -m v2.run`; streaming reasoning + watch mode remain) |
-| CLI — thin machine client over the engine: `python -m v2.run mandate.yaml --tickers … [--backtest]`, JSON on stdout | ✅ |
+| TUI — the main interface (Textual): backtest a mandate, paper trade one (deploy, advance a session with the analysts' live board, halt/resume, browse every session's report), build a mandate, model picker, in-app API-key setup | 🚧 (ships and is the default `aihf`; watch mode remains) |
+| CLI — thin machine client over the engine: `aihf backtest mandate.yaml --universe …` and `aihf paper create\|tick\|status\|list\|halt\|resume`, JSON on stdout | ✅ |
 | Web dashboard — replayable, time-scrubbable reasoning ledger | 🚧 (frontend scaffold exists; still runs on the v1 engine) |
 | Conversational control plane — operate the fund in natural language | ⬜ |
 

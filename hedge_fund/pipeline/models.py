@@ -1,9 +1,10 @@
-"""Pipeline records — the serialized truth of every cycle.
+"""Pipeline records — the serialized truth of every decision and execution.
 
-A CycleRecord captures one tick of the fund end to end: what the analysts
-saw, what they said, how views became weights, what risk clamped, what was
-ordered and filled, and what the book looks like after. The ledger persists
-these; `fund why AAPL` will answer from them alone.
+A DecisionRecord is an assessment: what the analysts saw, what they said,
+and how views became validated target weights. A CycleRecord is that
+decision executed: what risk clamped, what was ordered and filled, and what
+the book looks like after. `hedge_fund.pipeline.session.SessionRecord` wraps
+both into the per-session unit the ledger persists.
 """
 
 from __future__ import annotations
@@ -54,19 +55,6 @@ class DecisionRecord(BaseModel):
     clamps: list[ClampEvent]
     final_weights: dict[str, float]
     risk_scale_factor: float | None = None
-
-
-class PendingRunResult(BaseModel):
-    """A saved proposal awaiting an explicit run with completed session data."""
-
-    schema_version: Literal[2] = 2
-    status: Literal["pending"] = "pending"
-    execution_policy: Literal["next_close"] = "next_close"
-    fund: str
-    as_of: str
-    proposal: DecisionRecord
-    reason: str
-    scheduled_execution_date: str | None = None
 
 
 class CycleRecord(BaseModel):

@@ -14,10 +14,10 @@ STRATEGY  =  a blend policy over MODELS       (a "pod")
 MODEL     =  an alpha model → a Signal        (conviction in [-1,+1] + thesis)
 ```
 
-A fund is the **desk**, not a watchlist: the mandate names no tickers. Which
-names to trade is supplied per run (`--tickers`, or the app's ticker prompt)
-and recorded on every `CycleRecord` — so one fund can be pointed at anything,
-and every run remembers what it traded.
+A fund is the **desk**, not a watchlist: the mandate names no tickers. The
+universe is fixed when you backtest or deploy the mandate (`--universe`, or
+the app's ticker prompt) and recorded on every `SessionRecord` — so one
+mandate can be pointed at anything, and every record remembers what it traded.
 
 A fund runs two kinds of pods, like a real shop. **Discretionary** strategies
 are staffed by **agents** — LLM investor personas (Warren Buffett, Charlie
@@ -27,11 +27,20 @@ strategies are powered by quant models (post-earnings drift) — the model *is*
 the strategy, no persona attached. Both kinds implement one interface and
 plug into the same engine unchanged.
 
-Run a fund two ways: **one cycle** (today's data → today's target book) or a
-**backtest** — the same cycle looped over history at the mandate's rebalance
-cadence, producing an equity curve against your benchmark and a full
-`CycleRecord` for every tick. Same code path, so a backtest is honest by
-construction: it's the fund, replayed, not a separate simulator.
+A fund runs in two modes, and both are the same verb, `advance(fund, state,
+session, broker, data, universe)`, called once per completed session:
+
+- **Backtest** — `advance` looped over history with an in-memory state and a
+  simulated broker. Produces an equity curve against your benchmark and a
+  `SessionRecord` for every session.
+- **Paper** — a *deployed* fund: the mandate snapshotted into
+  `~/.hedge-fund/paper/<name>/` with a universe, a broker book and an
+  append-only, hash-chained ledger. `aihf paper tick` replays the ledger
+  into state and advances exactly the next unrecorded session.
+
+Same code path, so the backtest is honest by construction: stepping a paper
+fund through the same sessions produces byte-identical records. A decision
+made at session T's close is executed at T+1's close, in both modes.
 
 ## Quickstart
 
@@ -43,18 +52,25 @@ poetry install                          # dependencies
 #   ANTHROPIC_API_KEY=...               # only for LLM agents (Buffett)
 
 # THE command. No arguments: launch the interactive app (a Textual TUI).
-# Build a fund — pick stocks, strategies, rebalance cadence — or backtest a
-# saved fund and watch its equity curve draw against its benchmark.
+# Backtest a mandate, paper trade one, or build a new mandate.
 poetry run aihf       # or, equivalently: python -m hedge_fund.tui
 
-# With a mandate: run one cycle non-interactively (data → strategies →
-# netting → risk → execution), full CycleRecord as JSON on stdout. A mandate
-# carries no tickers — --tickers says what to point the fund at this run.
-poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT,NVDA
+# Backtest a mandate over a window: `advance` looped over every benchmark
+# session, full result JSON (every SessionRecord) on stdout, a copy saved to
+# ~/.hedge-fund/research/. A mandate carries no tickers — --universe says
+# what to point it at.
+poetry run aihf backtest ~/.hedge-fund/mandates/example.yaml \
+    --universe AAPL,MSFT,NVDA --start 2024-01-02 --end 2024-06-28
 
-# Backtest a mandate: the same run_cycle looped over history at the
-# mandate's rebalance cadence, full result JSON (every CycleRecord) on stdout.
-poetry run aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
+# Paper trade: deploy the mandate, then advance it one session per tick.
+# tick is idempotent and never skips a session — a scheduler can call it
+# after every close, and a week away takes a week of ticks to catch up.
+poetry run aihf paper create alpha --mandate ~/.hedge-fund/mandates/example.yaml --universe AAPL,MSFT
+poetry run aihf paper tick alpha
+poetry run aihf paper status alpha
+poetry run aihf paper list
+poetry run aihf paper halt alpha --reason "..."     # the kill switch
+poetry run aihf paper resume alpha
 
 # Tests
 poetry run pytest hedge_fund/
@@ -62,6 +78,25 @@ poetry run pytest hedge_fund/
 
 All API responses cache to disk (`~/.hedge-fund/cache/`), so reruns are fast,
 free, and work offline once warmed.
+
+### What lives where (`~/.hedge-fund/`)
+
+```
+mandates/<name>.yaml            a mandate: strategies, staff, risk, capital, cadence
+research/<name>-<start>-<end>-<stamp>.json   one backtest result each
+paper/<name>/
+  fund.yaml                     the deployed fund: mandate snapshot + universe
+  broker.json                   the paper broker's book (cash, shares)
+  ledger/<session>.json         one SessionRecord per session, hash-chained
+  control.json                  the kill switch (halted, reason, since)
+  events.jsonl                  ticks, failures, halts, resumes
+```
+
+The ledger is the fund's memory. `tick` replays it into a `FundState`
+(positions, cash, the pending decision) and reconciles that against
+`broker.json` before anything trades; a mismatch raises `BookMismatch` rather
+than being repaired. Any failure inside `advance` halts the fund, so a cron
+job cannot keep trading into a broken book.
 
 ## Architecture
 
@@ -79,12 +114,13 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | `strategies/` | Strategy library (fundamental-ls, deep-value, inflections, earnings-drift) — add yours as a YAML | ✅ |
 | `portfolio/` | View blending → target weights (conviction-weighted, optional market-neutral) | ✅ |
 | `risk/` | Hard limits — per-position and gross-exposure clamps | ✅ |
-| `brokers/` | `Broker` protocol + `SimBroker` (paper/live brokers planned) | ◐ |
-| `pipeline/` | `run_cycle` — one code path for backtest/paper/live; `CycleRecord` | ✅ |
-| `backtesting/` | `backtest_fund` — the whole fund over history on `run_cycle` — plus the per-model engine | ✅ |
+| `brokers/` | `Broker` protocol + `SimBroker` (backtest) + `PaperBroker` (the same book, persisted to `broker.json`); live brokers planned | ◐ |
+| `pipeline/` | `advance` — one session of the fund, the same code path in every mode — over the two stages in `stages.py` (`assess_fund` → `DecisionRecord`, `execute_decision` → `CycleRecord`); `SessionRecord`, `FundState` | ✅ |
+| `paper/` | A deployed fund: `deploy`, the hash-chained `Ledger` (replay, halt/resume, events), `tick` | ✅ |
+| `backtesting/` | `backtest_fund` — `advance` looped over history — plus the per-model engine | ✅ |
 | `event_study/` | Market-model abnormal returns (CARs) | ✅ |
 | `validation/` | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO) | ⬜ |
-| `tui/` | The interactive app (Textual): fund builder + live backtest board | ✅ |
+| `tui/` | The interactive app (Textual): backtest board, paper fund console, mandate builder | ✅ |
 
 ✅ built · ◐ partial · ⬜ planned
 
@@ -99,6 +135,11 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
   deterministic code sizes and places orders; risk limits are hard gates.
 - **One interface for every analyst.** Implement `AlphaModel.predict(ticker,
   date, data_client) -> Signal` and it plugs into the engine unchanged.
+- **Decide at T, execute at T+1.** Nothing is ever assessed and executed
+  against the same close. The rebalance rule (first session of each period)
+  is computable on a live tick, so backtest and paper agree by construction.
+- **The ledger is append-only.** Records are hash-chained; replay verifies
+  the chain and refuses an altered record. State is derived, never edited.
 
 ## Data contracts (`models.py`)
 

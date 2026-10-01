@@ -289,24 +289,63 @@ ConfirmDeleteScreen {
     margin-bottom: 1;
 }
 
-/* ---------------- run today ---------------- */
+/* ---------------- paper: deploy ---------------- */
 
-#run-ready {
+#dp-hero {
+    margin-bottom: 1;
+}
+
+/* ---------------- paper: halt prompt ---------------- */
+
+HaltPromptScreen {
     align: center middle;
+    background: #0b100e 70%;
 }
 
-#run-hero {
-    width: auto;
-    margin-bottom: 3;
+#halt {
+    width: 62;
+    max-width: 90%;
+    height: auto;
+    padding: 1 3;
+    background: #101613;
+    border: round #f87171;
 }
 
-#run-menu {
-    width: 40;
+#halt-q {
+    margin-bottom: 1;
 }
 
-#run-menu .hint {
-    text-align: center;
+#halt-blurb {
+    margin-bottom: 1;
 }
+
+/* ---------------- paper: one fund ---------------- */
+
+#pf {
+    padding: 1 2;
+}
+
+#pf-head {
+    margin-bottom: 1;
+}
+
+#pf-status {
+    margin-bottom: 1;
+}
+
+/* The sessions browser takes whatever the numbers and the curve leave. */
+#pf-panes {
+    height: 1fr;
+    min-height: 8;
+    margin-top: 1;
+}
+
+#pf-sessions {
+    height: 1fr;
+    max-height: 100%;
+}
+
+/* ---------------- paper: tick ---------------- */
 
 #run-phase {
     margin-bottom: 1;

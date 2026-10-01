@@ -29,8 +29,8 @@ def build_orders(
     deterministic, and sells free the cash that buys consume within the
     same cycle.
 
-    A KeyError on marks here means a pipeline bug upstream (run_cycle prices
-    every tradeable and held name before calling this) — let it raise.
+    A KeyError on marks here means a pipeline bug upstream (execute_decision
+    prices every tradeable and held name before calling this) — let it raise.
     """
     sells: list[Order] = []
     buys: list[Order] = []

@@ -20,6 +20,8 @@ from hedge_fund.llm import is_supported, load_api_models  # noqa: F401  (re-expo
 from hedge_fund.paths import (  # noqa: F401  (re-export)
     ensure_mandates_dir,
     MANDATES_DIR,
+    PAPER_DIR,
+    RESEARCH_DIR,
 )
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, get_investment_approach, LLMAgent
 
@@ -29,9 +31,9 @@ except PackageNotFoundError:  # running from source without an install
     VERSION = "dev"
 
 # Strategy libraries live in hedge_fund/strategies/ (code, inside the package).
-# Mandates the app writes are user data and live in ~/.hedge-fund/ (see paths.py).
+# Mandates, paper funds and backtest results the app writes are user data
+# and live in ~/.hedge-fund/ (see paths.py).
 STRATEGY_DIR = Path(__file__).resolve().parent.parent / "strategies"
-FUNDS_DIR = MANDATES_DIR
 
 UNIVERSE_PRESETS = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN",
                     "META", "TSLA", "JPM", "UNH", "XOM"]

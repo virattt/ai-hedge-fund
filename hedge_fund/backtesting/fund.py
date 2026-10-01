@@ -1,4 +1,16 @@
-"""Daily fund replay with assessments followed by next-close execution."""
+"""Backtest a fund — `advance` in a loop over history.
+
+`advance` is the fund's daily unit of work (hedge_fund/pipeline/session.py).
+This module is the historical clock around it: every benchmark session in
+the window, in order, against an in-memory FundState and a fresh SimBroker.
+Nothing here re-implements pipeline mechanics, so anything true of one
+session (point-in-time data, next-close execution, reconciliation, master
+risk on the netted book) is true of every backtested session by
+construction — and identical to what a paper fund does, one tick at a time.
+
+The trading grid derives from the mandate's benchmark's actual bars —
+holidays and half-weeks fall out naturally, no exchange calendar math.
+"""
 
 from __future__ import annotations
 
@@ -6,14 +18,20 @@ from datetime import date as _date
 from typing import Callable, Literal
 
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from hedge_fund.brokers.sim import SimBroker
 from hedge_fund.data.protocol import DataClient
 from hedge_fund.data.sessions import previous_day, session_closes
 from hedge_fund.fund import Fund, normalize_universe
-from hedge_fund.pipeline.models import CycleRecord, DecisionRecord, PendingRunResult
-from hedge_fund.pipeline.run_cycle import assess_fund, exact_marks, execute_decision
+from hedge_fund.pipeline.models import CycleRecord
+from hedge_fund.pipeline.session import (
+    advance,
+    FundState,
+    is_rebalance_session,
+    next_state,
+    SessionRecord,
+)
 
 
 class ReplaySchedule(BaseModel):
@@ -56,15 +74,14 @@ class FundBacktestMetrics(BaseModel):
     max_drawdown_pct: float
     benchmark_return_pct: float
     excess_return_pct: float          # fund total minus benchmark total
-    n_cycles: int
+    n_cycles: int                     # executed rebalances
     n_orders: int
-    n_pending: int = 0
 
 
 class FundBacktestResult(BaseModel):
     """A full backtest, serialized: the curve, the stats, and — because every
-    tick is a CycleRecord — every thesis, clamp, order, and fill behind it.
-    `model_dump_json()` round-trips; this is the receipts file."""
+    session is a SessionRecord — every thesis, clamp, order, and fill behind
+    it. `model_dump_json()` round-trips; this is the research artifact."""
 
     schema_version: Literal[2] = 2
     fund: str
@@ -78,8 +95,12 @@ class FundBacktestResult(BaseModel):
     nav: list[float]                  # closing NAV for every observed session
     benchmark_nav: list[float]        # benchmark scaled to the same capital
     metrics: FundBacktestMetrics
-    records: list[CycleRecord]
-    pending: list[PendingRunResult] = Field(default_factory=list)
+    records: list[SessionRecord]      # one per session, in order
+
+    @property
+    def cycles(self) -> list[CycleRecord]:
+        """The executed rebalances, in order."""
+        return [r.executed for r in self.records if r.executed is not None]
 
 
 def backtest_fund(
@@ -87,77 +108,73 @@ def backtest_fund(
     on_cycle: Callable[[int, int, CycleRecord], None] | None = None,
     on_valuation: Callable[[int, int, DailyValuation], None] | None = None,
 ) -> FundBacktestResult:
-    """Replay daily marks, executing assessments only on later observed sessions.
+    """Replay *fund* over *universe* through every benchmark session in [start, end].
 
-    Callbacks receive a zero-based index, the total count, and a record.
-    Executed-cycle and valuation counts are independent; the final proposal
-    can remain pending without extending the requested window.
+    `on_cycle(i, n, cycle)` fires after each executed rebalance and
+    `on_valuation(i, n, value)` after every session's close; both receive a
+    zero-based index and the total count. A decision made at the window's
+    last session stays on that record, unexecuted.
+
+    Fail loud: no benchmark bars in the window raises — a backtest with no
+    trading grid is an infrastructure problem, not an empty result.
     """
     spec = fund.spec
     universe = normalize_universe(universe)
-    schedule = build_schedule(data_client, spec.benchmark, start, end, spec.rebalance)
-    dates = list(schedule.closes)
+    closes = session_closes(data_client, spec.benchmark, start, end)
+    if not closes:
+        raise ValueError(
+            f"{spec.name}: no {spec.benchmark} bars in [{start}, {end}] — "
+            "cannot build the trading grid"
+        )
+    dates = list(closes)
+    n_cycles = sum(1 for day in rebalance_grid(dates, spec.rebalance) if day != dates[-1])
+
     broker = SimBroker(cash=spec.capital)
-    records: list[CycleRecord] = []
-    pending: list[PendingRunResult] = []
-    due: dict[str, DecisionRecord] = {}
+    state = FundState.initial(spec.capital)
+    records: list[SessionRecord] = []
     nav: list[float] = []
     benchmark_nav: list[float] = []
-    n_cycles = sum(day is not None for day in schedule.execution_dates.values())
+    base_close = closes[dates[0]]
+    n_executed = 0
     for i, session in enumerate(dates):
-        if session in due:
-            record = execute_decision(fund, due.pop(session), session, broker, data_client)
-            records.append(record)
+        record = advance(fund, state, session, broker, data_client, universe)
+        state = next_state(state, record)
+        records.append(record)
+        nav.append(record.nav)
+        benchmark_nav.append(spec.capital * record.benchmark_close / base_close)
+        if record.executed is not None:
             if on_cycle is not None:
-                on_cycle(len(records) - 1, n_cycles, record)
-        held = broker.positions()
-        marks = exact_marks(list(held), session, data_client)
-        nav.append(broker.cash() + sum(p.shares * marks[t] for t, p in held.items()))
-        benchmark_nav.append(spec.capital * schedule.closes[session] / schedule.closes[dates[0]])
+                on_cycle(n_executed, n_cycles, record.executed)
+            n_executed += 1
         if on_valuation is not None:
             on_valuation(i, len(dates), DailyValuation(
                 as_of=session, nav=nav[-1], benchmark_nav=benchmark_nav[-1],
             ))
-        if session in schedule.execution_dates:
-            proposal = assess_fund(fund, session, data_client, universe)
-            execution = schedule.execution_dates[session]
-            if execution is None:
-                pending.append(PendingRunResult(
-                    fund=spec.name, as_of=session, proposal=proposal,
-                    reason="No subsequent completed benchmark session exists inside the backtest window.",
-                ))
-            else:
-                due[execution] = proposal
+
+    cycles = [r.executed for r in records if r.executed is not None]
     return FundBacktestResult(
         fund=spec.name, start=dates[0], end=dates[-1], rebalance=spec.rebalance,
         benchmark=spec.benchmark, universe=universe, capital=spec.capital,
         dates=dates, nav=nav, benchmark_nav=benchmark_nav,
-        metrics=performance_metrics(spec.capital, dates, nav, benchmark_nav, records, len(pending)),
-        records=records, pending=pending,
+        metrics=performance_metrics(spec.capital, dates, nav, benchmark_nav, cycles),
+        records=records,
     )
 
 
 def rebalance_grid(days: list[str], cadence: str) -> list[str]:
     """Pick the rebalance dates out of sorted trading *days* (YYYY-MM-DD).
 
-    daily: every day. weekly: the last trading day of each ISO week.
-    monthly: the last trading day of each calendar month.
+    daily: every day. weekly: the first trading day of each ISO week.
+    monthly: the first trading day of each calendar month. The first day is
+    always one. Same rule as `is_rebalance_session`, applied to a whole list.
     """
-    if cadence == "daily":
-        return list(days)
-    if cadence not in ("weekly", "monthly"):
-        raise ValueError(f"unknown rebalance cadence {cadence!r}")
-
-    last_of_period: dict[tuple[int, int], str] = {}
+    grid: list[str] = []
+    last: str | None = None
     for day in days:
-        d = _date.fromisoformat(day)
-        if cadence == "weekly":
-            iso = d.isocalendar()
-            key = (iso[0], iso[1])
-        else:
-            key = (d.year, d.month)
-        last_of_period[key] = day  # days are sorted — the last write wins
-    return sorted(last_of_period.values())
+        if is_rebalance_session(day, last, cadence):
+            grid.append(day)
+        last = day
+    return grid
 
 
 def performance_metrics(
@@ -165,8 +182,7 @@ def performance_metrics(
     dates: list[str],
     nav: list[float],
     benchmark_nav: list[float],
-    records: list[CycleRecord],
-    n_pending: int = 0,
+    cycles: list[CycleRecord],
 ) -> FundBacktestMetrics:
     """Closing-value performance over the full window, with daily-return Sharpe."""
     total = nav[-1] / capital - 1
@@ -200,7 +216,6 @@ def performance_metrics(
         max_drawdown_pct=round(float(max_dd), 6),
         benchmark_return_pct=round(benchmark_return, 6),
         excess_return_pct=round(total - benchmark_return, 6),
-        n_cycles=len(records),
-        n_pending=n_pending,
-        n_orders=sum(len(r.orders) for r in records),
+        n_cycles=len(cycles),
+        n_orders=sum(len(r.orders) for r in cycles),
     )

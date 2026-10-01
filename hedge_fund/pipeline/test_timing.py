@@ -11,8 +11,9 @@ from hedge_fund.brokers.sim import SimBroker
 from hedge_fund.data import sessions
 from hedge_fund.fund import Fund, FundSpec
 from hedge_fund.models import Signal
-from hedge_fund.pipeline.models import CycleRecord, DecisionRecord, PendingRunResult
-from hedge_fund.pipeline.run_cycle import assess_fund, execute_decision, run_cycle
+from hedge_fund.pipeline.models import CycleRecord, DecisionRecord
+from hedge_fund.pipeline.session import advance, FundState, next_state
+from hedge_fund.pipeline.stages import assess_fund, execute_decision
 
 FRIDAY = "2024-06-07"
 MONDAY = "2024-06-10"
@@ -45,11 +46,24 @@ def market(execution=MONDAY, price=200):
                            "A": {FRIDAY: 100, execution: price}})
 
 
+def _advance_through(fund, broker, data, days, state=None):
+    """Advance session by session, the way a paper fund ticks; return the records."""
+    state = state or FundState.initial(broker.cash())
+    records = []
+    for day in days:
+        records.append(advance(fund, state, day, broker, data, ["A"]))
+        state = next_state(state, records[-1])
+    return records
+
+
 def test_weekend_refresh_replaces_targets_and_uses_execution_prices():
     fund, analyst = make_fund()
     broker = SimBroker(10_000)
-    result = run_cycle(fund, FRIDAY, broker, market(), ["A"])
-    assert analyst.calls == [("A", FRIDAY), ("A", "2024-06-09")]
+    friday, monday = _advance_through(fund, broker, market(), [FRIDAY, MONDAY])
+    # Friday decides; Monday refreshes at Sunday's cutoff, executes, then decides anew.
+    assert analyst.calls == [("A", FRIDAY), ("A", "2024-06-09"), ("A", MONDAY)]
+    assert friday.executed is None and friday.decision.as_of == FRIDAY
+    result = monday.executed
     assert result.as_of == FRIDAY
     assert result.execution_as_of == MONDAY
     assert result.execution_policy == "next_close"
@@ -60,19 +74,21 @@ def test_weekend_refresh_replaces_targets_and_uses_execution_prices():
     assert result.marks == {"A": 200}
     assert result.positions == {"A": -50}
     assert result.fills[0].price == 200
+    assert monday.positions == {"A": -50} and monday.nav == 10_000
     assert CycleRecord.model_validate_json(result.model_dump_json()) == result
 
 
 def test_holiday_uses_next_observed_session_and_preceding_day():
     fund, analyst = make_fund()
-    result = run_cycle(fund, FRIDAY, SimBroker(10_000), market("2024-06-11"), ["A"])
-    assert result.execution_as_of == "2024-06-11"
-    assert analyst.calls[-1] == ("A", "2024-06-10")
+    _, tuesday = _advance_through(fund, SimBroker(10_000), market("2024-06-11"), [FRIDAY, "2024-06-11"])
+    assert tuesday.executed.execution_as_of == "2024-06-11"
+    assert analyst.calls[1] == ("A", "2024-06-10")  # the refresh, at the day before execution
 
 
 def test_same_cutoff_reuses_assessment_and_records_are_snapshots():
     fund, analyst = make_fund()
-    result = run_cycle(fund, "2024-06-09", SimBroker(10_000), market(), ["A"])
+    proposal = assess_fund(fund, "2024-06-09", market(), ["A"])
+    result = execute_decision(fund, proposal, MONDAY, SimBroker(10_000), market())
     assert analyst.calls == [("A", "2024-06-09")]
     assert result.original_assessment == result.refreshed_assessment
     fund.spec.name = "changed"
@@ -83,7 +99,9 @@ def test_execution_revalues_existing_positions_before_sizing():
     fund, _ = make_fund()
     broker = SimBroker(10_000)
     broker.place_order(Order(ticker="A", side="buy", quantity=50, price=100))
-    result = run_cycle(fund, FRIDAY, broker, market(), ["A"])
+    carried = FundState(positions={"A": 50}, cash=5_000)  # what the ledger would say
+    _, monday = _advance_through(fund, broker, market(), [FRIDAY, MONDAY], state=carried)
+    result = monday.executed
     assert result.equity_before == 15_000
     assert result.positions == {"A": -75}
     assert result.orders[0].quantity == 125
@@ -99,8 +117,9 @@ def test_entire_basket_fails_before_orders_if_execution_price_invalid(bad_price)
     data._series["B"] = {FRIDAY: 100, MONDAY: 100}
     broker = SimBroker(10_000)
     broker.place_order = Mock(side_effect=AssertionError("order submitted"))
+    proposal = assess_fund(fund, FRIDAY, data, ["A", "B"])
     with pytest.raises(ValueError, match="A.*2024-06-10"):
-        run_cycle(fund, FRIDAY, broker, data, ["A", "B"])
+        execute_decision(fund, proposal, MONDAY, broker, data)
     broker.place_order.assert_not_called()
 
 
@@ -109,8 +128,9 @@ def test_missing_held_price_is_required_even_when_target_is_zero():
     broker = SimBroker(10_000)
     broker.place_order(Order(ticker="OLD", side="buy", quantity=1, price=100))
     broker.place_order = Mock()
+    proposal = assess_fund(fund, FRIDAY, market(), ["A"])
     with pytest.raises(ValueError, match="OLD.*2024-06-10"):
-        run_cycle(fund, FRIDAY, broker, market(), ["A"])
+        execute_decision(fund, proposal, MONDAY, broker, market())
     broker.place_order.assert_not_called()
 
 
@@ -124,22 +144,24 @@ def test_refresh_failure_does_not_fall_back_to_original_targets():
     analyst.predict = predict
     broker = SimBroker(10_000)
     broker.place_order = Mock()
+    proposal = assess_fund(fund, FRIDAY, market(), ["A"])
     with pytest.raises(ConnectionError, match="refresh failed"):
-        run_cycle(fund, FRIDAY, broker, market(), ["A"])
+        execute_decision(fund, proposal, MONDAY, broker, market())
     broker.place_order.assert_not_called()
 
 
 def test_invalid_projected_orders_fail_before_submission(monkeypatch):
     from importlib import import_module
-    pipeline = import_module("hedge_fund.pipeline.run_cycle")
+    pipeline = import_module("hedge_fund.pipeline.stages")
     monkeypatch.setattr(pipeline, "build_orders", lambda *args: [
         Order(ticker="A", side="buy", quantity=1000, price=200),
     ])
     fund, _ = make_fund()
     broker = SimBroker(10_000)
     broker.place_order = Mock()
+    proposal = assess_fund(fund, FRIDAY, market(), ["A"])
     with pytest.raises(ValueError, match="projected position"):
-        run_cycle(fund, FRIDAY, broker, market(), ["A"])
+        execute_decision(fund, proposal, MONDAY, broker, market())
     broker.place_order.assert_not_called()
 
 
@@ -147,8 +169,9 @@ def test_nonfinite_equity_fails_before_submission():
     fund, _ = make_fund()
     broker = SimBroker(float("nan"))
     broker.place_order = Mock()
+    proposal = assess_fund(fund, FRIDAY, market(), ["A"])
     with pytest.raises(ValueError, match="equity.*finite"):
-        run_cycle(fund, FRIDAY, broker, market(), ["A"])
+        execute_decision(fund, proposal, MONDAY, broker, market())
     broker.place_order.assert_not_called()
 
 
@@ -162,14 +185,16 @@ def test_current_new_york_day_is_excluded_even_after_close(monkeypatch, hour):
     fund, analyst = make_fund()
     broker = SimBroker(10_000)
     broker.place_order = Mock()
-    result = run_cycle(fund, MONDAY, broker, market(), ["A"])
-    assert isinstance(result, PendingRunResult)
-    assert result.as_of == "2024-06-09"
-    assert analyst.calls == [("A", "2024-06-09")]
-    assert result.scheduled_execution_date is None
-    assert not {"orders", "fills", "nav", "positions"} & result.model_dump().keys()
-    assert PendingRunResult.model_validate_json(result.model_dump_json()) == result
+    with pytest.raises(ValueError, match="not complete"):
+        advance(fund, FundState.initial(10_000), MONDAY, broker, market(), ["A"])
+    with pytest.raises(ValueError, match="incomplete"):
+        assess_fund(fund, MONDAY, market(), ["A"])
+    assert analyst.calls == []
     broker.place_order.assert_not_called()
+    # Yesterday is complete: the fund can still decide, and nothing executes.
+    record = advance(fund, FundState.initial(10_000), "2024-06-09", broker,
+                     FakeDataClient({"SPY": {"2024-06-09": 100}, "A": {"2024-06-09": 100}}), ["A"])
+    assert record.decision.as_of == "2024-06-09" and record.executed is None
 
 
 def test_assessment_has_no_broker_fields_and_rejects_same_day_execution():
@@ -183,7 +208,8 @@ def test_assessment_has_no_broker_fields_and_rejects_same_day_execution():
 
 def test_old_executed_record_defaults_remain_readable():
     fund, _ = make_fund()
-    result = run_cycle(fund, FRIDAY, SimBroker(10_000), market(), ["A"])
+    proposal = assess_fund(fund, FRIDAY, market(), ["A"])
+    result = execute_decision(fund, proposal, MONDAY, SimBroker(10_000), market())
     raw = result.model_dump(exclude={"original_assessment", "refreshed_assessment", "execution_as_of", "execution_policy"})
     historical = CycleRecord.model_validate(raw)
     assert historical.execution_as_of is None

@@ -1,13 +1,36 @@
-"""Shared assessment and next-close execution for fund runs and backtests."""
+"""One pipeline: assess, execute at a later close, advance session by session."""
 
 from hedge_fund.pipeline.execution import build_orders
 from hedge_fund.pipeline.models import (
     CycleRecord,
     DecisionRecord,
-    PendingRunResult,
     StrategyRecord,
     TickerSkip,
 )
-from hedge_fund.pipeline.run_cycle import assess_fund, execute_decision, run_cycle
+from hedge_fund.pipeline.session import (
+    advance,
+    BookMismatch,
+    FundHalted,
+    FundState,
+    is_rebalance_session,
+    next_state,
+    SessionRecord,
+)
+from hedge_fund.pipeline.stages import assess_fund, execute_decision
 
-__all__ = ["DecisionRecord", "PendingRunResult", "assess_fund", "execute_decision", "CycleRecord", "StrategyRecord", "TickerSkip", "build_orders", "run_cycle"]
+__all__ = [
+    "BookMismatch",
+    "CycleRecord",
+    "DecisionRecord",
+    "FundHalted",
+    "FundState",
+    "SessionRecord",
+    "StrategyRecord",
+    "TickerSkip",
+    "advance",
+    "assess_fund",
+    "build_orders",
+    "execute_decision",
+    "is_rebalance_session",
+    "next_state",
+]

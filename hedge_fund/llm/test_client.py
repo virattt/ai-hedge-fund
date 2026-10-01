@@ -238,10 +238,15 @@ def test_factory_missing_jev_key_names_variable(monkeypatch):
 
 
 def test_cli_jev_cycle_and_saved_replay(tmp_path, monkeypatch, http, capsys):
+    """`aihf backtest` over two sessions with a Jev model: the first close
+    decides, the second executes; a second run replays from the prompt cache
+    and never touches the provider again."""
     import sys
+    from datetime import date, timedelta
     from hedge_fund import run
+    from hedge_fund.backtesting import FundBacktestResult
     from hedge_fund.data.models import Price
-    from hedge_fund.pipeline.models import CycleRecord
+    from hedge_fund.features import breakpoints
     from hedge_fund.signals import llm_agent
     from hedge_fund.tui import keys
 
@@ -252,10 +257,19 @@ def test_cli_jev_cycle_and_saved_replay(tmp_path, monkeypatch, http, capsys):
         def __exit__(self, *args):
             return None
 
+        def get_financial_metrics(self, ticker, end_date, period="ttm", limit=10):
+            # Distinct fundamentals per name: blind prompts carry no ticker,
+            # so two identical snapshots would share one cache entry.
+            roe = {"MSFT": 0.05}.get(ticker, 0.2)
+            return [m.model_copy(update={"return_on_equity": roe})
+                    for m in super().get_financial_metrics(ticker, end_date, period, limit)]
+
         def get_prices(self, ticker, start_date, end_date, **kwargs):
-            day = start_date if ticker == "SPY" else end_date
-            return [Price(open=100, high=100, low=100, close=100,
-                          volume=1000, time=f"{day}T00:00:00Z")]
+            first, last = date.fromisoformat(start_date), date.fromisoformat(end_date)
+            days = [first + timedelta(days=i) for i in range((last - first).days + 1)]
+            return [Price(open=100, high=100, low=100, close=100, volume=1000,
+                          time=f"{day.isoformat()}T00:00:00Z")
+                    for day in days if day.weekday() < 5]
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(keys, "ENV_PATH", tmp_path / "saved.env")
@@ -264,9 +278,14 @@ def test_cli_jev_cycle_and_saved_replay(tmp_path, monkeypatch, http, capsys):
     monkeypatch.setenv("TYPESAFE_API_KEY", API_KEY)
     monkeypatch.setenv("HEDGE_FUND_LLM_MODEL", "claude-opus-5")
     monkeypatch.setattr(run, "ensure_mandates_dir", lambda: tmp_path)
+    monkeypatch.setattr(run, "RESEARCH_DIR", tmp_path / "research")
     monkeypatch.setattr(run, "FDClient", lambda: FinancialFixtures(metrics=_history()))
     monkeypatch.setattr(run, "CachedDataClient", lambda raw: raw)
     monkeypatch.setattr(llm_agent, "PromptCache", lambda: PromptCache(tmp_path / "llm"))
+    # A backtest blinds the agents, and a blind prompt sizes the company
+    # against the market-equity breakpoints table.
+    monkeypatch.setattr(breakpoints, "_shared",
+                        breakpoints.MEBreakpoints({"202412": tuple(100.0 * i for i in range(1, 21))}))
     mandate = tmp_path / "fund.yaml"
     mandate.write_text("""schema_version: 2
 name: jev-test
@@ -281,20 +300,28 @@ risk:
   max_gross_exposure: 1.0
 capital: 100000
 """)
-    output = tmp_path / "record.json"
-    monkeypatch.setattr(sys, "argv", ["aihf", str(mandate), "--tickers", "AAPL,MSFT",
-                                     "--date", "2025-01-15", "--model", "jev-1.13.0", "--out", str(output)])
+    output = tmp_path / "result.json"
+    monkeypatch.setattr(sys, "argv", ["aihf", "--model", "jev-1.13.0", "backtest", str(mandate),
+                                     "--universe", "AAPL,MSFT", "--start", "2025-01-14",
+                                     "--end", "2025-01-15", "--out", str(output)])
     _serve(http, _http_response(), _http_response(_response("bearish")))
     run.main()
-    first = CycleRecord.model_validate_json(output.read_text())
-    assert CycleRecord.model_validate_json(capsys.readouterr().out) == first
+    result = FundBacktestResult.model_validate_json(output.read_text())
+    assert FundBacktestResult.model_validate_json(capsys.readouterr().out) == result
+    assert [r.session for r in result.records] == ["2025-01-14", "2025-01-15"]
+    decided, executed = result.records[0].decision, result.records[1].executed
+    assert decided is not None and executed is not None
+    assert result.records[0].executed is None and result.records[1].decision is None
+    first = executed
+    assert first.as_of == "2025-01-14" and first.execution_as_of == "2025-01-15"
     assert first.strategies[0].convictions == {"AAPL": 0.8, "MSFT": -0.4}
     assert first.positions["AAPL"] > 0 > first.positions["MSFT"]
     assert first.orders and first.fills and first.clamps
     assert all(abs(weight) <= 0.25 for weight in first.final_weights.values())
     assert http[0].call_count == 2
+    assert len(list((tmp_path / "research").glob("jev-test-2025-01-14-2025-01-15-*.json"))) == 1
     run.main()
-    second = CycleRecord.model_validate_json(output.read_text())
+    second = FundBacktestResult.model_validate_json(output.read_text()).records[1].executed
     capsys.readouterr()
     assert second.final_weights == first.final_weights
     assert second.positions == first.positions

@@ -32,14 +32,17 @@ def test_packaged_example_uses_current_format():
 def test_all_shipped_strategies_execute_with_fixed_signals():
     from hedge_fund.brokers import SimBroker
     from hedge_fund.fund import Fund, FundSpec
-    from hedge_fund.pipeline import run_cycle
-    from hedge_fund.pipeline.test_run_cycle import FakeAnalyst, FakeDataClient
+    from hedge_fund.pipeline import advance, FundState, next_state
+    from hedge_fund.pipeline.test_stages import FakeAnalyst, FakeDataClient
     library = sorted(Path(__file__).parent.parent.glob("strategies/*.yaml"))
     for path in library:
         strategy = load_strategy(path)
         spec = FundSpec(schema_version=2, name=path.stem, strategies=[strategy],
                         risk={"max_position_pct": .25, "max_gross_exposure": 1})
         fund = Fund(spec, models={strategy.name: [FakeAnalyst(m.name, {"A": 1, "B": -1}) for m in strategy.models]})
-        record = run_cycle(fund, "2025-01-01", SimBroker(100_000), FakeDataClient({"A": 100, "B": 100}), ["A", "B"])
-        assert record.positions["A"] > 0
-        assert (record.positions.get("B", 0) < 0) == (strategy.blend.mode != "long_only")
+        broker, data = SimBroker(100_000), FakeDataClient({"A": 100, "B": 100})
+        state = FundState.initial(100_000)
+        first = advance(fund, state, "2025-01-06", broker, data, ["A", "B"])
+        second = advance(fund, next_state(state, first), "2025-01-07", broker, data, ["A", "B"])
+        assert second.executed.positions["A"] > 0
+        assert (second.positions.get("B", 0) < 0) == (strategy.blend.mode != "long_only")
