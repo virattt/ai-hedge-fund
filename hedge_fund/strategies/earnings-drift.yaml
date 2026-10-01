@@ -1,0 +1,11 @@
+# Earnings drift — systematic, event-time.
+# Post-earnings announcement drift: the market underreacts to surprises for
+# days. The model is the strategy; no one is pretending it has opinions.
+name: earnings-drift
+display_name: Earnings Drift
+models:
+  - name: pead
+blend:
+  mode: long_short
+  method: conviction_weighted
+  gross_target: 1.0

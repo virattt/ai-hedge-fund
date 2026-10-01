@@ -1,0 +1,17 @@
+# Fundamental long/short — the flagship discretionary pod.
+# All five agents contribute ownership views. Shorts require support from
+# Druckenmiller; long and short targets have equal dollar exposure.
+# Edge claimed: collective judgment ranks names better than the market
+# prices them.
+name: fundamental-ls
+display_name: Fundamental L/S
+models:
+  - name: buffett
+  - name: munger
+  - name: graham
+  - name: lynch
+  - name: druckenmiller
+blend:
+  mode: dollar_neutral
+  method: conviction_weighted
+  gross_target: 1.0

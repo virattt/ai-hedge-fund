@@ -1,0 +1,47 @@
+[
+  {
+    "display_name": "Opus 5.5",
+    "model_name": "claude-opus-5-5",
+    "provider": "Anthropic"
+  },
+  {
+    "display_name": "Fable 5.1",
+    "model_name": "claude-fable-5-1",
+    "provider": "Anthropic"
+  },
+  {
+    "display_name": "GPT-6 Sol",
+    "model_name": "gpt-6-sol",
+    "provider": "OpenAI"
+  },
+  {
+    "display_name": "GPT-6 Astra",
+    "model_name": "gpt-6-astra",
+    "provider": "OpenAI"
+  },
+  {
+    "display_name": "Jev",
+    "model_name": "jev-1.13.0",
+    "provider": "TypeSafe"
+  },
+  {
+    "display_name": "Grok 4.7",
+    "model_name": "grok-4.7",
+    "provider": "xAI"
+  },
+  {
+    "display_name": "DeepSeek V4.1 Flash",
+    "model_name": "deepseek-flash",
+    "provider": "DeepSeek"
+  },
+  {
+    "display_name": "Kimi K3",
+    "model_name": "kimi-k3",
+    "provider": "Kimi"
+  },
+  {
+    "display_name": "Gemini 3.8 Flash",
+    "model_name": "gemini-3.8-flash",
+    "provider": "Google"
+  }
+]

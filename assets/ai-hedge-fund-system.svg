@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1460" viewBox="0 0 2400 1460" role="img" aria-labelledby="title description">
+  <title id="title">AI Hedge Fund system architecture</title>
+  <desc id="description">A user configures analysts and strategies, capital allocations and risk limits, rebalance cadence and benchmark, tickers and dates, and the LLM model. Configuration feeds the fund engine as a whole. Market data and LLM providers support investor agents and quantitative models. Their views feed portfolio construction and fund-level risk checks. Before simulated execution, the engine refreshes the assessment using information through the prior day. Trades use the next completed session's closing prices. Backtests and reports show daily performance, benchmark comparisons, decisions, and trades.</desc>
+  <defs>
+    <style>
+      text { font-family: Arial, Helvetica, sans-serif; fill: #000; text-anchor: middle; }
+      .title { font-size: 88px; font-weight: 700; }
+      .subtitle { font-size: 48px; }
+      .group-title { font-size: 34px; font-weight: 700; }
+      .node-title { font-size: 34px; }
+      .config-title { font-size: 30px; }
+      .edge-label { font-size: 28px; paint-order: stroke; stroke: #fff; stroke-width: 10px; stroke-linejoin: round; }
+      .boundary { fill: none; stroke: #000; stroke-width: 2.5px; stroke-dasharray: 8 8; }
+      .node { stroke: #000; stroke-width: 2.5px; }
+      .edge { fill: none; stroke: #000; stroke-width: 2.5px; marker-end: url(#arrow); }
+    </style>
+    <marker id="arrow" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" orient="auto" markerUnits="strokeWidth">
+      <path d="M0 1 L11 6 L0 11 L3 6 Z" fill="#000"/>
+    </marker>
+  </defs>
+
+  <rect width="2400" height="1460" fill="#fff"/>
+  <text class="title" x="1200" y="110">AI Hedge Fund</text>
+  <text class="subtitle" x="1200" y="200">Multi-Strategy Investment System</text>
+
+  <rect class="boundary" x="570" y="300" width="1240" height="870" rx="110"/>
+  <text class="group-title" x="1190" y="370">Fund Engine</text>
+  <rect class="boundary" x="1970" y="300" width="390" height="870" rx="90"/>
+  <text class="group-title" x="2165" y="370">APIs</text>
+
+  <rect class="boundary" x="40" y="490" width="450" height="680" rx="70"/>
+  <text class="group-title" x="265" y="538">Configuration</text>
+  <path class="edge" d="M265 420 V490"/>
+  <text class="edge-label" x="265" y="463">configure</text>
+  <path class="edge" d="M490 575 H650"/>
+
+  <path class="edge" d="M1970 430 H875 V490"/>
+  <text class="edge-label" x="1890" y="438">inputs</text>
+
+  <path class="edge" d="M1100 575 H1280"/>
+  <text class="edge-label" x="1190" y="583">signals</text>
+  <path class="edge" d="M1505 660 V860"/>
+  <text class="edge-label" x="1505" y="770">targets</text>
+  <path class="edge" d="M1280 945 H1100"/>
+  <text class="edge-label" x="1190" y="953">weights</text>
+
+  <path class="edge" d="M875 1030 V1270"/>
+  <text class="edge-label" x="875" y="1217">positions + trades</text>
+
+  <rect class="node" x="95" y="300" width="340" height="120" rx="24" fill="#f5f2ee"/>
+  <text class="node-title" x="265" y="372">User</text>
+  <rect class="node" x="95" y="560" width="340" height="100" rx="24" fill="#f5f2ee"/>
+  <text class="config-title" x="265" y="621">Analysts &amp; Strategies</text>
+  <rect class="node" x="95" y="680" width="340" height="100" rx="24" fill="#f5f2ee"/>
+  <text class="config-title" x="265" y="741">Capital &amp; Risk</text>
+  <rect class="node" x="95" y="800" width="340" height="100" rx="24" fill="#f5f2ee"/>
+  <text class="config-title" x="265" y="861">Cadence &amp; Benchmark</text>
+  <rect class="node" x="95" y="920" width="340" height="100" rx="24" fill="#f5f2ee"/>
+  <text class="config-title" x="265" y="981">Tickers &amp; Dates</text>
+  <rect class="node" x="95" y="1040" width="340" height="100" rx="24" fill="#f5f2ee"/>
+  <text class="config-title" x="265" y="1101">LLM Model</text>
+
+  <rect class="node" x="650" y="490" width="450" height="170" rx="24" fill="#e0b6a3"/>
+  <text class="node-title" x="875" y="587">Investment Analysis</text>
+
+  <rect class="node" x="1280" y="490" width="450" height="170" rx="24" fill="#e0b6a3"/>
+  <text class="node-title" x="1505" y="587">Portfolio Construction</text>
+
+  <rect class="node" x="1280" y="860" width="450" height="170" rx="24" fill="#e5d6bb"/>
+  <text class="node-title" x="1505" y="957">Risk Checks</text>
+
+  <rect class="node" x="650" y="860" width="450" height="170" rx="24" fill="#e5d6bb"/>
+  <text class="node-title" x="875" y="957">Simulated Execution</text>
+
+
+  <rect class="node" x="2010" y="490" width="310" height="210" rx="24" fill="#a7b5c7"/>
+  <text class="node-title" x="2165" y="607">Market</text>
+
+  <rect class="node" x="2010" y="820" width="310" height="210" rx="24" fill="#a7b5c7"/>
+  <text class="node-title" x="2165" y="937">LLM Providers</text>
+
+  <rect class="node" x="650" y="1270" width="1080" height="155" rx="24" fill="#aec4a3"/>
+  <text class="node-title" x="1190" y="1360">Backtests &amp; Reports</text>
+</svg>

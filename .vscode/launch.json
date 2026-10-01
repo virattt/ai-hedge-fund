@@ -10,13 +10,8 @@
             "request": "launch",
             "console": "integratedTerminal",
             "envFile": "${workspaceFolder}/.env",
-            "program": "${workspaceFolder}/src/main.py",
+            "module": "hedge_fund.run",
             "args": [
-                "--ticker",
-                "AAPL,MSFT,NVDA,AAPL,GOOGL,MSFT,NVDA,TSLA",
-                "--analysts-all",
-                "--model",
-                "deepseek/deepseek-v3.2"
             ]
         }
     ]

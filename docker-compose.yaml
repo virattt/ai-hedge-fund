@@ -6,7 +6,7 @@ services:
     image: guestros/ai-hedge-fund:latest
     volumes:
       - ./.env:/app/.env
-    command: poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA,AAPL,GOOGL,MSFT,NVDA,TSLA --analysts-all --model gemini-2.5-flash
+    command: poetry run python -m hedge_fund.backtesting --help  # v1 src/backtester.py was removed upstream; set real args
     environment:
       PYTHONUNBUFFERED: "1"
       PYTHONPATH: /app
