@@ -163,8 +163,9 @@ def _compute_ticker_events(
     # Step 3: Fetch stock prices — one call covering all events.
     # Earliest event needs ~400 calendar days of history for the estimation window.
     # Latest event needs ~35 calendar days after for the post-event window.
-    min_date = min(_parse_date(r.filing_date) for r in records)
-    max_date = max(_parse_date(r.filing_date) for r in records)
+    filing_dates = [_parse_date(r.filing_date) for r in records if r.filing_date is not None]
+    min_date = min(filing_dates)
+    max_date = max(filing_dates)
     today = date.today()
     price_start = (min_date - timedelta(days=400)).isoformat()
     price_end = min(max_date + timedelta(days=35), today).isoformat()
@@ -229,6 +230,8 @@ def _process_event(
     5. Compute daily AR and cumulate into CARs for each window.
     """
     event_date_str = record.filing_date
+    if event_date_str is None:
+        return None
 
     # Find day 0: the trading day on or immediately after the filing date.
     # (Filing may land on a weekend/holiday — snap to next trading day.)
@@ -367,7 +370,7 @@ def _parse_date(s: str) -> date:
 
 
 def _filter_retrospective(records: list[EarningsRecord]) -> list[EarningsRecord]:
-    """Drop records where filing_date is >45 days after report_period.
+    """Drop records with no filing_date, or filed >45 days after report_period.
 
     The ER extractor sometimes parses prior-period comparison data from
     a current 8-K, producing rows that look like a real Q4 event but are
@@ -378,6 +381,9 @@ def _filter_retrospective(records: list[EarningsRecord]) -> list[EarningsRecord]
     """
     kept: list[EarningsRecord] = []
     for r in records:
+        if r.filing_date is None:
+            logger.debug("Filtered undated: %s %s (report %s)", r.ticker, r.source_type, r.report_period)
+            continue
         filing = _parse_date(r.filing_date)
         report = _parse_date(r.report_period)
         if (filing - report).days < _RETROSPECTIVE_CUTOFF_DAYS:

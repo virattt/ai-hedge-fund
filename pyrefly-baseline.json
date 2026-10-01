@@ -379,41 +379,6 @@
       "severity": "error"
     },
     {
-      "column": 32,
-      "path": "hedge_fund/event_study/engine.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `s` with type `str` in function `_parse_date`",
-      "severity": "error"
-    },
-    {
-      "column": 32,
-      "path": "hedge_fund/event_study/engine.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `s` with type `str` in function `_parse_date`",
-      "severity": "error"
-    },
-    {
-      "column": 33,
-      "path": "hedge_fund/event_study/engine.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `event_date` with type `str` in function `_find_event_idx`",
-      "severity": "error"
-    },
-    {
-      "column": 20,
-      "path": "hedge_fund/event_study/engine.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `event_date` with type `bytearray | bytes | str` in function `hedge_fund.event_study.models.EventCAR.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "hedge_fund/event_study/engine.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `s` with type `str` in function `_parse_date`",
-      "severity": "error"
-    },
-    {
       "column": 42,
       "path": "hedge_fund/features/test_snapshot.py",
       "name": "bad-argument-type",
