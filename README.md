@@ -86,6 +86,7 @@ cd ai-hedge-fund
 poetry install
 poetry run aihf
 poetry run pytest hedge_fund
+poetry run pyrefly check
 ```
 
 ## How to Contribute

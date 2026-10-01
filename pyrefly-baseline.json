@@ -1,0 +1,2461 @@
+{
+  "errors": [
+    {
+      "column": 34,
+      "path": "hedge_fund/backtesting/__main__.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.engine.BacktestEngine.run_alpha`",
+      "severity": "error"
+    },
+    {
+      "column": 48,
+      "path": "hedge_fund/backtesting/test_backtest.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.engine.BacktestEngine.run_alpha`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "hedge_fund/backtesting/test_backtest.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.engine.BacktestEngine.run_alpha`",
+      "severity": "error"
+    },
+    {
+      "column": 48,
+      "path": "hedge_fund/backtesting/test_backtest.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.engine.BacktestEngine.run_alpha`",
+      "severity": "error"
+    },
+    {
+      "column": 48,
+      "path": "hedge_fund/backtesting/test_backtest.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.engine.BacktestEngine.run_alpha`",
+      "severity": "error"
+    },
+    {
+      "column": 40,
+      "path": "hedge_fund/backtesting/test_backtest.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.engine.BacktestEngine.run_alpha`",
+      "severity": "error"
+    },
+    {
+      "column": 40,
+      "path": "hedge_fund/backtesting/test_backtest.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.engine.BacktestEngine.run_alpha`",
+      "severity": "error"
+    },
+    {
+      "column": 56,
+      "path": "hedge_fund/backtesting/test_backtest.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.engine.BacktestEngine.run_alpha`",
+      "severity": "error"
+    },
+    {
+      "column": 46,
+      "path": "hedge_fund/backtesting/test_backtest.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.engine.BacktestEngine.run_alpha`",
+      "severity": "error"
+    },
+    {
+      "column": 54,
+      "path": "hedge_fund/backtesting/test_backtest.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `TestMetrics.test_win_rate_and_counts.PerTickerMock` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.engine.BacktestEngine.run_alpha`",
+      "severity": "error"
+    },
+    {
+      "column": 16,
+      "path": "hedge_fund/backtesting/test_backtest.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `n_trades`",
+      "severity": "error"
+    },
+    {
+      "column": 16,
+      "path": "hedge_fund/backtesting/test_backtest.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `n_long`",
+      "severity": "error"
+    },
+    {
+      "column": 16,
+      "path": "hedge_fund/backtesting/test_backtest.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `win_rate`",
+      "severity": "error"
+    },
+    {
+      "column": 21,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-argument-type",
+      "concise_description": "Unpacked keyword argument `dict[str, float] | float | int | list[dict[str, list[dict[str, str]] | str | dict[str, str]]] | str | Unknown` is not assignable to parameter `schema_version` with type `Literal[2]` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 21,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-argument-type",
+      "concise_description": "Unpacked keyword argument `dict[str, float] | float | int | list[dict[str, list[dict[str, str]] | str | dict[str, str]]] | str | Unknown` is not assignable to parameter `name` with type `bytearray | bytes | str` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 21,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-argument-type",
+      "concise_description": "Unpacked keyword argument `dict[str, float] | float | int | list[dict[str, list[dict[str, str]] | str | dict[str, str]]] | str | Unknown` is not assignable to parameter `strategies` with type `Iterable[Any]` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 21,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-argument-type",
+      "concise_description": "Unpacked keyword argument `dict[str, float] | float | int | list[dict[str, list[dict[str, str]] | str | dict[str, str]]] | str | Unknown` is not assignable to parameter `capital` with type `Decimal | bool | bytes | float | int | str` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 21,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-argument-type",
+      "concise_description": "Unpacked keyword argument `dict[str, float] | float | int | list[dict[str, list[dict[str, str]] | str | dict[str, str]]] | str | Unknown` is not assignable to parameter `rebalance` with type `Literal['daily', 'monthly', 'weekly']` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 21,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-argument-type",
+      "concise_description": "Unpacked keyword argument `dict[str, float] | float | int | list[dict[str, list[dict[str, str]] | str | dict[str, str]]] | str | Unknown` is not assignable to parameter `benchmark` with type `bytearray | bytes | str` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 39,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 26,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.fund.backtest_fund`",
+      "severity": "error"
+    },
+    {
+      "column": 39,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 53,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.fund.backtest_fund`",
+      "severity": "error"
+    },
+    {
+      "column": 40,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 59,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.fund.backtest_fund`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 61,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.fund.backtest_fund`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 58,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.fund.backtest_fund`",
+      "severity": "error"
+    },
+    {
+      "column": 31,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data` with type `DataClient` in function `hedge_fund.backtesting.fund.build_schedule`",
+      "severity": "error"
+    },
+    {
+      "column": 28,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data` with type `DataClient` in function `hedge_fund.backtesting.fund.build_schedule`",
+      "severity": "error"
+    },
+    {
+      "column": 59,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[test_daily_replay_executes_before_creating_next_assessment.ObservedAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 51,
+      "path": "hedge_fund/backtesting/test_fund.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.fund.backtest_fund`",
+      "severity": "error"
+    },
+    {
+      "column": 47,
+      "path": "hedge_fund/data/cached.py",
+      "name": "bad-argument-count",
+      "concise_description": "Expected 3 positional arguments, got 5 in function `hedge_fund.data.protocol.DataClient.get_prices`",
+      "severity": "error"
+    },
+    {
+      "column": 37,
+      "path": "hedge_fund/data/cached.py",
+      "name": "bad-assignment",
+      "concise_description": "`str` is not assignable to dict key `fetched_at` with type `list[Unknown]`",
+      "severity": "error"
+    },
+    {
+      "column": 20,
+      "path": "hedge_fund/data/models.py",
+      "name": "bad-assignment",
+      "concise_description": "`dict[str, str]` is not assignable to attribute `model_config` with type `ConfigDict`",
+      "severity": "error"
+    },
+    {
+      "column": 20,
+      "path": "hedge_fund/data/models.py",
+      "name": "bad-assignment",
+      "concise_description": "`dict[str, str]` is not assignable to attribute `model_config` with type `ConfigDict`",
+      "severity": "error"
+    },
+    {
+      "column": 20,
+      "path": "hedge_fund/data/models.py",
+      "name": "bad-assignment",
+      "concise_description": "`dict[str, str]` is not assignable to attribute `model_config` with type `ConfigDict`",
+      "severity": "error"
+    },
+    {
+      "column": 20,
+      "path": "hedge_fund/data/models.py",
+      "name": "bad-assignment",
+      "concise_description": "`dict[str, str]` is not assignable to attribute `model_config` with type `ConfigDict`",
+      "severity": "error"
+    },
+    {
+      "column": 20,
+      "path": "hedge_fund/data/models.py",
+      "name": "bad-assignment",
+      "concise_description": "`dict[str, str]` is not assignable to attribute `model_config` with type `ConfigDict`",
+      "severity": "error"
+    },
+    {
+      "column": 20,
+      "path": "hedge_fund/data/models.py",
+      "name": "bad-assignment",
+      "concise_description": "`dict[str, str]` is not assignable to attribute `model_config` with type `ConfigDict`",
+      "severity": "error"
+    },
+    {
+      "column": 20,
+      "path": "hedge_fund/data/models.py",
+      "name": "bad-assignment",
+      "concise_description": "`dict[str, str]` is not assignable to attribute `model_config` with type `ConfigDict`",
+      "severity": "error"
+    },
+    {
+      "column": 20,
+      "path": "hedge_fund/data/models.py",
+      "name": "bad-assignment",
+      "concise_description": "`dict[str, str]` is not assignable to attribute `model_config` with type `ConfigDict`",
+      "severity": "error"
+    },
+    {
+      "column": 20,
+      "path": "hedge_fund/data/models.py",
+      "name": "bad-assignment",
+      "concise_description": "`dict[str, str]` is not assignable to attribute `model_config` with type `ConfigDict`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "hedge_fund/data/test_cached.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CountingClient` is not assignable to parameter `client` with type `DataClient` in function `hedge_fund.data.cached.CachedDataClient.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "hedge_fund/data/test_cached.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CountingClient` is not assignable to parameter `client` with type `DataClient` in function `hedge_fund.data.cached.CachedDataClient.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 22,
+      "path": "hedge_fund/data/test_cached.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CountingClient` is not assignable to parameter `client` with type `DataClient` in function `hedge_fund.data.cached.CachedDataClient.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 22,
+      "path": "hedge_fund/data/test_cached.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CountingClient` is not assignable to parameter `client` with type `DataClient` in function `hedge_fund.data.cached.CachedDataClient.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "hedge_fund/data/test_cached.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CountingClient` is not assignable to parameter `client` with type `DataClient` in function `hedge_fund.data.cached.CachedDataClient.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "hedge_fund/data/test_cached.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CountingClient` is not assignable to parameter `client` with type `DataClient` in function `hedge_fund.data.cached.CachedDataClient.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "hedge_fund/data/test_cached.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CountingClient` is not assignable to parameter `client` with type `DataClient` in function `hedge_fund.data.cached.CachedDataClient.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "hedge_fund/data/test_cached.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CountingClient` is not assignable to parameter `client` with type `DataClient` in function `hedge_fund.data.cached.CachedDataClient.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "hedge_fund/data/test_cached.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CountingClient` is not assignable to parameter `client` with type `DataClient` in function `hedge_fund.data.cached.CachedDataClient.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 53,
+      "path": "hedge_fund/event_study/__main__.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.event_study.engine._compute_ticker_events`",
+      "severity": "error"
+    },
+    {
+      "column": 32,
+      "path": "hedge_fund/event_study/engine.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `str | None` is not assignable to parameter `s` with type `str` in function `_parse_date`",
+      "severity": "error"
+    },
+    {
+      "column": 32,
+      "path": "hedge_fund/event_study/engine.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `str | None` is not assignable to parameter `s` with type `str` in function `_parse_date`",
+      "severity": "error"
+    },
+    {
+      "column": 33,
+      "path": "hedge_fund/event_study/engine.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `str | None` is not assignable to parameter `event_date` with type `str` in function `_find_event_idx`",
+      "severity": "error"
+    },
+    {
+      "column": 20,
+      "path": "hedge_fund/event_study/engine.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `str | None` is not assignable to parameter `event_date` with type `bytearray | bytes | str` in function `hedge_fund.event_study.models.EventCAR.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "hedge_fund/event_study/engine.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `str | None` is not assignable to parameter `s` with type `str` in function `_parse_date`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "hedge_fund/features/test_snapshot.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.features.snapshot.build_snapshot`",
+      "severity": "error"
+    },
+    {
+      "column": 46,
+      "path": "hedge_fund/features/test_snapshot.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.features.snapshot.build_snapshot`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "hedge_fund/features/test_snapshot.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.features.snapshot.build_snapshot`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "hedge_fund/features/test_snapshot.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.features.snapshot.build_snapshot`",
+      "severity": "error"
+    },
+    {
+      "column": 51,
+      "path": "hedge_fund/features/test_snapshot.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.features.snapshot.build_snapshot`",
+      "severity": "error"
+    },
+    {
+      "column": 51,
+      "path": "hedge_fund/features/test_snapshot.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.features.snapshot.build_snapshot`",
+      "severity": "error"
+    },
+    {
+      "column": 51,
+      "path": "hedge_fund/features/test_snapshot.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.features.snapshot.build_snapshot`",
+      "severity": "error"
+    },
+    {
+      "column": 53,
+      "path": "hedge_fund/features/test_snapshot.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.features.snapshot.build_snapshot`",
+      "severity": "error"
+    },
+    {
+      "column": 53,
+      "path": "hedge_fund/features/test_snapshot.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.features.snapshot.build_snapshot`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "hedge_fund/features/test_snapshot.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.features.snapshot.build_snapshot`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "hedge_fund/features/test_snapshot.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.features.snapshot.build_snapshot`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "hedge_fund/features/test_snapshot.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.features.snapshot.build_snapshot`",
+      "severity": "error"
+    },
+    {
+      "column": 21,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `int` is not assignable to parameter `schema_version` with type `Literal[2]` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 21,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `int` is not assignable to parameter `schema_version` with type `Literal[2]` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 21,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `str` is not assignable to parameter `rebalance` with type `Literal['daily', 'monthly', 'weekly']` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 18,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `int` is not assignable to parameter `schema_version` with type `Literal[2]` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 18,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `str` is not assignable to parameter `rebalance` with type `Literal['daily', 'monthly', 'weekly']` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 21,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `int` is not assignable to parameter `schema_version` with type `Literal[2]` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 18,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `int` is not assignable to parameter `schema_version` with type `Literal[2]` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 18,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "unexpected-keyword",
+      "concise_description": "Unexpected keyword argument `capitol` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 33,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `int` is not assignable to parameter `schema_version` with type `Literal[2]` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 18,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `int` is not assignable to parameter `schema_version` with type `Literal[2]` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 18,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "unexpected-keyword",
+      "concise_description": "Unexpected keyword argument `universe` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 18,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `int` is not assignable to parameter `schema_version` with type `Literal[2]` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 18,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `int` is not assignable to parameter `schema_version` with type `Literal[2]` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 26,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `int` is not assignable to parameter `schema_version` with type `Literal[2]` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 21,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `int` is not assignable to parameter `schema_version` with type `Literal[2]` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `name`",
+      "severity": "error"
+    },
+    {
+      "column": 21,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `int` is not assignable to parameter `schema_version` with type `Literal[2]` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 21,
+      "path": "hedge_fund/fund/test_spec.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `int` is not assignable to parameter `schema_version` with type `Literal[2]` in function `hedge_fund.fund.spec.FundSpec.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 50,
+      "path": "hedge_fund/fund/test_strategy_library.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 68,
+      "path": "hedge_fund/fund/test_strategy_library.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 16,
+      "path": "hedge_fund/fund/test_strategy_library.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `positions`",
+      "severity": "error"
+    },
+    {
+      "column": 17,
+      "path": "hedge_fund/fund/test_strategy_library.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `positions`",
+      "severity": "error"
+    },
+    {
+      "column": 75,
+      "path": "hedge_fund/llm/client.py",
+      "name": "bad-argument-type",
+      "concise_description": "Keyword argument `elapsed_seconds` with type `float` is not assignable to parameter `**kwargs` with type `dict[Unknown, Unknown] | int | str | None` in function `typing.MutableMapping.update`",
+      "severity": "error"
+    },
+    {
+      "column": 44,
+      "path": "hedge_fund/llm/client.py",
+      "name": "unbound-name",
+      "concise_description": "`status` may be uninitialized",
+      "severity": "error"
+    },
+    {
+      "column": 65,
+      "path": "hedge_fund/llm/client.py",
+      "name": "unbound-name",
+      "concise_description": "`raw` may be uninitialized",
+      "severity": "error"
+    },
+    {
+      "column": 38,
+      "path": "hedge_fund/llm/client.py",
+      "name": "unbound-name",
+      "concise_description": "`retry_after` may be uninitialized",
+      "severity": "error"
+    },
+    {
+      "column": 69,
+      "path": "hedge_fund/llm/client.py",
+      "name": "unbound-name",
+      "concise_description": "`native_response` may be uninitialized",
+      "severity": "error"
+    },
+    {
+      "column": 13,
+      "path": "hedge_fund/llm/client.py",
+      "name": "unbound-name",
+      "concise_description": "`metadata` may be uninitialized",
+      "severity": "error"
+    },
+    {
+      "column": 13,
+      "path": "hedge_fund/llm/client.py",
+      "name": "unbound-name",
+      "concise_description": "`payload` may be uninitialized",
+      "severity": "error"
+    },
+    {
+      "column": 16,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `LLMClient` has no attribute `_on_token`",
+      "severity": "error"
+    },
+    {
+      "column": 5,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `Response` has no attribute `_content_consumed`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 33,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[str]` is not assignable to dict value type `dict[str, dict[str, float] | float | str | Unknown] | dict[str, dict[str, float] | dict[str, Unknown] | float | str | Unknown]`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 70,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 13,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 101,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 23,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 50,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "not-iterable",
+      "concise_description": "`not in` is not supported between `Literal['parsed']` and `None`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`+` is not supported between `str` and `None`",
+      "severity": "error"
+    },
+    {
+      "column": 50,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 45,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 50,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 59,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.build_snapshot`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 50,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 50,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 50,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 50,
+      "path": "hedge_fund/llm/test_client.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 43,
+      "path": "hedge_fund/llm/test_contract.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[int]` is not assignable to dict value type `dict[str, dict[str, float] | float | str | Unknown] | dict[str, dict[str, float] | dict[str, Unknown] | float | str | Unknown]`",
+      "severity": "error"
+    },
+    {
+      "column": 5,
+      "path": "hedge_fund/llm/test_contract.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `dict` has no attribute `append`",
+      "severity": "error"
+    },
+    {
+      "column": 37,
+      "path": "hedge_fund/llm/test_contract.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[@_]` is not assignable to dict key with type `dict[str, dict[str, float] | float | str | Unknown] | dict[str, dict[str, float] | dict[str, Unknown] | float | str | Unknown]`",
+      "severity": "error"
+    },
+    {
+      "column": 23,
+      "path": "hedge_fund/llm/test_contract.py",
+      "name": "unsupported-operation",
+      "concise_description": "Cannot set item in `dict[str, float]`",
+      "severity": "error"
+    },
+    {
+      "column": 54,
+      "path": "hedge_fund/llm/test_contract.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[@_]` is not assignable to dict key `probabilities` with type `dict[str, float]`",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "hedge_fund/llm/test_contract.py",
+      "name": "unsupported-operation",
+      "concise_description": "Cannot set item in `dict[str, float]`",
+      "severity": "error"
+    },
+    {
+      "column": 17,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 18,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 52,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `equity_before`",
+      "severity": "error"
+    },
+    {
+      "column": 16,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `strategies`",
+      "severity": "error"
+    },
+    {
+      "column": 47,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "not-iterable",
+      "concise_description": "Type `object` is not iterable",
+      "severity": "error"
+    },
+    {
+      "column": 14,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `final_weights`",
+      "severity": "error"
+    },
+    {
+      "column": 16,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `fills`",
+      "severity": "error"
+    },
+    {
+      "column": 37,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `orders`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `nav`",
+      "severity": "error"
+    },
+    {
+      "column": 9,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `cash`",
+      "severity": "error"
+    },
+    {
+      "column": 31,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `marks`",
+      "severity": "error"
+    },
+    {
+      "column": 59,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `positions`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `positions`",
+      "severity": "error"
+    },
+    {
+      "column": 15,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 15,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 14,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `strategies`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `target_weights`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `target_weights`",
+      "severity": "error"
+    },
+    {
+      "column": 19,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 19,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 26,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `target_weights`",
+      "severity": "error"
+    },
+    {
+      "column": 44,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `target_weights`",
+      "severity": "error"
+    },
+    {
+      "column": 21,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 26,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 62,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 51,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 52,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `positions`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `orders`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `positions`",
+      "severity": "error"
+    },
+    {
+      "column": 62,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 43,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 52,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `positions`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `nav`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 31,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `skipped`",
+      "severity": "error"
+    },
+    {
+      "column": 26,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `final_weights`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 43,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 47,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 17,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `universe`",
+      "severity": "error"
+    },
+    {
+      "column": 26,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `final_weights`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 19,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 17,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 19,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 69,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `orders`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `final_weights`",
+      "severity": "error"
+    },
+    {
+      "column": 39,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 64,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 16,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `strategies`",
+      "severity": "error"
+    },
+    {
+      "column": 16,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `positions`",
+      "severity": "error"
+    },
+    {
+      "column": 16,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `positions`",
+      "severity": "error"
+    },
+    {
+      "column": 43,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `final_weights`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `nav`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 60,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 51,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `positions`",
+      "severity": "error"
+    },
+    {
+      "column": 52,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `strategies`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `positions`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `cash`",
+      "severity": "error"
+    },
+    {
+      "column": 31,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `orders`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 38,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 64,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `target_weights`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `risk_scale_factor`",
+      "severity": "error"
+    },
+    {
+      "column": 22,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `strategies`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `final_weights`",
+      "severity": "error"
+    },
+    {
+      "column": 16,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `object` has no attribute `values`",
+      "severity": "error"
+    },
+    {
+      "column": 37,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 35,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 64,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `risk_scale_factor`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `final_weights`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `strategies`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `strategies`",
+      "severity": "error"
+    },
+    {
+      "column": 63,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `final_weights`",
+      "severity": "error"
+    },
+    {
+      "column": 53,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `orders`",
+      "severity": "error"
+    },
+    {
+      "column": 16,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `positions`",
+      "severity": "error"
+    },
+    {
+      "column": 38,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `marks`",
+      "severity": "error"
+    },
+    {
+      "column": 63,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `positions`",
+      "severity": "error"
+    },
+    {
+      "column": 47,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 47,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 47,
+      "path": "hedge_fund/pipeline/test_run_cycle.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 40,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[DatedAnalyst | Unknown]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 46,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `execution_as_of`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `original_assessment`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `original_assessment`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `refreshed_assessment`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `strategies`",
+      "severity": "error"
+    },
+    {
+      "column": 33,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `refreshed_assessment`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `marks`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `positions`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `fills`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `execution_as_of`",
+      "severity": "error"
+    },
+    {
+      "column": 63,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `original_assessment`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `refreshed_assessment`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `spec`",
+      "severity": "error"
+    },
+    {
+      "column": 32,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of type `DecisionRecord | object | None` has no attribute `spec`",
+      "severity": "error"
+    },
+    {
+      "column": 46,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `equity_before`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `positions`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `orders`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `PendingRunResult` has no attribute `nav`",
+      "severity": "error"
+    },
+    {
+      "column": 41,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 41,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 23,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "bad-assignment",
+      "concise_description": "`(ticker: Unknown, date: Unknown, data: Unknown) -> Signal | Unknown` is not assignable to attribute `predict` with type `(ticker: Unknown, date: Unknown, data_client: Unknown) -> Signal`",
+      "severity": "error"
+    },
+    {
+      "column": 41,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 41,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 41,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 46,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.assess_fund`",
+      "severity": "error"
+    },
+    {
+      "column": 69,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.execute_decision`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "hedge_fund/pipeline/test_timing.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FakeDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 70,
+      "path": "hedge_fund/portfolio/test_construction.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `str | Unknown` is not assignable to parameter `mode` with type `Literal['dollar_neutral', 'long_only', 'long_short']` in function `hedge_fund.portfolio.construction.blend_signals`",
+      "severity": "error"
+    },
+    {
+      "column": 86,
+      "path": "hedge_fund/portfolio/test_construction.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `dict[str, str] | dict[Unknown, Unknown]` is not assignable to parameter `investment_approaches` with type `Mapping[str, InvestmentApproach]` in function `hedge_fund.portfolio.construction.blend_signals`",
+      "severity": "error"
+    },
+    {
+      "column": 35,
+      "path": "hedge_fund/run.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FDClient` is not assignable to parameter `client` with type `DataClient` in function `hedge_fund.data.cached.CachedDataClient.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 64,
+      "path": "hedge_fund/run.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CachedDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.fund.backtest_fund`",
+      "severity": "error"
+    },
+    {
+      "column": 31,
+      "path": "hedge_fund/run.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FDClient` is not assignable to parameter `client` with type `DataClient` in function `hedge_fund.data.cached.CachedDataClient.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "hedge_fund/run.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CachedDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/run.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `as_of`",
+      "severity": "error"
+    },
+    {
+      "column": 43,
+      "path": "hedge_fund/signals/llm_agent.py",
+      "name": "bad-assignment",
+      "concise_description": "`dict[Unknown, Unknown]` is not assignable to dict key `provider_metadata` with type `float | str`",
+      "severity": "error"
+    },
+    {
+      "column": 29,
+      "path": "hedge_fund/signals/pead.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `eps_surprise`",
+      "severity": "error"
+    },
+    {
+      "column": 47,
+      "path": "hedge_fund/signals/test_llm_agents.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 47,
+      "path": "hedge_fund/signals/test_llm_agents.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 47,
+      "path": "hedge_fund/signals/test_llm_agents.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 47,
+      "path": "hedge_fund/signals/test_llm_agents.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 45,
+      "path": "hedge_fund/signals/test_llm_agents.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "hedge_fund/signals/test_llm_agents.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 50,
+      "path": "hedge_fund/signals/test_llm_agents.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "hedge_fund/signals/test_llm_agents.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 50,
+      "path": "hedge_fund/signals/test_llm_agents.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "hedge_fund/signals/test_llm_agents.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 50,
+      "path": "hedge_fund/signals/test_llm_agents.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 41,
+      "path": "hedge_fund/signals/test_llm_agents.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 50,
+      "path": "hedge_fund/signals/test_llm_agents.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 41,
+      "path": "hedge_fund/signals/test_llm_agents.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 41,
+      "path": "hedge_fund/signals/test_llm_agents.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "hedge_fund/signals/test_signals.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.pead.PEADModel.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 16,
+      "path": "hedge_fund/signals/test_signals.py",
+      "name": "not-iterable",
+      "concise_description": "`in` is not supported between `Literal['BEAT']` and `None`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "hedge_fund/signals/test_signals.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.pead.PEADModel.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "hedge_fund/signals/test_signals.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.pead.PEADModel.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "hedge_fund/signals/test_signals.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.pead.PEADModel.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "hedge_fund/signals/test_signals.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.pead.PEADModel.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "hedge_fund/signals/test_signals.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.pead.PEADModel.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "hedge_fund/signals/test_signals.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.pead.PEADModel.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "hedge_fund/signals/test_signals.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.pead.PEADModel.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "hedge_fund/signals/test_signals.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.pead.PEADModel.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "hedge_fund/signals/test_signals.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.pead.PEADModel.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 80,
+      "path": "hedge_fund/signals/test_signals.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.pead.PEADModel.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "hedge_fund/signals/test_signals.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.pead.PEADModel.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "hedge_fund/signals/test_signals.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `MockFDClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.pead.PEADModel.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 45,
+      "path": "hedge_fund/test_run.py",
+      "name": "bad-assignment",
+      "concise_description": "`list[FakeAnalyst]` is not assignable to dict value type `list[AlphaModel]`",
+      "severity": "error"
+    },
+    {
+      "column": 37,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `str | None` is not assignable to parameter `provider` with type `str` in function `KeyPromptScreen.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CycleRecord | DecisionRecord` is not assignable to parameter `record` with type `CycleRecord` in function `_orders_detail`",
+      "severity": "error"
+    },
+    {
+      "column": 43,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FDClient` is not assignable to parameter `client` with type `DataClient` in function `hedge_fund.data.cached.CachedDataClient.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 70,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CachedDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.base.AlphaModel.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 70,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CachedDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CachedDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.pipeline.run_cycle.run_cycle`",
+      "severity": "error"
+    },
+    {
+      "column": 74,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FDClient` is not assignable to parameter `client` with type `DataClient` in function `hedge_fund.data.cached.CachedDataClient.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 22,
+      "path": "hedge_fund/tui/app.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `object` has no attribute `as_of`",
+      "severity": "error"
+    },
+    {
+      "column": 59,
+      "path": "hedge_fund/tui/app.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `DecisionRecord` has no attribute `refreshed_assessment`",
+      "severity": "error"
+    },
+    {
+      "column": 33,
+      "path": "hedge_fund/tui/app.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `DecisionRecord` has no attribute `execution_as_of`",
+      "severity": "error"
+    },
+    {
+      "column": 76,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CycleRecord | DecisionRecord` is not assignable to parameter `record` with type `CycleRecord` in function `_book_summary`",
+      "severity": "error"
+    },
+    {
+      "column": 25,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `Selection[int]` is not assignable to parameter `*selections` with type `Selection[str] | tuple[ContentText, str] | tuple[ContentText, str, bool]` in function `textual.widgets._selection_list.SelectionList.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 43,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CachedDataClient` is not assignable to parameter `data` with type `DataClient` in function `hedge_fund.backtesting.fund.build_schedule`",
+      "severity": "error"
+    },
+    {
+      "column": 60,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FDClient` is not assignable to parameter `client` with type `DataClient` in function `hedge_fund.data.cached.CachedDataClient.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 58,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CachedDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.backtesting.fund.backtest_fund`",
+      "severity": "error"
+    },
+    {
+      "column": 75,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FDClient` is not assignable to parameter `client` with type `DataClient` in function `hedge_fund.data.cached.CachedDataClient.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 39,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FDClient` is not assignable to parameter `client` with type `DataClient` in function `hedge_fund.data.cached.CachedDataClient.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 39,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `FDClient` is not assignable to parameter `client` with type `DataClient` in function `hedge_fund.data.cached.CachedDataClient.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 58,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CachedDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.base.AlphaModel.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 58,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CachedDataClient` is not assignable to parameter `data_client` with type `DataClient` in function `hedge_fund.signals.llm_agent.LLMAgent.predict`",
+      "severity": "error"
+    },
+    {
+      "column": 5,
+      "path": "hedge_fund/tui/app.py",
+      "name": "bad-override",
+      "concise_description": "Class member `HedgeFundApp.ansi_theme_dark` overrides parent class `App` in an inconsistent manner",
+      "severity": "error"
+    },
+    {
+      "column": 37,
+      "path": "hedge_fund/tui/test_app.py",
+      "name": "bad-assignment",
+      "concise_description": "`Literal[2]` is not assignable to dict key `schema_version` with type `str | dict[str, float | int]`",
+      "severity": "error"
+    },
+    {
+      "column": 63,
+      "path": "hedge_fund/tui/test_app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `list[dict[Unknown, Unknown] | None]` is not assignable to parameter `history` with type `list[dict[Unknown, Unknown]]` in function `hedge_fund.tui.app._fund_detail`",
+      "severity": "error"
+    },
+    {
+      "column": 44,
+      "path": "hedge_fund/tui/test_app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `list[dict[Unknown, Unknown] | None]` is not assignable to parameter `history` with type `list[dict[Unknown, Unknown]]` in function `hedge_fund.tui.app._fund_detail`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "hedge_fund/tui/test_app.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 62,
+      "path": "hedge_fund/tui/test_app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `list[dict[Unknown, Unknown] | None]` is not assignable to parameter `history` with type `list[dict[Unknown, Unknown]]` in function `hedge_fund.tui.app._fund_detail`",
+      "severity": "error"
+    },
+    {
+      "column": 90,
+      "path": "hedge_fund/tui/test_app.py",
+      "name": "unsupported-operation",
+      "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 13,
+      "path": "hedge_fund/tui/test_app.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `Screen` has no attribute `_show_report`",
+      "severity": "error"
+    },
+    {
+      "column": 50,
+      "path": "hedge_fund/tui/test_app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `list[int]` is not assignable to parameter `nav` with type `list[float]` in function `hedge_fund.backtesting.fund.performance_metrics`",
+      "severity": "error"
+    },
+    {
+      "column": 55,
+      "path": "hedge_fund/tui/test_app.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `list[int]` is not assignable to parameter `benchmark_nav` with type `list[float]` in function `hedge_fund.backtesting.fund.performance_metrics`",
+      "severity": "error"
+    },
+    {
+      "column": 13,
+      "path": "hedge_fund/tui/test_app.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `Screen` has no attribute `_begin_replay`",
+      "severity": "error"
+    },
+    {
+      "column": 13,
+      "path": "hedge_fund/tui/test_app.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `Screen` has no attribute `_board_valuation`",
+      "severity": "error"
+    },
+    {
+      "column": 13,
+      "path": "hedge_fund/tui/test_app.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `Screen` has no attribute `_board_tick`",
+      "severity": "error"
+    },
+    {
+      "column": 17,
+      "path": "hedge_fund/tui/test_app.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `Screen` has no attribute `_board_valuation`",
+      "severity": "error"
+    },
+    {
+      "column": 20,
+      "path": "hedge_fund/tui/test_app.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `Screen` has no attribute `_tape`",
+      "severity": "error"
+    },
+    {
+      "column": 13,
+      "path": "hedge_fund/tui/test_app.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `Screen` has no attribute `_finish`",
+      "severity": "error"
+    }
+  ]
+}
