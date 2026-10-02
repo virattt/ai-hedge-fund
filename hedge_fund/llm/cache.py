@@ -24,7 +24,7 @@ DEFAULT_CACHE_DIR = CACHE_DIR / "llm"
 
 def prompt_key(agent: str, model: str, system: str, user: str) -> str:
     """Cache key for one (agent, model, prompt) combination."""
-    payload = f"{agent}|{model}|{system}|{user}"
+    payload = json.dumps([agent, model, system, user], separators=(",", ":"))
     return hashlib.sha256(payload.encode()).hexdigest()[:24]
 
 
