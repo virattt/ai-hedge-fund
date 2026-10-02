@@ -121,3 +121,45 @@ def test_incomplete_daily_price_cache_is_refreshed_after_date_ends(tmp_path, mon
     assert inner.calls == 3
     fd.get_prices("AAPL", "2024-01-01", "2024-01-01")
     assert inner.calls == 3
+
+
+def test_earnings_history_is_refetched_on_a_later_new_york_day(tmp_path, monkeypatch):
+    """Earnings history takes no date: it is the latest filings at fetch time.
+    A copy from an earlier day misses any 8-K filed since, and PEAD would never
+    see the new quarter's surprise."""
+    from datetime import datetime
+    from hedge_fund.data import cached
+    from hedge_fund.data.models import EarningsData, EarningsRecord
+    from hedge_fund.signals import PEADModel
+
+    class Clock:
+        today = datetime(2026, 7, 31, 20, 0)
+
+        @classmethod
+        def now(cls, tz):
+            return cls.today.replace(tzinfo=tz)
+    Clock.fromisoformat = datetime.fromisoformat
+    monkeypatch.setattr(cached, "datetime", Clock)
+
+    def filing(period, filed, surprise):
+        return EarningsRecord(ticker="ACME", report_period=period, source_type="8-K",
+                              filing_date=filed, quarterly=EarningsData(eps_surprise=surprise))
+
+    class Feed:
+        calls = 0
+        filings = [filing("2026-06-30", "2026-07-30", "BEAT")]
+
+        def get_earnings_history(self, ticker, limit=12):
+            self.calls += 1
+            return list(self.filings)
+
+    feed = Feed()
+    fd = CachedDataClient(feed, cache_dir=tmp_path)
+    assert PEADModel().predict("ACME", "2026-07-31", fd).value == 1.0
+    assert PEADModel().predict("ACME", "2026-07-31", fd).value == 1.0
+    assert feed.calls == 1  # same day: served from disk
+
+    feed.filings = [filing("2026-09-30", "2026-10-29", "MISS"), *feed.filings]
+    Clock.today = datetime(2026, 10, 30, 20, 0)
+    assert PEADModel().predict("ACME", "2026-10-30", fd).value == -1.0
+    assert feed.calls == 2
