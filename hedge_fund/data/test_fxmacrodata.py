@@ -99,3 +99,30 @@ def test_fetch_dataset_never_sends_limit_above_100(fake_api):
     with fxmacrodata.FXMacroDataClient() as client:
         client.fetch_dataset("commodity", indicator="gold", limit=500)
     assert fake_api[0].url.params["limit"] == "100"
+
+
+def test_api_key_is_stripped_and_rejected_without_echo(fake_api):
+    with fxmacrodata.FXMacroDataClient(api_key="  test-key\n") as client:
+        client.fetch_dataset("forex", base="eur", quote="usd", limit=5)
+    assert fake_api[0].headers["X-API-Key"] == "test-key"
+
+    with pytest.raises(ValueError) as excinfo:
+        fxmacrodata.FXMacroDataClient(api_key="test-key\r\nX-Other: 1")
+    assert "test-key" not in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "body", [{"json": {"detail": "Not Found"}}, {"content": b"<html>oops</html>"}]
+)
+def test_error_body_with_200_raises_client_error(monkeypatch, body):
+    real_client = httpx.Client
+
+    def client_factory(**kwargs):
+        transport = httpx.MockTransport(lambda request: httpx.Response(200, **body))
+        return real_client(transport=transport, **kwargs)
+
+    monkeypatch.setattr(fxmacrodata.httpx, "Client", client_factory)
+    with fxmacrodata.FXMacroDataClient(api_key="test-key") as client:
+        with pytest.raises(fxmacrodata.FXMacroDataClientError) as excinfo:
+            client.fetch_dataset("forex", base="eur", quote="usd")
+    assert "test-key" not in str(excinfo.value)

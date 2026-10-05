@@ -131,6 +131,30 @@ def _env_api_key() -> str:
     return ""
 
 
+def _clean_api_key(value: str | None) -> str:
+    key = (value or "").strip()
+    if any(ch.isspace() or not ch.isprintable() for ch in key):
+        # Never echo the key itself in the error.
+        raise ValueError(
+            "FXMacroData API key contains whitespace or control characters"
+        )
+    return key
+
+
+def _json_payload(response: httpx.Response, label: str, path: str) -> Any:
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise FXMacroDataClientError(
+            f"{label} failed: response was not JSON", path=path
+        ) from exc
+    if isinstance(payload, dict) and "detail" in payload and "data" not in payload:
+        raise FXMacroDataClientError(
+            f"{label} failed: {payload['detail']}", path=path
+        )
+    return payload
+
+
 def _dataset_name(dataset: str) -> str:
     normalized = dataset.lower().replace("-", "_")
     return ALIASES.get(normalized, normalized)
@@ -192,7 +216,7 @@ class FXMacroDataClient:
         timeout: float = 30.0,
         base_url: str | None = None,
     ) -> None:
-        self._api_key = api_key or _env_api_key()
+        self._api_key = _clean_api_key(api_key or _env_api_key())
         headers = {"X-API-Key": self._api_key} if self._api_key else {}
         self._client = httpx.Client(timeout=timeout, headers=headers)
         self._base_url = (base_url or FXMACRODATA_BASE_URL).rstrip("/")
@@ -232,7 +256,7 @@ class FXMacroDataClient:
             raise FXMacroDataClientError(
                 f"GET {path} failed: {exc}", path=path
             ) from exc
-        return response.json()
+        return _json_payload(response, f"GET {path}", path)
 
     def rows(self, payload: Any) -> list[dict[str, Any]]:
         return _rows(payload)
@@ -295,7 +319,7 @@ class FXMacroDataClient:
             raise FXMacroDataClientError(
                 f"POST graphql failed: {exc}", path="graphql"
             ) from exc
-        return response.json()
+        return _json_payload(response, "POST graphql", "graphql")
 
     def data_catalogue(self, currency: str = "usd", **kwargs: Any) -> dict[str, Any]:
         return self.fetch_dataset("data_catalogue", currency=currency, **kwargs)
