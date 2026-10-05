@@ -2,6 +2,7 @@
 
 from hedge_fund.data.cached import CachedDataClient
 from hedge_fund.data.client import FDClient, FDClientError
+from hedge_fund.data.fxmacrodata import FXMacroDataClient, FXMacroDataClientError
 from hedge_fund.data.models import (
     CompanyFacts,
     CompanyNews,
@@ -26,6 +27,8 @@ __all__ = [
     "FDClient",
     "FDClientError",
     "Filing",
+    "FXMacroDataClient",
+    "FXMacroDataClientError",
     "FinancialMetrics",
     "InsiderTrade",
     "Price",
