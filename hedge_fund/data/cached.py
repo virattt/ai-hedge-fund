@@ -135,12 +135,24 @@ class CachedDataClient:
     def _cached_list(self, method: str, model_cls, params: dict, fetch: Callable) -> list:
         key = self._key(method, params)
         hit = self._read(key)
-        if hit is not None and method == "get_prices" and params.get("interval") == "day":
+        
+        needs_freshness = method == "get_earnings_history" or (
+            method == "get_prices" and params.get("interval") == "day"
+        )
+        
+        if hit is not None and needs_freshness:
             try:
                 fetched = datetime.fromisoformat(hit["fetched_at"])
-                complete = fetched.tzinfo is not None and (
-                    fetched.astimezone(NEW_YORK).date().isoformat() > params["end_date"]
-                )
+                if method == "get_prices":
+                    complete = fetched.tzinfo is not None and (
+                        fetched.astimezone(NEW_YORK).date().isoformat() > params["end_date"]
+                    )
+                else: 
+                    # get_earnings_history: complete if fetched today or later
+                    today = datetime.now(NEW_YORK).date().isoformat()
+                    complete = fetched.tzinfo is not None and (
+                        fetched.astimezone(NEW_YORK).date().isoformat() >= today
+                    )
             except (KeyError, TypeError, ValueError):
                 complete = False
             if not complete:
@@ -150,7 +162,7 @@ class CachedDataClient:
         fetched_at = datetime.now(NEW_YORK).isoformat()
         result = fetch()
         payload = {"data": [r.model_dump() for r in result]}
-        if method == "get_prices":
+        if needs_freshness:
             payload["fetched_at"] = fetched_at
         self._write(key, payload)
         return result
