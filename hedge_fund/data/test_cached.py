@@ -24,6 +24,11 @@ class CountingClient:
         self.calls += 1
         return 3.0e12
 
+    def get_earnings_history(self, ticker, limit):
+        from hedge_fund.data.models import EarningsRecord
+        self.calls += 1
+        return [EarningsRecord(ticker=ticker, report_period="2024-01-01", source_type="8-K")]
+
 
 def test_cache_hit_skips_wrapped_client(tmp_path):
     inner = CountingClient()
@@ -121,3 +126,35 @@ def test_incomplete_daily_price_cache_is_refreshed_after_date_ends(tmp_path, mon
     assert inner.calls == 3
     fd.get_prices("AAPL", "2024-01-01", "2024-01-01")
     assert inner.calls == 3
+
+
+def test_earnings_history_refreshed_after_fetch_date(tmp_path, monkeypatch):
+    from datetime import datetime
+    from hedge_fund.data import cached
+
+    class Clock:
+        day = 1
+        @classmethod
+        def now(cls, tz):
+            return datetime(2024, 1, cls.day, 23, 0, tzinfo=tz)
+
+    monkeypatch.setattr(cached, "datetime", Clock)
+    Clock.fromisoformat = datetime.fromisoformat
+
+    inner = CountingClient()
+    fd = CachedDataClient(inner, cache_dir=tmp_path)
+    
+    # Day 1: fetch earnings from the API
+    fd.get_earnings_history("AAPL", limit=12)
+    fd.get_earnings_history("AAPL", limit=12) # cache hit
+    assert inner.calls == 1
+    
+    # Advance clock to Day 2: should miss the cache because earnings history needs to check for newer quarters
+    Clock.day = 2
+    fd.get_earnings_history("AAPL", limit=12)
+    assert inner.calls == 2
+    
+    # Second fetch on Day 2 should hit cache
+    fd.get_earnings_history("AAPL", limit=12)
+    assert inner.calls == 2
+
