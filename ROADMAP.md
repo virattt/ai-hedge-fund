@@ -49,7 +49,7 @@ the engine. Two flavors:
 | Model | Status |
 |-------|--------|
 | Post-Earnings Announcement Drift (PEAD) | ✅ |
-| Market-regime detection (HMM / regime-switching) | ⬜ |
+| Market-regime detection (HMM / regime-switching) | ✅ (`regime`: forward-filtered Gaussian HMM on IWM, long-only exposure dial) |
 | Momentum | ⬜ |
 | Mean reversion | ⬜ |
 | Value / quality factors | ⬜ |
