@@ -19,7 +19,7 @@ from hedge_fund.brokers.protocol import Broker
 from hedge_fund.data.protocol import DataClient
 from hedge_fund.fund import Fund, normalize_universe
 from hedge_fund.models import Signal
-from hedge_fund.pipeline.clock import Clock, clock_for, execution_policy
+from hedge_fund.pipeline.clock import Clock, clock_for, execution_policy, PinnedQuotes
 from hedge_fund.pipeline.execution import build_orders
 from hedge_fund.pipeline.models import (
     CycleRecord,
@@ -50,6 +50,9 @@ def assess_fund(
     marks, skipped = _mark_prices(universe, clock.session_date(as_of), data_client)
 
     tradeable = [t for t in universe if t in marks]
+    # Analysts read the session's print, not the wire: the same price the
+    # engine marks and executes with, and nothing from after the session.
+    view = PinnedQuotes(data_client, clock, as_of)
 
     # Each strategy runs its own analysts and blends its own sleeve; the fund
     # nets the sleeves by capital slice. A persona staffed into two strategies
@@ -61,7 +64,7 @@ def assess_fund(
         signals: list[Signal] = []
         for ticker in tradeable:
             for model in staff:
-                signals.append(model.predict(ticker, as_of, data_client))
+                signals.append(model.predict(ticker, as_of, view))
         blend = blend_signals(
             signals, strategy.model_weights, strategy.blend.gross_target,
             mode=strategy.blend.mode,

@@ -8,11 +8,12 @@
     paper/<name>/broker.json      the PaperBroker's own book
     paper/<name>/control.json     the kill switch
     paper/<name>/events.jsonl     halts, failures, resumes, gaps, checkpoints
-    paper/<name>/runner.pid       the minute fund's runner, while it is alive
+    paper/<name>/runner.pid       the fund's runner, while it is alive
 
-`tick` is what a scheduler calls after each close; `run` is the loop a
-minute fund lives in. Backtests never import anything from here: research
-reads the shared data cache and writes only to research/.
+`tick` advances one session: a human, a scheduler, or the runner calls it
+when one is due. `run` is the loop that keeps a fund going unattended, at
+whatever cadence it has. Backtests never import anything from here:
+research reads the shared data cache and writes only to research/.
 """
 
 from hedge_fund.paper.deployed import (
@@ -32,18 +33,25 @@ from hedge_fund.paper.runner import (
     spawn_runner,
     stop_runner,
 )
-from hedge_fund.paper.tick import assessment_dates, MinuteFund, next_session, NothingDue, redo, tick
+from hedge_fund.paper.tick import (
+    assessment_dates,
+    following_session,
+    next_session,
+    NothingDue,
+    redo,
+    tick,
+)
 
 __all__ = [
     "DeployedFund",
     "FUND_FILE",
     "Ledger",
     "LedgerError",
-    "MinuteFund",
     "NothingDue",
     "PID_FILE",
     "assessment_dates",
     "deploy",
+    "following_session",
     "is_running",
     "list_deployed",
     "load_deployed",

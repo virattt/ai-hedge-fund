@@ -7,11 +7,16 @@ New York dates and daily closes; a minute fund with bar boundaries and the
 prices at them. The engine does not know which it is holding.
 
     DailyClock  completed dates, previous calendar day, exact daily closes
-    BarClock    historical minute bars — a minute fund's backtest
     LiveClock   real-time snapshots taken at the boundary — a minute fund's
                 paper runner
+    BarClock    historical minute bars, for a provider that serves them;
+                backtests replay a minute fund at daily closes instead
 
 `clock_for(spec, data, live)` picks one from the mandate.
+
+`PinnedQuotes` hands the clock's print to the analysts: a data client whose
+quote at a session is what the clock marks that session at, so an analyst
+reads the same price the engine executes with and never the wire.
 """
 
 from __future__ import annotations
@@ -211,6 +216,62 @@ def clock_for(spec: FundSpec, data: DataClient, *, live: bool = False) -> Clock:
     if live:
         return LiveClock(data, spec.interval_seconds, spec.window)
     return BarClock(data, spec.interval_seconds, spec.window)
+
+
+class PinnedQuotes:
+    """*data*, with its quote pinned to the clock's print at *session*.
+
+    An analyst asked at a session is handed this instead of the wire. Whatever
+    it asks the price of, it reads what the engine marks that session at: the
+    boundary's print live, the bar's close over history, the day's close for a
+    daily fund. Nothing from after the session, and no second fetch of a name
+    the clock has already seen. A name the clock cannot price at the session
+    has no quote. Everything else passes through to *data*."""
+
+    def __init__(self, data: DataClient, clock: Clock, session: str) -> None:
+        self._data = data
+        self._clock = clock
+        self._session = session
+
+    def get_snapshot(self, ticker: str) -> PriceSnapshot | None:
+        try:
+            marked = self._clock.marks([ticker], self._session)
+        except ValueError:
+            return None
+        when = (marked.times or {}).get(ticker) or _session_stamp(self._session)
+        return PriceSnapshot(ticker=ticker, price=marked.prices[ticker], time=when)
+
+    def get_prices(self, ticker, start_date, end_date, **kwargs):
+        return self._data.get_prices(ticker, start_date, end_date, **kwargs)
+
+    def get_financial_metrics(self, ticker, end_date, period="ttm", limit=10):
+        return self._data.get_financial_metrics(ticker, end_date, period, limit)
+
+    def get_news(self, ticker, end_date, start_date=None, limit=1000):
+        return self._data.get_news(ticker, end_date, start_date, limit)
+
+    def get_insider_trades(self, ticker, end_date, start_date=None, limit=1000):
+        return self._data.get_insider_trades(ticker, end_date, start_date, limit)
+
+    def get_company_facts(self, ticker):
+        return self._data.get_company_facts(ticker)
+
+    def get_earnings(self, ticker):
+        return self._data.get_earnings(ticker)
+
+    def get_earnings_history(self, ticker, limit=12):
+        return self._data.get_earnings_history(ticker, limit)
+
+    def get_market_cap(self, ticker, end_date):
+        return self._data.get_market_cap(ticker, end_date)
+
+
+def _session_stamp(session: str) -> str:
+    """When a session's print was, absent a print time: the bar itself, or
+    the day's 4pm close."""
+    if is_intraday(session):
+        return bar_time(session).isoformat()
+    return datetime.fromisoformat(session).replace(hour=16, tzinfo=NEW_YORK).isoformat()
 
 
 def execution_policy(session: str) -> str:

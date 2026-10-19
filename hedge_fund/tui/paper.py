@@ -73,6 +73,7 @@ from hedge_fund.tui.shared import (
     cadence_identity,
     DISPLAY_NAMES,
     render_area_chart,
+    session_label,
 )
 from hedge_fund.tui.widgets import first_selectable, StatTiles
 
@@ -80,13 +81,17 @@ from hedge_fund.tui.widgets import first_selectable, StatTiles
 class PaperScreen(Screen):
     """Paper trading. The fund list is the home of the fund: every deployed
     fund on the left, the highlighted one's state and its next run on the
-    right. Enter runs it (through the approval step); `s` opens its history;
-    `h`/`r` work the kill switch; the last row builds a new fund.
+    right. Enter runs its next session (through the approval step); `space`
+    starts or stops its runner, the detached loop that does the same thing
+    unattended; `s` opens its history; `h`/`r` work the kill switch; the
+    last row builds a new fund. Every verb means the same thing at every
+    cadence; the cadence only decides when the next session is.
     """
 
     BINDINGS = [
         Binding("escape", "back", "back"),
         Binding("enter", "run", "run next session", priority=True),
+        Binding("space", "runner", "start/stop runner"),
         Binding("s", "sessions", "sessions"),
         Binding("h", "halt", "halt"),
         Binding("r", "resume", "resume"),
@@ -189,22 +194,22 @@ class PaperScreen(Screen):
                 "Build a fund here and it starts paper trading at once: pick its "
                 "strategies, capital, cadence and tickers, and it gets a ledger, a "
                 "book and a kill switch of its own under\n" + str(paths.PAPER_DIR) + "\n\n"
-                "Then run it a session at a time with enter, or from a scheduler with "
-                "`aihf paper tick <name>`. A minute fund is started and stopped with enter "
-                "instead, or kept up with `aihf paper run <name>`.", style=MUTED)
+                "Then run it a session at a time with enter, or leave it running with "
+                "space (`aihf paper run <name>` from a shell). Whatever its cadence, "
+                "the next session is the next close or the next bar.", style=MUTED)
             detail.update(blurb)
 
     # ---- live quotes ------------------------------------------------------
 
     def _poll_quotes(self) -> None:
         """Ask for the highlighted fund's prints, off-thread. Only a fund with
-        positions has anything live to show; cash is cash. A minute fund's
-        runner changes the ledger under us: re-read it when the runner has
-        come or gone, or has recorded a bar since the last read."""
+        positions has anything live to show; cash is cash. A runner changes
+        the ledger under us: re-read it when the runner has come or gone, or
+        has recorded a session since the last read."""
         snap = self._current()
         if snap is None:
             return
-        if snap.intraday and snap.error is None and (
+        if snap.error is None and (
                 is_running(snap.directory) != snap.running
                 or (snap.ledger.sessions() or [None])[-1] != snap.last_session):
             self._populate(snap.deployed.name)
@@ -242,6 +247,8 @@ class PaperScreen(Screen):
             return snap.halted is None
         if action == "resume":
             return snap.halted is not None
+        if action == "runner":
+            return snap.halted is None or snap.running  # a halted fund's runner can still be stopped
         return True
 
     def action_back(self) -> None:
@@ -260,10 +267,11 @@ class PaperScreen(Screen):
         if snap.halted:
             self.notify(f"{snap.deployed.name} is halted — r to resume first.", severity="warning")
             return
-        directory = snap.directory
-        if snap.intraday:
-            self._toggle_runner(snap)
+        if snap.running:
+            self.notify(f"{snap.deployed.name}'s runner is advancing it — space to stop it first.",
+                        severity="warning")
             return
+        directory = snap.directory
 
         def resume() -> None:
             if demand_run_keys(self.app, resume):
@@ -271,14 +279,21 @@ class PaperScreen(Screen):
                                      lambda verdict: self._after_confirm(directory, verdict))
         resume()
 
-    def _toggle_runner(self, snap: PaperSnapshot) -> None:
-        """Enter on a minute fund: stop its runner if one is up, else start
-        one (a detached `aihf paper run`, so it outlives this screen)."""
+    def action_runner(self) -> None:
+        """Space: stop the fund's runner if one is up, else start one (a
+        detached `aihf paper run`, so it outlives this screen). The runner
+        does what enter does, unattended, at the fund's cadence."""
+        snap = self._current()
+        if snap is None or snap.error:
+            return
         name = snap.deployed.name
         if is_running(snap.directory):
             stop_runner(snap.directory)
-            self.notify(f"{name} stopping after the bar in flight")
+            self.notify(f"{name} stopping after the session in flight")
             self._populate(name)
+            return
+        if snap.halted:
+            self.notify(f"{name} is halted — r to resume first.", severity="warning")
             return
 
         def resume() -> None:
@@ -288,7 +303,7 @@ class PaperScreen(Screen):
                 except OSError as exc:
                     self.notify(f"Could not start {name}: {exc}", severity="error")
                     return
-                self.notify(f"{name} started · {snap.spec.cadence_label} · {snap.spec.window.label}")
+                self.notify(f"{name} running · {cadence_identity(snap.spec)}")
                 self._populate(name)
         resume()
 
@@ -392,8 +407,8 @@ class RunConfirmScreen(ModalScreen[str | None]):
         self._ready = True
         self.query_one("#run-q", Static).update(Text.assemble(
             ("Run ", f"bold {BRIGHT}"), (deployed.name, f"bold {GREEN}"),
-            (f" through {due}?" if due else
-             f" again through {state.last_session}?" if self._verdict == "redo" else "?",
+            (f" through {session_label(due)}?" if due else
+             f" again through {session_label(state.last_session)}?" if self._verdict == "redo" else "?",
              f"bold {BRIGHT}")))
         self.query_one("#run-body", Static).update(run_plan(deployed.name, state, due, deployed.spec))
         keys = Text()
@@ -480,7 +495,7 @@ class RunSessionScreen(Screen):
             ledger = Ledger(directory)
             state = ledger.replay(spec.capital)
             with FDClient() as raw:
-                data = CachedDataClient(raw)
+                data = CachedDataClient(raw, live=spec.is_intraday)
                 if self._redo:
                     if state.last_session is None:
                         raise NothingDue("no session recorded yet, nothing to run again")
@@ -489,9 +504,9 @@ class RunSessionScreen(Screen):
                     due = state.last_session
                     state = ledger.replay(spec.capital, before=due)
                 else:
-                    due = next_session(data, spec.benchmark, state.last_session)
-                    if due is None:  # the close slipped out from under the approval step
-                        raise NothingDue(f"no completed {spec.benchmark} session after {state.last_session}")
+                    due = next_session(data, spec, state.last_session)
+                    if due is None:  # the session slipped out from under the approval step
+                        raise NothingDue(f"nothing due after {state.last_session}")
                 dates = assessment_dates(state, due, spec)
                 app.call_from_thread(self._begin_board, deployed, due, dates, state.pending)
                 if dates:
@@ -540,7 +555,7 @@ class RunSessionScreen(Screen):
             doing.append("marking the book")
         self.query_one("#run-phase", Static).update(Text.assemble(
             (f"Running {deployed.name} {'again through' if self._redo else 'through'} ", f"bold {BRIGHT}"),
-            (due, f"bold {RED}"),
+            (session_label(due), f"bold {RED}"),
             ("  ·  " + " · ".join(doing), MUTED),
         ))
         if not dates:
@@ -586,7 +601,7 @@ class RunSessionScreen(Screen):
         if isinstance(exc, NothingDue):
             phase.update(Text.assemble(
                 ("Nothing due  ", f"bold {BRIGHT}"), (f"{exc}", MUTED),
-                ("\n\nThe fund is up to date. Run it again after the next close. esc to go back.", MUTED)))
+                ("\n\nThe fund is up to date. Run it again when the next session is in. esc to go back.", MUTED)))
         else:
             phase.update(Text.assemble(
                 ("✗ ", f"bold {RED}"), (f"{type(exc).__name__}: {exc}", RED),
@@ -759,10 +774,11 @@ class SessionReportScreen(Screen):
 
 
 def _resolve_next_session(directory: Path) -> tuple[DeployedFund, FundState, str | None]:
-    """Load the fund, replay its ledger, and ask the market which session is
-    due. The one place the confirm modal touches the network."""
+    """Load the fund, replay its ledger, and ask which session is due. The
+    one place the confirm modal touches the network (a daily fund asks the
+    market for its closes; a minute fund's bar is read off the clock)."""
     deployed = load_deployed(directory)
     state = Ledger(directory).replay(deployed.spec.capital)
     with FDClient() as raw:
-        due = next_session(CachedDataClient(raw), deployed.spec.benchmark, state.last_session)
+        due = next_session(CachedDataClient(raw), deployed.spec, state.last_session)
     return deployed, state, due

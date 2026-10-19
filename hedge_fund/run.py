@@ -21,20 +21,22 @@ Usage::
         empty ledger and a book with the mandate's capital.
 
     aihf paper tick alpha
-        Advance the fund by exactly one completed session and append it to
-        the ledger. Idempotent; what a scheduler calls after each close:
+        Advance the fund by exactly one session and append it to the ledger:
+        the oldest unrecorded completed close for a daily fund, the current
+        bar at prints taken now for a minute fund. Idempotent; what a
+        scheduler calls after each close:
 
             30 18 * * 1-5  aihf paper tick alpha >> ~/.hedge-fund/paper/alpha/tick.log 2>&1
 
         A missed day is never skipped — the next tick advances the oldest
-        unrecorded session. --session YYYY-MM-DD names it explicitly.
+        unrecorded session. --session names it explicitly.
 
     aihf paper run alpha
-        For a minute fund (`rebalance: minute`): stay up and advance the fund
-        at every bar inside its trading window, writing a checkpoint at the
-        last bar of each day. One process per fund, found by its runner.pid;
-        Ctrl-C, SIGTERM or `aihf paper stop alpha` stop it after the bar in
-        flight. Time it was down is logged as a gap, never back-filled.
+        Stay up and do what tick does whenever a session is due: after each
+        midnight for a daily fund, at every bar inside the window for a
+        minute fund. One process per fund, found by its runner.pid; Ctrl-C,
+        SIGTERM or `aihf paper stop alpha` stop it after the session in
+        flight. A minute fund's time down is logged as a gap, never back-filled.
 
     aihf paper status alpha | list | halt alpha --reason "..." | resume alpha
 
@@ -70,7 +72,6 @@ from hedge_fund.paper import (
     LedgerError,
     list_deployed,
     load_deployed,
-    MinuteFund,
     NothingDue,
     redo,
     serve,
@@ -109,7 +110,7 @@ def main() -> None:
             _backtest(args, parser, console)
         else:
             _paper(args, parser, console)
-    except (FundHalted, MinuteFund, NothingDue, LedgerError) as exc:
+    except (FundHalted, NothingDue, LedgerError) as exc:
         console.print(f"[red]{exc}[/]")
         sys.exit(1)
 
@@ -153,16 +154,17 @@ def _parser() -> argparse.ArgumentParser:
     create.add_argument("--mandate", required=True, help="path to a mandate YAML")
     create.add_argument("--universe", required=True, help=_UNIVERSE_HELP)
 
-    advance = actions.add_parser("tick", help="advance the fund by one completed session")
+    advance = actions.add_parser("tick", help="advance the fund by one session")
     advance.add_argument("name")
-    advance.add_argument("--session", help="the session to record, YYYY-MM-DD; must be the next unrecorded one")
+    advance.add_argument("--session", help="the session to record (YYYY-MM-DD, or a bar's YYYY-MM-DDTHH:MM:SS); "
+                                           "must be the next unrecorded one")
     advance.add_argument("--again", action="store_true",
                          help="run the latest recorded session again and replace its record")
 
-    runner = actions.add_parser("run", help="minute funds: stay up and advance the fund at every bar")
+    runner = actions.add_parser("run", help="stay up and advance the fund whenever a session is due")
     runner.add_argument("name")
 
-    stopper = actions.add_parser("stop", help="stop a fund's runner after the bar in flight")
+    stopper = actions.add_parser("stop", help="stop a fund's runner after the session in flight")
     stopper.add_argument("name")
 
     status = actions.add_parser("status", help="NAV, last session, pending decision, halt state")
@@ -264,16 +266,13 @@ def _paper(args, parser: argparse.ArgumentParser, console: Console) -> None:
             directory = deploy(args.name, spec, universe, root=PAPER_DIR)
         except FileExistsError as exc:
             parser.error(str(exc))
+        cadence = f"{spec.cadence_label}, {spec.window.label}" if spec.is_intraday else spec.cadence_label
         console.print(
             f"[bold]{args.name}[/] deployed at {directory}  ·  mandate {spec.name}  ·  "
-            f"{', '.join(universe)}  ·  ${spec.capital:,.0f}  ·  {spec.cadence_label}"
+            f"{', '.join(universe)}  ·  ${spec.capital:,.0f}  ·  {cadence}"
         )
-        if spec.is_intraday:
-            console.print(f"[dim]next: `aihf paper run {args.name}` to start it ({spec.window.label}), "
-                          f"`aihf paper status {args.name}` any time[/]")
-        else:
-            console.print("[dim]next: `aihf paper tick "
-                          f"{args.name}` after each close (cron it), `aihf paper status {args.name}` any time[/]")
+        console.print(f"[dim]next: `aihf paper tick {args.name}` to run one session, `aihf paper run "
+                      f"{args.name}` to leave it running, `aihf paper status {args.name}` any time[/]")
         return
 
     if args.action == "list":
@@ -286,7 +285,7 @@ def _paper(args, parser: argparse.ArgumentParser, console: Console) -> None:
     if args.action == "tick":
         deployed = load_deployed(directory)
         with FDClient() as raw:
-            fd = CachedDataClient(raw)
+            fd = CachedDataClient(raw, live=deployed.spec.is_intraday)
             verb = "running the latest session again" if args.again else "advancing one session"
             with console.status(
                 f"[cyan]{deployed.name}: {verb} over {', '.join(deployed.universe)}…", spinner="dots",
@@ -300,7 +299,8 @@ def _paper(args, parser: argparse.ArgumentParser, console: Console) -> None:
     if args.action == "run":
         deployed = load_deployed(directory)
         spec = deployed.spec
-        console.print(f"[bold]{deployed.name}[/] running {spec.cadence_label}, {spec.window.label}  ·  "
+        cadence = f"{spec.cadence_label}, {spec.window.label}" if spec.is_intraday else spec.rebalance
+        console.print(f"[bold]{deployed.name}[/] running {cadence}  ·  "
                       f"{', '.join(deployed.universe)}  ·  Ctrl-C or `aihf paper stop {deployed.name}` to stop")
 
         def _event(kind: str, fields: dict) -> None:
@@ -309,7 +309,7 @@ def _paper(args, parser: argparse.ArgumentParser, console: Console) -> None:
 
         with FDClient() as raw:
             try:
-                serve(directory, CachedDataClient(raw, live=True),
+                serve(directory, CachedDataClient(raw, live=spec.is_intraday),
                       on_record=lambda record: console.print(_tick_summary(deployed.name, record)),
                       on_event=_event)
             except RuntimeError as exc:  # already running
@@ -320,7 +320,7 @@ def _paper(args, parser: argparse.ArgumentParser, console: Console) -> None:
 
     if args.action == "stop":
         if stop_runner(directory):
-            console.print(f"[green]{args.name}[/] asked to stop; it finishes the bar in flight first")
+            console.print(f"[green]{args.name}[/] asked to stop; it finishes the session in flight first")
         else:
             console.print(f"[dim]{args.name} is not running[/]")
         return

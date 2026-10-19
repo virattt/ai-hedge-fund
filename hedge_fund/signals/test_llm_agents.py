@@ -170,7 +170,7 @@ def test_new_filing_forces_new_llm_call(tmp_path):
 
 
 class BarClient(MockDataClient):
-    """Fundamentals plus a day: minute bars, a prior close, headlines."""
+    """Fundamentals plus a day: the quote at the bar, a prior close, headlines."""
 
     def __init__(self, news=()):
         super().__init__(metrics=_history())
@@ -178,9 +178,11 @@ class BarClient(MockDataClient):
 
     def get_prices(self, ticker, start_date, end_date, interval="day", interval_multiplier=1):
         from hedge_fund.data.models import Price
-        if interval == "minute":
-            return [Price(open=100, close=100, high=100, low=100, volume=1, time="2025-01-15T09:30:00-05:00")]
         return [Price(open=100, close=100, high=100, low=100, volume=1, time="2025-01-14T00:00:00Z")]
+
+    def get_snapshot(self, ticker):
+        from hedge_fund.data.models import PriceSnapshot
+        return PriceSnapshot(ticker=ticker, price=100.0, time="2025-01-15T09:30:00-05:00")
 
     def get_news(self, ticker, end_date, start_date=None, limit=1000):
         return self.news

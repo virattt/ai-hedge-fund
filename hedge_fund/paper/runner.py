@@ -1,26 +1,33 @@
-"""run — the loop a minute fund lives in.
+"""run — the loop a paper fund lives in when nobody is watching.
 
     aihf paper run <name>
 
-A daily fund is advanced by a tick after each close. A minute fund has a bar
-every interval inside its trading window, so something has to be awake:
-this loop sleeps to the next boundary, takes one print per name there,
-advances the fund through that bar with `_run` (the same path a tick
-takes), and goes back to sleep. After the window's last bar it writes the
-day's checkpoint so tomorrow's replay starts from tonight.
+Any fund can be advanced a session at a time by hand (the app, `aihf paper
+tick`). This loop does the same thing unattended: it sleeps until the fund's
+next session is due, advances it through `_run` (the path a tick takes),
+and goes back to sleep. The cadence decides what "due" means.
 
-What it does with time it was not awake for: nothing. On start, if the
-current bar is not the one after the last recorded bar, the span between
-is logged as a `gap` event and the fund picks up at the current bar; the
-pending decision, if any, is refreshed at the bar before execution by
-`execute_decision` itself (its cutoff is no longer the bar it was made at).
-No bar is ever back-filled with prices the fund did not see.
+A daily fund's session is a completed close, which under the engine's rule
+is any date before today in New York. The loop wakes just after midnight,
+advances every session that has become due since it last looked, oldest
+first, and sleeps again; a missed week is caught up one honest session at
+a time, exactly as a week of ticks would.
 
-A bar whose prints cannot be taken (the API is down, or the benchmark
-has not printed today: a holiday, or a window that opens before the first
+A minute fund's session is a bar boundary, and its prints exist only at the
+boundary. The loop wakes at each one, takes one print per name there, and
+advances the bar. What it does with time it was not awake for: nothing. On
+start, if the current bar is not the one after the last recorded bar, the
+span between is logged as a `gap` event and the fund picks up at the
+current bar; the pending decision, if any, is refreshed at the bar before
+execution by `execute_decision` itself. No bar is ever back-filled with
+prices the fund did not see, and a boundary the loop reaches too late to
+call its own is left for the next.
+
+A bar whose prints cannot be taken (the API is down, or the benchmark has
+not printed today: a holiday, or a window that opens before the first
 trade) is skipped with a `gap` event, not a halt. A failure inside
-`advance`, a held name with no print included, halts the fund exactly as
-a failed tick does.
+`advance`, a held name with no print included, halts the fund exactly as a
+failed tick does.
 """
 
 from __future__ import annotations
@@ -30,14 +37,13 @@ import signal
 import subprocess
 import sys
 import threading
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from pathlib import Path
 from typing import Callable
 
 from hedge_fund.data.bars import (
     bar_time,
     bars_between,
-    is_last_bar,
     next_bar,
     session_date,
     to_key,
@@ -48,12 +54,14 @@ from hedge_fund.data.sessions import NEW_YORK
 from hedge_fund.fund import Fund, FundSpec
 from hedge_fund.paper.deployed import load_deployed
 from hedge_fund.paper.ledger import Ledger
-from hedge_fund.paper.tick import _run, MinuteFund
+from hedge_fund.paper.tick import _run, next_session, print_day
 from hedge_fund.pipeline.clock import LiveClock
-from hedge_fund.pipeline.session import FundHalted, next_state, SessionRecord
+from hedge_fund.pipeline.session import FundHalted, SessionRecord
 
 PID_FILE = "runner.pid"
-_LATE_SECONDS = 60  # how long after a boundary its prints still count as that bar's
+_LATE_SECONDS = 60      # how long after a boundary its prints still count as that bar's
+_DAY_TURNS = time(0, 5)  # when a daily fund's loop first looks for yesterday's close
+_DAY_POLL = 3600         # ...and how often it looks again until the close has landed
 
 
 def run(
@@ -67,25 +75,59 @@ def run(
     now: Callable[[], datetime] | None = None,
     sleep: Callable[[float], None] | None = None,
 ) -> None:
-    """Advance the minute fund in *directory* bar by bar until *stop* is set.
+    """Advance the fund in *directory* session by session until *stop* is set.
 
     *now* and *sleep* are the clock and the wait; tests inject both. The
     default wait is `stop.wait`, so a stop lands within the second. Raises
-    MinuteFund for a daily fund and FundHalted when the kill switch is set
-    (on start, or after a bar fails).
+    FundHalted when the kill switch is set (on start, or after a session
+    fails).
     """
     directory = Path(directory)
     deployed = load_deployed(directory)
-    spec = deployed.spec
-    if not spec.is_intraday:
-        raise MinuteFund(f"{deployed.name} is a {spec.rebalance} fund: advance it with `aihf paper tick`")
     stop = stop or threading.Event()
     now = now or (lambda: datetime.now(NEW_YORK))
     sleep = sleep or stop.wait
+    fund = (build_fund or Fund)(deployed.spec)  # once: the analysts' caches live across sessions
+    loop = _run_bars if deployed.spec.is_intraday else _run_days
+    loop(directory, deployed, data_client, fund, stop=stop, build_fund=build_fund,
+         on_record=on_record, on_event=on_event, now=now, sleep=sleep)
+
+
+def _run_days(directory, deployed, data_client, fund, *, stop, build_fund, on_record, on_event, now, sleep):
+    """A daily fund: every session that has become due, oldest first, then
+    sleep to the next turn of the day."""
+    spec = deployed.spec
+    ledger = Ledger(directory)
+    while not stop.is_set():
+        state = ledger.replay(spec.capital)
+        if state.halted is not None:
+            raise FundHalted(f"{deployed.name} is halted: {state.halted}")
+        due = next_session(data_client, spec, state.last_session, now=now)
+        if due is None:
+            _wait_for(_next_look(now()), now, sleep)
+            continue
+        record = _run(directory, deployed, ledger, state, due, data_client, build_fund, fund=fund)
+        if on_record is not None:
+            on_record(record)
+
+
+def _next_look(now: datetime) -> datetime:
+    """When a daily loop looks again: just after the next New York midnight,
+    or in an hour if the day has turned and the close has not landed yet."""
+    local = now.astimezone(NEW_YORK)
+    turn = datetime.combine(local.date(), _DAY_TURNS, tzinfo=NEW_YORK)
+    if local < turn:
+        return turn
+    return min(turn + timedelta(days=1), local + timedelta(seconds=_DAY_POLL))
+
+
+def _run_bars(directory, deployed, data_client, fund, *, stop, build_fund, on_record, on_event, now, sleep):
+    """A minute fund: one print per name at each boundary, the bar advanced
+    there, gaps logged for the boundaries the loop was not awake for."""
+    spec = deployed.spec
     ledger = Ledger(directory)
     clock = LiveClock(data_client, spec.interval_seconds, spec.window, now=now)
-    fund = (build_fund or Fund)(spec)  # once: the analysts' caches live across bars
-    closed_day: str | None = None      # the day already logged as not trading
+    closed_day: str | None = None  # the day already logged as not trading
 
     def event(kind: str, **fields) -> None:
         ledger.log_event(kind, **fields)
@@ -96,8 +138,8 @@ def run(
         state = ledger.replay(spec.capital)
         if state.halted is not None:
             raise FundHalted(f"{deployed.name} is halted: {state.halted}")
-        bar = clock.current()
-        if bar is None or (state.last_session is not None and bar <= state.last_session):
+        bar = next_session(data_client, spec, state.last_session, now=now)
+        if bar is None:
             _wait_for(next_bar(now(), spec.interval_seconds, spec.window), now, sleep)
             continue
         if (now() - bar_time(bar)).total_seconds() > max(spec.interval_seconds, _LATE_SECONDS):
@@ -116,7 +158,7 @@ def run(
             event("gap", **{"from": state.last_session, "to": bar, "reason": f"no prints: {exc}"})
             _wait_for(next_bar(now(), spec.interval_seconds, spec.window), now, sleep)
             continue
-        if _print_day(benchmark.time) < session_date(bar):
+        if print_day(benchmark.time) < session_date(bar):
             if closed_day != session_date(bar):  # a holiday, or the market has not opened yet
                 closed_day = session_date(bar)
                 event("gap", **{"from": state.last_session, "to": bar,
@@ -133,8 +175,6 @@ def run(
         record = _run(directory, deployed, ledger, state, bar, data_client, build_fund, clock=clock, fund=fund)
         if on_record is not None:
             on_record(record)
-        if is_last_bar(bar, spec.window):
-            ledger.checkpoint(next_state(state, record))
         if not stop.is_set():
             _wait_for(next_bar(now(), spec.interval_seconds, spec.window), now, sleep)
 
@@ -143,10 +183,6 @@ def _wait_for(moment: datetime, now: Callable[[], datetime], sleep: Callable[[fl
     seconds = (moment - now()).total_seconds()
     if seconds > 0:
         sleep(seconds)
-
-
-def _print_day(time: str) -> str:
-    return datetime.fromisoformat(time.replace("Z", "+00:00")).astimezone(NEW_YORK).date().isoformat()
 
 
 # ---------------------------------------------------------------------------

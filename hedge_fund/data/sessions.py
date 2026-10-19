@@ -9,9 +9,11 @@ from hedge_fund.data.protocol import DataClient
 NEW_YORK = ZoneInfo("America/New_York")
 
 
-def completed_through() -> str:
-    """Exclude the current New York date, even after market close."""
-    return (datetime.now(NEW_YORK).date() - timedelta(days=1)).isoformat()
+def completed_through(now: datetime | None = None) -> str:
+    """Exclude the current New York date, even after market close. *now*
+    is for a caller that keeps its own clock (the runner, tests)."""
+    moment = now.astimezone(NEW_YORK) if now is not None else datetime.now(NEW_YORK)
+    return (moment.date() - timedelta(days=1)).isoformat()
 
 
 def previous_day(day: str) -> str:

@@ -329,61 +329,30 @@ def test_daily_replay_executes_the_prior_decision_then_assesses_anew():
 # minute funds
 # ---------------------------------------------------------------------------
 
-class MinuteDataClient(FakeDataClient):
-    """Daily closes for the grid's days, plus 1-minute bars inside them: a
-    path per ticker per day, {HH:MM: close}."""
-
-    def __init__(self, series, minutes):
-        super().__init__(series)
-        self._minutes = minutes  # ticker -> day -> {HH:MM: close}
-        self.minute_calls = []
+class DailyOnly(FakeDataClient):
+    """Financial Datasets as it is: daily bars, and nothing finer."""
 
     def get_prices(self, ticker, start_date, end_date, interval="day", interval_multiplier=1):
-        if interval != "minute":
-            return super().get_prices(ticker, start_date, end_date)
-        self.minute_calls.append((ticker, start_date, interval_multiplier))
-        return [Price(open=p, close=p, high=p, low=p, volume=1, time=f"{start_date}T{hm}:00-04:00")
-                for hm, p in sorted(self._minutes.get(ticker, {}).get(start_date, {}).items())]
+        if interval != "day":
+            raise RuntimeError("GET /prices/ returned 400: Invalid interval")
+        return super().get_prices(ticker, start_date, end_date)
 
 
-def _minute_run(interval, start="2024-06-03", end="2024-06-04"):
-    spec = _spec(rebalance="minute", interval=interval, window={"start": "13:00", "end": "13:10"})
-    days = ["2024-06-03", "2024-06-04"]
-    series = {"SPY": {d: 500.0 for d in days}, "AAPL": {d: 100.0 for d in days}}
-    minutes = {"SPY": {d: {f"13:{m:02d}": 500.0 for m in range(0, 11)} for d in days},
-               "AAPL": {d: {f"13:{m:02d}": 100.0 + m + (10 if d == days[1] else 0) for m in range(0, 11)}
-                        for d in days}}
-    data = MinuteDataClient(series, minutes)
-    fund = Fund(spec, models={"solo": [FakeAnalyst("a", views={"AAPL": 1.0})]})
-    return backtest_fund(fund, start, end, data, ["AAPL"]), data
-
-
-def test_minute_backtest_steps_every_bar_of_the_window_on_each_benchmark_day():
-    result, data = _minute_run(interval=5)
-    assert result.dates == [f"{d}T13:{m:02d}:00" for d in ("2024-06-03", "2024-06-04") for m in (0, 5, 10)]
-    assert result.rebalance == "every 5m · 13:00–13:10 ET"
-    first, second, *_ = result.records
-    assert first.decision is not None and first.executed is None
-    assert second.executed is not None and second.executed.execution_policy == "next_bar"
-    # The price at 13:05 is the close of the last minute bar that had ended
-    # by then (the 13:04 bar), never the 13:05 bar still forming.
-    assert second.executed.fills[0].price == 104.0
-    assert second.positions == {"AAPL": 961} and second.marks == {"AAPL": 104.0}
-    assert result.records[3].marks == {"AAPL": 110.0}  # tomorrow's first bar: that bar's open
-    assert result.metrics.n_cycles == 5  # a decision at every bar, executed at the next
-    assert result.benchmark_nav == [100_000.0] * 6
-    assert data.minute_calls.count(("AAPL", "2024-06-03", 1)) == 1  # a day's bars are fetched once
-
-
-def test_sub_minute_mandates_backtest_at_one_minute_and_say_so():
-    result, _ = _minute_run(interval=0.5)
-    assert result.dates[:3] == ["2024-06-03T13:00:00", "2024-06-03T13:01:00", "2024-06-03T13:02:00"]
-    assert len(result.dates) == 22
-    assert result.rebalance.startswith("every 1m · 13:00–13:10 ET (mandate: every 30s; backtested at the 1-minute")
-    # Sharpe annualizes by bars a day, not sessions a year: 11 bars × 252.
-    from hedge_fund.backtesting.fund import performance_metrics
-    cycles = result.cycles
-    by_bars = performance_metrics(100_000, result.dates, result.nav, result.benchmark_nav, cycles,
-                                  periods_per_year=11 * 252)
-    by_days = performance_metrics(100_000, result.dates, result.nav, result.benchmark_nav, cycles)
-    assert result.metrics.sharpe_ratio == by_bars.sharpe_ratio != by_days.sharpe_ratio
+def test_a_minute_fund_backtests_at_daily_closes_as_the_daily_fund_it_collapses_to():
+    """A minute fund decides every bar and fills at the next. On a daily
+    grid that is: decide at every close, fill at the next — a daily fund.
+    The sessions, fills and metrics match the daily mandate exactly, no
+    minute bars are asked for, and the cadence says how it was replayed."""
+    days = ["2024-06-03", "2024-06-04", "2024-06-05"]
+    series = {"SPY": {d: 500.0 for d in days}, "AAPL": dict(zip(days, (100.0, 104.0, 110.0)))}
+    results = {}
+    for cadence in ("minute", "daily"):
+        overrides = {"interval": 10, "window": {"start": "13:00", "end": "13:10"}} if cadence == "minute" else {}
+        fund = Fund(_spec(rebalance=cadence, **overrides), models={"solo": [FakeAnalyst("a", views={"AAPL": 1.0})]})
+        results[cadence] = backtest_fund(fund, days[0], days[-1], DailyOnly(series), ["AAPL"])
+    minute, daily = results["minute"], results["daily"]
+    assert minute.rebalance == "daily (mandate: every 10m · 13:00–13:10 ET)" and daily.rebalance == "daily"
+    assert minute.dates == daily.dates == days
+    assert minute.nav == daily.nav and minute.metrics == daily.metrics
+    assert minute.records[1].executed.execution_policy == "next_close"
+    assert minute.records[1].executed.fills[0].price == 104.0 and minute.metrics.n_cycles == 2

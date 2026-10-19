@@ -11,8 +11,7 @@ from __future__ import annotations
 
 import os
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date as _date
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 from rich.console import Group
@@ -21,10 +20,10 @@ from rich.text import Text
 
 from hedge_fund.backtesting import performance_metrics
 from hedge_fund.data import FDClient, FDClientError, PriceSnapshot
-from hedge_fund.data.bars import bar_time, bars_per_day, is_intraday, next_bar
+from hedge_fund.data.bars import bar_time, bars_per_day, is_intraday
 from hedge_fund.data.sessions import NEW_YORK
 from hedge_fund.fund import FundSpec
-from hedge_fund.paper import is_running, Ledger, LedgerError, load_deployed
+from hedge_fund.paper import following_session, is_running, Ledger, LedgerError, load_deployed
 from hedge_fund.pipeline import (
     DecisionRecord,
     FundState,
@@ -33,7 +32,7 @@ from hedge_fund.pipeline import (
 )
 from hedge_fund.tui.palette import BRIGHT, CYAN, GREEN, MUTED, RED, TEXT
 from hedge_fund.tui.report import session_row, weights_line
-from hedge_fund.tui.shared import cadence_identity, render_area_chart
+from hedge_fund.tui.shared import cadence_identity, render_area_chart, session_label
 
 _PERIOD_WORD = {"daily": "day", "weekly": "week", "monthly": "month"}
 
@@ -58,9 +57,7 @@ class PaperSnapshot:
         self.records: list[SessionRecord] = []
         self.state: FundState | None = None
         self.error: str | None = None
-        # A minute fund is alive while its runner process is; a daily fund
-        # has no process and is never "running".
-        self.running = self.deployed.spec.is_intraday and is_running(directory)
+        self.running = is_running(directory)  # a runner process holds the fund
         try:
             self.records = self.ledger.records()
             self.state = self.ledger.replay(self.deployed.spec.capital)
@@ -115,17 +112,17 @@ class PaperSnapshot:
         return performance_metrics(self.spec.capital, dates, nav, bench, cycles, periods_per_year=per_year)
 
     def _state_word(self) -> tuple[str, str, str]:
-        """Glyph, word, tone. A minute fund's resting state is whether its
-        runner is up; a daily fund's is whether it has a track record yet."""
+        """Glyph, word, tone, the same vocabulary at every cadence: a runner
+        up is running; otherwise new until the first session, then idle."""
         if self.error:
             return "✗", "ledger error", RED
         if self.halted:
             return "■", "halted", RED
-        if self.intraday:
-            return ("●", "running", GREEN) if self.running else ("○", "idle", MUTED)
+        if self.running:
+            return "●", "running", GREEN
         if self.last_session is None:
             return "●", "new", CYAN
-        return "●", "live", GREEN
+        return "○", "idle", MUTED
 
     def status(self) -> Text:
         """One line: the same facts as `aihf paper status`."""
@@ -171,27 +168,22 @@ def paper_slot(index: int, snap: PaperSnapshot) -> Text:
 
 def next_run_rows(snap: PaperSnapshot, now: datetime | None = None) -> list[tuple[str, Text | str]]:
     """What the next run will do, from the ledger alone — no network on a
-    highlight. Two steps: what happens to the pending decision, then
-    whether a new one is made. The exact date is resolved when the user
-    asks to run. For a minute fund the next run is the next bar on its
-    grid, and whether anything happens at it depends on the runner."""
+    highlight. When the next session arrives and whether a runner will take
+    it; then what happens to the pending decision, then whether a new one is
+    made. The exact session is resolved when the user asks to run."""
     if snap.halted:
         rows: list[tuple[str, Text | str]] = [("Halted", Text("r to resume before it can run", style=RED))]
         if snap.halted not in (APP_HALT, "halted"):  # a reason given from the CLI
             rows.append(("", Text(snap.halted, style=MUTED)))
         return rows
-    rows: list[tuple[str, Text | str]] = []
-    if snap.intraday:
-        spec = snap.spec
-        upcoming = next_bar(now or datetime.now(NEW_YORK), spec.interval_seconds, spec.window)
-        today = (now or datetime.now(NEW_YORK)).astimezone(NEW_YORK).date()
-        when = upcoming.strftime("%H:%M:%S ET") if upcoming.date() == today else upcoming.strftime("%a %H:%M:%S ET")
-        rows.append(("Next bar", Text.assemble(
-            (when, BRIGHT),
-            ("   ● running" if snap.running else "   ○ idle · enter to start", GREEN if snap.running else MUTED))))
+    moment = now or datetime.now(NEW_YORK)
+    rows: list[tuple[str, Text | str]] = [("Next bar" if snap.intraday else "Next close", Text.assemble(
+        (following_session(snap.spec, snap.last_session, moment).removesuffix(" close"), BRIGHT),
+        ("   ● running · space to stop" if snap.running else "   ○ idle · space to start a runner",
+         GREEN if snap.running else MUTED)))]
     if snap.pending is not None:
         rows.append(("First", Text.assemble(
-            "execute the ", (snap.pending.as_of, BRIGHT), " decision")))
+            "execute the ", (session_label(snap.pending.as_of), BRIGHT), " decision")))
         rows.append(("", weights_line(snap.pending)))
     elif snap.last_session is None:
         rows.append(("First", "mark the book at the first bar's prints" if snap.intraday
@@ -323,47 +315,57 @@ def fetch_snapshots(tickers: list[str]) -> dict[str, PriceSnapshot]:
     return quotes
 
 
-def run_plan(name: str, state: FundState, due: str | None, spec: FundSpec) -> Text:
+def run_plan(name: str, state: FundState, due: str | None, spec: FundSpec,
+             now: datetime | None = None) -> Text:
     """What pressing enter will do, in plain words, from the ledger state and
     the session that is due. Pure: the confirm modal renders it, tests read it.
 
     Three shapes when a session is due — execute then decide, execute then
-    mark, or mark only. When nothing is due, enter runs the last session
-    again instead, and the body says what that replaces.
+    mark, or mark only — at a close for a daily fund, at a bar's print for a
+    minute fund (taken now, and the body says how long after the bar that
+    is). When nothing is due, enter runs the last session again instead,
+    and the body says what that replaces.
     """
+    moment = now or datetime.now(NEW_YORK)
     body = Text()
     if due is None:
         if state.last_session is None:
-            body.append(f"No completed {spec.benchmark} session to run yet.", style=TEXT)
+            what = "bar" if spec.is_intraday else f"completed {spec.benchmark} session"
+            body.append(f"No {what} to run yet.  Next: ", style=TEXT)
+            body.append(following_session(spec, None, moment), style=f"bold {BRIGHT}")
+            body.append(".", style=TEXT)
             return body
         body.append("Up to date through ", style=TEXT)
-        body.append(state.last_session, style=f"bold {BRIGHT}")
-        body.append(".  Next session closes ", style=TEXT)
-        body.append(_next_weekday(state.last_session), style=f"bold {BRIGHT}")
-        body.append(" at 4pm ET.\n\n", style=TEXT)
+        body.append(session_label(state.last_session), style=f"bold {BRIGHT}")
+        body.append(".  Next session: ", style=TEXT)
+        body.append(following_session(spec, state.last_session, moment), style=f"bold {BRIGHT}")
+        body.append(".\n\n", style=TEXT)
         body.append("Run ", style=TEXT)
-        body.append(state.last_session, style=f"bold {BRIGHT}")
+        body.append(session_label(state.last_session), style=f"bold {BRIGHT}")
         body.append(" again?  ", style=TEXT)
-        body.append("The analysts look again and the book is sized again at the same close. "
+        at = "prints it saw" if spec.is_intraday else "same close"
+        body.append(f"The analysts look again and the book is sized again at the {at}. "
                     "The recorded session is replaced; the old record is kept aside, off the chain.",
                     style=MUTED)
         return body
+    at = _at_phrase(due, moment)
     if state.pending is not None:
         body.append("Execute the ", style=TEXT)
-        body.append(state.pending.as_of, style=f"bold {BRIGHT}")
+        body.append(session_label(state.pending.as_of), style=f"bold {BRIGHT}")
         body.append(" decision at the ", style=TEXT)
-        body.append(due, style=f"bold {BRIGHT}")
-        body.append(" close\n  ", style=TEXT)
+        body.append_text(at)
+        body.append("\n  ", style=TEXT)
         body.append_text(weights_line(state.pending))
         body.append("\n  views refreshed before sizing\n", style=MUTED)
         then = "Then "
     else:
         body.append("Mark the book at the ", style=TEXT)
-        body.append(due, style=f"bold {BRIGHT}")
-        body.append(" close.  No trades.\n", style=TEXT)
+        body.append_text(at)
+        body.append(".  No trades.\n", style=TEXT)
         then = ""
     if is_rebalance_session(due, state.last_session, spec.rebalance):
         why = ("the fund's first decision" if state.last_session is None
+               else "every bar" if spec.rebalance == "minute"
                else "every session" if spec.rebalance == "daily"
                else f"first session of the {_PERIOD_WORD[spec.rebalance]}")
         body.append(f"{then}make a new decision", style=TEXT)
@@ -371,6 +373,19 @@ def run_plan(name: str, state: FundState, due: str | None, spec: FundSpec) -> Te
     elif then:
         body.append("Then mark the book.", style=TEXT)
     return body
+
+
+def _at_phrase(due: str, now: datetime) -> Text:
+    """Where the session's prices come from: `<date> close`, or `<bar> ET
+    print` with how late the print is taken when the bar is behind now."""
+    if not is_intraday(due):
+        return Text.assemble((due, f"bold {BRIGHT}"), (" close", TEXT))
+    phrase = Text.assemble((session_label(due), f"bold {BRIGHT}"), (" print, taken now", TEXT))
+    late = (now - bar_time(due)).total_seconds()
+    if late >= 60:
+        minutes = int(late // 60)
+        phrase.append(f" ({minutes} {'minute' if minutes == 1 else 'minutes'} after the bar)", style=MUTED)
+    return phrase
 
 
 def day_heading(day: str, records: list[SessionRecord], navs: list[float]) -> Text:
@@ -406,12 +421,3 @@ def _facts(rows: list[tuple[str, Text | str]]) -> Table:
 def _quote_time(snapshot: PriceSnapshot) -> datetime:
     """The quote's trade time in New York."""
     return datetime.fromisoformat(snapshot.time.replace("Z", "+00:00")).astimezone(NEW_YORK)
-
-
-def _next_weekday(after: str) -> str:
-    """The first Monday–Friday strictly after *after* (YYYY-MM-DD). Holidays
-    are not consulted; this is a hint, not a schedule."""
-    day = _date.fromisoformat(after) + timedelta(days=1)
-    while day.weekday() >= 5:
-        day += timedelta(days=1)
-    return day.isoformat()

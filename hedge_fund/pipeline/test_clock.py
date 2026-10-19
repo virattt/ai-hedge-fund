@@ -10,7 +10,7 @@ from hedge_fund.brokers.sim import SimBroker
 from hedge_fund.data.models import Price, PriceSnapshot
 from hedge_fund.data.sessions import NEW_YORK
 from hedge_fund.fund import Fund, FundSpec, TradingWindow
-from hedge_fund.pipeline.clock import bar_key, BarClock, clock_for, DailyClock, LiveClock
+from hedge_fund.pipeline.clock import bar_key, BarClock, clock_for, DailyClock, LiveClock, PinnedQuotes
 from hedge_fund.pipeline.session import advance, FundState, is_rebalance_session, next_state, SessionRecord
 from hedge_fund.pipeline.test_stages import FakeAnalyst
 
@@ -126,6 +126,33 @@ def test_live_clock_takes_every_print_once_per_bar_and_records_when_each_was():
     assert tape.snapshot_calls == ["AAPL", "SPY"]
     clock.observe(["SPY", "AAPL"], "2024-06-04T09:35:00")
     assert tape.snapshot_calls == ["AAPL", "SPY"]
+
+
+def test_pinned_quotes_hand_analysts_the_clocks_print_not_the_wire(monkeypatch):
+    """Whatever the cadence, an analyst's quote is the price the engine marks
+    the session at. Live: the boundary's print, fetched once per bar for the
+    clock and the analysts together. History: the bar's close, stamped with
+    the bar. Daily: the close. A name the clock cannot price has no quote."""
+    monkeypatch.setattr("hedge_fund.pipeline.clock.completed_through", lambda: "2024-06-04")
+    path = {"AAPL": {"2024-06-04T09:30:00": 100.0, "2024-06-04T09:35:00": 105.0, "2024-06-04T09:41:00": 106.0}}
+
+    tape = Tape(path, now=_at(9, 41))
+    live = PinnedQuotes(tape, LiveClock(tape, 300, TradingWindow(), now=lambda: tape.now), "2024-06-04T09:40:00")
+    quote = live.get_snapshot("AAPL")
+    assert quote.price == 106.0 and quote.time == "2024-06-04T13:41:00Z"  # the print, with when it was
+    live.get_snapshot("AAPL")
+    assert tape.snapshot_calls == ["AAPL"]  # served from the bar's prints, not fetched again
+
+    history = PinnedQuotes(tape, BarClock(tape, 300, TradingWindow()), "2024-06-04T09:40:00")
+    quote = history.get_snapshot("AAPL")
+    assert quote.price == 105.0 and quote.time == "2024-06-04T09:40:00-04:00"  # the 09:35 bar's close, at the bar
+    assert history.get_snapshot("MSFT") is None
+    assert tape.snapshot_calls == ["AAPL"]  # history never touches the wire
+
+    daily = PinnedQuotes(tape, DailyClock(tape), "2024-06-04")
+    quote = daily.get_snapshot("AAPL")
+    assert quote.price == 106.0 and quote.time == "2024-06-04T16:00:00-04:00"  # Tape's daily close is its last print
+    assert daily.get_prices("AAPL", "2024-06-04", "2024-06-04")[0].time == "2024-06-04T00:00:00Z"  # passes through
 
 
 def test_advance_on_bars_decides_at_one_bar_and_fills_at_the_next_with_prints():

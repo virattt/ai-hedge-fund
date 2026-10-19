@@ -80,7 +80,7 @@ def test_paper_screen_runs_through_the_approval_step(monkeypatch):
     ledger.append(make_session("2025-01-17", decision=decided, nav=100000))
     due = {"value": "2025-01-21"}
     monkeypatch.setattr(paper, "FDClient", lambda: Mock(__enter__=lambda s: s, __exit__=lambda s, *a: None))
-    monkeypatch.setattr(paper, "next_session", lambda data, benchmark, last: due["value"])
+    monkeypatch.setattr(paper, "next_session", lambda data, spec, last, **kw: due["value"])
     monkeypatch.setenv("FINANCIAL_DATASETS_API_KEY", "x")
     monkeypatch.setenv("HEDGE_FUND_LLM_MODEL", "jev-1.13.0")
     monkeypatch.setenv("TYPESAFE_API_KEY", "x")
@@ -221,7 +221,7 @@ def test_paper_screen_works_the_kill_switch_and_sessions_reads_the_ledger(tmp_pa
             await pilot.press("escape")
             await pilot.pause()
             detail = render(screen.query_one("#detail-body", Static).content)
-            assert "● live" in detail and "mark the book" in detail and "2025-01-17 · 2 sessions" in detail
+            assert "○ idle" in detail and "mark the book" in detail and "2025-01-17 · 2 sessions" in detail
             assert "SESSIONS" in detail and "2025-01-20" in detail and "1 fill" in detail
             assert "+1.0%" in render(menu.get_option("paper:0").prompt)
 
@@ -262,8 +262,45 @@ def test_paper_screen_works_the_kill_switch_and_sessions_reads_the_ledger(tmp_pa
     asyncio.run(scenario())
 
 
-def test_paper_screen_enter_starts_and_stops_a_minute_fund(monkeypatch):
+def test_paper_screen_enter_on_a_minute_fund_opens_the_same_approval_step(monkeypatch):
+    """Enter means one thing at every cadence: run the next session, through
+    the modal, onto the board. For a minute fund the session is the current
+    bar, named by its clock time."""
     directory = deploy("fast", make_minute_spec(), ["TEST"], root=paths.PAPER_DIR)
+    for variable in ("FINANCIAL_DATASETS_API_KEY", "TYPESAFE_API_KEY"):
+        monkeypatch.setenv(variable, "x")
+    monkeypatch.setenv("HEDGE_FUND_LLM_MODEL", "jev-1.13.0")
+    monkeypatch.setattr(paper, "FDClient", lambda: Mock(__enter__=lambda s: s, __exit__=lambda s, *a: None))
+    monkeypatch.setattr(paper, "next_session", lambda data, spec, last, **kw: "2025-01-21T13:05:00")
+    started: list = []
+    monkeypatch.setattr(paper.RunSessionScreen, "_run", lambda self: started.append(self._directory))
+
+    async def scenario():
+        app = HedgeFundApp()
+        async with app.run_test(size=(140, 50)) as pilot:
+            await app.push_screen(paper.PaperScreen())
+            screen = app.screen
+            await pilot.press("enter")
+            await pilot.pause()
+            modal = app.screen
+            assert isinstance(modal, paper.RunConfirmScreen) and modal.check_action("confirm", ())
+            assert "through 2025-01-21 13:05:00 ET?" in render(modal.query_one("#run-q", Static).content)
+            body = render(modal.query_one("#run-body", Static).content)
+            assert "Mark the book at the 2025-01-21 13:05:00 ET print, taken now" in body
+            assert "first decision" in body
+            await pilot.press("enter")
+            await pilot.pause()
+            assert isinstance(app.screen, paper.RunSessionScreen) and started == [directory]
+            app.screen._phase = "done"
+            await pilot.press("escape")
+            assert app.screen is screen
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("cadence", ["daily", "minute"])
+def test_paper_screen_space_starts_and_stops_a_runner_at_any_cadence(monkeypatch, cadence):
+    spec = make_minute_spec() if cadence == "minute" else make_spec(["pead"], "alpha")
+    directory = deploy(spec.name, spec, ["TEST"], root=paths.PAPER_DIR)
     for variable in ("FINANCIAL_DATASETS_API_KEY", "TYPESAFE_API_KEY"):
         monkeypatch.setenv(variable, "x")
     monkeypatch.setenv("HEDGE_FUND_LLM_MODEL", "jev-1.13.0")
@@ -287,19 +324,23 @@ def test_paper_screen_enter_starts_and_stops_a_minute_fund(monkeypatch):
             await app.push_screen(paper.PaperScreen())
             screen = app.screen
             menu = screen.query_one("#paper-menu", OptionList)
-            assert "○ idle" in render(menu.get_option("paper:0").prompt)
-            await pilot.press("enter")
+            assert "● new" in render(menu.get_option("paper:0").prompt)
+            await pilot.press("space")
             await pilot.pause()
             assert spawned == [directory] and app.screen is screen  # no approval modal for a runner
             assert "● running" in render(menu.get_option("paper:0").prompt)
-            assert "● running" in render(screen.query_one("#detail-body", Static).content)
-            await pilot.press("enter")
+            detail = render(screen.query_one("#detail-body", Static).content)
+            assert "● running · space to stop" in detail
+            await pilot.press("enter")  # the runner owns the ledger while it is up: enter does not run
             await pilot.pause()
-            assert stopped == [directory] and "○ idle" in render(menu.get_option("paper:0").prompt)
-            # A halted minute fund neither starts nor stops.
+            assert app.screen is screen
+            await pilot.press("space")
+            await pilot.pause()
+            assert stopped == [directory] and "● new" in render(menu.get_option("paper:0").prompt)
+            # A halted fund's runner is not started.
             await pilot.press("h")
             await pilot.pause()
-            await pilot.press("enter")
+            await pilot.press("space")
             await pilot.pause()
             assert spawned == [directory]
     asyncio.run(scenario())

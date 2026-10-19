@@ -11,9 +11,12 @@ an unchanged prompt, which means the prompt cache answers and no model is
 called. A new headline, a filing, or the price crossing a band changes the
 block, and only then is the analyst asked again.
 
-Everything is point-in-time by construction: today's minute bars up to the
-bar, headlines dated up to the bar, filings time-stamped up to the bar. A
-backtest at a bar in 2024 sees exactly what the day had shown by then.
+Everything is point-in-time by construction: the price is the quote the
+data client gives at the bar (the engine pins it to the clock's print, so it
+is the bar's own and never the wire's), headlines are dated up to the bar,
+filings time-stamped up to the bar. A backtest at a bar in 2024 sees exactly
+what the day had shown by then. No minute history is read here: Financial
+Datasets has none, and a live fund needs none.
 """
 
 from __future__ import annotations
@@ -29,7 +32,7 @@ from hedge_fund.data.sessions import NEW_YORK
 
 MARKET = "SPY"           # the market the move is read against
 _CLOSE = time(16, 0)     # the previous close, for "since the previous close"
-_HEADLINES = 12          # the most recent this many headlines are shown
+_HEADLINES = 10          # the most recent this many headlines are asked for and shown
 
 # Move bands, in percent. The edges are where the prompt changes.
 _BANDS = [0.5, 1.0, 2.0, 3.0, 5.0]
@@ -106,14 +109,13 @@ def _previous_close(at: datetime) -> datetime:
 
 
 def _move(data: DataClient, ticker: str, at: datetime, since: datetime) -> float | None:
-    """Percent change from the close before *since*'s day ended to the last
-    minute bar at or before *at*. None until the day has printed."""
-    day = at.date().isoformat()
-    bars = data.get_prices(ticker, day, day, interval="minute", interval_multiplier=1)
-    upto = [b for b in bars if _aware(b.time) <= at]
-    if not upto:
+    """Percent change from the close before *since*'s day ended to the quote
+    at the bar. None until the day has printed: a quote from an earlier day
+    is the previous session's last trade, not today's."""
+    quote = data.get_snapshot(ticker)
+    if quote is None or _aware(quote.time).date() < at.date():
         return None
-    now = max(upto, key=lambda b: b.time).close
+    now = quote.price
     closes = data.get_prices(ticker, (since.date() - timedelta(days=7)).isoformat(), since.date().isoformat())
     before = [b for b in closes if b.time[:10] <= since.date().isoformat()]
     if not before:
@@ -141,7 +143,8 @@ def _released(data: DataClient, ticker: str, since: datetime, at: datetime) -> E
 
 
 def _headlines(data: DataClient, ticker: str, since: datetime, at: datetime, day: str) -> list[Headline]:
-    items = data.get_news(ticker, end_date=day, start_date=since.date().isoformat(), limit=200)
+    """The newest headlines, kept to those that landed in (since, at]."""
+    items = data.get_news(ticker, end_date=day, start_date=since.date().isoformat(), limit=_HEADLINES)
     out = []
     for item in items:
         if item.date is None:

@@ -10,10 +10,8 @@ construction — and identical to what a paper fund does, one tick at a time.
 
 The trading grid derives from the mandate's benchmark's actual bars —
 holidays and half-weeks fall out naturally, no exchange calendar math. A
-minute fund's grid is its own: every bar of its window on each of those
-days, marked from 1-minute history (`BarClock`); an interval under a minute
-is backtested at one minute, the finest history there is, and the result
-says so.
+minute fund replays on the same grid: it decides every session, so at daily
+closes it is a daily fund, and the result's cadence says so.
 """
 
 from __future__ import annotations
@@ -25,11 +23,10 @@ import numpy as np
 from pydantic import BaseModel
 
 from hedge_fund.brokers.sim import SimBroker
-from hedge_fund.data.bars import bar_grid, bars_per_day
 from hedge_fund.data.protocol import DataClient
 from hedge_fund.data.sessions import previous_day, session_closes
-from hedge_fund.fund import format_interval, Fund, FundSpec, normalize_universe
-from hedge_fund.pipeline.clock import BarClock, Clock, DailyClock
+from hedge_fund.fund import Fund, FundSpec, normalize_universe
+from hedge_fund.pipeline.clock import Clock, DailyClock
 from hedge_fund.pipeline.models import CycleRecord
 from hedge_fund.pipeline.session import (
     advance,
@@ -38,8 +35,6 @@ from hedge_fund.pipeline.session import (
     next_state,
     SessionRecord,
 )
-
-BACKTEST_FLOOR_SECONDS = 60  # the finest bar history has: sub-minute mandates replay at 1m
 
 
 class ReplaySchedule(BaseModel):
@@ -175,17 +170,12 @@ def backtest_fund(
 def replay_grid(spec: FundSpec, days: list[str], data: DataClient) -> tuple[list[str], Clock, str, float]:
     """The sessions a backtest steps through, the clock that marks them, the
     cadence as the result will name it, and the sessions in a year (for
-    annualizing). Daily mandates: the benchmark's *days* themselves. Minute
-    mandates: every bar of the window on each of those days, at the
-    mandate's interval or one minute, whichever is coarser."""
+    annualizing). Always the benchmark's *days* at their closes: a minute
+    mandate decides every session, so on a daily grid it is a daily fund,
+    and the result's cadence says that is how it was replayed."""
     if not spec.is_intraday:
         return days, DailyClock(data), spec.rebalance, 252
-    seconds = max(BACKTEST_FLOOR_SECONDS, round(spec.interval_seconds / 60) * 60)
-    sessions = [bar for day in days for bar in bar_grid(day, seconds, spec.window)]
-    cadence = f"every {format_interval(seconds)} · {spec.window.label}"
-    if seconds != spec.interval_seconds:
-        cadence += f" (mandate: {spec.cadence_label}; backtested at the 1-minute bars history has)"
-    return sessions, BarClock(data, seconds, spec.window), cadence, bars_per_day(seconds, spec.window) * 252
+    return days, DailyClock(data), f"daily (mandate: {spec.cadence_label} · {spec.window.label})", 252
 
 
 def rebalance_grid(days: list[str], cadence: str) -> list[str]:

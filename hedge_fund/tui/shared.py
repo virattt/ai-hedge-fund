@@ -15,6 +15,7 @@ from pathlib import Path
 
 from rich.text import Text
 
+from hedge_fund.data.bars import is_intraday
 from hedge_fund.fund import FundSpec, PortfolioMode, StrategySpec
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, get_investment_approach, LLMAgent
 
@@ -280,3 +281,10 @@ def cadence_identity(spec: FundSpec) -> str:
     if not spec.is_intraday:
         return spec.rebalance
     return f"{spec.cadence_label} · {spec.window.label}"
+
+
+def session_label(session: str) -> str:
+    """A session for a human: a date as it is, a bar as `2024-06-04 13:05:00 ET`."""
+    if is_intraday(session):
+        return f"{session[:10]} {session[11:]} ET"
+    return session

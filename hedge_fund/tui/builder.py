@@ -510,18 +510,15 @@ class BuilderScreen(Screen):
             menu = self.query_one("#done-menu", OptionList)
             menu.clear_options()
             menu.add_options([
-                Option("▶  Start running" if intraday else "▶  Run its first session", id="go-run"),
+                Option("▶  Run its first session", id="go-run"),
                 None,
                 Option("Back", id="go-back"),
             ])
             menu.highlighted = 0
             first = (
-                f"Start it and it runs {spec.cadence_label} inside {spec.window.label}: the first bar "
-                "marks the book and makes the first decision; the next bar executes it. Stop it any time; "
-                "time it was down is logged, never back-filled."
-                if intraday else
-                "Its first session marks the book at the latest completed close and "
-                "makes the first decision; the session after executes it."
+                f"Its first session marks the book at the {'current bar' if intraday else 'latest completed close'} and "
+                f"makes the first decision; the {'next bar' if intraday else 'session after'} executes it. "
+                "Run it a session at a time, or leave a runner on it from the paper screen (space)."
             )
             self.query_one("#done-summary", Static).update(Group(
                 Text.assemble((spec.name, f"bold {GREEN}"), (" is live.", f"bold {BRIGHT}")),

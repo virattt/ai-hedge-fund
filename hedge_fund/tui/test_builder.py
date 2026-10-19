@@ -223,9 +223,10 @@ def test_builder_minute_path_sets_interval_and_window_and_offers_start_running()
             await pilot.pause()
             assert screen.query_one("#panes", ContentSwitcher).current == "step-done"
             menu = screen.query_one("#done-menu", OptionList)
-            assert render(menu.get_option_at_index(0).prompt).strip() == "▶  Start running"
+            assert render(menu.get_option_at_index(0).prompt).strip() == "▶  Run its first session"  # same as daily
             summary = render(screen.query_one("#done-summary", Static).content)
-            assert "every 30s · 09:00–12:00 ET" in summary and "Start it and it runs every 30s" in summary
+            assert "every 30s · 09:00–12:00 ET" in summary
+            assert "marks the book at the current bar" in summary and "leave a runner on it" in summary
             saved = load_spec(paths.MANDATES_DIR / "fast.yaml")
             assert saved.rebalance == "minute" and saved.interval == 0.5
             assert saved.window.start == "09:00" and saved.window.end == "12:00"

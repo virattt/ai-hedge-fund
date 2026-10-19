@@ -21,6 +21,8 @@ from hedge_fund.data.models import (
 
 logger = logging.getLogger(__name__)
 
+NEWS_PAGE = 10  # the most /news/ returns per request
+
 
 class FDClientError(Exception):
     """An API request failed for infrastructure reasons (auth, rate limit,
@@ -139,8 +141,10 @@ class FDClient:
         start_date: str | None = None,
         limit: int = 1000,
     ) -> list[CompanyNews]:
-        """Fetch company news."""
-        params: dict = {"ticker": ticker, "end_date": end_date, "limit": limit}
+        """Fetch company news: the newest items first, at most *limit*.
+        /news/ serves no more than NEWS_PAGE per request and rejects a
+        larger ask, so the request is clamped to what it can answer."""
+        params: dict = {"ticker": ticker, "end_date": end_date, "limit": min(limit, NEWS_PAGE)}
         if start_date is not None:
             params["start_date"] = start_date
         data = self._get("/news/", params, response_key="news")
