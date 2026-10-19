@@ -38,6 +38,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from hedge_fund.brokers.protocol import Broker
+from hedge_fund.data.bars import is_intraday
 from hedge_fund.data.protocol import DataClient
 from hedge_fund.fund import Cadence, Fund, FundSpec, normalize_universe
 from hedge_fund.llm import DEFAULT_MODEL
@@ -110,6 +111,20 @@ class SessionRecord(BaseModel):
         exclude = {"hash"} | ({"snapshot_times"} if self.snapshot_times is None else set())
         payload = self.model_dump_json(exclude=exclude)
         return hashlib.sha256(payload.encode()).hexdigest()
+
+    def price_at(self, ticker: str) -> float | None:
+        """The best price this record has for *ticker* at its session: the
+        exact execution mark, then the exact valuation mark, then, for a
+        daily session only, the assessment's close. A bar's record never
+        answers with a daily close: the assessment marks a minute fund at
+        the day's close, the same number for every bar of the day."""
+        if self.executed is not None and ticker in self.executed.marks:
+            return self.executed.marks[ticker]
+        if ticker in self.marks:
+            return self.marks[ticker]
+        if self.decision is not None and not is_intraday(self.session) and ticker in self.decision.marks:
+            return self.decision.marks[ticker]
+        return None
 
 
 def advance(

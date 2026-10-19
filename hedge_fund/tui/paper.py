@@ -40,6 +40,7 @@ from hedge_fund.pipeline import (
     FundState,
     SessionRecord,
 )
+from hedge_fund.scorecard import score
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent
 from hedge_fund.tui.builder import BuilderScreen
 from hedge_fund.tui.funds import ConfirmWipeScreen, wipe_fund
@@ -65,6 +66,7 @@ from hedge_fund.tui.report import (
     session_overview,
     session_row,
 )
+from hedge_fund.tui.scorecard_view import analyst_table, strategy_table
 from hedge_fund.tui.shared import (
     agent_names,
     BOARD_REFRESH,
@@ -614,6 +616,7 @@ class SessionsScreen(Screen):
             yield StatTiles(id="stats")
             with Vertical(id="curve-box"):
                 yield Static("", id="curve")
+            yield Static("", id="scorecard")
             with Horizontal(id="pf-panes"):
                 with Vertical(id="report-rail"):
                     yield Static(Text("SESSIONS", style=MUTED), classes="rail-title")
@@ -657,6 +660,7 @@ class SessionsScreen(Screen):
         curve_box.border_subtitle = f"[{GREEN}]██[/] fund   [{CYAN}]──[/] {snap.spec.benchmark}"
         if not snap.records:
             self.query_one("#stats", StatTiles).add_class("hidden")
+            self.query_one("#scorecard", Static).add_class("hidden")
             self.query_one("#curve", Static).update(
                 Text("The curve starts with the first session.", style=MUTED))
             return
@@ -669,6 +673,10 @@ class SessionsScreen(Screen):
         curve_widget = self.query_one("#curve", Static)
         width = curve_widget.content_size.width or 80
         curve_widget.update(Group(*render_area_chart(nav, bench, snap.spec.capital, min(width, 100))))
+        card = score(snap.records)
+        scorecard = self.query_one("#scorecard", Static)
+        scorecard.update(Group(analyst_table(card), strategy_table(card)))
+        scorecard.remove_class("hidden")
 
     def _render_sessions(self, snap: PaperSnapshot) -> None:
         menu = self.query_one("#pf-sessions", OptionList)

@@ -459,6 +459,11 @@ RunConfirmScreen {
     content-align: center middle;
 }
 
+#scorecard {
+    height: auto;
+    margin-top: 1;
+}
+
 #curve-box {
     border: round #1f2b25;
     padding: 0 1 1 1;  /* bottom row of air between the fill and the legend */

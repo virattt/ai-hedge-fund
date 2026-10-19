@@ -38,6 +38,10 @@ Usage::
 
     aihf paper status alpha | list | halt alpha --reason "..." | resume alpha
 
+    aihf paper scorecard alpha
+        Grade every analyst (hit rate, slugging, IC) and every strategy
+        (P&L between executions) on the fund's ledger. JSON on stdout.
+
 A mandate is the desk — strategies, staff, risk, capital, cadence — and
 never names tickers; the universe is fixed when a fund is deployed (paper)
 or given per study (backtest).
@@ -76,7 +80,9 @@ from hedge_fund.paper import (
 )
 from hedge_fund.paths import ensure_mandates_dir, PAPER_DIR
 from hedge_fund.pipeline import FundHalted, SessionRecord
+from hedge_fund.scorecard import score
 from hedge_fund.tui.keys import apply_credentials
+from hedge_fund.tui.scorecard_view import analyst_table, strategy_table
 from hedge_fund.tui.shared import BACKTEST_WEEKS
 
 
@@ -164,6 +170,9 @@ def _parser() -> argparse.ArgumentParser:
 
     actions.add_parser("list", help="every deployed paper fund")
 
+    scorecard = actions.add_parser("scorecard", help="grade every analyst and strategy on the ledger")
+    scorecard.add_argument("name")
+
     halt = actions.add_parser("halt", help="set the kill switch: ticks refuse to trade")
     halt.add_argument("name")
     halt.add_argument("--reason", required=True)
@@ -233,6 +242,9 @@ def _backtest(args, parser: argparse.ArgumentParser, console: Console) -> None:
         f"return {m.total_return_pct:+.1%} vs {spec.benchmark} {m.benchmark_return_pct:+.1%}  ·  "
         f"sharpe {m.sharpe_ratio:.2f}  ·  max drawdown {m.max_drawdown_pct:.1%}"
     )
+    card = score(result.records)
+    console.print(analyst_table(card))
+    console.print(strategy_table(card))
     console.print(f"[dim]saved to {saved}[/]")
 
 
@@ -326,6 +338,17 @@ def _paper(args, parser: argparse.ArgumentParser, console: Console) -> None:
             print("  book:")
             for ticker, shares in sorted(latest.positions.items()):
                 print(f"    {ticker}: {shares:+d} @ {latest.marks[ticker]:,.2f}")
+        return
+
+    if args.action == "scorecard":
+        records = Ledger(directory).records()
+        if not records:
+            console.print(f"[dim]{args.name} has no sessions recorded yet[/]")
+            return
+        card = score(records)
+        print(card.model_dump_json(indent=2))
+        console.print(analyst_table(card))
+        console.print(strategy_table(card))
         return
 
     ledger = Ledger(directory)
