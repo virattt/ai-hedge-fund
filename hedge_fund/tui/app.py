@@ -2573,16 +2573,30 @@ def _parse_interval(text: str) -> float:
         raise ValueError("Enter the interval in minutes: 1, 5, or 0.5 for every 30 seconds.")
     if round(minutes * 60) < MIN_INTERVAL_SECONDS:
         raise ValueError(
-            f"The shortest interval is {MIN_INTERVAL_SECONDS}s: a bar takes one price request per "
-            "ticker, about a second each, so anything faster samples quicker than it can fetch."
+            f"The shortest interval is {MIN_INTERVAL_SECONDS}s: sessions are stamped to the second. "
+            "Enter 0.0167 for every second."
         )
     return minutes
+
+
+_FAST_SECONDS = 10  # under this, one price request per ticker (~1s each) may not fit in a bar
 
 
 def _interval_line(minutes: float, window: TradingWindow) -> str:
     """`every 1m · 09:30–16:00 ET · 391 sessions a day`"""
     seconds = int(round(minutes * 60))
     return f"every {format_interval(seconds)} · {window.label} · {bars_per_day(seconds, window):,} sessions a day"
+
+
+def _fast_caveat(minutes: float) -> str | None:
+    """What a very short interval costs: a price request per ticker takes
+    about a second, so bars the fetch cannot reach in time are skipped and
+    logged as gaps. None at intervals that comfortably fit."""
+    seconds = int(round(minutes * 60))
+    if seconds >= _FAST_SECONDS:
+        return None
+    return (f"Under {_FAST_SECONDS}s a bar may not fit its price requests (about a second per ticker); "
+            "bars the fund cannot reach in time are skipped and logged as gaps.")
 
 
 def _window_lines(window: TradingWindow, minutes: float = 1.0, *,
@@ -2949,6 +2963,9 @@ class BuilderScreen(Screen):
             line = Text(str(exc), style=RED)
         else:
             line = Text(_interval_line(minutes, self._window_draft()), style=TEXT)
+            caveat = _fast_caveat(minutes)
+            if caveat:
+                line.append(f"\n{caveat}", style=MUTED)
         self.query_one("#interval-line", Static).update(line)
 
     @on(Input.Submitted, "#interval-input")

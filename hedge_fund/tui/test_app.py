@@ -970,16 +970,20 @@ def test_builder_minute_path_sets_interval_and_window_and_offers_start_running()
                 screen.query_one("#interval-line", Static).content)
 
             interval = screen.query_one("#interval-input", Input)
-            interval.value = "0.1"
+            interval.value = "0.005"
             await pilot.pause()
             line = _render(screen.query_one("#interval-line", Static).content)
-            assert "shortest interval is 10s" in line and "one price request per ticker" in line
+            assert "shortest interval is 1s" in line and "stamped to the second" in line
             await pilot.press("enter")  # refused; still here
             assert screen.query_one("#panes", ContentSwitcher).current == "step-interval"
+            interval.value = "0.0167"  # every second: allowed, with a caveat about keeping up
+            await pilot.pause()
+            line = _render(screen.query_one("#interval-line", Static).content)
+            assert "every 1s · 09:30–16:00 ET · 23,401 sessions a day" in line and "logged as gaps" in line
             interval.value = "0.5"
             await pilot.pause()
-            assert "every 30s · 09:30–16:00 ET · 781 sessions a day" in _render(
-                screen.query_one("#interval-line", Static).content)
+            line = _render(screen.query_one("#interval-line", Static).content)
+            assert "every 30s · 09:30–16:00 ET · 781 sessions a day" in line and "gaps" not in line
             await pilot.press("enter")
             assert screen.query_one("#panes", ContentSwitcher).current == "step-window"
             assert "Cadence" in _render(screen.query_one("#rail-3", Static).content)
@@ -1030,9 +1034,10 @@ def test_builder_minute_helpers_are_pure():
     assert ui._interval_line(90, window) == "every 1h30m · 09:30–16:00 ET · 6 sessions a day"
     with pytest.raises(ValueError, match="in minutes"):
         ui._parse_interval("soon")
-    with pytest.raises(ValueError, match="10s"):
-        ui._parse_interval("0.15")
-    assert ui._parse_interval("0.16") == 0.16  # 9.6s rounds to the 10s floor, as the spec counts it
+    with pytest.raises(ValueError, match="1s"):
+        ui._parse_interval("0.005")
+    assert ui._parse_interval("0.01") == 0.01  # 0.6s rounds to the 1s floor, as the spec counts it
+    assert ui._fast_caveat(0.1) and ui._fast_caveat(1 / 6) is None  # 6s warns, 10s does not
 
     today = datetime(2025, 7, 1, tzinfo=ui.NEW_YORK)  # summer: ET is UTC-4
     assert ui._window_lines(window, 1, today=today, local_zone=ui.NEW_YORK) == [

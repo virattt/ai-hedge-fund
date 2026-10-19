@@ -23,9 +23,11 @@ from hedge_fund.signals.base import AlphaModel
 PortfolioMode: TypeAlias = Literal["long_only", "long_short", "dollar_neutral"]
 Cadence: TypeAlias = Literal["minute", "daily", "weekly", "monthly"]
 
-# The shortest interval a minute fund may run at. A snapshot round trip is
-# about a second per name; below this the fund samples faster than it can ask.
-MIN_INTERVAL_SECONDS = 10
+# The shortest interval a minute fund may run at: a session key is stamped
+# to the second, so one second is the finest bar there is. A snapshot round
+# trip is about a second per name, so at the fastest settings the runner
+# will miss bars (logged as gaps) rather than fall behind its clock.
+MIN_INTERVAL_SECONDS = 1
 
 # US extended hours: the earliest and latest a trading window may reach.
 EARLIEST_WINDOW = "04:00"
@@ -188,8 +190,7 @@ class FundSpec(BaseModel):
             return self
         if self.interval_seconds < MIN_INTERVAL_SECONDS:
             raise ValueError(
-                f"interval: floor is {MIN_INTERVAL_SECONDS} seconds — a snapshot round trip is "
-                "about a second per ticker, and the fund cannot sample faster than it can ask"
+                f"interval: floor is {MIN_INTERVAL_SECONDS} second — sessions are stamped to the second"
             )
         if self.interval_seconds > self.window.end_seconds - self.window.start_seconds:
             raise ValueError(

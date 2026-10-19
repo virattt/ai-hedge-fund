@@ -84,7 +84,7 @@ def test_minute_fund_has_an_interval_and_a_window():
 @pytest.mark.parametrize(
     "overrides,message",
     [
-        ({"interval": 0.1}, "floor is 10 seconds"),
+        ({"interval": 0.005}, "floor is 1 second"),  # 0.3s rounds to no bar at all
         ({"interval": 0}, "greater than 0"),
         ({"interval": 60 * 7}, "longer than the 09:30–16:00 ET window"),
         ({"window": {"start": "16:00", "end": "09:30"}}, "open before it closes"),
