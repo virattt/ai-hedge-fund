@@ -191,9 +191,13 @@ def build_snapshot(
     Raises InsufficientData if fewer than MIN_PERIODS filed periods exist.
     Data-layer failures propagate (fail loud) — a broken snapshot must never
     silently become a neutral view.
+
+    *as_of* may be a bar (YYYY-MM-DDTHH:MM:SS) for a minute fund; filings
+    are dated by day, so the data layer is asked by the date alone. Every
+    bar of a day then shares one metrics response and one prompt.
     """
     metrics = data_client.get_financial_metrics(
-        ticker, as_of, period="ttm", limit=periods,
+        ticker, as_of[:10], period="ttm", limit=periods,
     )
     if len(metrics) < MIN_PERIODS:
         raise InsufficientData(

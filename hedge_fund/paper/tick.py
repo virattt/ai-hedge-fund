@@ -22,11 +22,13 @@ from pathlib import Path
 from typing import Callable
 
 from hedge_fund.brokers.paper import PaperBroker
+from hedge_fund.data.bars import previous_bar, session_date
 from hedge_fund.data.protocol import DataClient
 from hedge_fund.data.sessions import completed_through, session_closes
-from hedge_fund.fund import Fund, FundSpec
+from hedge_fund.fund import Fund, FundSpec, TradingWindow
 from hedge_fund.paper.deployed import BROKER_FILE, load_deployed
 from hedge_fund.paper.ledger import Ledger
+from hedge_fund.pipeline.clock import Clock, Marked
 from hedge_fund.pipeline.session import advance, FundHalted, SessionRecord
 
 # A fresh fund starts at the most recent completed session; this is how far
@@ -36,6 +38,49 @@ _FRESH_LOOKBACK_DAYS = 14
 
 class NothingDue(RuntimeError):
     """Every completed session is already recorded."""
+
+
+class MinuteFund(RuntimeError):
+    """A minute fund is a loop, not a tick: `aihf paper run <name>`."""
+
+
+class RecordedClock:
+    """A bar run again at the prices it saw. A print cannot be taken twice,
+    so a redo of a bar serves the marks its record kept — the book's names,
+    the benchmark, and whatever the executed decision was sized at. A name
+    none of those cover has no honest price, and the redo says so."""
+
+    def __init__(self, record: SessionRecord, interval_seconds: int, window: TradingWindow) -> None:
+        self._record = record
+        self._interval = interval_seconds
+        self._window = window
+        self._prices = {record.benchmark: record.benchmark_close, **record.marks}
+        if record.executed is not None:
+            self._prices = {**record.executed.marks, **self._prices}
+        self._times = dict(record.snapshot_times or {})
+
+    def is_complete(self, session: str) -> bool:
+        return session <= self._record.session
+
+    def previous(self, session: str) -> str:
+        return previous_bar(session, self._interval, self._window)
+
+    def session_date(self, session: str) -> str:
+        return session_date(session)
+
+    def marks(self, tickers: list[str], session: str) -> Marked:
+        if session != self._record.session:
+            raise ValueError(f"{session}: only {self._record.session} can be run again at recorded prices")
+        missing = sorted(set(tickers) - set(self._prices))
+        if missing:
+            raise ValueError(
+                f"{', '.join(missing)}: no recorded print at {session}; a bar can only be run "
+                "again at the prices it saw"
+            )
+        return Marked(
+            prices={t: self._prices[t] for t in sorted(set(tickers))},
+            times={t: self._times[t] for t in sorted(set(tickers)) if t in self._times} or None,
+        )
 
 
 def next_session(data_client: DataClient, benchmark: str, last_session: str | None) -> str | None:
@@ -68,6 +113,11 @@ def tick(
     """
     directory = Path(directory)
     deployed = load_deployed(directory)
+    if deployed.spec.is_intraday:
+        raise MinuteFund(
+            f"{deployed.name} runs {deployed.spec.cadence_label}: it is advanced by "
+            f"`aihf paper run {deployed.name}`, not by a tick"
+        )
     ledger = Ledger(directory)
     if session is not None and session in ledger.sessions():
         return ledger.read(session)
@@ -115,7 +165,10 @@ def redo(
     superseded = ledger.rewind()
     PaperBroker.restore(directory / BROKER_FILE, before.cash, before.positions)
     ledger.log_event("redo", session=superseded.session, superseded=superseded.hash)
-    return _run(directory, deployed, ledger, before, superseded.session, data_client, build_fund)
+    clock = None
+    if deployed.spec.is_intraday:  # a bar's prints are gone; run it at the ones it kept
+        clock = RecordedClock(superseded, deployed.spec.interval_seconds, deployed.spec.window)
+    return _run(directory, deployed, ledger, before, superseded.session, data_client, build_fund, clock=clock)
 
 
 def _run(
@@ -126,12 +179,17 @@ def _run(
     session: str,
     data_client: DataClient,
     build_fund: Callable[[FundSpec], Fund] | None,
+    *,
+    clock: Clock | None = None,
+    fund: Fund | None = None,
 ) -> SessionRecord:
-    """Advance one session from *state* and record it, halting on failure."""
+    """Advance one session from *state* and record it, halting on failure.
+    *fund* lets a long-running caller keep one Fund (and its analysts'
+    caches) across sessions instead of staffing a new one each time."""
     broker = PaperBroker(directory / BROKER_FILE)
-    fund = (build_fund or Fund)(deployed.spec)
+    fund = fund or (build_fund or Fund)(deployed.spec)
     try:
-        record = advance(fund, state, session, broker, data_client, deployed.universe)
+        record = advance(fund, state, session, broker, data_client, deployed.universe, clock)
         ledger.append(record)
     except FundHalted:
         raise

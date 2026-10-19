@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from hedge_fund.fund import (
     custom_strategy,
     discover_funds,
+    format_interval,
     Fund,
     FundSpec,
     load_spec,
@@ -60,6 +61,49 @@ def test_rebalance_cadence_validated():
     assert FundSpec(**{**MINIMAL, "rebalance": "daily"}).rebalance == "daily"
     with pytest.raises(ValidationError):
         FundSpec(**{**MINIMAL, "rebalance": "hourly"})
+
+
+def test_minute_fund_has_an_interval_and_a_window():
+    spec = FundSpec(**{**MINIMAL, "rebalance": "minute"})
+    assert spec.is_intraday and spec.interval == 1.0 and spec.interval_seconds == 60
+    assert spec.window.start == "09:30" and spec.window.end == "16:00"
+    assert spec.cadence_label == "every 1m" and spec.window.label == "09:30–16:00 ET"
+    half = FundSpec(**{**MINIMAL, "rebalance": "minute", "interval": 0.5, "window": {"start": "07:00", "end": "17:30"}})
+    assert half.interval_seconds == 30 and half.cadence_label == "every 30s"
+    assert half.window.start_seconds == 7 * 3600 and half.window.end_seconds == 17 * 3600 + 30 * 60
+    assert FundSpec(**{**MINIMAL, "rebalance": "minute", "interval": 90}).cadence_label == "every 1h30m"
+    assert format_interval(150) == "2m30s" and format_interval(3600) == "1h"
+    # The round trip keeps both fields; a daily fund never writes them.
+    assert FundSpec.model_validate(half.model_dump()) == half
+    assert "interval" in half.model_dump_json() and "window" in half.model_dump_json()
+    assert "interval" not in FundSpec(**MINIMAL).model_dump_json()
+    assert "window" not in FundSpec(**MINIMAL).model_dump()
+    assert not FundSpec(**MINIMAL).is_intraday and FundSpec(**MINIMAL).cadence_label == "weekly"
+
+
+@pytest.mark.parametrize(
+    "overrides,message",
+    [
+        ({"interval": 0.1}, "floor is 10 seconds"),
+        ({"interval": 0}, "greater than 0"),
+        ({"interval": 60 * 7}, "longer than the 09:30–16:00 ET window"),
+        ({"window": {"start": "16:00", "end": "09:30"}}, "open before it closes"),
+        ({"window": {"start": "03:59"}}, "outside US extended hours"),
+        ({"window": {"end": "20:01"}}, "outside US extended hours"),
+        ({"window": {"start": "9:30"}}, "not a time of day"),
+        ({"window": {"start": "09:30", "lunch": "12:00"}}, "lunch"),
+    ],
+)
+def test_minute_fund_rejects_bad_intervals_and_windows(overrides, message):
+    with pytest.raises(ValidationError, match=message):
+        FundSpec(**{**MINIMAL, "rebalance": "minute", **overrides})
+
+
+def test_interval_and_window_are_refused_on_slower_cadences():
+    with pytest.raises(ValidationError, match="interval, window: only a minute fund"):
+        FundSpec(**{**MINIMAL, "rebalance": "daily", "interval": 5, "window": {"start": "10:00"}})
+    with pytest.raises(ValidationError, match="interval: only a minute fund"):
+        FundSpec(**{**MINIMAL, "interval": 5})
 
 
 def test_benchmark_uppercased():

@@ -62,6 +62,17 @@ def test_as_of_passes_through_to_data_client():
     assert call["ticker"] == "TEST"
 
 
+def test_a_bar_asks_for_filings_by_its_date_and_keeps_the_bar_as_its_as_of():
+    """Filings are dated by day: every bar of 2025-01-15 shares one metrics
+    response (and so one prompt-cache key), while the snapshot remembers the
+    bar it was built for."""
+    client = MockDataClient(metrics=_history())
+    snapshot = build_snapshot("TEST", "2025-01-15T10:05:00", client)
+    assert client.metrics_calls[0]["end_date"] == "2025-01-15"
+    assert snapshot.as_of == "2025-01-15T10:05:00"
+    assert snapshot.content_hash == build_snapshot("TEST", "2025-01-15T10:10:00", client).content_hash
+
+
 def test_insufficient_data_raises():
     client = MockDataClient(metrics=_history(3))  # below MIN_PERIODS
     with pytest.raises(InsufficientData):

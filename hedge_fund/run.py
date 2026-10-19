@@ -29,6 +29,13 @@ Usage::
         A missed day is never skipped — the next tick advances the oldest
         unrecorded session. --session YYYY-MM-DD names it explicitly.
 
+    aihf paper run alpha
+        For a minute fund (`rebalance: minute`): stay up and advance the fund
+        at every bar inside its trading window, writing a checkpoint at the
+        last bar of each day. One process per fund, found by its runner.pid;
+        Ctrl-C, SIGTERM or `aihf paper stop alpha` stop it after the bar in
+        flight. Time it was down is logged as a gap, never back-filled.
+
     aihf paper status alpha | list | halt alpha --reason "..." | resume alpha
 
 A mandate is the desk — strategies, staff, risk, capital, cadence — and
@@ -49,16 +56,21 @@ from rich.console import Console
 
 from hedge_fund.backtesting import backtest_fund
 from hedge_fund.data import CachedDataClient, FDClient
+from hedge_fund.data.bars import is_intraday
 from hedge_fund.data.sessions import completed_through
 from hedge_fund.fund import Fund, load_spec, normalize_universe
 from hedge_fund.paper import (
     deploy,
+    is_running,
     Ledger,
     LedgerError,
     list_deployed,
     load_deployed,
+    MinuteFund,
     NothingDue,
     redo,
+    serve,
+    stop_runner,
     tick,
     validate_fund_name,
 )
@@ -91,7 +103,7 @@ def main() -> None:
             _backtest(args, parser, console)
         else:
             _paper(args, parser, console)
-    except (FundHalted, NothingDue, LedgerError) as exc:
+    except (FundHalted, MinuteFund, NothingDue, LedgerError) as exc:
         console.print(f"[red]{exc}[/]")
         sys.exit(1)
 
@@ -140,6 +152,12 @@ def _parser() -> argparse.ArgumentParser:
     advance.add_argument("--session", help="the session to record, YYYY-MM-DD; must be the next unrecorded one")
     advance.add_argument("--again", action="store_true",
                          help="run the latest recorded session again and replace its record")
+
+    runner = actions.add_parser("run", help="minute funds: stay up and advance the fund at every bar")
+    runner.add_argument("name")
+
+    stopper = actions.add_parser("stop", help="stop a fund's runner after the bar in flight")
+    stopper.add_argument("name")
 
     status = actions.add_parser("status", help="NAV, last session, pending decision, halt state")
     status.add_argument("name")
@@ -239,10 +257,14 @@ def _paper(args, parser: argparse.ArgumentParser, console: Console) -> None:
             parser.error(str(exc))
         console.print(
             f"[bold]{args.name}[/] deployed at {directory}  ·  mandate {spec.name}  ·  "
-            f"{', '.join(universe)}  ·  ${spec.capital:,.0f}  ·  {spec.rebalance}"
+            f"{', '.join(universe)}  ·  ${spec.capital:,.0f}  ·  {spec.cadence_label}"
         )
-        console.print("[dim]next: `aihf paper tick "
-                      f"{args.name}` after each close (cron it), `aihf paper status {args.name}` any time[/]")
+        if spec.is_intraday:
+            console.print(f"[dim]next: `aihf paper run {args.name}` to start it ({spec.window.label}), "
+                          f"`aihf paper status {args.name}` any time[/]")
+        else:
+            console.print("[dim]next: `aihf paper tick "
+                          f"{args.name}` after each close (cron it), `aihf paper status {args.name}` any time[/]")
         return
 
     if args.action == "list":
@@ -266,12 +288,41 @@ def _paper(args, parser: argparse.ArgumentParser, console: Console) -> None:
         console.print(_tick_summary(deployed.name, record))
         return
 
+    if args.action == "run":
+        deployed = load_deployed(directory)
+        spec = deployed.spec
+        console.print(f"[bold]{deployed.name}[/] running {spec.cadence_label}, {spec.window.label}  ·  "
+                      f"{', '.join(deployed.universe)}  ·  Ctrl-C or `aihf paper stop {deployed.name}` to stop")
+
+        def _event(kind: str, fields: dict) -> None:
+            detail = fields.get("reason") or (f"{fields.get('bars_skipped')} bars skipped" if "bars_skipped" in fields else "")
+            console.print(f"[yellow]{kind}[/] {fields.get('from') or 'start'} → {fields.get('to')}  {detail}".rstrip())
+
+        with FDClient() as raw:
+            try:
+                serve(directory, CachedDataClient(raw, live=True),
+                      on_record=lambda record: console.print(_tick_summary(deployed.name, record)),
+                      on_event=_event)
+            except RuntimeError as exc:  # already running
+                console.print(f"[red]{exc}[/]")
+                sys.exit(1)
+        console.print(f"[dim]{deployed.name} stopped[/]")
+        return
+
+    if args.action == "stop":
+        if stop_runner(directory):
+            console.print(f"[green]{args.name}[/] asked to stop; it finishes the bar in flight first")
+        else:
+            console.print(f"[dim]{args.name} is not running[/]")
+        return
+
     if args.action == "status":
         print(_status_line(directory))
         ledger = Ledger(directory)
         latest = ledger.latest()
         if latest is not None and latest.decision is not None:
-            print("  pending decision, to execute at the next close:")
+            when = "bar" if load_deployed(directory).spec.is_intraday else "close"
+            print(f"  pending decision, to execute at the next {when}:")
             for ticker, weight in sorted(latest.decision.final_weights.items()):
                 print(f"    {ticker}: {weight:+.2%}")
         if latest is not None and latest.positions:
@@ -304,8 +355,9 @@ def _status_line(directory: Path) -> str:
         state = (f"{len(ledger.sessions())} sessions  ·  last {latest.session}  ·  "
                  f"NAV ${latest.nav:,.2f} ({ret:+.2%})")
     flag = f"  ·  HALTED: {halted}" if halted else ""
+    running = "  ·  running" if is_running(directory) else ""
     return (f"{deployed.name:<18} {deployed.spec.name}  ·  {' '.join(deployed.universe)}  ·  "
-            f"{deployed.spec.rebalance}  ·  {state}{flag}")
+            f"{deployed.spec.cadence_label}{running}  ·  {state}{flag}")
 
 
 def _tick_summary(name: str, record: SessionRecord) -> str:
@@ -314,7 +366,8 @@ def _tick_summary(name: str, record: SessionRecord) -> str:
         parts.append(f"executed {len(record.executed.orders)} orders from {record.executed.as_of}")
     if record.decision is not None:
         n_signals = sum(len(sr.signals) for sr in record.decision.strategies)
-        parts.append(f"decided on {n_signals} signals, {len(record.decision.clamps)} clamps; executes next close")
+        when = "bar" if is_intraday(record.session) else "close"
+        parts.append(f"decided on {n_signals} signals, {len(record.decision.clamps)} clamps; executes next {when}")
     if record.executed is None and record.decision is None:
         parts.append("marked the book; no rebalance due")
     return "  ·  ".join(parts)

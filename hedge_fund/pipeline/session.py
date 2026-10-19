@@ -39,14 +39,14 @@ from pydantic import BaseModel, Field
 
 from hedge_fund.brokers.protocol import Broker
 from hedge_fund.data.protocol import DataClient
-from hedge_fund.data.sessions import completed_through
-from hedge_fund.fund import Fund, FundSpec, normalize_universe
+from hedge_fund.fund import Cadence, Fund, FundSpec, normalize_universe
 from hedge_fund.llm import DEFAULT_MODEL
+from hedge_fund.pipeline.clock import Clock, clock_for
 from hedge_fund.pipeline.models import CycleRecord, DecisionRecord
-from hedge_fund.pipeline.stages import assess_fund, exact_marks, execute_decision
+from hedge_fund.pipeline.stages import assess_fund, execute_decision
 from hedge_fund.signals import LLMAgent
 
-Cadence = Literal["daily", "weekly", "monthly"]
+__all__ = ["Cadence"]  # re-exported for callers that typed against the engine
 
 # Cash is compared to the cent: fills are whole shares at a float price, so
 # two honest books can differ by float noise, never by money.
@@ -100,9 +100,15 @@ class SessionRecord(BaseModel):
     code_version: str
     mandate_hash: str
     llm_model: str | None = None
+    # When the marks are live prints (a minute fund), the moment of each
+    # ticker's print — so a name that last traded an hour ago is visible.
+    snapshot_times: dict[str, str] | None = None
 
     def compute_hash(self) -> str:
-        payload = self.model_dump_json(exclude={"hash"})
+        # A record without print times hashes exactly as it did before the
+        # field existed: every ledger written until then must still verify.
+        exclude = {"hash"} | ({"snapshot_times"} if self.snapshot_times is None else set())
+        payload = self.model_dump_json(exclude=exclude)
         return hashlib.sha256(payload.encode()).hexdigest()
 
 
@@ -113,15 +119,21 @@ def advance(
     broker: Broker,
     data_client: DataClient,
     universe: list[str],
+    clock: Clock | None = None,
 ) -> SessionRecord:
-    """Advance *fund* through one completed *session* (YYYY-MM-DD).
+    """Advance *fund* through one completed *session*: a date (YYYY-MM-DD)
+    for a daily/weekly/monthly fund, a bar (YYYY-MM-DDTHH:MM:SS, New York)
+    for a minute fund.
 
     The caller owns the state: fold the returned record into it with
-    `next_state` before advancing again. Raises FundHalted if the kill
+    `next_state` before advancing again. *clock* says what "complete" and
+    "the price at a session" mean; without one, the mandate's own (daily
+    closes, or historical minute bars). Raises FundHalted if the kill
     switch is set, BookMismatch if the broker disagrees with the state, and
     ValueError for a session that is out of order or not yet complete.
     """
     spec = fund.spec
+    clock = clock or clock_for(spec, data_client)
     if state.halted is not None:
         raise FundHalted(f"{spec.name} is halted: {state.halted}")
     if state.last_session is not None and session <= state.last_session:
@@ -129,24 +141,24 @@ def advance(
             f"{spec.name}: session {session} is not after the last recorded "
             f"session {state.last_session}"
         )
-    if session > completed_through():
+    if not clock.is_complete(session):
         raise ValueError(f"{spec.name}: session {session} is not complete yet")
     universe = normalize_universe(universe)
     reconcile(state, broker, spec.name)
 
     executed: CycleRecord | None = None
     if state.pending is not None:
-        executed = execute_decision(fund, state.pending, session, broker, data_client)
+        executed = execute_decision(fund, state.pending, session, broker, data_client, clock)
 
     held = broker.positions()
-    closes = exact_marks([*held, spec.benchmark], session, data_client)
-    marks = {t: closes[t] for t in sorted(held)}
+    marked = clock.marks([*held, spec.benchmark], session)
+    marks = {t: marked.prices[t] for t in sorted(held)}
     cash = broker.cash()
     positions = {t: p.shares for t, p in sorted(held.items())}
     nav = cash + sum(shares * marks[t] for t, shares in positions.items())
 
     rebalance = is_rebalance_session(session, state.last_session, spec.rebalance)
-    decision = assess_fund(fund, session, data_client, universe) if rebalance else None
+    decision = assess_fund(fund, session, data_client, universe, clock) if rebalance else None
 
     record = SessionRecord(
         fund=spec.name,
@@ -157,7 +169,7 @@ def advance(
         positions=positions,
         marks=marks,
         benchmark=spec.benchmark,
-        benchmark_close=closes[spec.benchmark],
+        benchmark_close=marked.prices[spec.benchmark],
         rebalance=rebalance,
         executed=executed,
         decision=decision,
@@ -165,6 +177,7 @@ def advance(
         code_version=code_version(),
         mandate_hash=mandate_hash(spec),
         llm_model=_llm_model(fund),
+        snapshot_times=marked.times,
     )
     record.hash = record.compute_hash()
     return record
@@ -199,18 +212,19 @@ def reconcile(state: FundState, broker: Broker, name: str) -> None:
 
 
 def is_rebalance_session(session: str, last_session: str | None, cadence: str) -> bool:
-    """First session of each period: daily is every session; weekly is the
-    first session of an ISO week; monthly the first of a calendar month.
-    The fund's first session is always a rebalance session."""
-    if cadence not in ("daily", "weekly", "monthly"):
+    """First session of each period: minute is every bar and daily every
+    session; weekly is the first session of an ISO week; monthly the first
+    of a calendar month. The fund's first session is always a rebalance
+    session."""
+    if cadence not in ("minute", "daily", "weekly", "monthly"):
         raise ValueError(f"unknown rebalance cadence {cadence!r}")
-    if cadence == "daily" or last_session is None:
+    if cadence in ("minute", "daily") or last_session is None:
         return True
     return _period(session, cadence) != _period(last_session, cadence)
 
 
 def _period(day: str, cadence: str) -> tuple[int, int]:
-    d = _date.fromisoformat(day)
+    d = _date.fromisoformat(day[:10])
     if cadence == "weekly":
         iso = d.isocalendar()
         return (iso[0], iso[1])

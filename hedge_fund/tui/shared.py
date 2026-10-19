@@ -107,7 +107,7 @@ def _fund_label(spec: FundSpec) -> str:
     staff = ", ".join(f"{s.title} ({MODE_LABELS[s.blend.mode]})" for s in spec.strategies[:3])
     if len(spec.strategies) > 3:
         staff += ", …"
-    return f"{spec.name:<18} {staff} · {spec.rebalance}"
+    return f"{spec.name:<18} {staff} · {spec.cadence_label}"
 
 
 def _agent_names(spec: FundSpec) -> list[str]:

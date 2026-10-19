@@ -39,7 +39,7 @@ def offline(tmp_path, monkeypatch):
     monkeypatch.setattr(run, "Fund", build_fund)
     monkeypatch.setattr(tick_module, "Fund", build_fund)
     monkeypatch.setattr(run, "FDClient", OfflineClient)
-    monkeypatch.setattr(run, "CachedDataClient", lambda client: client)
+    monkeypatch.setattr(run, "CachedDataClient", lambda client, **kwargs: client)
     monkeypatch.setattr(run, "PAPER_DIR", tmp_path / "paper")
     monkeypatch.setattr(run, "RESEARCH_DIR", tmp_path / "research")
 
@@ -194,3 +194,45 @@ def test_paper_flow_create_tick_status_halt_resume(tmp_path, monkeypatch, capsys
     with pytest.raises(SystemExit) as exc:
         _main(monkeypatch, "paper", "status", "nobody")
     assert exc.value.code == 2 and "no paper fund named 'nobody'" in capsys.readouterr().err
+
+
+def test_paper_minute_fund_is_run_not_ticked(tmp_path, monkeypatch, capsys, offline):
+    import os
+    from hedge_fund.paper import PID_FILE
+    spec = FundSpec(schema_version=2, name="bars", strategies=[custom_strategy(["buffett"])],
+                    risk={"max_position_pct": .25, "max_gross_exposure": 1},
+                    rebalance="minute", interval=0.5, window={"start": "09:30", "end": "12:00"})
+    path = tmp_path / "bars.yaml"
+    path.write_text(yaml.safe_dump(spec.model_dump()))
+
+    _main(monkeypatch, "paper", "create", "fast", "--mandate", str(path), "--universe", "AAPL")
+    err = capsys.readouterr().err
+    assert "every 30s" in err and "aihf paper run fast" in err and "09:30–12:00 ET" in err
+
+    with pytest.raises(SystemExit) as exc:
+        _main(monkeypatch, "paper", "tick", "fast")
+    assert exc.value.code == 1 and "aihf paper run fast" in capsys.readouterr().err
+
+    _main(monkeypatch, "paper", "stop", "fast")
+    assert "not running" in capsys.readouterr().err
+    _main(monkeypatch, "paper", "list")
+    listed = capsys.readouterr().out
+    assert "every 30s" in listed and "running" not in listed
+
+    # `run` is the serve loop; stand in for it and check the wiring around it.
+    seen = {}
+    def fake_serve(directory, data, *, on_record, on_event):
+        seen["pid"] = directory / PID_FILE
+        on_event("gap", {"from": None, "to": "2025-01-07T09:30:00", "bars_skipped": 3})
+    monkeypatch.setattr(run, "serve", fake_serve)
+    _main(monkeypatch, "paper", "run", "fast")
+    err = capsys.readouterr().err
+    assert "fast" in err and "every 30s" in err and "gap start → 2025-01-07T09:30:00  3 bars skipped" in err
+    assert "stopped" in err
+
+    (seen["pid"]).write_text(str(os.getpid()))
+    _main(monkeypatch, "paper", "list")
+    assert "running" in capsys.readouterr().out
+    monkeypatch.setattr(run, "stop_runner", lambda directory: True)
+    _main(monkeypatch, "paper", "stop", "fast")
+    assert "asked to stop" in capsys.readouterr().err

@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
+import sys
 from concurrent.futures import as_completed, ThreadPoolExecutor
 from datetime import date as _date
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta, tzinfo
 from math import isfinite
 from pathlib import Path
 from typing import Literal
@@ -44,23 +46,29 @@ from hedge_fund.backtesting.fund import (
     performance_metrics,
 )
 from hedge_fund.brokers import Fill
-from hedge_fund.data import CachedDataClient, FDClient
-from hedge_fund.data.sessions import previous_day
+from hedge_fund.data import CachedDataClient, FDClient, FDClientError, PriceSnapshot
+from hedge_fund.data.bars import bar_time, bars_per_day, is_intraday, next_bar
+from hedge_fund.data.sessions import NEW_YORK, previous_day
+from hedge_fund.fund.spec import EARLIEST_WINDOW, LATEST_WINDOW
 from hedge_fund.fund import (
     custom_strategy,
     discover_funds,
+    format_interval,
     Fund,
     FundSpec,
     load_strategy,
+    MIN_INTERVAL_SECONDS,
     normalize_universe,
     SavedFund,
     StrategySpec,
+    TradingWindow,
 )
 from hedge_fund.llm import make_llm, provider_for, ThesisStream
 from hedge_fund.models import Signal
 from hedge_fund.paper import (
     deploy,
     DeployedFund,
+    is_running,
     Ledger,
     LedgerError,
     list_deployed,
@@ -68,6 +76,7 @@ from hedge_fund.paper import (
     next_session,
     NothingDue,
     redo,
+    stop_runner,
     tick,
     validate_fund_name,
 )
@@ -737,7 +746,7 @@ def _slot_card(index: int, spec: FundSpec, score: tuple | None) -> Text:
         card.append(f"   {'▲' if up else '▼'} {total:+.1%}",
                     style=f"bold {GREEN if up else RED}")
     card.append(f"\n     {n} {'strategy' if n == 1 else 'strategies'}"
-                f"  ·  {spec.rebalance}", style=MUTED)
+                f"  ·  {_cadence_identity(spec)}", style=MUTED)
     card.append("\n     " + ", ".join(MODE_LABELS[s.blend.mode] for s in spec.strategies), style=MUTED)
     return card
 
@@ -748,7 +757,7 @@ def _fund_detail(spec: FundSpec, history: list[dict]) -> Group:
     staff = ", ".join(s.title for s in spec.strategies)
     parts: list = [
         Text(spec.name, style=f"bold {BRIGHT}"),
-        Text(f"{staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}", style=MUTED),
+        Text(f"{staff}  ·  {_cadence_identity(spec)}  ·  ${spec.capital:,.0f}", style=MUTED),
     ]
     parts.extend(Text(f"{s.title}: {strategy_description(s)}", style=MUTED) for s in spec.strategies)
 
@@ -1334,6 +1343,9 @@ class _PaperSnapshot:
         self.records: list[SessionRecord] = []
         self.state: FundState | None = None
         self.error: str | None = None
+        # A minute fund is alive while its runner process is; a daily fund
+        # has no process and is never "running".
+        self.running = self.deployed.spec.is_intraday and is_running(directory)
         try:
             self.records = self.ledger.records()
             self.state = self.ledger.replay(self.deployed.spec.capital)
@@ -1343,6 +1355,15 @@ class _PaperSnapshot:
     @property
     def spec(self) -> FundSpec:
         return self.deployed.spec
+
+    @property
+    def intraday(self) -> bool:
+        return self.spec.is_intraday
+
+    def today(self, today: str | None = None) -> list[SessionRecord]:
+        """A minute fund's records from *today* (NY date; default: now)."""
+        today = today or datetime.now(NEW_YORK).date().isoformat()
+        return [r for r in self.records if r.session[:10] == today and is_intraday(r.session)]
 
     @property
     def halted(self) -> str | None:
@@ -1375,35 +1396,41 @@ class _PaperSnapshot:
     def metrics(self):
         dates, nav, bench = self.curves()
         cycles = [r.executed for r in self.records if r.executed is not None]
-        return performance_metrics(self.spec.capital, dates, nav, bench, cycles)
+        per_year = bars_per_day(self.spec.interval_seconds, self.spec.window) * 252 if self.intraday else 252
+        return performance_metrics(self.spec.capital, dates, nav, bench, cycles, periods_per_year=per_year)
+
+    def _state_word(self) -> tuple[str, str, str]:
+        """Glyph, word, tone. A minute fund's resting state is whether its
+        runner is up; a daily fund's is whether it has a track record yet."""
+        if self.error:
+            return "✗", "ledger error", RED
+        if self.halted:
+            return "■", "halted", RED
+        if self.intraday:
+            return ("●", "running", GREEN) if self.running else ("○", "idle", MUTED)
+        if self.last_session is None:
+            return "●", "new", CYAN
+        return "●", "live", GREEN
 
     def status(self) -> Text:
         """One line: the same facts as `aihf paper status`."""
+        glyph, word, tone = self._state_word()
         line = Text()
+        line.append(f"{glyph} {word.upper()}  ", style=f"bold {tone}")
         if self.error:
-            line.append("✗ LEDGER ERROR  ", style=f"bold {RED}")
             line.append(self.error, style=RED)
-            return line
-        if self.halted:
-            line.append("■ HALTED  ", style=f"bold {RED}")
+        elif self.halted:
             line.append(self.halted, style=RED)
-            return line
-        if self.last_session is None:
-            line.append("● NEW  ", style=f"bold {CYAN}")
+        elif self.last_session is None:
             line.append("no sessions yet", style=MUTED)
         else:
-            line.append("● LIVE  ", style=f"bold {GREEN}")
             line.append(f"last session {self.last_session}", style=TEXT)
         return line
 
     def badge(self) -> Text:
         """The state as a colored glyph and a quiet word, for a header line.
         The reason behind a halt or an error is told where there is room."""
-        glyph, word, tone = (
-            ("✗", "ledger error", RED) if self.error else
-            ("■", "halted", RED) if self.halted else
-            ("●", "new", CYAN) if self.last_session is None else
-            ("●", "live", GREEN))
+        glyph, word, tone = self._state_word()
         return Text.assemble((f"{glyph} ", tone), (word, MUTED))
 
 
@@ -1413,16 +1440,17 @@ def _paper_slot(index: int, snap: _PaperSnapshot) -> Text:
     card = Text()
     card.append(f" {index + 1:02d}  ", style=MUTED)
     card.append(snap.deployed.name, style=TEXT)
+    glyph, word, tone = snap._state_word()
     if snap.error:
         card.append("   ✗ ledger", style=RED)
-    elif snap.halted:
-        card.append("   ■ halted", style=RED)
-    elif snap.records:
+        return card
+    if snap.records and not snap.halted:
         ret = snap.nav / snap.spec.capital - 1
         card.append(f"   {ret:+.1%}", style=GREEN if ret >= 0 else RED)
-        card.append("  ● live", style=GREEN)
+        card.append("  ", style=MUTED)
     else:
-        card.append("   ● new", style=CYAN)
+        card.append("   ")
+    card.append(f"{glyph} {word}", style=tone)
     return card
 
 
@@ -1484,51 +1512,142 @@ def _facts(rows: list[tuple[str, Text | str]]) -> Table:
     return grid
 
 
-def _next_run_rows(snap: _PaperSnapshot) -> list[tuple[str, Text | str]]:
+def _next_run_rows(snap: _PaperSnapshot, now: datetime | None = None) -> list[tuple[str, Text | str]]:
     """What the next run will do, from the ledger alone — no network on a
     highlight. Two steps: what happens to the pending decision, then
     whether a new one is made. The exact date is resolved when the user
-    asks to run."""
+    asks to run. For a minute fund the next run is the next bar on its
+    grid, and whether anything happens at it depends on the runner."""
     if snap.halted:
         rows: list[tuple[str, Text | str]] = [("Halted", Text("r to resume before it can run", style=RED))]
         if snap.halted not in (_APP_HALT, "halted"):  # a reason given from the CLI
             rows.append(("", Text(snap.halted, style=MUTED)))
         return rows
     rows: list[tuple[str, Text | str]] = []
+    if snap.intraday:
+        spec = snap.spec
+        upcoming = next_bar(now or datetime.now(NEW_YORK), spec.interval_seconds, spec.window)
+        today = (now or datetime.now(NEW_YORK)).astimezone(NEW_YORK).date()
+        when = upcoming.strftime("%H:%M:%S ET") if upcoming.date() == today else upcoming.strftime("%a %H:%M:%S ET")
+        rows.append(("Next bar", Text.assemble(
+            (when, BRIGHT),
+            ("   ● running" if snap.running else "   ○ idle · enter to start", GREEN if snap.running else MUTED))))
     if snap.pending is not None:
         rows.append(("First", Text.assemble(
             "execute the ", (snap.pending.as_of, BRIGHT), " decision")))
         rows.append(("", _weights_line(snap.pending)))
     elif snap.last_session is None:
-        rows.append(("First", "mark the book at the latest completed close"))
+        rows.append(("First", "mark the book at the first bar's prints" if snap.intraday
+                     else "mark the book at the latest completed close"))
     else:
         rows.append(("First", "mark the book"))
     cadence = snap.spec.rebalance
     if snap.last_session is None:
         rows.append(("Then", "make the first decision"))
-    elif cadence == "daily":
+    elif cadence in ("daily", "minute"):
         rows.append(("Then", "make a new decision"))
     else:
         rows.append(("Then", f"make a new decision if it opens a new {_PERIOD_WORD[cadence]}"))
     return rows
 
 
-def _paper_detail(snap: _PaperSnapshot, width: int = 60) -> Group:
+def _today_rows(snap: _PaperSnapshot, now: datetime | None = None) -> list[tuple[str, Text | str]]:
+    """A minute fund's day so far: bars recorded out of the day's grid, the
+    last one's time, and the move since the open (the NAV going into the
+    day's first bar). Empty before the first bar of the day."""
+    now = now or datetime.now(NEW_YORK)
+    today = now.astimezone(NEW_YORK).date().isoformat()
+    bars = snap.today(today)
+    if not bars:
+        return []
+    spec = snap.spec
+    total = bars_per_day(spec.interval_seconds, spec.window)
+    first_index = snap.records.index(bars[0])
+    opened_at = snap.records[first_index - 1].nav if first_index else spec.capital
+    change = bars[-1].nav / opened_at - 1 if opened_at else 0.0
+    fills = sum(len(r.executed.fills) for r in bars if r.executed is not None)
+    return [
+        ("Bars", Text.assemble((f"{len(bars)} / {total}", TEXT),
+                               (f"   last {bar_time(bars[-1].session):%H:%M:%S} ET", MUTED))),
+        ("Since open", Text.assemble((f"{change:+.2%}", GREEN if change >= 0 else RED),
+                                     (f"   {fills} {'fill' if fills == 1 else 'fills'}", MUTED))),
+    ]
+
+
+_LIVE_REFRESH = 30  # seconds between quote refreshes while the paper list is up
+
+
+def _fetch_snapshots(tickers: list[str]) -> dict[str, PriceSnapshot]:
+    """One real-time quote per ticker, fetched together. Empty when there is
+    no key to ask with or the API refuses: the pane then shows the last close
+    and nothing else, which is the honest fallback."""
+    if not tickers or not os.environ.get("FINANCIAL_DATASETS_API_KEY"):
+        return {}
+    quotes: dict[str, PriceSnapshot] = {}
+    try:
+        with FDClient() as fd, ThreadPoolExecutor(max_workers=min(8, len(tickers))) as pool:
+            for ticker, snapshot in zip(tickers, pool.map(fd.get_snapshot, tickers)):
+                if snapshot is not None:
+                    quotes[ticker] = snapshot
+    except FDClientError:
+        return {}
+    return quotes
+
+
+def _quote_time(snapshot: PriceSnapshot) -> datetime:
+    """The quote's trade time in New York."""
+    return datetime.fromisoformat(snapshot.time.replace("Z", "+00:00")).astimezone(NEW_YORK)
+
+
+def _live_rows(
+    snap: _PaperSnapshot, quotes: dict[str, PriceSnapshot], today: str | None = None,
+) -> list[tuple[str, Text | str]]:
+    """The book at the latest prints: value, change since the last close,
+    and when the newest print was. Empty unless every held name has a quote;
+    muted all through when the newest print is from before *today*, because
+    a stale quote marked green would be a lie."""
+    if snap.state is None or not snap.state.positions:
+        return []
+    positions = snap.state.positions
+    if any(t not in quotes for t in positions):
+        return []
+    value = snap.state.cash + sum(shares * quotes[t].price for t, shares in positions.items())
+    change = value / snap.nav - 1 if snap.nav else 0.0
+    newest = max(_quote_time(quotes[t]) for t in positions)
+    today = today or datetime.now(NEW_YORK).date().isoformat()
+    stale = newest.date().isoformat() < today
+    tone = MUTED if stale else GREEN if change >= 0 else RED
+    when = newest.strftime("%b %-d %H:%M") if stale else newest.strftime("%H:%M")
+    return [("Live", Text.assemble(
+        (f"${value:,.0f}", MUTED if stale else TEXT),
+        (f"   {change:+.2%}", tone),
+        (f"   as of {when} ET", MUTED)))]
+
+
+def _paper_detail(
+    snap: _PaperSnapshot, width: int = 60, quotes: dict[str, PriceSnapshot] | None = None,
+    now: datetime | None = None,
+) -> Group:
     """The right pane, top to bottom: who the fund is, what the next run
-    does, how it has done, its last few sessions. One bold line (the name);
-    color only where it means something — gains, losses, state."""
+    does, (a minute fund's day so far,) how it has done, its last few
+    sessions. One bold line (the name); color only where it means something
+    — gains, losses, state. *quotes* (the latest prints for the held names)
+    adds a live value line; *now* is for tests."""
     spec = snap.spec
     staff = ", ".join(s.title for s in spec.strategies)
     parts: list = [
         Text.assemble((snap.deployed.name, f"bold {BRIGHT}"), "   ", snap.badge()),
-        Text(f"{staff} · {spec.rebalance} · ${spec.capital:,.0f} · {' '.join(snap.deployed.universe)}",
+        Text(f"{staff} · {_cadence_identity(spec)} · ${spec.capital:,.0f} · {' '.join(snap.deployed.universe)}",
              style=MUTED),
         Text(""),
     ]
     if snap.error:
         parts.append(Text(snap.error, style=RED))
         return Group(*parts)
-    parts += [_section("NEXT RUN"), _facts(_next_run_rows(snap))]
+    parts += [_section("NEXT RUN"), _facts(_next_run_rows(snap, now))]
+    today = _today_rows(snap, now) if snap.intraday else []
+    if today:
+        parts += [Text(""), _section("TODAY"), _facts(today)]
     if snap.records:
         m = snap.metrics()
         _, nav, bench = snap.curves()
@@ -1540,6 +1659,7 @@ def _paper_detail(snap: _PaperSnapshot, width: int = 60) -> Group:
                                      (f"   {spec.benchmark} {bench_ret:+.1%}", MUTED))),
             ("Since", Text(f"{snap.records[0].session} · {n} {'session' if n == 1 else 'sessions'}"
                            f" · {m.n_orders} {'order' if m.n_orders == 1 else 'orders'}", style=MUTED)),
+            *(_live_rows(snap, quotes) if quotes else []),
         ])]
         if n >= 2:  # one point is a flat block, not a curve
             parts.append(Text(""))
@@ -1554,11 +1674,13 @@ def _paper_detail(snap: _PaperSnapshot, width: int = 60) -> Group:
     return Group(*parts)
 
 
-def _session_row(record: SessionRecord, prev_nav: float) -> Text:
-    """One session in the fund's history rail: date, day change, what happened."""
+def _session_row(record: SessionRecord, prev_nav: float, *, time_only: bool = False) -> Text:
+    """One session in the fund's history rail: date, day change, what happened.
+    *time_only* shows a bar as its clock time, for a list already grouped by day."""
     change = record.nav / prev_nav - 1 if prev_nav else 0.0
     row = Text()
-    row.append(f" {record.session}", style=TEXT)
+    label = record.session[11:] if time_only and is_intraday(record.session) else record.session
+    row.append(f" {label}", style=TEXT)
     row.append(f"  {change:+.2%}", style=GREEN if change >= 0 else RED)
     if record.executed is not None:
         n = len(record.executed.fills)
@@ -1596,7 +1718,8 @@ def _session_overview(record: SessionRecord) -> Group:
         n_signals = sum(len(sr.signals) for sr in d.strategies)
         parts.append(Text.assemble(
             ("DECIDED  ", f"bold {CYAN}"),
-            (f"{n_signals} signals · executes at the next session's close", MUTED)))
+            (f"{n_signals} signals · executes at the next "
+             f"{'bar' if is_intraday(record.session) else 'session'}'s close", MUTED)))
         targets = sorted(((t, w) for t, w in d.final_weights.items() if w), key=lambda x: -abs(x[1]))
         for ticker, weight in targets[:8]:
             parts.append(Text.assemble(
@@ -1668,6 +1791,23 @@ def _run_plan(name: str, state: FundState, due: str | None, spec: FundSpec) -> T
     elif then:
         body.append("Then mark the book.", style=TEXT)
     return body
+
+
+_RUNNER_LOG = "runner.log"  # where a runner started from the app writes its console
+
+
+def _spawn_runner(directory: Path) -> int:
+    """Start `aihf paper run <name>` as its own session so it survives the
+    app closing; its console goes to runner.log in the fund directory. The
+    runner writes runner.pid itself once it is up. Returns the child's pid."""
+    log = (directory / _RUNNER_LOG).open("a")
+    with log:
+        child = subprocess.Popen(
+            [sys.executable, "-m", "hedge_fund.run", "paper", "run", directory.name],
+            stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+            start_new_session=True, cwd=str(directory),
+        )
+    return child.pid
 
 
 def _resolve_next_session(directory: Path) -> tuple[DeployedFund, FundState, str | None]:
@@ -1781,6 +1921,8 @@ class PaperScreen(Screen):
         self._snaps: list[_PaperSnapshot | None] = []
         self._select = select   # highlight this fund on first paint
         self._run_on_mount = run  # ...and open its approval step right away
+        self._quotes: dict[str, dict[str, PriceSnapshot]] = {}  # fund name -> latest prints
+        self._quote_timer: Timer | None = None
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="select"):
@@ -1793,13 +1935,20 @@ class PaperScreen(Screen):
 
     def on_mount(self) -> None:
         self._populate(self._select)
+        self._quote_timer = self.set_interval(_LIVE_REFRESH, self._poll_quotes)
         if self._run_on_mount:
             self._run_on_mount = False
             self.call_after_refresh(self.action_run)
 
+    def on_screen_suspend(self) -> None:
+        if self._quote_timer is not None:
+            self._quote_timer.pause()
+
     def on_screen_resume(self) -> None:
         current = self._current()
         self._populate(current.deployed.name if current else None)
+        if self._quote_timer is not None:
+            self._quote_timer.resume()
 
     # ---- the list ---------------------------------------------------------
 
@@ -1853,7 +2002,8 @@ class PaperScreen(Screen):
             snap = self._snaps[int(oid.split(":")[1])]
             if snap is not None:
                 width = detail.content_size.width or 60
-                detail.update(_paper_detail(snap, min(width, 100)))
+                detail.update(_paper_detail(snap, min(width, 100), self._quotes.get(snap.deployed.name)))
+                self._poll_quotes()
         elif oid == "build":
             blurb = Text()
             if not self._snaps:
@@ -1863,8 +2013,41 @@ class PaperScreen(Screen):
                 "strategies, capital, cadence and tickers, and it gets a ledger, a "
                 "book and a kill switch of its own under\n" + str(PAPER_DIR) + "\n\n"
                 "Then run it a session at a time with enter, or from a scheduler with "
-                "`aihf paper tick <name>`.", style=MUTED)
+                "`aihf paper tick <name>`. A minute fund is started and stopped with enter "
+                "instead, or kept up with `aihf paper run <name>`.", style=MUTED)
             detail.update(blurb)
+
+    # ---- live quotes ------------------------------------------------------
+
+    def _poll_quotes(self) -> None:
+        """Ask for the highlighted fund's prints, off-thread. Only a fund with
+        positions has anything live to show; cash is cash. A minute fund's
+        runner changes the ledger under us: re-read it when the runner has
+        come or gone, or has recorded a bar since the last read."""
+        snap = self._current()
+        if snap is None:
+            return
+        if snap.intraday and snap.error is None and (
+                is_running(snap.directory) != snap.running
+                or (snap.ledger.sessions() or [None])[-1] != snap.last_session):
+            self._populate(snap.deployed.name)
+            return
+        if snap.state is not None and snap.state.positions:
+            self._fetch_quotes(snap.deployed.name, sorted(snap.state.positions))
+
+    @work(thread=True, group="quotes", exclusive=True)
+    def _fetch_quotes(self, name: str, tickers: list[str]) -> None:
+        quotes = _fetch_snapshots(tickers)
+        if quotes:
+            self.app.call_from_thread(self._quotes_arrived, name, quotes)
+
+    def _quotes_arrived(self, name: str, quotes: dict[str, PriceSnapshot]) -> None:
+        self._quotes[name] = quotes
+        snap = self._current()
+        if snap is not None and snap.deployed.name == name:
+            detail = self.query_one("#detail-body", Static)
+            width = detail.content_size.width or 60
+            detail.update(_paper_detail(snap, min(width, 100), quotes))
 
     # ---- actions ----------------------------------------------------------
 
@@ -1901,11 +2084,35 @@ class PaperScreen(Screen):
             self.notify(f"{snap.deployed.name} is halted — r to resume first.", severity="warning")
             return
         directory = snap.directory
+        if snap.intraday:
+            self._toggle_runner(snap)
+            return
 
         def resume() -> None:
             if _demand_run_keys(self.app, resume):
                 self.app.push_screen(RunConfirmScreen(directory),
                                      lambda verdict: self._after_confirm(directory, verdict))
+        resume()
+
+    def _toggle_runner(self, snap: _PaperSnapshot) -> None:
+        """Enter on a minute fund: stop its runner if one is up, else start
+        one (a detached `aihf paper run`, so it outlives this screen)."""
+        name = snap.deployed.name
+        if is_running(snap.directory):
+            stop_runner(snap.directory)
+            self.notify(f"{name} stopping after the bar in flight")
+            self._populate(name)
+            return
+
+        def resume() -> None:
+            if _demand_run_keys(self.app, resume):
+                try:
+                    _spawn_runner(snap.directory)
+                except OSError as exc:
+                    self.notify(f"Could not start {name}: {exc}", severity="error")
+                    return
+                self.notify(f"{name} started · {snap.spec.cadence_label} · {snap.spec.window.label}")
+                self._populate(name)
         resume()
 
     def _after_confirm(self, directory: Path, verdict: str | None) -> None:
@@ -2005,7 +2212,7 @@ class SessionsScreen(Screen):
         staff = ", ".join(s.title for s in spec.strategies)
         self.query_one("#pf-head", Static).update(Group(
             Text.assemble((snap.deployed.name, f"bold {BRIGHT}"), ("  ·  paper", MUTED)),
-            Text(f"{staff}  ·  {spec.rebalance}  ·  ${spec.capital:,.0f}"
+            Text(f"{staff}  ·  {_cadence_identity(spec)}  ·  ${spec.capital:,.0f}"
                  f"  ·  {' '.join(snap.deployed.universe)}", style=MUTED),
         ))
         self.query_one("#pf-status", Static).update(snap.status())
@@ -2042,10 +2249,15 @@ class SessionsScreen(Screen):
                 "executes it.", style=MUTED))
             return
         navs = [snap.spec.capital, *(r.nav for r in snap.records)]
+        day: str | None = None
         for i, record in enumerate(self._shown):
             index = len(snap.records) - 1 - i
-            menu.add_option(Option(_session_row(record, navs[index]), id=f"s:{i}"))
-        menu.highlighted = 0
+            grouped = is_intraday(record.session)
+            if grouped and record.session[:10] != day:  # a minute fund's bars, under their day
+                day = record.session[:10]
+                menu.add_option(Option(_day_heading(day, snap.records, navs), disabled=True))
+            menu.add_option(Option(_session_row(record, navs[index], time_only=grouped), id=f"s:{i}"))
+        menu.highlighted = menu.get_option_index("s:0")
         menu.focus()
 
     @on(OptionList.OptionHighlighted, "#pf-sessions")
@@ -2062,6 +2274,20 @@ class SessionsScreen(Screen):
         if oid.startswith("s:") and self._snap is not None:
             record = self._shown[int(oid.split(":")[1])]
             self.app.push_screen(SessionReportScreen(self._snap.deployed.name, record))
+
+
+def _day_heading(day: str, records: list[SessionRecord], navs: list[float]) -> Text:
+    """A day's line over its bars in the history rail: the date, how many
+    bars, and the day's move (its last bar against the NAV going into it)."""
+    indices = [i for i, r in enumerate(records) if r.session[:10] == day]
+    opened_at, closed_at = navs[indices[0]], navs[indices[-1] + 1]
+    change = closed_at / opened_at - 1 if opened_at else 0.0
+    n = len(indices)
+    return Text.assemble(
+        (f" {day}", f"bold {BRIGHT}"),
+        (f"  {change:+.2%}", GREEN if change >= 0 else RED),
+        (f"  {n} {'bar' if n == 1 else 'bars'}", MUTED),
+    )
 
 
 def _update_stat_tiles(screen: Screen, benchmark: str, nav: float, fund_return: float,
@@ -2329,6 +2555,71 @@ class RunSessionScreen(Screen):
         self.refresh_bindings()
 
 
+_NEWS_SENTENCE = (
+    "Analysts are asked again at every bar and see new headlines as they land (the news "
+    "feed refreshes about every 10 minutes); a bar with nothing new re-marks the book and "
+    "fills what is pending, at no extra model cost."
+)
+_WINDOW_NOTE = f"anywhere inside US extended hours ({EARLIEST_WINDOW}–{LATEST_WINDOW})"
+
+
+def _parse_interval(text: str) -> float:
+    """Minutes between bars from what was typed; ValueError says what is wrong."""
+    try:
+        minutes = float(text.strip())
+    except ValueError:
+        raise ValueError("Enter the interval in minutes: 1, 5, or 0.5 for every 30 seconds.") from None
+    if not isfinite(minutes) or minutes <= 0:
+        raise ValueError("Enter the interval in minutes: 1, 5, or 0.5 for every 30 seconds.")
+    if round(minutes * 60) < MIN_INTERVAL_SECONDS:
+        raise ValueError(
+            f"The shortest interval is {MIN_INTERVAL_SECONDS}s: a bar takes one price request per "
+            "ticker, about a second each, so anything faster samples quicker than it can fetch."
+        )
+    return minutes
+
+
+def _interval_line(minutes: float, window: TradingWindow) -> str:
+    """`every 1m · 09:30–16:00 ET · 391 sessions a day`"""
+    seconds = int(round(minutes * 60))
+    return f"every {format_interval(seconds)} · {window.label} · {bars_per_day(seconds, window):,} sessions a day"
+
+
+def _window_lines(window: TradingWindow, minutes: float = 1.0, *,
+                  today: datetime | None = None, local_zone: tzinfo | None = None) -> list[str]:
+    """The window as it will run, plus the same hours in the user's own zone
+    when that differs from New York (times are always stored in ET)."""
+    lines = [_interval_line(minutes, window)]
+    today = today or datetime.now(NEW_YORK)
+    local = local_zone or datetime.now().astimezone().tzinfo
+    start_ny = datetime.combine(today.date(), time(*map(int, window.start.split(":"))), tzinfo=NEW_YORK)
+    end_ny = datetime.combine(today.date(), time(*map(int, window.end.split(":"))), tzinfo=NEW_YORK)
+    start_local, end_local = start_ny.astimezone(local), end_ny.astimezone(local)
+    if (start_local.hour, start_local.minute) != (start_ny.hour, start_ny.minute) \
+            or (end_local.hour, end_local.minute) != (end_ny.hour, end_ny.minute):
+        day_shift = (end_local.date() - end_ny.date()).days
+        suffix = {1: " (the next day)", -1: " (the day before)"}.get(day_shift, "")
+        lines.append(f"that is {start_local:%H:%M}–{end_local:%H:%M} {start_local:%Z} where you are{suffix}")
+    return lines
+
+
+def _first_reason(exc: Exception) -> str:
+    """A pydantic ValidationError's first message, without the field frame."""
+    errors = getattr(exc, "errors", None)
+    if callable(errors):
+        details = errors()
+        if details:
+            return str(details[0]["msg"]).removeprefix("Value error, ")
+    return str(exc)
+
+
+def _cadence_identity(spec: FundSpec) -> str:
+    """How a fund's cadence reads on one line: `weekly`, or `every 30s · 09:30–16:00 ET`."""
+    if not spec.is_intraday:
+        return spec.rebalance
+    return f"{spec.cadence_label} · {spec.window.label}"
+
+
 class BuilderScreen(Screen):
     """The fund wizard: a step rail on the left, the active step on the right.
     Esc rewinds one step. The output is a FundSpec YAML — the same definition
@@ -2337,10 +2628,19 @@ class BuilderScreen(Screen):
     Backtest mode asks four things (name, strategies, capital, cadence) and
     offers to backtest the result; what it trades is chosen per run. Paper
     mode adds the tickers as a fifth step, because a paper fund trades the
-    same universe every session, and ends with "Run its first session".
+    same universe every session, and ends with "Run its first session" (or
+    "Start running" for a minute fund). Choosing the minute cadence opens two
+    sub-steps under Cadence, the interval and the trading window, the way
+    "Build your own" opens the agent picker under Strategies.
     """
 
-    CADENCES = ["daily", "weekly", "monthly"]
+    CADENCES = ["minute", "daily", "weekly", "monthly"]
+    CADENCE_TAGLINES = {
+        "minute": "intraday — set the interval and trading window",
+        "daily": "one decision at each close",
+        "weekly": "the fundamentals default",
+        "monthly": "slow-turn — one decision a month",
+    }
 
     BINDINGS = [
         Binding("escape", "back", "back"),
@@ -2420,16 +2720,27 @@ class BuilderScreen(Screen):
                 with Vertical(id="step-cadence", classes="pane"):
                     yield Label("Rebalance cadence", classes="q")
                     yield OptionList(
-                        Option(Text.assemble(
-                            ("daily     ", "bold"),
-                            ("news-speed — the most cycles", MUTED))),
-                        Option(Text.assemble(
-                            ("weekly    ", "bold"),
-                            ("the fundamentals default", MUTED))),
-                        Option(Text.assemble(
-                            ("monthly   ", "bold"),
-                            ("slow-turn — the fewest LLM calls", MUTED))),
+                        *(Option(Text.assemble((f"{cadence:<10}", "bold"),
+                                               (self.CADENCE_TAGLINES[cadence], MUTED)))
+                          for cadence in self.CADENCES),
                         id="cadence-list",
+                    )
+                with VerticalScroll(id="step-interval", classes="pane"):
+                    yield Label("Interval between sessions (minutes)", classes="q")
+                    yield Input(value="1", id="interval-input")
+                    yield Static("", id="interval-line")
+                    yield Static(Text(_NEWS_SENTENCE, style=MUTED), classes="hint")
+                with VerticalScroll(id="step-window", classes="pane"):
+                    yield Label("Trading window (ET)", classes="q")
+                    with Horizontal(id="window-inputs"):
+                        yield Input(value=TradingWindow().start, id="window-start-input")
+                        yield Static(Text("  to  ", style=MUTED), classes="window-sep")
+                        yield Input(value=TradingWindow().end, id="window-end-input")
+                    yield Static("", id="window-line")
+                    yield Static(
+                        Text(f"New York time, {_WINDOW_NOTE}. The first and last bar fall exactly on these.",
+                             style=MUTED),
+                        classes="hint",
                     )
                 with Vertical(id="step-tickers", classes="pane"):
                     yield Label("What does it trade?", classes="q")
@@ -2478,6 +2789,8 @@ class BuilderScreen(Screen):
             "step-agents": "#agent-list",
             "step-capital": "#capital-input",
             "step-cadence": "#cadence-list",
+            "step-interval": "#interval-input",
+            "step-window": "#window-start-input",
             "step-tickers": "#tickers-input",
             "step-done": "#done-menu",
         }[pane_id]
@@ -2487,6 +2800,10 @@ class BuilderScreen(Screen):
             self.query_one("#cadence-list", OptionList).highlighted = (
                 self.CADENCES.index(picked)
             )
+        if pane_id == "step-interval":
+            self._refresh_interval_line()
+        if pane_id == "step-window":
+            self._refresh_window_line()
         if pane_id == "step-tickers":
             tickers = self.query_one("#tickers-input", Input)
             if not tickers.value:
@@ -2518,6 +2835,13 @@ class BuilderScreen(Screen):
             self._goto("step-strategies")
         elif pane == "step-capital" and self._state.get("custom_selected"):
             self._goto("step-agents")
+        elif pane == "step-interval":
+            self._goto("step-cadence")
+        elif pane == "step-window":
+            self._goto("step-interval")
+        elif pane in ("step-tickers", "step-done") and self._state.get("rebalance") == "minute" \
+                and (pane == "step-tickers" or self.mode == "backtest"):
+            self._goto("step-window")
         elif pane == "step-done":
             self._goto(self.STEP_IDS[-1])
         else:
@@ -2595,10 +2919,74 @@ class BuilderScreen(Screen):
     @on(OptionList.OptionSelected, "#cadence-list")
     def _submit_cadence(self, event: OptionList.OptionSelected) -> None:
         self._state["rebalance"] = self.CADENCES[event.option_index]
+        if self._state["rebalance"] == "minute":
+            self._goto("step-interval")
+        else:
+            self._after_cadence()
+
+    def _after_cadence(self) -> None:
         if self.mode == "paper":
             self._goto("step-tickers")
         else:
             self._finish_build()
+
+    # ---- the minute sub-steps: interval, then window ------------------------
+
+    def _window_draft(self) -> TradingWindow:
+        """The window as typed, or the default while it does not parse yet."""
+        try:
+            return TradingWindow(start=self.query_one("#window-start-input", Input).value.strip(),
+                                 end=self.query_one("#window-end-input", Input).value.strip())
+        except ValueError:
+            return self._state.get("window") or TradingWindow()
+
+    @on(Input.Changed, "#interval-input")
+    def _refresh_interval_line(self) -> None:
+        text = self.query_one("#interval-input", Input).value
+        try:
+            minutes = _parse_interval(text)
+        except ValueError as exc:
+            line = Text(str(exc), style=RED)
+        else:
+            line = Text(_interval_line(minutes, self._window_draft()), style=TEXT)
+        self.query_one("#interval-line", Static).update(line)
+
+    @on(Input.Submitted, "#interval-input")
+    def _submit_interval(self, event: Input.Submitted) -> None:
+        try:
+            self._state["interval"] = _parse_interval(event.value)
+        except ValueError as exc:
+            self.notify(str(exc), severity="error")
+            return
+        self._goto("step-window")
+
+    @on(Input.Changed, "#window-start-input")
+    @on(Input.Changed, "#window-end-input")
+    def _refresh_window_line(self) -> None:
+        start = self.query_one("#window-start-input", Input).value.strip()
+        end = self.query_one("#window-end-input", Input).value.strip()
+        try:
+            window = TradingWindow(start=start, end=end)
+        except ValueError as exc:
+            line = Text(_first_reason(exc), style=RED)
+        else:
+            line = Text("\n".join(_window_lines(window, self._state.get("interval", 1.0))), style=TEXT)
+        self.query_one("#window-line", Static).update(line)
+
+    @on(Input.Submitted, "#window-start-input")
+    def _submit_window_start(self) -> None:
+        self.query_one("#window-end-input", Input).focus()
+
+    @on(Input.Submitted, "#window-end-input")
+    def _submit_window_end(self) -> None:
+        start = self.query_one("#window-start-input", Input).value.strip()
+        end = self.query_one("#window-end-input", Input).value.strip()
+        try:
+            self._state["window"] = TradingWindow(start=start, end=end)
+        except ValueError as exc:
+            self.notify(_first_reason(exc), severity="error")
+            return
+        self._after_cadence()
 
     @on(Input.Submitted, "#tickers-input")
     def _submit_tickers(self, event: Input.Submitted) -> None:
@@ -2613,6 +3001,7 @@ class BuilderScreen(Screen):
 
     def _finish_build(self) -> None:
         # Equal capital slices; master risk defaults. Power users edit the YAML.
+        intraday = self._state["rebalance"] == "minute"
         spec = FundSpec(
             schema_version=2,
             name=self._state["name"],
@@ -2620,6 +3009,7 @@ class BuilderScreen(Screen):
             risk=DEFAULT_RISK,
             capital=self._state["capital"],
             rebalance=self._state["rebalance"],
+            **({"interval": self._state["interval"], "window": self._state["window"]} if intraday else {}),
         )
         # The user said yes to replacing the fund that held this name: clear
         # it now, at the last moment, so an abandoned wizard costs nothing.
@@ -2649,13 +3039,29 @@ class BuilderScreen(Screen):
         staff = ", ".join(s.title for s in self._state["strategies"])
         identity = Text.assemble(
             (spec.name, f"bold {BRIGHT}"),
-            (f"  ·  {staff}  ·  ${spec.capital:,.0f}  ·  {spec.rebalance}", MUTED),
+            (f"  ·  {staff}  ·  ${spec.capital:,.0f}  ·  {_cadence_identity(spec)}", MUTED),
         )
         if replaced:
             self.notify(f"Replaced the previous {spec.name}.", severity="warning")
         if self.mode == "paper":
             universe = self._state["universe"]
             directory = deploy(spec.name, spec, universe, root=PAPER_DIR)
+            menu = self.query_one("#done-menu", OptionList)
+            menu.clear_options()
+            menu.add_options([
+                Option("▶  Start running" if intraday else "▶  Run its first session", id="go-run"),
+                None,
+                Option("Back", id="go-back"),
+            ])
+            menu.highlighted = 0
+            first = (
+                f"Start it and it runs {spec.cadence_label} inside {spec.window.label}: the first bar "
+                "marks the book and makes the first decision; the next bar executes it. Stop it any time; "
+                "time it was down is logged, never back-filled."
+                if intraday else
+                "Its first session marks the book at the latest completed close and "
+                "makes the first decision; the session after executes it."
+            )
             self.query_one("#done-summary", Static).update(Group(
                 Text.assemble((spec.name, f"bold {GREEN}"), (" is live.", f"bold {BRIGHT}")),
                 Text(""),
@@ -2667,8 +3073,7 @@ class BuilderScreen(Screen):
                 Text.assemble(("✓ ", f"bold {GREEN}"), ("Definition saved to ", MUTED),
                               (str(path), MUTED)),
                 Text(""),
-                Text("Its first session marks the book at the latest completed close and "
-                     "makes the first decision; the session after executes it.", style=MUTED),
+                Text(first, style=MUTED),
             ))
         else:
             self.query_one("#done-summary", Static).update(Group(
@@ -2701,7 +3106,7 @@ class BuilderScreen(Screen):
             1: self._short_strategies(),
             2: (f"${self._state['capital']:,.0f}"
                 if "capital" in self._state else None),
-            3: self._state.get("rebalance"),
+            3: self._short_cadence(),
             4: (_short_tickers(self._state["universe"], 3)
                 if "universe" in self._state else None),
         }
@@ -2726,6 +3131,15 @@ class BuilderScreen(Screen):
             return None
         names = ", ".join(s.title for s in strategies[:2])
         return names + (", …" if len(strategies) > 2 else "")
+
+    def _short_cadence(self) -> str | None:
+        cadence = self._state.get("rebalance")
+        if cadence != "minute":
+            return cadence
+        if self._pane() in ("step-interval", "step-window") or "window" not in self._state:
+            return None  # still being set
+        seconds = int(round(self._state["interval"] * 60))
+        return f"every {format_interval(seconds)}\n  {self._state['window'].label}"
 
     @staticmethod
     def _strategy_prompt(strategy: StrategySpec) -> Text:

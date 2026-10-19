@@ -29,6 +29,23 @@ class Price(BaseModel):
     time: str
 
 
+class PriceSnapshot(BaseModel):
+    """Real-time quote from /prices/snapshot.
+
+    Not a bar: a single observation of the last trade. ``time`` is the
+    server's UTC timestamp of that trade. Never cache one — it is stale
+    the moment it is returned.
+    """
+
+    model_config = _IGNORE
+
+    ticker: str
+    price: float
+    time: str
+    day_change: float | None = None
+    day_change_percent: float | None = None
+
+
 # ---------------------------------------------------------------------------
 # Financial Metrics
 # ---------------------------------------------------------------------------

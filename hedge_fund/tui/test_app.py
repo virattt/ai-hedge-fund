@@ -5,6 +5,7 @@ import io
 import json
 import os
 import stat
+from datetime import datetime, timedelta
 from unittest.mock import Mock
 
 import pytest
@@ -19,7 +20,7 @@ from hedge_fund.llm import PROVIDER_ENV_VARS
 from hedge_fund.llm.contract import normalize_jev_response
 from hedge_fund.llm.test_contract import _response
 from hedge_fund.models import Signal
-from hedge_fund.paper import Ledger
+from hedge_fund.paper import Ledger, PID_FILE
 from hedge_fund.pipeline.models import CycleRecord, DecisionRecord
 from hedge_fund.pipeline.session import SessionRecord
 from hedge_fund.tui import app as ui
@@ -455,6 +456,55 @@ def test_run_plan_says_exactly_what_the_run_will_do():
     assert ui._run_plan("alpha", _state(), None, spec).plain == "No completed SPY session to run yet."
 
 
+def _quote(ticker, price, time="2025-01-21T15:05:00Z"):
+    return ui.PriceSnapshot(ticker=ticker, price=price, time=time)
+
+
+def test_live_rows_value_the_book_at_the_latest_prints():
+    spec = _spec(["pead"], "alpha")
+    directory = ui.deploy("alpha", spec, ["TEST"], root=ui.PAPER_DIR)
+    ledger = Ledger(directory)
+    record, _ = _executed_and_decided()
+    ledger.append(_session("2025-01-20", executed=record, nav=101000, positions={"TEST": 10}, marks={"TEST": 100}))
+    snap = ui._PaperSnapshot(directory)
+    # Every held name needs a print; cash alone has nothing live to say.
+    assert ui._live_rows(snap, {}, today="2025-01-21") == []
+    label, line = ui._live_rows(snap, {"TEST": _quote("TEST", 110)}, today="2025-01-21")[0]
+    text = _render(line)
+    assert label == "Live" and "$101,100" in text and "+0.10%" in text and "as of 10:05 ET" in text
+    # A print from before today is shown, but muted and dated: not a live gain.
+    _, line = ui._live_rows(snap, {"TEST": _quote("TEST", 110, "2025-01-20T21:00:00Z")}, today="2025-01-21")[0]
+    assert "as of Jan 20 16:00 ET" in _render(line)
+    assert all(span.style == ui.MUTED for span in line.spans)
+    assert "Live" in _render(ui._paper_detail(snap, quotes={"TEST": _quote("TEST", 110)}))
+    assert "Live" not in _render(ui._paper_detail(snap))
+
+
+def test_paper_screen_shows_live_prints_when_they_arrive(monkeypatch):
+    spec = _spec(["pead"], "alpha")
+    directory = ui.deploy("alpha", spec, ["TEST"], root=ui.PAPER_DIR)
+    record, _ = _executed_and_decided()
+    Ledger(directory).append(_session("2025-01-20", executed=record, nav=101000, positions={"TEST": 10}, marks={"TEST": 100}))
+    asked: list = []
+
+    def fetch(tickers):
+        asked.append(tickers)
+        return {"TEST": _quote("TEST", 120, datetime.now(ui.NEW_YORK).isoformat())}
+    monkeypatch.setattr(ui, "_fetch_snapshots", fetch)
+
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=(140, 50)) as pilot:
+            await app.push_screen(ui.PaperScreen())
+            for _ in range(50):  # the prints arrive off-thread
+                await pilot.pause(0.05)
+                detail = _render(app.screen.query_one("#detail-body", Static).content)
+                if "Live" in detail:
+                    break
+            assert asked and asked[-1] == ["TEST"] and "$101,200" in detail
+    asyncio.run(scenario())
+
+
 def test_paper_screen_runs_through_the_approval_step(monkeypatch):
     spec = _spec(["pead"], "alpha")
     directory = ui.deploy("alpha", spec, ["TEST"], root=ui.PAPER_DIR)
@@ -729,6 +779,123 @@ def test_paper_screen_works_the_kill_switch_and_sessions_reads_the_ledger(tmp_pa
     asyncio.run(scenario())
 
 
+def _minute_spec(name="fast", interval=5, start="13:00", end="13:10"):
+    return FundSpec(**{**_spec(["pead"], name).model_dump(), "rebalance": "minute", "interval": interval,
+                       "window": {"start": start, "end": end}})
+
+
+def test_minute_fund_rows_are_pure(monkeypatch):
+    directory = ui.deploy("fast", _minute_spec(), ["TEST"], root=ui.PAPER_DIR)
+    ledger = Ledger(directory)
+    noon = datetime(2025, 1, 21, 12, 0, tzinfo=ui.NEW_YORK)
+    snap = ui._PaperSnapshot(directory)
+    assert not snap.running and snap.intraday
+    rows = dict(ui._next_run_rows(snap, now=noon))
+    assert _render(rows["Next bar"]).strip() == "13:00:00 ET   ○ idle · enter to start"
+    assert rows["First"] == "mark the book at the first bar's prints" and rows["Then"] == "make the first decision"
+    assert ui._today_rows(snap, now=noon) == []
+    assert "○ idle" in _render(ui._paper_slot(0, snap)) and "○ idle" in _render(snap.badge())
+    assert _render(snap.status()).startswith("○ IDLE  no sessions yet")
+
+    record, decided = _executed_and_decided()
+    first = _session("2025-01-21T13:00:00", decision=decided, nav=100000)
+    second = _session("2025-01-21T13:05:00", executed=record, nav=101000, positions={"TEST": 10},
+                      marks={"TEST": 100}, prev_hash=first.hash)
+    ledger.append(first)
+    ledger.append(second)
+    (directory / PID_FILE).write_text(str(os.getpid()))
+    snap = ui._PaperSnapshot(directory)
+    assert snap.running
+    rows = dict(ui._next_run_rows(snap, now=noon.replace(hour=13, minute=6)))
+    assert _render(rows["Next bar"]).strip() == "13:10:00 ET   ● running" and rows["Then"] == "make a new decision"
+    # After the day's last bar the next one is tomorrow's open, named by weekday.
+    assert _render(dict(ui._next_run_rows(snap, now=noon.replace(hour=15)))["Next bar"]).startswith("Wed 13:00:00 ET")
+    today = dict(ui._today_rows(snap, now=noon.replace(hour=13, minute=6)))
+    assert _render(today["Bars"]).strip() == "2 / 3   last 13:05:00 ET"
+    assert _render(today["Since open"]).strip() == "+1.00%   1 fill"
+    assert ui._today_rows(snap, now=noon + timedelta(days=1)) == []  # yesterday's bars are not today's
+    detail = _render(ui._paper_detail(snap, now=noon.replace(hour=13, minute=6)))
+    assert "every 5m · 13:00–13:10 ET" in detail and "TODAY" in detail and "● running" in detail
+    assert "SESSIONS" in detail and "2025-01-21T13:05:00" in detail
+    assert "+1.0%  ● running" in _render(ui._paper_slot(0, snap))
+    assert snap.metrics().n_cycles == 1  # bar keys do not trip the metrics' date math
+
+
+def test_paper_screen_enter_starts_and_stops_a_minute_fund(monkeypatch):
+    directory = ui.deploy("fast", _minute_spec(), ["TEST"], root=ui.PAPER_DIR)
+    for variable in ("FINANCIAL_DATASETS_API_KEY", "TYPESAFE_API_KEY"):
+        monkeypatch.setenv(variable, "x")
+    monkeypatch.setenv("HEDGE_FUND_LLM_MODEL", "jev-1.13.0")
+    spawned, stopped = [], []
+
+    def spawn(path):
+        spawned.append(path)
+        (path / PID_FILE).write_text(str(os.getpid()))  # what the real runner does on start
+        return os.getpid()
+
+    def stop(path):
+        stopped.append(path)
+        (path / PID_FILE).unlink()
+        return True
+    monkeypatch.setattr(ui, "_spawn_runner", spawn)
+    monkeypatch.setattr(ui, "stop_runner", stop)
+
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=(140, 50)) as pilot:
+            await app.push_screen(ui.PaperScreen())
+            screen = app.screen
+            menu = screen.query_one("#paper-menu", OptionList)
+            assert "○ idle" in _render(menu.get_option("paper:0").prompt)
+            await pilot.press("enter")
+            await pilot.pause()
+            assert spawned == [directory] and app.screen is screen  # no approval modal for a runner
+            assert "● running" in _render(menu.get_option("paper:0").prompt)
+            assert "● running" in _render(screen.query_one("#detail-body", Static).content)
+            await pilot.press("enter")
+            await pilot.pause()
+            assert stopped == [directory] and "○ idle" in _render(menu.get_option("paper:0").prompt)
+            # A halted minute fund neither starts nor stops.
+            await pilot.press("h")
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            assert spawned == [directory]
+    asyncio.run(scenario())
+
+
+def test_sessions_screen_groups_a_minute_funds_bars_by_day():
+    directory = ui.deploy("fast", _minute_spec(), ["TEST"], root=ui.PAPER_DIR)
+    ledger = Ledger(directory)
+    record, decided = _executed_and_decided()
+    chain = [_session("2025-01-21T13:00:00", decision=decided, nav=100000)]
+    chain.append(_session("2025-01-21T13:05:00", executed=record, nav=101000, positions={"TEST": 10},
+                          marks={"TEST": 100}, prev_hash=chain[-1].hash))
+    chain.append(_session("2025-01-22T13:00:00", nav=102000, positions={"TEST": 10}, marks={"TEST": 200},
+                          prev_hash=chain[-1].hash))
+    for r in chain:
+        ledger.append(r)
+
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=(140, 50)) as pilot:
+            await app.push_screen(ui.SessionsScreen(directory))
+            screen = app.screen
+            await pilot.pause()
+            assert "every 5m · 13:00–13:10 ET" in _render(screen.query_one("#pf-head", Static).content)
+            sessions = screen.query_one("#pf-sessions", OptionList)
+            rows = [(sessions.get_option_at_index(i).id, _render(sessions.get_option_at_index(i).prompt).strip())
+                    for i in range(sessions.option_count)]
+            assert rows[0][0] is None and rows[0][1].startswith("2025-01-22  +0.99%  1 bar")
+            assert rows[1] == ("s:0", "13:00:00  +0.99%")
+            assert rows[2][0] is None and rows[2][1].startswith("2025-01-21  +1.00%  2 bars")
+            assert rows[3][0] == "s:1" and rows[3][1].startswith("13:05:00  +1.00%  1 fill")
+            assert rows[4][0] == "s:2" and rows[4][1].startswith("13:00:00  +0.00%  decided")
+            assert sessions.highlighted == 1  # the newest bar, not its heading
+            assert "next bar's close" in _render(ui._session_overview(chain[0]))
+    asyncio.run(scenario())
+
+
 def test_builder_paper_mode_builds_a_live_fund_and_refuses_taken_names():
     ui.deploy("taken", _spec(["pead"], "taken"), ["NVDA", "AMD"], root=ui.PAPER_DIR)
     (ui.MANDATES_DIR / "saved.yaml").write_text(yaml.safe_dump(_spec(["pead"], "saved").model_dump()))
@@ -777,6 +944,106 @@ def test_builder_paper_mode_builds_a_live_fund_and_refuses_taken_names():
             assert rail.get_option_at_index(rail.highlighted).id == "paper:0"
             assert "alpha" in _render(rail.get_option("paper:0").prompt)
     asyncio.run(scenario())
+
+
+def test_builder_minute_path_sets_interval_and_window_and_offers_start_running():
+    async def scenario():
+        app = ui.HedgeFundApp()
+        async with app.run_test(size=(120, 45)) as pilot:
+            await app.push_screen(ui.BuilderScreen(mode="paper"))
+            screen = app.screen
+            screen.query_one("#name-input", Input).value = "fast"
+            await pilot.press("enter")
+            screen.query_one("#strategy-list", SelectionList).select(ui._CUSTOM)
+            await pilot.press("enter")
+            screen.query_one("#agent-list", SelectionList).select("pead")
+            await pilot.press("enter", "enter")
+            cadences = screen.query_one("#cadence-list", OptionList)
+            assert cadences.highlighted == ui.BuilderScreen.CADENCES.index("weekly")  # the default, still
+            prompts = [_render(cadences.get_option_at_index(i).prompt) for i in range(cadences.option_count)]
+            assert prompts[0].startswith("minute") and "set the interval and trading window" in prompts[0]
+            assert "one decision at each close" in prompts[1] and "news-speed" not in "".join(prompts)
+            cadences.highlighted = 0
+            await pilot.press("enter")
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-interval"
+            assert "every 1m · 09:30–16:00 ET · 391 sessions a day" in _render(
+                screen.query_one("#interval-line", Static).content)
+
+            interval = screen.query_one("#interval-input", Input)
+            interval.value = "0.1"
+            await pilot.pause()
+            line = _render(screen.query_one("#interval-line", Static).content)
+            assert "shortest interval is 10s" in line and "one price request per ticker" in line
+            await pilot.press("enter")  # refused; still here
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-interval"
+            interval.value = "0.5"
+            await pilot.pause()
+            assert "every 30s · 09:30–16:00 ET · 781 sessions a day" in _render(
+                screen.query_one("#interval-line", Static).content)
+            await pilot.press("enter")
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-window"
+            assert "Cadence" in _render(screen.query_one("#rail-3", Static).content)
+
+            start, end = screen.query_one("#window-start-input", Input), screen.query_one("#window-end-input", Input)
+            end.value = "21:00"
+            await pilot.pause()
+            assert "outside US extended hours" in _render(screen.query_one("#window-line", Static).content)
+            await pilot.press("enter")  # start's enter moves to end
+            await pilot.press("enter")  # end's enter: refused
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-window"
+            start.value, end.value = "09:00", "12:00"
+            await pilot.pause()
+            assert "every 30s · 09:00–12:00 ET · 361 sessions a day" in _render(
+                screen.query_one("#window-line", Static).content)
+            end.focus()
+            await pilot.press("enter")
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-tickers"
+            rail = _render(screen.query_one("#rail-3", Static).content)
+            assert "every 30s" in rail and "09:00–12:00 ET" in rail
+            await pilot.press("escape")  # back from tickers lands on the window, not the cadence list
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-window"
+            await pilot.press("escape", "escape")
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-cadence"
+            assert cadences.highlighted == 0
+            await pilot.press("enter", "enter")  # interval and window remembered
+            end.focus()
+            await pilot.press("enter")
+            screen.query_one("#tickers-input", Input).value = "TEST"
+            await pilot.press("enter")
+            await pilot.pause()
+            assert screen.query_one("#panes", ContentSwitcher).current == "step-done"
+            menu = screen.query_one("#done-menu", OptionList)
+            assert _render(menu.get_option_at_index(0).prompt).strip() == "▶  Start running"
+            summary = _render(screen.query_one("#done-summary", Static).content)
+            assert "every 30s · 09:00–12:00 ET" in summary and "Start it and it runs every 30s" in summary
+            saved = load_spec(ui.MANDATES_DIR / "fast.yaml")
+            assert saved.rebalance == "minute" and saved.interval == 0.5
+            assert saved.window.start == "09:00" and saved.window.end == "12:00"
+            assert ui.load_deployed(ui.PAPER_DIR / "fast").spec == saved
+    asyncio.run(scenario())
+
+
+def test_builder_minute_helpers_are_pure():
+    from zoneinfo import ZoneInfo
+    window = ui.TradingWindow(start="09:30", end="16:00")
+    assert ui._interval_line(1, window) == "every 1m · 09:30–16:00 ET · 391 sessions a day"
+    assert ui._interval_line(90, window) == "every 1h30m · 09:30–16:00 ET · 6 sessions a day"
+    with pytest.raises(ValueError, match="in minutes"):
+        ui._parse_interval("soon")
+    with pytest.raises(ValueError, match="10s"):
+        ui._parse_interval("0.15")
+    assert ui._parse_interval("0.16") == 0.16  # 9.6s rounds to the 10s floor, as the spec counts it
+
+    today = datetime(2025, 7, 1, tzinfo=ui.NEW_YORK)  # summer: ET is UTC-4
+    assert ui._window_lines(window, 1, today=today, local_zone=ui.NEW_YORK) == [
+        "every 1m · 09:30–16:00 ET · 391 sessions a day"]
+    assert ui._window_lines(window, 1, today=today, local_zone=ZoneInfo("America/Los_Angeles"))[1] == \
+        "that is 06:30–13:00 PDT where you are"
+    assert ui._window_lines(window, 1, today=today, local_zone=ZoneInfo("Asia/Tokyo"))[1] == \
+        "that is 22:30–05:00 JST where you are (the next day)"
+    assert ui._cadence_identity(FundSpec(**{**_spec().model_dump(), "rebalance": "minute", "interval": 5})) == \
+        "every 5m · 09:30–16:00 ET"
+    assert ui._cadence_identity(_spec()) == "weekly"
 
 
 def test_builder_replaces_a_taken_name_only_after_yes_and_only_at_the_end():

@@ -16,6 +16,7 @@ from hedge_fund.data.models import (
     FinancialMetrics,
     InsiderTrade,
     Price,
+    PriceSnapshot,
 )
 
 logger = logging.getLogger(__name__)
@@ -90,6 +91,14 @@ class FDClient:
             "end_date": end_date,
         }, response_key="prices")
         return [Price(**row) for row in data] if data else []
+
+    def get_snapshot(self, ticker: str) -> PriceSnapshot | None:
+        """Fetch the real-time quote. None if the ticker is unknown."""
+        resp = self._request("GET", "/prices/snapshot/", params={"ticker": ticker})
+        if resp is None:
+            return None
+        row = resp.json().get("snapshot")
+        return PriceSnapshot(**row) if row else None
 
     # ------------------------------------------------------------------
     # Financial Metrics

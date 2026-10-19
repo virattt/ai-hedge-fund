@@ -27,6 +27,7 @@ from hedge_fund.data.models import (
     FinancialMetrics,
     InsiderTrade,
     Price,
+    PriceSnapshot,
 )
 
 
@@ -50,6 +51,8 @@ class DataClient(Protocol):
         end_date: str,
         **kwargs,
     ) -> list[Price]: ...
+
+    def get_snapshot(self, ticker: str) -> PriceSnapshot | None: ...
 
     def get_financial_metrics(
         self,

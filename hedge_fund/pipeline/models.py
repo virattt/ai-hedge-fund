@@ -84,4 +84,4 @@ class CycleRecord(BaseModel):
     original_assessment: DecisionRecord | None = None
     refreshed_assessment: DecisionRecord | None = None
     execution_as_of: str | None = None
-    execution_policy: Literal["next_close"] | None = None
+    execution_policy: Literal["next_close", "next_bar"] | None = None

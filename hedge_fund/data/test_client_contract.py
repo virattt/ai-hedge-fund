@@ -187,6 +187,32 @@ def test_mid_walk_500_still_fails_loud(client):
         client.get_prices("AAPL", "2024-01-01", "2024-12-31")
 
 
+def test_snapshot_is_a_single_quote_not_a_list(client):
+    calls = _stub(client, [_FakeResponse(200, {"snapshot": {
+        "ticker": "BRK.A", "price": 756000.0, "day_change": 1210.0,
+        "day_change_percent": 0.16, "time": "2026-10-05T14:28:39Z",
+        "time_milliseconds": 1791210519441,
+    }})])
+
+    snap = client.get_snapshot("BRK.A")
+
+    assert calls[0]["url"].endswith("/prices/snapshot/")
+    assert calls[0]["params"] == {"ticker": "BRK.A"}
+    assert snap.price == 756000.0
+    assert snap.time == "2026-10-05T14:28:39Z"
+
+
+def test_snapshot_404_means_unknown_ticker(client):
+    _stub(client, [_FakeResponse(404)])
+    assert client.get_snapshot("ZZZZ") is None
+
+
+def test_snapshot_500_fails_loud(client):
+    _stub(client, [_FakeResponse(500, text="internal error")])
+    with pytest.raises(FDClientError):
+        client.get_snapshot("AAPL")
+
+
 def test_financial_metrics_parses_filing_metadata(client):
     _stub(client, [_FakeResponse(200, {"financial_metrics": [{
         "ticker": "AAPL",

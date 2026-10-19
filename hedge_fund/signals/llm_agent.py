@@ -18,14 +18,20 @@ Failure contract (locked decisions):
 - LLM call/parse failures ABSTAIN: Signal(value=0.0, metadata.abstained=True).
 - Every LLM decision persists its exact prompt + response (via PromptCache),
   and an unchanged snapshot never pays for a second LLM call.
+
+At a bar (a minute fund's session) the prompt also carries the day so far
+— the move since the previous close, results released, headlines — see
+features/intraday.py. It is bucketed so quiet bars stay cache hits.
 """
 
 from __future__ import annotations
 
 import logging
 
+from hedge_fund.data.bars import is_intraday
 from hedge_fund.data.protocol import DataClient
 from hedge_fund.features.breakpoints import MEBreakpoints, shared_breakpoints
+from hedge_fund.features.intraday import build_intraday_context
 from hedge_fund.features.snapshot import FundamentalsSnapshot, InsufficientData, build_snapshot
 from hedge_fund.llm import LLMCallError, LLMClient, PromptCache, extract_json, make_llm, prompt_key
 from hedge_fund.models import Signal
@@ -71,6 +77,11 @@ class LLMAgent(AlphaModel):
 
         system = self.get_system_prompt()
         user = self.build_user_prompt(snapshot)
+        if is_intraday(date):
+            # A bar, not a close: add the day so far. Bucketed, so a quiet
+            # bar renders the same prompt as the last one and costs nothing.
+            context = build_intraday_context(ticker, date, data_client)
+            user = f"{user}\n\n{context.render(blind=self._blind)}"
         cache_key = getattr(self._llm, "cache_key", None)
         key = (cache_key(self.name, system, user) if callable(cache_key)
                else prompt_key(self.name, self._llm.model, system, user))

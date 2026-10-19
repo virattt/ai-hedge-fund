@@ -9,7 +9,11 @@ risk on the netted book) is true of every backtested session by
 construction — and identical to what a paper fund does, one tick at a time.
 
 The trading grid derives from the mandate's benchmark's actual bars —
-holidays and half-weeks fall out naturally, no exchange calendar math.
+holidays and half-weeks fall out naturally, no exchange calendar math. A
+minute fund's grid is its own: every bar of its window on each of those
+days, marked from 1-minute history (`BarClock`); an interval under a minute
+is backtested at one minute, the finest history there is, and the result
+says so.
 """
 
 from __future__ import annotations
@@ -21,9 +25,11 @@ import numpy as np
 from pydantic import BaseModel
 
 from hedge_fund.brokers.sim import SimBroker
+from hedge_fund.data.bars import bar_grid, bars_per_day
 from hedge_fund.data.protocol import DataClient
 from hedge_fund.data.sessions import previous_day, session_closes
-from hedge_fund.fund import Fund, normalize_universe
+from hedge_fund.fund import format_interval, Fund, FundSpec, normalize_universe
+from hedge_fund.pipeline.clock import BarClock, Clock, DailyClock
 from hedge_fund.pipeline.models import CycleRecord
 from hedge_fund.pipeline.session import (
     advance,
@@ -32,6 +38,8 @@ from hedge_fund.pipeline.session import (
     next_state,
     SessionRecord,
 )
+
+BACKTEST_FLOOR_SECONDS = 60  # the finest bar history has: sub-minute mandates replay at 1m
 
 
 class ReplaySchedule(BaseModel):
@@ -126,7 +134,8 @@ def backtest_fund(
             f"{spec.name}: no {spec.benchmark} bars in [{start}, {end}] — "
             "cannot build the trading grid"
         )
-    dates = list(closes)
+    days = list(closes)
+    dates, clock, cadence, periods_per_year = replay_grid(spec, days, data_client)
     n_cycles = sum(1 for day in rebalance_grid(dates, spec.rebalance) if day != dates[-1])
 
     broker = SimBroker(cash=spec.capital)
@@ -134,13 +143,14 @@ def backtest_fund(
     records: list[SessionRecord] = []
     nav: list[float] = []
     benchmark_nav: list[float] = []
-    base_close = closes[dates[0]]
+    base_close: float | None = None
     n_executed = 0
     for i, session in enumerate(dates):
-        record = advance(fund, state, session, broker, data_client, universe)
+        record = advance(fund, state, session, broker, data_client, universe, clock)
         state = next_state(state, record)
         records.append(record)
         nav.append(record.nav)
+        base_close = base_close or record.benchmark_close
         benchmark_nav.append(spec.capital * record.benchmark_close / base_close)
         if record.executed is not None:
             if on_cycle is not None:
@@ -153,12 +163,29 @@ def backtest_fund(
 
     cycles = [r.executed for r in records if r.executed is not None]
     return FundBacktestResult(
-        fund=spec.name, start=dates[0], end=dates[-1], rebalance=spec.rebalance,
+        fund=spec.name, start=dates[0], end=dates[-1], rebalance=cadence,
         benchmark=spec.benchmark, universe=universe, capital=spec.capital,
         dates=dates, nav=nav, benchmark_nav=benchmark_nav,
-        metrics=performance_metrics(spec.capital, dates, nav, benchmark_nav, cycles),
+        metrics=performance_metrics(spec.capital, dates, nav, benchmark_nav, cycles,
+                                    periods_per_year=periods_per_year),
         records=records,
     )
+
+
+def replay_grid(spec: FundSpec, days: list[str], data: DataClient) -> tuple[list[str], Clock, str, float]:
+    """The sessions a backtest steps through, the clock that marks them, the
+    cadence as the result will name it, and the sessions in a year (for
+    annualizing). Daily mandates: the benchmark's *days* themselves. Minute
+    mandates: every bar of the window on each of those days, at the
+    mandate's interval or one minute, whichever is coarser."""
+    if not spec.is_intraday:
+        return days, DailyClock(data), spec.rebalance, 252
+    seconds = max(BACKTEST_FLOOR_SECONDS, round(spec.interval_seconds / 60) * 60)
+    sessions = [bar for day in days for bar in bar_grid(day, seconds, spec.window)]
+    cadence = f"every {format_interval(seconds)} · {spec.window.label}"
+    if seconds != spec.interval_seconds:
+        cadence += f" (mandate: {spec.cadence_label}; backtested at the 1-minute bars history has)"
+    return sessions, BarClock(data, seconds, spec.window), cadence, bars_per_day(seconds, spec.window) * 252
 
 
 def rebalance_grid(days: list[str], cadence: str) -> list[str]:
@@ -183,18 +210,23 @@ def performance_metrics(
     nav: list[float],
     benchmark_nav: list[float],
     cycles: list[CycleRecord],
+    *,
+    periods_per_year: float = 252,
 ) -> FundBacktestMetrics:
-    """Closing-value performance over the full window, with daily-return Sharpe."""
+    """Closing-value performance over the full window. Sharpe is annualized
+    from per-session returns by *periods_per_year*: 252 for daily sessions,
+    bars-per-day × 252 for a minute fund. *dates* may be bar keys; only the
+    day matters here."""
     total = nav[-1] / capital - 1
 
-    calendar_days = (_date.fromisoformat(dates[-1]) - _date.fromisoformat(dates[0])).days
+    calendar_days = (_date.fromisoformat(dates[-1][:10]) - _date.fromisoformat(dates[0][:10])).days
     years = calendar_days / 365.25
     annualized = (1 + total) ** (1 / years) - 1 if years > 0 else 0.0
 
     curve = np.array(nav)
     returns = curve[1:] / curve[:-1] - 1
     if len(returns) > 1 and float(returns.std(ddof=1)) > 0:
-        sharpe = float(returns.mean() / returns.std(ddof=1)) * np.sqrt(252)
+        sharpe = float(returns.mean() / returns.std(ddof=1)) * np.sqrt(periods_per_year)
     else:
         sharpe = 0.0
 
