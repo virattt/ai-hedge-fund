@@ -91,8 +91,7 @@ the three modes ship today. The backtester is `advance` looped over history; a
 paper fund is `advance` called once per completed session, with its state replayed
 from an append-only, hash-chained ledger and its book reconciled against the paper
 broker first. Stepping a paper fund through the same sessions produces the same
-records as the backtest, byte for byte. Live is a broker away. An older per-model
-harness remains for single-model studies.)
+records as the backtest, byte for byte. Live is a broker away.)
 
 ### One session
 

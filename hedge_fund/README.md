@@ -125,8 +125,7 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | `brokers/` | `Broker` protocol + `SimBroker` (backtest) + `PaperBroker` (the same book, persisted to `broker.json`); live brokers planned | ◐ |
 | `pipeline/` | `advance` — one session of the fund, the same code path in every mode — over the two stages in `stages.py` (`assess_fund` → `DecisionRecord`, `execute_decision` → `CycleRecord`); `SessionRecord`, `FundState` | ✅ |
 | `paper/` | A deployed fund: `deploy`, the hash-chained `Ledger` (replay, halt/resume, events), `tick` | ✅ |
-| `backtesting/` | `backtest_fund` — `advance` looped over history — plus the per-model engine | ✅ |
-| `event_study/` | Market-model abnormal returns (CARs) | ✅ |
+| `backtesting/` | `backtest_fund` — `advance` looped over history | ✅ |
 | `validation/` | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO) | ⬜ |
 | `tui/` | The interactive app (Textual): backtest board, paper fund console, mandate builder | ✅ |
 
