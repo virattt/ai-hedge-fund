@@ -24,8 +24,15 @@ from hedge_fund.paper.deployed import (
     validate_fund_name,
 )
 from hedge_fund.paper.ledger import Ledger, LedgerError
-from hedge_fund.paper.runner import is_running, PID_FILE, run, serve, stop_runner
-from hedge_fund.paper.tick import MinuteFund, next_session, NothingDue, redo, tick
+from hedge_fund.paper.runner import (
+    is_running,
+    PID_FILE,
+    run,
+    serve,
+    spawn_runner,
+    stop_runner,
+)
+from hedge_fund.paper.tick import assessment_dates, MinuteFund, next_session, NothingDue, redo, tick
 
 __all__ = [
     "DeployedFund",
@@ -35,6 +42,7 @@ __all__ = [
     "MinuteFund",
     "NothingDue",
     "PID_FILE",
+    "assessment_dates",
     "deploy",
     "is_running",
     "list_deployed",
@@ -43,6 +51,7 @@ __all__ = [
     "redo",
     "run",
     "serve",
+    "spawn_runner",
     "stop_runner",
     "tick",
     "validate_fund_name",

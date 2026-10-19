@@ -152,6 +152,13 @@ def execute_decision(
     )
 
 
+def mark_lookback_start(as_of: str) -> str:
+    """The first date a mark for *as_of* may come from: a week back, enough
+    to cover weekends, holiday clusters and short halts without reaching into
+    stale history. The backtest warm fetches exactly this window."""
+    return (_date.fromisoformat(as_of) - timedelta(days=_MARK_LOOKBACK_DAYS)).isoformat()
+
+
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
@@ -162,7 +169,7 @@ def _mark_prices(
     data_client: DataClient,
 ) -> tuple[dict[str, float], list[TickerSkip]]:
     """Analytical lookback marks; names without data are excluded from assessment."""
-    start = (_date.fromisoformat(as_of) - timedelta(days=_MARK_LOOKBACK_DAYS)).isoformat()
+    start = mark_lookback_start(as_of)
     marks: dict[str, float] = {}
     skipped: list[TickerSkip] = []
 

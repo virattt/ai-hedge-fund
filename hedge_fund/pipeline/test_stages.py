@@ -10,7 +10,7 @@ from hedge_fund.data.models import Price
 from hedge_fund.fund.spec import Fund, FundSpec
 from hedge_fund.models import Signal
 from hedge_fund.pipeline.models import CycleRecord
-from hedge_fund.pipeline.stages import assess_fund, execute_decision
+from hedge_fund.pipeline.stages import assess_fund, execute_decision, mark_lookback_start
 
 
 def _cycle(fund, as_of, broker, data, universe):
@@ -446,3 +446,7 @@ def test_strategy_gross_violation_is_rejected_even_when_fund_risk_clips_it(monke
     with pytest.raises(ValueError, match="team.*strategy gross target"):
         _cycle(fund, "2024-06-03", broker, FakeDataClient({"A": 100, "B": 100}), ["A", "B"])
     broker.place_order.assert_not_called()
+
+
+def test_mark_lookback_start_is_a_week_before():
+    assert mark_lookback_start("2025-01-15") == "2025-01-08"

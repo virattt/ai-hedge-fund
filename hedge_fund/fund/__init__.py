@@ -16,7 +16,7 @@ from hedge_fund.fund.spec import (
     StrategySpec,
     TradingWindow,
 )
-from hedge_fund.fund.storage import discover_funds, SavedFund
+from hedge_fund.fund.storage import discover_funds, save_spec, SavedFund
 
 __all__ = [
     "BlendPolicy",
@@ -35,4 +35,5 @@ __all__ = [
     "load_spec",
     "load_strategy",
     "normalize_universe",
+    "save_spec",
 ]

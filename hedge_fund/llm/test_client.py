@@ -243,7 +243,7 @@ def test_cli_jev_cycle_and_saved_replay(tmp_path, monkeypatch, http, capsys):
     and never touches the provider again."""
     import sys
     from datetime import date, timedelta
-    from hedge_fund import run
+    from hedge_fund import paths, run
     from hedge_fund.backtesting import FundBacktestResult
     from hedge_fund.data.models import Price
     from hedge_fund.features import breakpoints
@@ -278,7 +278,7 @@ def test_cli_jev_cycle_and_saved_replay(tmp_path, monkeypatch, http, capsys):
     monkeypatch.setenv("TYPESAFE_API_KEY", API_KEY)
     monkeypatch.setenv("HEDGE_FUND_LLM_MODEL", "claude-opus-5")
     monkeypatch.setattr(run, "ensure_mandates_dir", lambda: tmp_path)
-    monkeypatch.setattr(run, "RESEARCH_DIR", tmp_path / "research")
+    monkeypatch.setattr(paths, "RESEARCH_DIR", tmp_path / "research")
     monkeypatch.setattr(run, "FDClient", lambda: FinancialFixtures(metrics=_history()))
     monkeypatch.setattr(run, "CachedDataClient", lambda raw: raw)
     monkeypatch.setattr(llm_agent, "PromptCache", lambda: PromptCache(tmp_path / "llm"))

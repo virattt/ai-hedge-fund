@@ -16,6 +16,7 @@ from hedge_fund.fund import (
     load_spec,
     load_strategy,
     normalize_universe,
+    save_spec,
     StrategySpec,
 )
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, get_investment_approach
@@ -297,3 +298,13 @@ def test_blind_reaches_llm_agents_only(monkeypatch, blind):
     expected = {"blind": True} if blind else {}
     assert seen["buffett"] == expected
     assert seen["druckenmiller"] == expected
+
+
+def test_save_spec_round_trips_and_never_overwrites(tmp_path):
+    spec = FundSpec(**MINIMAL)
+    path = save_spec(spec, tmp_path / "mandates")
+    assert path == tmp_path / "mandates" / "test-fund.yaml"
+    assert load_spec(path) == spec
+    with pytest.raises(FileExistsError):
+        save_spec(spec, tmp_path / "mandates")
+    assert load_spec(path) == spec

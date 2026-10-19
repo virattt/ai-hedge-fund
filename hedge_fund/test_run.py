@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 import yaml
 
-from hedge_fund import run
+from hedge_fund import paths, run
 from hedge_fund.data import sessions
 from hedge_fund.fund import custom_strategy, FundSpec
 
@@ -41,7 +41,7 @@ def offline(tmp_path, monkeypatch):
     monkeypatch.setattr(run, "FDClient", OfflineClient)
     monkeypatch.setattr(run, "CachedDataClient", lambda client, **kwargs: client)
     monkeypatch.setattr(run, "PAPER_DIR", tmp_path / "paper")
-    monkeypatch.setattr(run, "RESEARCH_DIR", tmp_path / "research")
+    monkeypatch.setattr(paths, "RESEARCH_DIR", tmp_path / "research")
 
     def set_today(day):
         y, m, d = map(int, day.split("-"))

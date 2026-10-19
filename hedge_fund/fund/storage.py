@@ -1,9 +1,11 @@
-"""Read-only discovery of saved fund configurations."""
+"""Saved fund configurations on disk: find them, and write a new one."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+
+import yaml
 
 from hedge_fund.fund.spec import FundSpec, load_spec
 
@@ -30,3 +32,17 @@ def discover_funds(directory: str | Path) -> list[SavedFund]:
         except ValueError as exc:
             entries.append(SavedFund(path, error=str(exc)))
     return entries
+
+
+def save_spec(spec: FundSpec, directory: str | Path) -> Path:
+    """Write *spec* as <directory>/<name>.yaml and return the path.
+
+    Never overwrites: raises FileExistsError when a mandate already holds the
+    name, so two writers racing for it cannot silently lose one.
+    """
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{spec.name}.yaml"
+    with path.open("x") as output:
+        output.write(yaml.safe_dump(spec.model_dump(), sort_keys=False))
+    return path

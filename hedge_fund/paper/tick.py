@@ -24,12 +24,12 @@ from typing import Callable
 from hedge_fund.brokers.paper import PaperBroker
 from hedge_fund.data.bars import previous_bar, session_date
 from hedge_fund.data.protocol import DataClient
-from hedge_fund.data.sessions import completed_through, session_closes
+from hedge_fund.data.sessions import completed_through, previous_day, session_closes
 from hedge_fund.fund import Fund, FundSpec, TradingWindow
 from hedge_fund.paper.deployed import BROKER_FILE, load_deployed
 from hedge_fund.paper.ledger import Ledger
 from hedge_fund.pipeline.clock import Clock, Marked
-from hedge_fund.pipeline.session import advance, FundHalted, SessionRecord
+from hedge_fund.pipeline.session import advance, FundHalted, FundState, is_rebalance_session, SessionRecord
 
 # A fresh fund starts at the most recent completed session; this is how far
 # back to look for one (covers a long weekend plus a holiday cluster).
@@ -95,6 +95,21 @@ def next_session(data_client: DataClient, benchmark: str, last_session: str | No
     start = (_date.fromisoformat(last_session) + timedelta(days=1)).isoformat()
     closes = session_closes(data_client, benchmark, start, end)
     return min(closes) if closes else None
+
+
+def assessment_dates(state: FundState, session: str, spec: FundSpec) -> list[str]:
+    """The dates the analysts are asked about when *session* is run from
+    *state*: the session before it, to refresh a pending decision made
+    earlier than that (`execute_decision` sizes from the refreshed views),
+    and *session* itself when it opens a rebalance period (`advance` then
+    makes a new decision). Daily cadences only: a minute fund's bars are
+    advanced by the runner, not by a tick."""
+    dates: list[str] = []
+    if state.pending is not None and previous_day(session) != state.pending.as_of:
+        dates.append(previous_day(session))
+    if is_rebalance_session(session, state.last_session, spec.rebalance):
+        dates.append(session)
+    return dates
 
 
 def tick(

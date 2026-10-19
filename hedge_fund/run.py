@@ -49,12 +49,12 @@ import argparse
 import os
 import sys
 from datetime import date as _date
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 from rich.console import Console
 
-from hedge_fund.backtesting import backtest_fund
+from hedge_fund.backtesting import backtest_fund, save_result
 from hedge_fund.data import CachedDataClient, FDClient
 from hedge_fund.data.bars import is_intraday
 from hedge_fund.data.sessions import completed_through
@@ -74,10 +74,10 @@ from hedge_fund.paper import (
     tick,
     validate_fund_name,
 )
-from hedge_fund.paths import ensure_mandates_dir, PAPER_DIR, RESEARCH_DIR
+from hedge_fund.paths import ensure_mandates_dir, PAPER_DIR
 from hedge_fund.pipeline import FundHalted, SessionRecord
 from hedge_fund.tui.keys import apply_credentials
-from hedge_fund.tui.shared import _BACKTEST_WEEKS
+from hedge_fund.tui.shared import BACKTEST_WEEKS
 
 
 def main() -> None:
@@ -135,7 +135,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     backtest.add_argument("mandate", help="path to a mandate YAML, e.g. ~/.hedge-fund/mandates/example.yaml")
     backtest.add_argument("--universe", required=True, help=_UNIVERSE_HELP)
-    backtest.add_argument("--start", help=f"first session YYYY-MM-DD (default: {_BACKTEST_WEEKS} weeks before --end)")
+    backtest.add_argument("--start", help=f"first session YYYY-MM-DD (default: {BACKTEST_WEEKS} weeks before --end)")
     backtest.add_argument("--end", help="last session YYYY-MM-DD (default: the latest completed session)")
     backtest.add_argument("--out", help="also write the result JSON to this file")
 
@@ -205,7 +205,7 @@ def _backtest(args, parser: argparse.ArgumentParser, console: Console) -> None:
     except ValueError as exc:
         parser.error(str(exc))
     end = args.end or completed_through()
-    start = args.start or (_date.fromisoformat(end) - timedelta(weeks=_BACKTEST_WEEKS)).isoformat()
+    start = args.start or (_date.fromisoformat(end) - timedelta(weeks=BACKTEST_WEEKS)).isoformat()
     # A backtest blinds the investor agents' prompts (no ticker, industry or
     # calendar dates): the LLM may have been trained on what those companies
     # did over the window, and that memory would otherwise score as skill.
@@ -223,10 +223,7 @@ def _backtest(args, parser: argparse.ArgumentParser, console: Console) -> None:
 
     payload = result.model_dump_json(indent=2)
     print(payload)
-    RESEARCH_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    saved = RESEARCH_DIR / f"{spec.name}-{result.start}-{result.end}-{stamp}.json"
-    saved.write_text(payload)
+    saved = save_result(result)
     if args.out:
         Path(args.out).write_text(payload)
     m = result.metrics

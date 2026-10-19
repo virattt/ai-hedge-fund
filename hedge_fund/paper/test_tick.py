@@ -12,6 +12,7 @@ from hedge_fund.brokers.paper import PaperBroker
 from hedge_fund.data import sessions
 from hedge_fund.fund import Fund, FundSpec
 from hedge_fund.paper import (
+    assessment_dates,
     deploy,
     Ledger,
     list_deployed,
@@ -22,6 +23,7 @@ from hedge_fund.paper import (
     tick,
     validate_fund_name,
 )
+from hedge_fund.pipeline import DecisionRecord, FundState
 from hedge_fund.pipeline.session import FundHalted
 
 
@@ -239,3 +241,17 @@ def test_broker_drift_between_ticks_is_caught_and_halts(tmp_path, clock, SPEC):
         _tick(directory)
     assert "BookMismatch" in Ledger(directory).halted()
     assert PaperBroker(directory / "broker.json").positions() == {}  # nothing traded
+
+
+def test_assessment_dates_name_the_refresh_and_the_new_decision(SPEC):
+    """A weekly fund. A Friday decision run at Tuesday's close is refreshed on
+    Monday and followed by the week's new decision; a decision made at the
+    previous close needs no refresh and mid-week no new decision; a fresh
+    fund only decides."""
+    friday = DecisionRecord.model_construct(as_of="2025-01-17")
+    state = FundState(cash=100_000, last_session="2025-01-17", pending=friday)
+    assert assessment_dates(state, "2025-01-21", SPEC) == ["2025-01-20", "2025-01-21"]
+    monday = DecisionRecord.model_construct(as_of="2025-01-20")
+    state = FundState(cash=100_000, last_session="2025-01-20", pending=monday)
+    assert assessment_dates(state, "2025-01-21", SPEC) == []
+    assert assessment_dates(FundState(cash=100_000), "2025-01-21", SPEC) == ["2025-01-21"]

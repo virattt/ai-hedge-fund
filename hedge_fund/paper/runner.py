@@ -27,6 +27,8 @@ from __future__ import annotations
 
 import os
 import signal
+import subprocess
+import sys
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -197,6 +199,23 @@ def stop_runner(directory: str | Path) -> bool:
         return False
     os.kill(pid, signal.SIGTERM)
     return True
+
+
+_RUNNER_LOG = "runner.log"  # where a runner started from the app writes its console
+
+
+def spawn_runner(directory: Path) -> int:
+    """Start `aihf paper run <name>` as its own session so it survives the
+    app closing; its console goes to runner.log in the fund directory. The
+    runner writes runner.pid itself once it is up. Returns the child's pid."""
+    log = (directory / _RUNNER_LOG).open("a")
+    with log:
+        child = subprocess.Popen(
+            [sys.executable, "-m", "hedge_fund.run", "paper", "run", directory.name],
+            stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+            start_new_session=True, cwd=str(directory),
+        )
+    return child.pid
 
 
 def _read_pid(directory: str | Path) -> int | None:
