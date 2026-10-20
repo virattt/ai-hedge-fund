@@ -141,18 +141,22 @@ def _clean_api_key(value: str | None) -> str:
     return key
 
 
+def _check_payload(payload: Any) -> Any:
+    if not isinstance(payload, (dict, list)):
+        raise FXMacroDataClientError("FXMacroData returned an invalid response")
+    if isinstance(payload, dict) and ("detail" in payload or "error" in payload):
+        raise FXMacroDataClientError("FXMacroData returned an error response")
+    return payload
+
+
 def _json_payload(response: httpx.Response, label: str, path: str) -> Any:
     try:
         payload = response.json()
     except ValueError as exc:
         raise FXMacroDataClientError(
             f"{label} failed: response was not JSON", path=path
-        ) from exc
-    if isinstance(payload, dict) and "detail" in payload and "data" not in payload:
-        raise FXMacroDataClientError(
-            f"{label} failed: {payload['detail']}", path=path
-        )
-    return payload
+        ) from None
+    return _check_payload(payload)
 
 
 def _dataset_name(dataset: str) -> str:
@@ -184,14 +188,13 @@ def _format_path(path_template: str, kwargs: dict[str, Any]) -> str:
     except KeyError as exc:
         raise ValueError(
             f"missing required FXMacroData parameter: {exc.args[0]}"
-        ) from exc
+        ) from None
 
 
 def _rows(payload: Any) -> list[dict[str, Any]]:
+    payload = _check_payload(payload)
     if isinstance(payload, list):
         return payload
-    if not isinstance(payload, dict):
-        return []
     data = payload.get("data")
     if isinstance(data, list):
         return data
@@ -251,11 +254,11 @@ class FXMacroDataClient:
                 f"GET {path} failed: HTTP {exc.response.status_code}",
                 status_code=exc.response.status_code,
                 path=path,
-            ) from exc
+            ) from None
         except httpx.HTTPError as exc:
             raise FXMacroDataClientError(
-                f"GET {path} failed: {exc}", path=path
-            ) from exc
+                f"GET {path} failed: transport error", path=path
+            ) from None
         return _json_payload(response, f"GET {path}", path)
 
     def rows(self, payload: Any) -> list[dict[str, Any]]:
@@ -286,7 +289,9 @@ class FXMacroDataClient:
                 dataset, limit=page_size, offset=offset, **kwargs
             )
             page = payload.get("data") if isinstance(payload, dict) else payload
-            if not isinstance(page, list) or not page:
+            if not isinstance(page, list):
+                raise FXMacroDataClientError("FXMacroData returned an invalid paginated response")
+            if not page:
                 break
             rows.extend(page)
             if limit is not None and len(rows) >= limit:
@@ -314,11 +319,11 @@ class FXMacroDataClient:
                 f"POST graphql failed: HTTP {exc.response.status_code}",
                 status_code=exc.response.status_code,
                 path="graphql",
-            ) from exc
+            ) from None
         except httpx.HTTPError as exc:
             raise FXMacroDataClientError(
-                f"POST graphql failed: {exc}", path="graphql"
-            ) from exc
+                "POST graphql failed: transport error", path="graphql"
+            ) from None
         return _json_payload(response, "POST graphql", "graphql")
 
     def data_catalogue(self, currency: str = "usd", **kwargs: Any) -> dict[str, Any]:
