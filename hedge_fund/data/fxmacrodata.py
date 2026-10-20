@@ -141,11 +141,11 @@ def _clean_api_key(value: str | None) -> str:
     return key
 
 
-def _check_payload(payload: Any) -> Any:
+def _check_payload(payload: Any, path: str | None = None) -> Any:
     if not isinstance(payload, (dict, list)):
-        raise FXMacroDataClientError("FXMacroData returned an invalid response")
+        raise FXMacroDataClientError("FXMacroData returned an invalid response", path=path)
     if isinstance(payload, dict) and ("detail" in payload or "error" in payload):
-        raise FXMacroDataClientError("FXMacroData returned an error response")
+        raise FXMacroDataClientError("FXMacroData returned an error response", path=path)
     return payload
 
 
@@ -156,7 +156,7 @@ def _json_payload(response: httpx.Response, label: str, path: str) -> Any:
         raise FXMacroDataClientError(
             f"{label} failed: response was not JSON", path=path
         ) from None
-    return _check_payload(payload)
+    return _check_payload(payload, path=path)
 
 
 def _dataset_name(dataset: str) -> str:

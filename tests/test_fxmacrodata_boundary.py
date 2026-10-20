@@ -185,6 +185,12 @@ class BoundaryTests(unittest.TestCase):
             with self.subTest(kind=str(list(payload))), self.assertRaises(Exception):
                 self.client.fetch_rows("forex", base="eur", quote="usd")
 
+    def test_error_response_preserves_request_path(self):
+        self.payload = {"detail": "fixture-private-value"}
+        with self.assertRaises(adapter.FXMacroDataClientError) as raised:
+            self.client.fetch_dataset("calendar", currency="usd")
+        self.assertEqual("calendar/usd", raised.exception.path)
+
 
 if __name__ == "__main__":
     unittest.main()
