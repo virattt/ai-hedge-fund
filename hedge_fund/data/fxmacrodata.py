@@ -152,7 +152,7 @@ def _check_payload(payload: Any) -> Any:
 def _json_payload(response: httpx.Response, label: str, path: str) -> Any:
     try:
         payload = response.json()
-    except ValueError as exc:
+    except ValueError:
         raise FXMacroDataClientError(
             f"{label} failed: response was not JSON", path=path
         ) from None
@@ -255,7 +255,7 @@ class FXMacroDataClient:
                 status_code=exc.response.status_code,
                 path=path,
             ) from None
-        except httpx.HTTPError as exc:
+        except httpx.HTTPError:
             raise FXMacroDataClientError(
                 f"GET {path} failed: transport error", path=path
             ) from None
@@ -320,7 +320,7 @@ class FXMacroDataClient:
                 status_code=exc.response.status_code,
                 path="graphql",
             ) from None
-        except httpx.HTTPError as exc:
+        except httpx.HTTPError:
             raise FXMacroDataClientError(
                 "POST graphql failed: transport error", path="graphql"
             ) from None
