@@ -79,6 +79,29 @@ poetry run pytest hedge_fund
 
 **Important**: Please keep your pull requests small and focused. This will make it easier to review and merge.
 
+## Data Providers (Free / Keyed)
+
+`hedge_fund/data/protocol.py` admits any object satisfying the DataClient
+shape (structural typing — no inheritance needed). Stock providers:
+
+- `FDClient` — Financial Datasets (paid, key)
+
+- `LuckymanProvider` — [Luckyman](https://mcp.luckyman.app): free, no auth,
+  60 req/min/IP. Covers daily OHLCV `/history`, snapshot `/quotes`,
+  Form-4-derived `get_insider_trades` (filing facts only — transaction
+  amounts require fetching the form body), and raw `get_xbrl` concept
+  series. No `/news`, `/earnings`, or pre-computed ratios upstream — those
+  methods return honest empties (`None` / `[]`) per the fail-loud protocol
+  rather than fabricating data.
+
+  ```python
+  from hedge_fund.data.luckyman import LuckymanProvider
+
+  with LuckymanProvider() as lm:
+      prices = lm.get_prices("AAPL", "2024-01-01", "2024-12-31")
+  ```
+
+
 ## Feature Requests
 
 If you have a feature request, please open an [issue](https://github.com/virattt/ai-hedge-fund/issues) and make sure it is tagged with `enhancement`.
