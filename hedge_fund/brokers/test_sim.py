@@ -57,3 +57,43 @@ def test_positions_returns_a_copy():
     broker.place_order(Order(ticker="AAPL", side="buy", quantity=5, price=100.0))
     broker.positions().clear()
     assert broker.positions()["AAPL"].shares == 5
+
+
+def test_slippage_moves_the_fill_against_the_order():
+    broker = SimBroker(cash=10_000.0, slippage_bps=10)  # 10 bps = 0.1%
+    buy = broker.place_order(Order(ticker="AAPL", side="buy", quantity=10, price=100.0))
+    assert buy.price == pytest.approx(100.1)
+    assert broker.cash() == pytest.approx(10_000.0 - 10 * 100.1)
+
+    sell = broker.place_order(Order(ticker="AAPL", side="sell", quantity=4, price=110.0))
+    assert sell.price == pytest.approx(109.89)
+    assert broker.cash() == pytest.approx(10_000.0 - 10 * 100.1 + 4 * 109.89)
+
+
+def test_commission_leaves_cash_but_not_the_price():
+    broker = SimBroker(cash=10_000.0, commission_bps=5)  # 5 bps of notional per fill
+    buy = broker.place_order(Order(ticker="AAPL", side="buy", quantity=10, price=100.0))
+    assert buy.price == pytest.approx(100.0)
+    assert broker.cash() == pytest.approx(10_000.0 - 1_000.0 - 0.5)
+
+    sell = broker.place_order(Order(ticker="AAPL", side="sell", quantity=10, price=100.0))
+    assert sell.price == pytest.approx(100.0)
+    # round trip on flat prices costs exactly two commissions, nothing else
+    assert broker.cash() == pytest.approx(10_000.0 - 1.0)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"commission_bps": -1},
+        {"slippage_bps": -1},
+        {"commission_bps": float("nan")},
+        {"slippage_bps": float("inf")},
+        {"slippage_bps": 10_000},
+    ],
+)
+def test_costs_that_could_poison_a_fill_raise(kwargs):
+    """A sell at >= 100% slippage prices the fill at or below zero, and
+    place_order only checks the reference price — so the guard lives here."""
+    with pytest.raises(ValueError):
+        SimBroker(cash=1_000.0, **kwargs)
