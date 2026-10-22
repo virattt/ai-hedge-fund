@@ -1,0 +1,17 @@
+# ARF AI Hedge Fund Mandate
+# Trades the US AI Infrastructure universe using the AI Relevance Factor.
+# Longs high-ROE AI compounders, shorts frothy valuation multiples.
+schema_version: 2
+name: arf-hedge-fund
+strategies:
+  - name: arf-thematic
+    blend: {mode: long_short}
+    weight: 1.0
+    models:
+      - name: arf
+risk:
+  max_position_pct: 0.20      # max 20% equity in any single stock
+  max_gross_exposure: 1.0     # 100% unlevered gross exposure
+capital: 100000
+rebalance: weekly
+benchmark: SPY

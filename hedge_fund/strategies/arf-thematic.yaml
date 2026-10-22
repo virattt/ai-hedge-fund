@@ -1,0 +1,12 @@
+# ARF Thematic — systematic AI Relevance Factor long/short pod.
+# Trades the 5-layer AI stack on valuation reality vs narrative hype:
+# longs high-exposure compounders with superior ROE (NVDA), shorts
+# frothy names with negative ROE and extreme P/S stretch (LITE).
+name: arf-thematic
+display_name: ARF Thematic
+models:
+  - name: arf
+blend:
+  mode: long_short
+  method: conviction_weighted
+  gross_target: 1.0
