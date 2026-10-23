@@ -8,6 +8,8 @@ Satisfies the DataClient protocol without requiring a paid Financial Datasets AP
 from __future__ import annotations
 
 import logging
+import os
+import time
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -28,37 +30,65 @@ from hedge_fund.data.models import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_ARF_DB_PATH = Path("/Users/sheng/Developer/ARF/data/arf.db")
+DEFAULT_ARF_DB_PATH = Path(os.getenv("ARF_DB_PATH", "data/arf.db"))
 
 
 class ARFDataClient:
-    """Zero-cost DataClient backed by ARF's DuckDB and cached market data."""
+    """Zero-cost DataClient backed by ARF's DuckDB and cached market data.
+
+    Set ``ARF_DB_PATH`` (or pass ``db_path``) to point at the ARF database. A
+    caller that already holds an open DuckDB connection — the ARF webapp keeps
+    one read-write for its lifetime — can pass it as ``connection``; DuckDB
+    refuses to open a second connection to the same file with a different
+    configuration, so sharing the connection is the only in-process option.
+    """
 
     def __init__(
         self,
         db_path: str | Path | None = None,
         cache_dir: str | Path | None = None,
+        connection: duckdb.DuckDBPyConnection | None = None,
     ) -> None:
         self.db_path = Path(db_path) if db_path is not None else DEFAULT_ARF_DB_PATH
         self.cache_dir = Path(cache_dir) if cache_dir is not None else Path.home() / ".hedge-fund" / "cache"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._connection = connection
+        self._owns_connection = False
+        self._price_cache: dict[str, pd.DataFrame] = {}
         self._yf_cache: dict[str, pd.DataFrame] = {}
 
     def __enter__(self) -> ARFDataClient:
         return self
 
     def __exit__(self, *args: Any) -> None:
-        pass
+        if self._owns_connection and self._connection is not None:
+            self._connection.close()
+        self._connection = None
+        self._owns_connection = False
+
+    def _con(self) -> duckdb.DuckDBPyConnection:
+        """The DuckDB connection, opened read-only once and reused."""
+        if self._connection is None:
+            if not self.db_path.exists():
+                raise FileNotFoundError(f"ARF database not found at {self.db_path}")
+            self._connection = duckdb.connect(str(self.db_path), read_only=True)
+            self._owns_connection = True
+        return self._connection
 
     def get_prices(
         self,
         ticker: str,
         start_date: str,
         end_date: str,
+        interval: str = "day",
+        interval_multiplier: int = 1,
         **kwargs: Any,
     ) -> list[Price]:
         """Fetch daily OHLCV bars between start_date and end_date."""
         ticker_clean = ticker.strip().upper()
+        if interval != "day":
+            # ARF stores daily bars only; a minute fund must use another client.
+            return []
 
         # 1. First attempt to read from ARF DuckDB daily_prices table
         prices_from_db = self._get_prices_from_db(ticker_clean, start_date, end_date)
@@ -127,39 +157,58 @@ class ARFDataClient:
     # Private storage helpers
     # ------------------------------------------------------------------
 
+    def _load_history(self, ticker: str) -> pd.DataFrame:
+        """All daily bars for *ticker*, loaded once and kept for this client.
+
+        A backtest asks for a rolling window on every session; re-querying the
+        full history per session turns a 36-name replay into thousands of
+        DuckDB round-trips. One query per ticker instead.
+        """
+        if ticker in self._price_cache:
+            return self._price_cache[ticker]
+        query = """
+            SELECT date, open, high, low, close, volume
+            FROM daily_prices
+            WHERE ticker = ?
+            ORDER BY date ASC
+        """
+        frame = self._con().execute(query, [ticker]).df()
+        self._price_cache[ticker] = frame
+        return frame
+
     def _get_prices_from_db(
         self, ticker: str, start_date: str, end_date: str
     ) -> list[Price]:
-        if not self.db_path.exists():
+        # Missing database / missing table is a genuine "no data" here only
+        # when the universe simply isn't in ARF; a connection failure must
+        # propagate (the DataClient contract forbids silent empty results).
+        frame = self._load_history(ticker)
+        if frame.empty:
             return []
-        try:
-            con = duckdb.connect(str(self.db_path), read_only=True)
-            query = """
-                SELECT date, open, high, low, close, volume 
-                FROM daily_prices 
-                WHERE ticker = ? AND date >= ? AND date <= ?
-                ORDER BY date ASC
-            """
-            rows = con.execute(query, [ticker, start_date, end_date]).fetchall()
-            con.close()
-            if not rows:
-                return []
 
-            return [
-                Price(
-                    time=f"{row[0].strftime('%Y-%m-%d')}T20:00:00Z",
-                    open=float(row[1] if row[1] is not None else row[4]),
-                    high=float(row[2] if row[2] is not None else row[4]),
-                    low=float(row[3] if row[3] is not None else row[4]),
-                    close=float(row[4]),
-                    volume=int(row[5] or 0),
-                )
-                for row in rows
-                if row[4] is not None and row[4] > 0
-            ]
-        except Exception as exc:
-            logger.warning("Error reading daily_prices for %s from %s: %s", ticker, self.db_path, exc)
+        start = pd.Timestamp(start_date)
+        end = pd.Timestamp(end_date)
+        dates = pd.to_datetime(frame["date"])
+        window = frame.loc[(dates >= start) & (dates <= end)]
+        if window.empty:
             return []
+
+        prices: list[Price] = []
+        for row in window.itertuples(index=False):
+            close = row.close
+            if close is None or pd.isna(close) or close <= 0:
+                continue
+            prices.append(
+                Price(
+                    time=f"{pd.Timestamp(row.date).strftime('%Y-%m-%d')}T20:00:00Z",
+                    open=float(row.open if pd.notna(row.open) else close),
+                    high=float(row.high if pd.notna(row.high) else close),
+                    low=float(row.low if pd.notna(row.low) else close),
+                    close=float(close),
+                    volume=int(row.volume or 0),
+                )
+            )
+        return prices
 
     def _get_prices_from_yfinance(
         self, ticker: str, start_date: str, end_date: str
@@ -173,23 +222,32 @@ class ARFDataClient:
         if ticker not in self._yf_cache:
             # Lookback buffer of 14 days before start to satisfy clock lookbacks
             lookback_start = (date.fromisoformat(start_date) - timedelta(days=14)).isoformat()
+            # yfinance's `end` is exclusive; ask for the day after so the
+            # requested end_date bar is included.
+            exclusive_end = (date.fromisoformat(end_date) + timedelta(days=1)).isoformat()
             cache_file = self.cache_dir / f"{ticker}_yf.parquet"
+            df = pd.DataFrame()
             if cache_file.exists():
                 try:
                     df = pd.read_parquet(cache_file)
-                    self._yf_cache[ticker] = df
                 except Exception:
                     df = pd.DataFrame()
-            else:
-                df = pd.DataFrame()
 
-            if df.empty or df.index.max().strftime("%Y-%m-%d") < end_date:
-                df = yf.download(ticker, start=lookback_start, end=end_date, progress=False)
+            cached_through = (
+                pd.Timestamp(df.index.max()).strftime("%Y-%m-%d")
+                if not df.empty and isinstance(df.index, pd.DatetimeIndex)
+                else ""
+            )
+            if df.empty or cached_through < end_date:
+                df = self._download_yfinance(yf, ticker, lookback_start, exclusive_end)
                 if isinstance(df.columns, pd.MultiIndex):
                     df.columns = df.columns.get_level_values(0)
                 if not df.empty:
-                    df.to_parquet(cache_file)
-                self._yf_cache[ticker] = df
+                    try:
+                        df.to_parquet(cache_file)
+                    except Exception as exc:  # cache is an optimisation, never fatal
+                        logger.warning("Could not cache %s prices: %s", ticker, exc)
+            self._yf_cache[ticker] = df
 
         df = self._yf_cache.get(ticker, pd.DataFrame())
         if df.empty:
@@ -205,11 +263,32 @@ class ARFDataClient:
             prices.append(
                 Price(
                     time=f"{d_str}T20:00:00Z",
-                    open=float(row.get("Open", close_val)),
-                    high=float(row.get("High", close_val)),
-                    low=float(row.get("Low", close_val)),
+                    open=float(self._value_or(row, "Open", close_val)),
+                    high=float(self._value_or(row, "High", close_val)),
+                    low=float(self._value_or(row, "Low", close_val)),
                     close=close_val,
-                    volume=int(row.get("Volume", 0)),
+                    volume=int(self._value_or(row, "Volume", 0) or 0),
                 )
             )
         return prices
+
+    @staticmethod
+    def _value_or(row: pd.Series, column: str, default: float) -> float:
+        value = row.get(column, default)
+        return default if value is None or pd.isna(value) else value
+
+    @staticmethod
+    def _download_yfinance(yf: Any, ticker: str, start: str, end: str) -> pd.DataFrame:
+        """Download with a small exponential backoff; raise if every try fails."""
+        last_error: Exception | None = None
+        for attempt in range(3):
+            try:
+                frame = yf.download(ticker, start=start, end=end, progress=False)
+                if not frame.empty:
+                    return frame
+                last_error = RuntimeError(f"yfinance returned no bars for {ticker}")
+            except Exception as exc:  # noqa: BLE001 — retried below, then raised
+                last_error = exc
+            if attempt < 2:
+                time.sleep(2**attempt)
+        raise RuntimeError(f"yfinance failed for {ticker}: {last_error}") from last_error

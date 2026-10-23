@@ -135,16 +135,73 @@ class TestARFPredict:
         assert sig.metadata.get("abstained") is True
 
 
-class TestARFRealDatabase:
-    def test_loads_from_real_arf_db(self):
-        """Test against real arf.db if it exists on disk."""
-        db_path = "/Users/sheng/Developer/ARF/data/arf.db"
-        model = ARFModel(db_path=db_path)
-        if model._df.empty:
-            pytest.skip("ARF database not found at expected path")
+class TestARFPointInTimeRevisions:
+    """A revision fetched after the backtest date must not be visible to it."""
 
-        sig = model.predict("NVDA", "2026-09-15", MockDataClient())
-        assert sig.model_name == "arf"
-        assert sig.ticker == "NVDA"
-        assert sig.value > 0.0
-        assert sig.components["e_score"] > 90.0
+    @pytest.fixture
+    def revision_db(self, tmp_path):
+        duckdb = pytest.importorskip("duckdb")
+        path = tmp_path / "arf.db"
+        con = duckdb.connect(str(path))
+        con.execute("""
+            CREATE TABLE snapshot_revisions (
+                ticker VARCHAR, as_of_date DATE, revision INTEGER, fetched_at TIMESTAMP,
+                leg VARCHAR, arf DOUBLE, decile INTEGER, froth_flag BOOLEAN,
+                e_score DOUBLE, v_score DOUBLE, implied_growth_gap DOUBLE,
+                roe DOUBLE, ps_ratio DOUBLE
+            )
+        """)
+        for revision, fetched, e_score in [
+            (1, "2026-06-01 22:00:00", 90.0),
+            # A correction recomputed four months later must not leak back
+            (2, "2026-10-01 22:00:00", 40.0),
+        ]:
+            con.execute(
+                "INSERT INTO snapshot_revisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                ["NVDA", "2026-06-01", revision, fetched, "US", 55.0, 5, False,
+                 e_score, 20.0, -0.85, 1.15, 18.0],
+            )
+        con.close()
+        return path
+
+    def test_uses_revision_visible_at_backtest_date(self, revision_db):
+        model = ARFModel(db_path=revision_db)
+        june = model.predict("NVDA", "2026-06-15", MockDataClient())
+        assert june.components["e_score"] == 90.0
+
+        october = model.predict("NVDA", "2026-10-15", MockDataClient())
+        assert october.components["e_score"] == 40.0
+
+    def test_falls_back_to_snapshots_view(self, tmp_path):
+        duckdb = pytest.importorskip("duckdb")
+        path = tmp_path / "legacy.db"
+        con = duckdb.connect(str(path))
+        con.execute("""
+            CREATE TABLE snapshots (
+                ticker VARCHAR, as_of_date DATE, leg VARCHAR, arf DOUBLE,
+                decile INTEGER, froth_flag BOOLEAN, e_score DOUBLE, v_score DOUBLE,
+                implied_growth_gap DOUBLE, roe DOUBLE, ps_ratio DOUBLE
+            )
+        """)
+        con.execute(
+            "INSERT INTO snapshots VALUES ('NVDA','2026-06-01','US',55,5,false,90,20,-0.85,1.15,18)"
+        )
+        con.close()
+
+        model = ARFModel(db_path=path)
+        sig = model.predict("NVDA", "2026-06-15", MockDataClient())
+        assert sig.components["e_score"] == 90.0
+
+
+class TestARFMissingFrothFlag:
+    def test_nan_froth_flag_is_not_a_short(self):
+        frame = pd.DataFrame([{
+            "ticker": "NVDA", "as_of_date": "2026-06-01", "leg": "US",
+            "arf": 55.0, "decile": 5, "froth_flag": float("nan"),
+            "e_score": 90.0, "v_score": 20.0, "implied_growth_gap": -0.8,
+            "roe": 1.1, "ps_ratio": 18.0,
+        }])
+        model = ARFModel(snapshots_df=frame)
+        sig = model.predict("NVDA", "2026-06-15", MockDataClient())
+        assert sig.value > 0
+        assert sig.components["froth_flag"] == 0.0

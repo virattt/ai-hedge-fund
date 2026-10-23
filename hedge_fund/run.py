@@ -207,10 +207,17 @@ def _fund_dir(name: str, parser: argparse.ArgumentParser) -> Path:
 # backtest
 # ---------------------------------------------------------------------------
 
-def _make_data_client(spec=None):
-    if not os.environ.get("FINANCIAL_DATASETS_API_KEY") or (spec and "arf" in spec.name.lower()):
+def _make_data_client(spec=None, *, live: bool = False):
+    """Pick the data source from the mandate, not from the environment.
+
+    Only ARF mandates can run off the local ARF DuckDB. Other mandates need
+    the financial-datasets API: swapping them onto ARFDataClient because the
+    key is absent would silently strip their fundamentals, news and facts.
+    """
+    if spec is not None and "arf" in spec.name.lower():
         return ARFDataClient()
-    return CachedDataClient(FDClient())
+    raw = FDClient()
+    return CachedDataClient(raw, live=True) if live else CachedDataClient(raw)
 
 
 def _backtest(args, parser: argparse.ArgumentParser, console: Console) -> None:
@@ -311,7 +318,7 @@ def _paper(args, parser: argparse.ArgumentParser, console: Console) -> None:
             detail = fields.get("reason") or (f"{fields.get('bars_skipped')} bars skipped" if "bars_skipped" in fields else "")
             console.print(f"[yellow]{kind}[/] {fields.get('from') or 'start'} → {fields.get('to')}  {detail}".rstrip())
 
-        with _make_data_client(spec) as fd:
+        with _make_data_client(spec, live=True) as fd:
             try:
                 serve(directory, fd,
                       on_record=lambda record: console.print(_tick_summary(deployed.name, record)),

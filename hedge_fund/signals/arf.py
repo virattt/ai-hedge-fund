@@ -8,6 +8,7 @@ Connects directly to ARF's DuckDB snapshots (data/arf.db).
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 import duckdb
@@ -19,8 +20,9 @@ from hedge_fund.signals.base import QuantModel
 
 logger = logging.getLogger(__name__)
 
-# Default location for the ARF DuckDB database
-DEFAULT_ARF_DB_PATH = Path("/Users/sheng/Developer/ARF/data/arf.db")
+# Default location for the ARF DuckDB database. Override with ARF_DB_PATH so
+# the model works outside one developer's machine and inside the webapp image.
+DEFAULT_ARF_DB_PATH = Path(os.getenv("ARF_DB_PATH", "data/arf.db"))
 
 
 class ARFModel(QuantModel):
@@ -76,10 +78,19 @@ class ARFModel(QuantModel):
         ticker_clean = ticker.strip().upper()
         as_of = pd.to_datetime(date)
 
-        # Strict point-in-time: only consider snapshots on or before `date`
-        matches = self._df[
-            (self._df["ticker"] == ticker_clean) & (self._df["as_of_date"] <= as_of)
-        ].sort_values("as_of_date", ascending=False)
+        # Strict point-in-time: only snapshots for a date on or before `date`,
+        # and — when the frame carries revision metadata — only the revision
+        # that had actually been fetched by then. Re-running a past as_of adds
+        # a revision rather than rewriting it, so reading the latest revision
+        # unconditionally leaks corrected data into historical backtests.
+        visible = self._df[self._df["as_of_date"] <= as_of]
+        if "fetched_at" in visible.columns:
+            fetched = pd.to_datetime(visible["fetched_at"], errors="coerce")
+            cutoff = as_of + pd.Timedelta(days=1)
+            visible = visible[fetched.isna() | (fetched <= cutoff)]
+        matches = visible[visible["ticker"] == ticker_clean]
+        sort_cols = ["as_of_date"] + (["revision"] if "revision" in matches.columns else [])
+        matches = matches.sort_values(sort_cols, ascending=False)
 
         if matches.empty:
             return self._abstain(
@@ -95,7 +106,7 @@ class ARFModel(QuantModel):
         decile = int(self._safe_float(row.get("decile"), 5))
         e_score = self._safe_float(row.get("e_score"), 50.0)
         v_score = self._safe_float(row.get("v_score"), 50.0)
-        froth_flag = bool(row.get("froth_flag", False))
+        froth_flag = self._safe_bool(row.get("froth_flag", False))
         roe = self._safe_float(row.get("roe"), 0.0)
         ps_ratio = self._safe_float(row.get("ps_ratio"), 0.0)
         growth_gap = row.get("implied_growth_gap")
@@ -168,30 +179,53 @@ class ARFModel(QuantModel):
         )
 
     @staticmethod
+    def _safe_bool(value: object, default: bool = False) -> bool:
+        """Parse a SQL/Pandas boolean without treating NaN as True."""
+        if value is None or value is pd.NA:
+            return default
+        try:
+            if pd.isna(value):
+                return default
+        except (TypeError, ValueError):
+            pass
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "t", "yes"}
+        return bool(value)
+
+    @staticmethod
     def _load_from_db(path: Path) -> pd.DataFrame:
-        """Load snapshots table from DuckDB with read_only=True."""
+        """Load the ARF snapshot history from DuckDB, read-only.
+
+        Reads ``snapshot_revisions`` when present so `predict` can filter to
+        the revision that existed at the backtest date; falls back to the
+        ``snapshots`` view for older databases.
+        """
         if not path.exists():
             logger.warning("ARF DuckDB file not found at %s", path)
             return pd.DataFrame()
+        cols = [
+            "ticker",
+            "as_of_date",
+            "leg",
+            "arf",
+            "decile",
+            "froth_flag",
+            "e_score",
+            "v_score",
+            "implied_growth_gap",
+            "roe",
+            "ps_ratio",
+        ]
         try:
             con = duckdb.connect(str(path), read_only=True)
-            cols = [
-                "ticker",
-                "as_of_date",
-                "leg",
-                "arf",
-                "decile",
-                "froth_flag",
-                "e_score",
-                "v_score",
-                "implied_growth_gap",
-                "roe",
-                "ps_ratio",
-            ]
-            query = f"SELECT {', '.join(cols)} FROM snapshots"
-            df = con.execute(query).df()
-            con.close()
-            return df
+            try:
+                query = f"SELECT {', '.join(cols)}, revision, fetched_at FROM snapshot_revisions"
+                return con.execute(query).df()
+            except duckdb.Error:
+                query = f"SELECT {', '.join(cols)} FROM snapshots"
+                return con.execute(query).df()
+            finally:
+                con.close()
         except Exception as exc:
             logger.error("Failed to load snapshots from %s: %s", path, exc)
             return pd.DataFrame()
