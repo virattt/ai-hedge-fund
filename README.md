@@ -21,6 +21,40 @@ This project is for **educational and research purposes only**.
 
 By using this software, you agree to use it solely for learning purposes.
 
+## How the investor agents work
+
+**Training.** The five investor agents are prompt-based personas, not custom-trained
+or fine-tuned models of those investors. Each defines a system prompt for the shared
+[`LLMAgent`](hedge_fund/signals/llm_agent.py), which calls the
+[selected provider model](hedge_fund/llm/client.py). The provider supplies the underlying
+pretrained model; this repository does not document its training corpus. The personas
+are stylized approximations of public investment philosophies, not the actual
+individuals or endorsements.
+
+**Inputs.** All five use the same point-in-time
+[`FundamentalsSnapshot`](hedge_fund/features/snapshot.py): financial metrics from
+Financial Datasets filed by the analysis date, including earnings, growth, margins,
+leverage, and valuation, plus derived summaries. These are inputs for analysis, not
+training data. Minute funds also add [intraday context](hedge_fund/features/intraday.py):
+price-move bands, earnings releases, and news headlines (headlines are withheld in
+blind backtests).
+
+**Intended focus.** The system prompts emphasize different analytical lenses, not
+proven areas of outperformance:
+
+| Agent (system prompt) | Focus |
+|-----------------------|-------|
+| [Warren Buffett](hedge_fund/signals/buffett.py) | Durable business quality, financial strength, and a fair price |
+| [Charlie Munger](hedge_fund/signals/munger.py) | Consistent quality, capital allocation, and avoiding failure risks |
+| [Benjamin Graham](hedge_fund/signals/graham.py) | Margin of safety, balance-sheet strength, and earnings stability |
+| [Peter Lynch](hedge_fund/signals/lynch.py) | Growth at a reasonable price, comparing earnings growth with valuation |
+| [Stanley Druckenmiller](hedge_fund/signals/druckenmiller.py) | Fundamental inflections in growth, margins, and earnings, rather than a full macro strategy |
+
+Agents return a directional signal, confidence, and thesis; deterministic portfolio
+and risk code handles position sizing and limits. The separate
+[PEAD model](hedge_fund/signals/pead.py) is rule-based, using earnings surprises
+without an LLM or a training step.
+
 ## How to Install
 
 ```bash
