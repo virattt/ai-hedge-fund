@@ -53,6 +53,7 @@ def keyed(monkeypatch):
         monkeypatch.setenv(env_var, "test-key-not-real")
     monkeypatch.delenv("HEDGE_FUND_LLM_MODEL", raising=False)
     monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
 
 
 @pytest.mark.parametrize("provider", sorted(SUPPORTED_PROVIDERS))
@@ -88,6 +89,24 @@ def test_unlisted_model_falls_back_to_anthropic(keyed):
     code change first."""
     llm = make_llm("claude-something-unreleased")
     assert llm.model == "claude-something-unreleased"
+    assert type(llm._chat).__name__ == "ChatAnthropic"
+
+
+@pytest.mark.parametrize("env_var", ["OPENAI_API_BASE", "OPENAI_BASE_URL"])
+def test_unlisted_model_routes_to_custom_openai_endpoint(env_var, keyed, monkeypatch):
+    """With a custom OpenAI base URL set, an unlisted id belongs to that
+    endpoint (Groq, Ollama, ...) rather than falling back to Anthropic (#711)."""
+    monkeypatch.setenv(env_var, "https://api.groq.com/openai/v1")
+    llm = make_llm("llama-3.3-70b-versatile")
+    assert type(llm._chat).__name__ == "ChatOpenAI"
+    assert llm._chat.openai_api_base == "https://api.groq.com/openai/v1"
+
+
+def test_custom_openai_endpoint_leaves_listed_models_alone(keyed, monkeypatch):
+    """The base URL only claims unlisted ids; a registry model keeps its provider."""
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.groq.com/openai/v1")
+    llm = make_llm(_BY_PROVIDER["Anthropic"])
+    assert type(llm._chat).__name__ == "ChatAnthropic"
 
 
 def test_kimi_accepts_moonshot_key(monkeypatch):
