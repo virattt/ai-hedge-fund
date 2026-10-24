@@ -16,6 +16,7 @@ from pydantic import (
     ValidationError,
 )
 
+from hedge_fund.brokers.costs import TradingCosts
 from hedge_fund.risk.limits import RiskLimits
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent, get_investment_approach
 from hedge_fund.signals.base import AlphaModel
@@ -149,6 +150,10 @@ class FundSpec(BaseModel):
     name: str
     strategies: list[StrategySpec] = Field(min_length=1)
     risk: RiskLimits
+    costs: TradingCosts = Field(
+        default_factory=TradingCosts,
+        description="what every fill costs: half-spread per side and commission per share",
+    )
     capital: float = Field(default=100_000.0, gt=0)
     rebalance: Cadence = Field(
         default="weekly",
@@ -202,11 +207,15 @@ class FundSpec(BaseModel):
     def _serialize(self, handler):
         """Daily/weekly/monthly mandates serialize exactly as they did before
         minute funds existed: `interval` and `window` mean nothing to them,
-        and every ledger record carries a serialized spec in its hash."""
+        and every ledger record carries a serialized spec in its hash. For
+        the same reason a mandate at the default costs serializes without a
+        `costs` block, as every mandate did before costs existed."""
         data = handler(self)
         if self.rebalance != "minute":
             data.pop("interval", None)
             data.pop("window", None)
+        if self.costs == TradingCosts():
+            data.pop("costs", None)
         return data
 
     @property

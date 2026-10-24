@@ -111,6 +111,21 @@ def test_benchmark_uppercased():
     assert FundSpec(**{**MINIMAL, "benchmark": "qqq"}).benchmark == "QQQ"
 
 
+def test_costs_default_to_a_real_cost_model_and_serialize_only_when_changed():
+    spec = FundSpec(**MINIMAL)
+    assert spec.costs.spread_bps == 5.0 and spec.costs.commission_per_share == 0.005
+    # A mandate at the default serializes exactly as it did before costs
+    # existed, so every recorded hash still verifies.
+    assert "costs" not in spec.model_dump()
+    explicit = FundSpec(**{**MINIMAL, "costs": {"spread_bps": 5, "commission_per_share": 0.005}})
+    assert explicit.model_dump_json() == spec.model_dump_json()
+    free = FundSpec(**{**MINIMAL, "costs": {"spread_bps": 0, "commission_per_share": 0}})
+    assert free.model_dump()["costs"] == {"spread_bps": 0.0, "commission_per_share": 0.0}
+    assert FundSpec.model_validate(free.model_dump()) == free
+    with pytest.raises(ValidationError):
+        FundSpec(**{**MINIMAL, "costs": {"spread_bps": -1}})
+
+
 def test_typo_key_rejected():
     with pytest.raises(ValidationError):
         FundSpec(**{**MINIMAL, "capitol": 1000})

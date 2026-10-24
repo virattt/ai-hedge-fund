@@ -28,6 +28,9 @@ strategies:
 risk:
   max_position_pct: 0.25      # master risk: no single name above 25% of equity
   max_gross_exposure: 1.0     # unlevered, across the netted book
+costs:                        # what every fill costs; these are the defaults
+  spread_bps: 5               # half the bid-ask spread, paid on every side
+  commission_per_share: 0.005 # dollars a share; zero on both means free fills
 capital: 100000
 rebalance: weekly             # daily | weekly | monthly — how often the fund trades
 benchmark: SPY                # measured against; also the backtest's trading-day grid

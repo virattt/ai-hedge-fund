@@ -83,6 +83,7 @@ from hedge_fund.paths import ensure_mandates_dir, PAPER_DIR
 from hedge_fund.pipeline import FundHalted, SessionRecord
 from hedge_fund.scorecard import score
 from hedge_fund.tui.keys import apply_credentials
+from hedge_fund.tui.report import cost_line
 from hedge_fund.tui.scorecard_view import analyst_table, strategy_table
 from hedge_fund.tui.shared import BACKTEST_WEEKS
 
@@ -241,6 +242,7 @@ def _backtest(args, parser: argparse.ArgumentParser, console: Console) -> None:
     console.print(
         f"[bold]{spec.name}[/] {result.start} → {result.end}  ·  "
         f"{len(result.dates)} sessions  ·  {m.n_cycles} rebalances  ·  {m.n_orders} orders  ·  "
+        f"{cost_line(m.trading_cost, m.traded_notional)}  ·  "
         f"return {m.total_return_pct:+.1%} vs {spec.benchmark} {m.benchmark_return_pct:+.1%}  ·  "
         f"sharpe {m.sharpe_ratio:.2f}  ·  max drawdown {m.max_drawdown_pct:.1%}"
     )
@@ -383,7 +385,8 @@ def _status_line(directory: Path) -> str:
 def _tick_summary(name: str, record: SessionRecord) -> str:
     parts = [f"[bold]{name}[/] · session {record.session} · NAV ${record.nav:,.2f}"]
     if record.executed is not None:
-        parts.append(f"executed {len(record.executed.orders)} orders from {record.executed.as_of}")
+        costs = f", costs ${record.executed.trading_cost:,.2f}" if record.executed.trading_cost else ""
+        parts.append(f"executed {len(record.executed.orders)} orders from {record.executed.as_of}{costs}")
     if record.decision is not None:
         n_signals = sum(len(sr.signals) for sr in record.decision.strategies)
         when = "bar" if is_intraday(record.session) else "close"

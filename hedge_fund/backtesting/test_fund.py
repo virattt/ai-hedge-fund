@@ -2,7 +2,7 @@
 
 import pytest
 
-from hedge_fund.backtesting.fund import backtest_fund, rebalance_grid
+from hedge_fund.backtesting.fund import backtest_fund, FundBacktestMetrics, rebalance_grid
 from hedge_fund.data.models import Price
 from hedge_fund.fund.spec import Fund, FundSpec
 from hedge_fund.models import Signal
@@ -58,6 +58,7 @@ def _spec(**overrides):
         name="test-fund",
         strategies=[{"name": "solo", "models": [{"name": "a"}], "blend": {"mode": "long_short"}}],
         risk={"max_position_pct": 1.0, "max_gross_exposure": 1.0},
+        costs={"spread_bps": 0, "commission_per_share": 0},  # exact arithmetic below
         capital=100_000.0,
         rebalance="weekly",
     )
@@ -155,6 +156,27 @@ def test_happy_path_hand_computed():
     assert result.records[1].positions == {"AAPL": 500}
     assert result.records[-1].nav == 95_000.0
     assert result.records[-1].decision is None  # Friday is not a rebalance session
+
+
+def test_metrics_report_what_the_fills_cost():
+    result = _run(spec=_spec(costs={"spread_bps": 5, "commission_per_share": 0.005}))
+    first = result.cycles[0]
+    assert first.fills[0].price == pytest.approx(200.10)
+    assert first.trading_cost == pytest.approx(52.50) and first.traded_notional == pytest.approx(100_050.0)
+    # Cycle 2 re-sizes 1.0 of equity (now 99,947.50) at 200: 499 shares, so
+    # one share is sold at 199.90 less $0.005 to pay for the first cycle.
+    second = result.cycles[1]
+    assert [(f.side, f.quantity, f.price) for f in second.fills] == [("sell", 1, pytest.approx(199.90))]
+    assert second.trading_cost == pytest.approx(0.105)
+    assert result.cycles[2].fills == []
+    m = result.metrics
+    assert m.trading_cost == pytest.approx(52.605, abs=0.01)
+    assert m.traded_notional == pytest.approx(100_249.90, abs=0.01)
+    # NAV is net of every cost: 147.395 cash + 499 × 190.
+    assert result.nav[-1] == pytest.approx(94_957.395)
+    # A result saved before costs existed reads back as free.
+    free = FundBacktestMetrics.model_validate({**m.model_dump(exclude={"trading_cost", "traded_notional"})})
+    assert free.trading_cost == 0.0 and free.traded_notional == 0.0
 
 
 def test_positions_carry_across_cycles_not_restart():

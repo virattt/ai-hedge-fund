@@ -7,9 +7,10 @@ from hedge_fund.tui.fixtures import render
 from hedge_fund.tui.scorecard_view import analyst_table, strategy_table
 
 
-def _card(analysts=(), strategies=(), fund_pnl=0.0) -> Scorecard:
+def _card(analysts=(), strategies=(), fund_pnl=0.0, trading_cost=0.0) -> Scorecard:
     return Scorecard(fund="alpha", first_session="2025-01-06", last_session="2025-03-03", horizon="weekly",
-                     analysts=list(analysts), strategies=list(strategies), fund_pnl=fund_pnl)
+                     analysts=list(analysts), strategies=list(strategies), fund_pnl=fund_pnl,
+                     trading_cost=trading_cost)
 
 
 def test_analyst_table_shows_rates_with_their_counts():
@@ -30,10 +31,10 @@ def test_strategy_table_reports_the_unattributed_gap():
     card = _card(strategies=[
         StrategyScore(name="fundamental-ls", n_periods=8, pnl=2450.0, return_pct=0.0245, win_rate=0.625,
                       share_of_pnl=1.2, max_drawdown_pct=0.013),
-    ], fund_pnl=2040.0)
+    ], fund_pnl=2040.0, trading_cost=300.0)
     text = render(strategy_table(card))
     assert "fundamental-ls" in text and "+2,450" in text and "+2.45%" in text and "62% of 8" in text
-    assert "fund P&L +2,040" in text and "unattributed -410" in text
+    assert "fund P&L +2,040" in text and "unattributed -410" in text and "trading costs -300" in text
 
 
 def test_empty_scorecard_says_why():

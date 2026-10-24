@@ -52,7 +52,8 @@ def clock(monkeypatch):
 def SPEC(registered_fakes):
     return FundSpec(schema_version=2, name="paper-fund",
                     strategies=[{"name": "solo", "models": [{"name": "a"}], "blend": {"mode": "long_short"}}],
-                    risk={"max_position_pct": 1, "max_gross_exposure": 1}, capital=100_000)
+                    risk={"max_position_pct": 1, "max_gross_exposure": 1}, capital=100_000,
+                    costs={"spread_bps": 0, "commission_per_share": 0})
 
 
 def build_fund(spec):

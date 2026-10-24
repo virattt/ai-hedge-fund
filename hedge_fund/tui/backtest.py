@@ -43,7 +43,7 @@ from hedge_fund.scorecard import score
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent
 from hedge_fund.tui.home import demand_run_keys, HomeScreen
 from hedge_fund.tui.palette import BRIGHT, CYAN, GREEN, MUTED, RED, TEXT
-from hedge_fund.tui.report import roster_table, tape_table
+from hedge_fund.tui.report import cost_line, roster_table, tape_table
 from hedge_fund.tui.scorecard_view import analyst_table, strategy_table
 from hedge_fund.tui.shared import (
     agent_names,
@@ -432,6 +432,7 @@ class BacktestScreen(Screen):
             (result.fund, f"bold {CYAN}"),
             (f"  {result.start} → {result.end} · {result.rebalance} "
              f"rebalance · {m.n_cycles} executed cycles · {m.n_orders} orders · "
+             f"{cost_line(m.trading_cost, m.traded_notional)} · "
              f"{m.annualized_return_pct:+.1%} annualized",
              MUTED),
         ))

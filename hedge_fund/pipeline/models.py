@@ -85,3 +85,31 @@ class CycleRecord(BaseModel):
     refreshed_assessment: DecisionRecord | None = None
     execution_as_of: str | None = None
     execution_policy: Literal["next_close", "next_bar"] | None = None
+
+    @property
+    def traded_notional(self) -> float:
+        """Dollars that changed hands at the fill prices, both sides added."""
+        return sum(f.quantity * f.price for f in self.fills)
+
+    @property
+    def slippage(self) -> float:
+        """What the fills cost against the reference marks: a buy filled above
+        its mark and a sell filled below both count as a positive cost."""
+        return sum(
+            (fill.price - order.price) * fill.quantity * (1 if fill.side == "buy" else -1)
+            for order, fill in zip(self.orders, self.fills)
+        )
+
+    @property
+    def commission(self) -> float:
+        """The cash the fills do not explain. Derived from the book, not from
+        the mandate's cost model, so a record filled free reports zero and a
+        live broker's real fees land here without a schema change."""
+        signed_notional = sum(
+            f.quantity * f.price * (1 if f.side == "buy" else -1) for f in self.fills
+        )
+        return self.cash_before - self.cash - signed_notional
+
+    @property
+    def trading_cost(self) -> float:
+        return self.slippage + self.commission

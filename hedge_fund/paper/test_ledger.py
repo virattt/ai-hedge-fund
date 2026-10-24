@@ -21,7 +21,8 @@ def registered_fakes(monkeypatch):
 def records():
     spec = FundSpec(schema_version=2, name="ledger-fund",
                     strategies=[{"name": "solo", "models": [{"name": "a"}], "blend": {"mode": "long_short"}}],
-                    risk={"max_position_pct": 1, "max_gross_exposure": 1}, capital=100_000)
+                    risk={"max_position_pct": 1, "max_gross_exposure": 1}, capital=100_000,
+                    costs={"spread_bps": 0, "commission_per_share": 0})
     fund = Fund(spec, models={"solo": [FakeAnalyst("a", {"AAPL": 1})]})
     return backtest_fund(fund, WEEKDAYS[0], WEEKDAYS[4], FakeDataClient(SERIES), ["AAPL"]).records
 

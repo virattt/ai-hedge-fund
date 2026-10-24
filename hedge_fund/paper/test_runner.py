@@ -32,7 +32,7 @@ def _spec(**overrides):
         "schema_version": 2, "name": "bars",
         "strategies": [{"name": "solo", "models": [{"name": "a"}], "blend": {"mode": "long_short"}}],
         "risk": {"max_position_pct": 1, "max_gross_exposure": 1}, "capital": 100_000,
-        "rebalance": "minute", "interval": 5, "window": {"start": "13:00", "end": "13:10"},
+        "costs": {"spread_bps": 0, "commission_per_share": 0}, "rebalance": "minute", "interval": 5, "window": {"start": "13:00", "end": "13:10"},
         **overrides,
     })
 

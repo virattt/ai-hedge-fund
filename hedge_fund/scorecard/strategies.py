@@ -56,11 +56,18 @@ def score_strategies(records: list[SessionRecord]) -> list[StrategyScore]:
 
 def fund_pnl(records: list[SessionRecord]) -> float:
     """Pre-fill equity at the last execution minus the first. Pre-fill at
-    both ends so a cost model, once one exists, lands in `unattributed`."""
+    both ends so the spread and commission land in `unattributed`."""
     executions = [r for r in records if r.executed is not None]
     if len(executions) < 2:
         return 0.0
     return executions[-1].executed.equity_before - executions[0].executed.equity_before
+
+
+def trading_cost(records: list[SessionRecord]) -> float:
+    """Spread and commission paid inside the `fund_pnl` window: every
+    execution but the last, whose fills come after its pre-fill equity."""
+    executions = [r for r in records if r.executed is not None]
+    return sum(r.executed.trading_cost for r in executions[:-1])
 
 
 # ---------------------------------------------------------------------------

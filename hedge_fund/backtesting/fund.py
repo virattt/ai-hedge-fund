@@ -79,6 +79,8 @@ class FundBacktestMetrics(BaseModel):
     excess_return_pct: float          # fund total minus benchmark total
     n_cycles: int                     # executed rebalances
     n_orders: int
+    traded_notional: float = 0.0      # dollars traded, both sides, at fill prices
+    trading_cost: float = 0.0         # spread plus commission paid; NAV is already net of it
 
 
 class FundBacktestResult(BaseModel):
@@ -133,7 +135,7 @@ def backtest_fund(
     dates, clock, cadence, periods_per_year = replay_grid(spec, days, data_client)
     n_cycles = sum(1 for day in rebalance_grid(dates, spec.rebalance) if day != dates[-1])
 
-    broker = SimBroker(cash=spec.capital)
+    broker = SimBroker(cash=spec.capital, costs=spec.costs)
     state = FundState.initial(spec.capital)
     records: list[SessionRecord] = []
     nav: list[float] = []
@@ -240,4 +242,6 @@ def performance_metrics(
         excess_return_pct=round(total - benchmark_return, 6),
         n_cycles=len(cycles),
         n_orders=sum(len(r.orders) for r in cycles),
+        traded_notional=round(sum(r.traded_notional for r in cycles), 2),
+        trading_cost=round(sum(r.trading_cost for r in cycles), 2),
     )

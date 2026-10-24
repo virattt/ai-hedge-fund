@@ -11,7 +11,7 @@ from __future__ import annotations
 from hedge_fund.pipeline.session import SessionRecord
 from hedge_fund.scorecard.analysts import score_analysts
 from hedge_fund.scorecard.models import AnalystScore, Scorecard, StrategyScore
-from hedge_fund.scorecard.strategies import fund_pnl, score_strategies
+from hedge_fund.scorecard.strategies import fund_pnl, score_strategies, trading_cost
 
 
 def score(records: list[SessionRecord]) -> Scorecard:
@@ -27,6 +27,7 @@ def score(records: list[SessionRecord]) -> Scorecard:
         analysts=score_analysts(records),
         strategies=score_strategies(records),
         fund_pnl=fund_pnl(records),
+        trading_cost=trading_cost(records),
     )
 
 

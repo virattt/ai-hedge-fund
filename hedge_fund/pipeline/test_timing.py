@@ -37,7 +37,8 @@ def make_fund(analyst=None):
     spec = FundSpec(schema_version=2, name="timing", capital=10_000,
                     strategies=[{"name": "macro", "models": [{"name": "druckenmiller"}],
                                  "blend": {"mode": "long_short"}}],
-                    risk={"max_position_pct": 1, "max_gross_exposure": 1})
+                    risk={"max_position_pct": 1, "max_gross_exposure": 1},
+                    costs={"spread_bps": 0, "commission_per_share": 0})
     return Fund(spec, models={"macro": [analyst]}), analyst
 
 

@@ -68,7 +68,7 @@ def deploy(
     (directory / FUND_FILE).write_text(
         yaml.safe_dump(deployed.model_dump(), sort_keys=False)
     )
-    PaperBroker.create(directory / BROKER_FILE, spec.capital)
+    PaperBroker.create(directory / BROKER_FILE, spec.capital, spec.costs)
     Ledger(directory).init()
     return directory
 

@@ -44,6 +44,7 @@ class Scorecard(BaseModel):
     analysts: list[AnalystScore]
     strategies: list[StrategyScore]
     fund_pnl: float                   # pre-fill equity, last execution minus first
+    trading_cost: float               # spread and commission paid inside that window
 
     @computed_field
     @property

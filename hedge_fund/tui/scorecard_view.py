@@ -75,8 +75,8 @@ def strategy_table(card: Scorecard) -> Table:
             Text(f"{s.max_drawdown_pct:.1%}", style=RED if s.max_drawdown_pct > 0 else MUTED),
             _NONE if s.share_of_pnl is None else Text(f"{s.share_of_pnl:+.0%}", style=TEXT),
         )
-    table.caption = (f"fund P&L {card.fund_pnl:+,.0f}  ·  unattributed {card.unattributed:+,.0f} "
-                     "(whole-share rounding, cash)")
+    table.caption = (f"fund P&L {card.fund_pnl:+,.0f}  ·  unattributed {card.unattributed:+,.0f}  ·  "
+                     f"of which trading costs {-card.trading_cost:+,.0f}")
     table.caption_style = MUTED
     table.caption_justify = "left"
     return table

@@ -7,6 +7,7 @@ from math import sqrt
 import numpy as np
 import pytest
 
+from hedge_fund.brokers.models import Fill, Order
 from hedge_fund.models import Signal
 from hedge_fund.pipeline.models import CycleRecord, DecisionRecord, StrategyRecord
 from hedge_fund.pipeline.session import SessionRecord
@@ -276,6 +277,23 @@ def test_no_executions_and_no_records():
     assert card.unattributed == 0.0
     with pytest.raises(ValueError):
         score([])
+
+
+def test_trading_cost_counts_every_execution_but_the_last():
+    """fund_pnl runs to the last execution's pre-fill equity, so that
+    execution's own spread and commission fall outside the window."""
+    def charged(record: SessionRecord) -> SessionRecord:
+        x = record.executed
+        order = Order(ticker="AAA", side="buy", quantity=10, price=100.0)
+        fill = Fill(ticker="AAA", side="buy", quantity=10, price=100.05)
+        costed = x.model_copy(update={"orders": [order], "fills": [fill],
+                                      "cash_before": x.cash + 10 * 100.05 + 0.05})
+        assert costed.slippage == pytest.approx(0.50) and costed.commission == pytest.approx(0.05)
+        return record.model_copy(update={"executed": costed})
+    records = [charged(r) if r.executed is not None else r for r in _attribution_ledger()]
+    card = score(records)
+    assert card.trading_cost == pytest.approx(0.55)   # E2 only; E3 is the last execution
+    assert card.unattributed == pytest.approx(-1.0)   # unchanged: equity_before is pre-fill
 
 
 def test_max_drawdown_of_a_sleeve():

@@ -232,7 +232,7 @@ def redo(
 
     before = ledger.replay(deployed.spec.capital, before=state.last_session)
     superseded = ledger.rewind()
-    PaperBroker.restore(directory / BROKER_FILE, before.cash, before.positions)
+    PaperBroker.restore(directory / BROKER_FILE, before.cash, before.positions, deployed.spec.costs)
     ledger.log_event("redo", session=superseded.session, superseded=superseded.hash)
     clock = None
     if deployed.spec.is_intraday:  # a bar's prints are gone; run it at the ones it kept
@@ -257,7 +257,7 @@ def _run(
     caches) across sessions instead of staffing a new one each time. A
     minute fund's closing bar also checkpoints the day, so tomorrow's
     replay starts from tonight."""
-    broker = PaperBroker(directory / BROKER_FILE)
+    broker = PaperBroker(directory / BROKER_FILE, deployed.spec.costs)
     fund = fund or (build_fund or Fund)(deployed.spec)
     try:
         record = advance(fund, state, session, broker, data_client, deployed.universe, clock)

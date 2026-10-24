@@ -34,6 +34,7 @@ through one session in backtest or paper mode, live later (see [VISION.md](./VIS
 | Fund object — persistent mandate, staff, capital, books | ✅ (mandates carry no tickers; a *deployed* paper fund fixes the universe and carries its book in `~/.hedge-fund/paper/<name>/`) |
 | Persistent ledger — positions, every decision + thesis, orders, fills, NAV history | ✅ (append-only `SessionRecord`s, hash-chained; replay verifies the chain and rebuilds state; the broker book is reconciled against it before every tick) |
 | Kill switch — halt/resume a paper fund; any failure inside a tick halts it | ✅ |
+| Transaction cost model — half-spread and commission charged on every fill, in backtest and paper; the mandate's `costs:` block | ✅ (market impact from daily volume, and cost-aware sizing, next) |
 | LLM provider layer — one client factory (`make_llm`) routed by the model registry: Anthropic · OpenAI · DeepSeek · Google · xAI · Kimi | ✅ (Ollama next — the free local path, and the last blocker v1 holds over v2) |
 | Point-in-time data correctness — as-of / filing-date queries, no lookahead | 🚧 |
 | Validation gate — CPCV, probability of backtest overfitting (PBO) | ⬜ |

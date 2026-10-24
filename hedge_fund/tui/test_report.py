@@ -2,9 +2,10 @@
 
 import pytest
 
+from hedge_fund.brokers.models import Fill, Order
 from hedge_fund.models import Signal
 from hedge_fund.tui import report
-from hedge_fund.tui.fixtures import make_cycle, make_signal, render
+from hedge_fund.tui.fixtures import make_cycle, make_session, make_signal, render
 
 
 @pytest.mark.parametrize("direction,strength", [("bullish", 3.2), ("bearish", 1.6), ("neutral", 4), ("bullish", 0), ("bearish", 0)])
@@ -82,3 +83,26 @@ def test_portfolio_report_explains_rounding_scaling_and_flat_strategies():
     assert "no eligible shorts to balance the longs" in text
     assert "Allocated capital remains unused" in text
     assert "flat — no positions" in text
+
+
+def test_orders_report_shows_the_fill_beside_the_mark_and_what_it_cost():
+    record = make_cycle(make_signal())
+    record.orders = [Order(ticker="TEST", side="buy", quantity=100, price=100.0)]
+    record.fills = [Fill(ticker="TEST", side="buy", quantity=100, price=100.05)]
+    record.cash_before, record.cash = 100_000, 100_000 - 100 * 100.05 - 0.50
+    text = render(report.session_detail(_session_with(record), "x:sec:orders"))
+    assert "Mark" in text and "Fill" in text
+    assert "$100.00" in text and "$100.05" in text
+    assert "slippage $5.00 · commission $0.50" in text
+    record.fills = [Fill(ticker="TEST", side="buy", quantity=100, price=100.0)]
+    record.cash = 100_000 - 100 * 100.0
+    assert "slippage" not in render(report.session_detail(_session_with(record), "x:sec:orders"))
+
+
+def test_cost_line_reads_as_bps_of_what_was_traded():
+    assert report.cost_line(312.0, 375_000.0) == "costs $312 · 8.3 bps of $375,000 traded"
+    assert report.cost_line(0.0, 0.0) == "no trades"
+
+
+def _session_with(record):
+    return make_session(record.as_of, executed=record)

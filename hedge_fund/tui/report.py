@@ -402,9 +402,10 @@ def session_overview(record: SessionRecord) -> Group:
     ]
     if record.executed is not None:
         x = record.executed
+        costs = f" · costs ${x.trading_cost:,.2f}" if x.trading_cost else ""
         parts.append(Text.assemble(
             ("EXECUTED  ", f"bold {GREEN}"),
-            (f"decision from {x.as_of} · {len(x.orders)} orders · {len(x.fills)} fills", MUTED)))
+            (f"decision from {x.as_of} · {len(x.orders)} orders · {len(x.fills)} fills{costs}", MUTED)))
         for fill in x.fills[:8]:
             tone = GREEN if fill.side == "buy" else RED
             parts.append(Text.assemble(
@@ -431,6 +432,15 @@ def session_overview(record: SessionRecord) -> Group:
         parts.append(Text(""))
     parts.append(Text("enter for the full report", style=MUTED))
     return Group(*parts)
+
+
+def cost_line(trading_cost: float, traded_notional: float) -> str:
+    """What the fills cost, as a fraction of what was traded: the number a
+    desk compares against its alpha. Shared by the backtest header and CLI."""
+    if traded_notional == 0:
+        return "no trades"
+    bps = trading_cost / traded_notional * 10_000
+    return f"costs ${trading_cost:,.0f} · {bps:.1f} bps of ${traded_notional:,.0f} traded"
 
 
 def tape_table(tape: list[tuple[str, Fill, int]]) -> Table:
@@ -598,15 +608,21 @@ def _orders_detail(record: CycleRecord) -> Group:
     table.add_column("Action", justify="center")
     table.add_column("Quantity", justify="right")
     table.add_column("Ticker", style=f"bold {CYAN}")
-    table.add_column("Price", justify="right")
-    for o in record.orders:
+    table.add_column("Mark", justify="right")
+    table.add_column("Fill", justify="right")
+    for o, fill in zip(record.orders, record.fills):
         tone = f"bold {GREEN}" if o.side == "buy" else f"bold {RED}"
         table.add_row(
             Text(o.side.upper(), style=tone),
             Text(f"{o.quantity:,}", style=tone),
             o.ticker,
             f"${o.price:,.2f}",
+            f"${fill.price:,.2f}",
         )
+    if record.slippage or record.commission:
+        table.caption = f"slippage ${record.slippage:,.2f} · commission ${record.commission:,.2f}"
+        table.caption_style = MUTED
+        table.caption_justify = "left"
     return Group(Text("ORDERS", style=f"bold {BRIGHT}"), Text(""), table)
 
 

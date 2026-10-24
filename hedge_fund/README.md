@@ -122,7 +122,7 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | `strategies/` | Strategy library (fundamental-ls, deep-value, inflections, earnings-drift) — add yours as a YAML | ✅ |
 | `portfolio/` | View blending → target weights (conviction-weighted, optional market-neutral) | ✅ |
 | `risk/` | Hard limits — per-position and gross-exposure clamps | ✅ |
-| `brokers/` | `Broker` protocol + `SimBroker` (backtest) + `PaperBroker` (the same book, persisted to `broker.json`); live brokers planned | ◐ |
+| `brokers/` | `Broker` protocol + `SimBroker` (backtest) + `PaperBroker` (the same book, persisted to `broker.json`) + `TradingCosts` (half-spread and commission on every fill); live brokers planned | ◐ |
 | `pipeline/` | `advance` — one session of the fund, the same code path in every mode — over the two stages in `stages.py` (`assess_fund` → `DecisionRecord`, `execute_decision` → `CycleRecord`); `SessionRecord`, `FundState` | ✅ |
 | `paper/` | A deployed fund: `deploy`, the hash-chained `Ledger` (replay, halt/resume, events), `tick` | ✅ |
 | `backtesting/` | `backtest_fund` — `advance` looped over history | ✅ |

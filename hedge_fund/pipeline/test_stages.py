@@ -84,6 +84,7 @@ def _spec(strategies=None, max_position_pct=0.25):
         name="test-fund",
         strategies=strategies,
         risk={"max_position_pct": max_position_pct, "max_gross_exposure": 1.0},
+        costs={"spread_bps": 0, "commission_per_share": 0},  # exact arithmetic below
         capital=100_000.0,
     )
 
@@ -293,6 +294,7 @@ def _rule_fund(mode, names=("buffett", "druckenmiller"), views=None, **risk):
             "name": "team", "models": [{"name": name} for name in names],
             "blend": {"mode": mode},
         }], risk={"max_position_pct": .25, "max_gross_exposure": 1, **risk},
+        costs={"spread_bps": 0, "commission_per_share": 0},
     )
     views = views or {name: {"A": .8, "B": -.6} for name in names}
     return Fund(spec, models={"team": [FakeAnalyst(name, views[name]) for name in names]})
