@@ -31,6 +31,7 @@ requests = "^2.32.0"
 rich = "^14.2.0"
 pydantic = "^2.4.2"
 scipy = "^1.11.0"
+hmmlearn = "^0.3.3"
 pyyaml = "^6.0.3"
 textual = "^8.2.8"
 
