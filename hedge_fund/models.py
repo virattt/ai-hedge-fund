@@ -21,7 +21,12 @@ class Signal(BaseModel):
     model_name: str = Field(description="which alpha model produced it, e.g. 'pead', 'buffett'")
     ticker: str
     date: str = Field(description="as-of date the view was formed (YYYY-MM-DD)")
-    value: float = Field(description="conviction from -1.0 (bearish) to +1.0 (bullish)")
+    value: float = Field(
+        ge=-1.0,
+        le=1.0,
+        allow_inf_nan=False,
+        description="conviction from -1.0 (bearish) to +1.0 (bullish)",
+    )
     reasoning: str | None = None  # human-readable rationale — central for LLM agents
     components: dict[str, float] = Field(default_factory=dict)  # quant decomposition
     metadata: dict[str, Any] = Field(default_factory=dict)
