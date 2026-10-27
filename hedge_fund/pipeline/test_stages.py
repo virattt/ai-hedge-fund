@@ -46,6 +46,7 @@ class FakeAnalyst:
     """Fixed conviction per ticker; counts predict calls."""
 
     investment_approach = "long_short"
+    horizon_days = 1
 
     def __init__(self, name, views=None, abstain=False, error=None):
         self._name = name
@@ -117,6 +118,8 @@ def test_full_cycle_record_is_consistent():
     assert record.equity_before == pytest.approx(100_000.0)
     assert len(record.strategies) == 2
     assert all(len(sr.signals) == 3 for sr in record.strategies)  # 3 tickers x 1 analyst
+    # The engine stamps each model's declared horizon on its views.
+    assert all(sig.horizon_days == 1 for sr in record.strategies for sig in sr.signals)
     # Weights respect the hard caps
     for w in record.final_weights.values():
         assert abs(w) <= 0.25 + 1e-12

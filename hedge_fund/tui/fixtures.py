@@ -24,7 +24,7 @@ def render(renderable):
 def make_signal(direction="bullish", strength=3.2, cached=False):
     payload, metadata = normalize_jev_response(_response(direction, bullish=strength, bearish=strength))
     sign = {"bullish": 1, "bearish": -1, "neutral": 0}[direction]
-    return Signal(model_name="buffett", ticker="TEST", date="2025-01-15", value=sign * payload["confidence"] / 100, reasoning=payload["reasoning"], metadata={"signal": direction, "confidence": payload["confidence"], "abstained": False, "cached": cached, "provider_metadata": {"jev": metadata}})
+    return Signal(model_name="buffett", ticker="TEST", date="2025-01-15", value=sign * payload["confidence"] / 100, reasoning=payload["reasoning"], horizon_days=252, metadata={"signal": direction, "confidence": payload["confidence"], "abstained": False, "cached": cached, "provider_metadata": {"jev": metadata}})
 
 
 def make_cycle(signal):

@@ -25,7 +25,8 @@ def test_mixed_description_identifies_short_analysts():
     description = strategy_description(make_spec().strategies[0])
     assert "Short ideas must be supported by Druckenmiller." in description
     assert "Long-only analysts contribute ownership views." in description
-    assert "Long-only" in builder.BuilderScreen._agent_prompt("buffett", ALPHA_MODEL_REGISTRY["buffett"]).plain
+    assert "Long-only · 1y view" in builder.BuilderScreen._agent_prompt("buffett", ALPHA_MODEL_REGISTRY["buffett"]).plain
+    assert "Long/short · 60d view  quant" in builder.BuilderScreen._agent_prompt("pead", ALPHA_MODEL_REGISTRY["pead"]).plain
 
 
 @pytest.mark.parametrize("names,mode", [

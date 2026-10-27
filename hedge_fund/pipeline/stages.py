@@ -64,7 +64,10 @@ def assess_fund(
         signals: list[Signal] = []
         for ticker in tradeable:
             for model in staff:
-                signals.append(model.predict(ticker, as_of, view))
+                # The model declares its horizon; the engine stamps it on the
+                # view, so no analyst has to remember to.
+                signals.append(model.predict(ticker, as_of, view).model_copy(
+                    update={"horizon_days": model.horizon_days}))
         blend = blend_signals(
             signals, strategy.model_weights, strategy.blend.gross_target,
             mode=strategy.blend.mode,

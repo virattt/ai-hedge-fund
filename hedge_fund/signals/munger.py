@@ -15,6 +15,7 @@ class MungerAgent(LLMAgent):
     """Reasons over fundamentals in Charlie Munger's voice."""
 
     investment_approach = "long_only"
+    horizon_days = 252  # same desk, same clock as Buffett
 
     @property
     def name(self) -> str:

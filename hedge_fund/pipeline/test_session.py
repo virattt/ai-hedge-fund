@@ -9,6 +9,7 @@ from hedge_fund.backtesting.test_fund import FakeAnalyst, FakeDataClient, SERIES
 from hedge_fund.brokers.models import Order
 from hedge_fund.brokers.sim import SimBroker
 from hedge_fund.fund import Fund, FundSpec
+from hedge_fund.models import Signal
 from hedge_fund.pipeline.session import (
     advance,
     BookMismatch,
@@ -114,6 +115,22 @@ def test_a_free_fill_derives_zero_cost():
     x = tuesday.executed
     assert x.fills[0].price == 200.0
     assert (x.traded_notional, x.slippage, x.commission, x.trading_cost) == (100_000.0, 0.0, 0.0, 0.0)
+
+
+def test_a_view_serializes_its_horizon_only_when_it_has_one():
+    """Every view sits inside a hash-chained record: one recorded before
+    horizons existed must still serialize byte-for-byte as it did then."""
+    bare = Signal(model_name="a", ticker="AAPL", date=WEEKDAYS[0], value=0.5)
+    assert "horizon_days" not in bare.model_dump() and "horizon_days" not in bare.model_dump_json()
+    assert Signal.model_validate_json(bare.model_dump_json()) == bare
+    dated = bare.model_copy(update={"horizon_days": 252})
+    assert dated.model_dump()["horizon_days"] == 252
+    assert Signal.model_validate_json(dated.model_dump_json()) == dated
+    with pytest.raises(ValueError):
+        Signal(model_name="a", ticker="AAPL", date=WEEKDAYS[0], value=0.5, horizon_days=0)
+    (monday,), _ = _step(_fund(), WEEKDAYS[:1])
+    assert all(sig.horizon_days == 1 for sr in monday.decision.strategies for sig in sr.signals)
+    assert monday.hash == monday.compute_hash()
 
 
 def test_next_state_carries_the_decision_and_the_chain():

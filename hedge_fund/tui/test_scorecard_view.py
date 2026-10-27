@@ -8,22 +8,25 @@ from hedge_fund.tui.scorecard_view import analyst_table, strategy_table
 
 
 def _card(analysts=(), strategies=(), fund_pnl=0.0, trading_cost=0.0) -> Scorecard:
-    return Scorecard(fund="alpha", first_session="2025-01-06", last_session="2025-03-03", horizon="weekly",
+    return Scorecard(fund="alpha", first_session="2025-01-06", last_session="2025-03-03",
                      analysts=list(analysts), strategies=list(strategies), fund_pnl=fund_pnl,
                      trading_cost=trading_cost)
 
 
 def test_analyst_table_shows_rates_with_their_counts():
     card = _card(analysts=[
-        AnalystScore(name="buffett", n_views=40, n_directional=32, n_abstained=3, hit_rate=0.5625,
-                     slugging=1.8, ic_mean=0.042, ic_std=0.11, ic_t_stat=1.2, n_dates=10),
-        AnalystScore(name="pead", n_views=4, n_directional=0, n_abstained=36, hit_rate=None,
-                     slugging=None, ic_mean=None, ic_std=None, ic_t_stat=None, n_dates=0),
+        AnalystScore(name="buffett", horizon_days=252, n_views=40, n_directional=32, n_abstained=3,
+                     n_pending=120, hit_rate=0.5625, slugging=1.8, ic_mean=0.042, ic_std=0.11,
+                     ic_t_stat=1.2, n_dates=10),
+        AnalystScore(name="pead", horizon_days=60, n_views=4, n_directional=0, n_abstained=36,
+                     n_pending=0, hit_rate=None, slugging=None, ic_mean=None, ic_std=None,
+                     ic_t_stat=None, n_dates=0),
     ])
     text = render(analyst_table(card))
-    assert "judged over one weekly period" in text
-    assert "Buffett" in text and "56% of 32" in text and "1.80×" in text and "+0.042" in text
-    assert "PEAD" in text and "36" in text
+    assert "each view judged at its own horizon" in text
+    assert "Buffett" in text and "1y" in text and "120" in text
+    assert "56% of 32" in text and "1.80×" in text and "+0.042" in text
+    assert "PEAD" in text and "60d" in text and "36" in text
     assert text.count("–") >= 4  # every missing PEAD number renders as a dash
 
 
@@ -41,4 +44,3 @@ def test_empty_scorecard_says_why():
     card = _card()
     assert "nothing to grade yet" in render(analyst_table(card))
     assert "nothing to attribute yet" in render(strategy_table(card))
-    assert "no decisions yet" in render(analyst_table(card.model_copy(update={"horizon": None})))

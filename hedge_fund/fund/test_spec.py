@@ -19,7 +19,7 @@ from hedge_fund.fund import (
     save_spec,
     StrategySpec,
 )
-from hedge_fund.signals import ALPHA_MODEL_REGISTRY, get_investment_approach
+from hedge_fund.signals import ALPHA_MODEL_REGISTRY, get_horizon_days, get_investment_approach
 
 MINIMAL = {
     "schema_version": 2,
@@ -224,6 +224,34 @@ def test_all_profiles_are_explicit(name):
 )
 def test_initial_analyst_approaches(name, expected):
     assert get_investment_approach(name) == expected
+
+
+@pytest.mark.parametrize("name", sorted(ALPHA_MODEL_REGISTRY))
+def test_all_horizons_are_explicit(name):
+    assert get_horizon_days(name) > 0
+
+
+def test_initial_analyst_horizons():
+    assert {name: get_horizon_days(name) for name in ALPHA_MODEL_REGISTRY} == {
+        "buffett": 252, "munger": 252, "graham": 252, "lynch": 252, "druckenmiller": 126, "pead": 60,
+    }
+
+
+@pytest.mark.parametrize("horizon", [None, 0, 1.5, "1y"])
+def test_missing_or_invalid_horizon_is_configuration_error(monkeypatch, horizon):
+    class NoHorizon:
+        investment_approach = "long_only"
+
+        def __init__(self):
+            raise AssertionError("must not instantiate")
+
+    if horizon is not None:
+        NoHorizon.horizon_days = horizon
+    monkeypatch.setitem(ALPHA_MODEL_REGISTRY, "nohorizon", NoHorizon)
+    with pytest.raises(ValueError, match="horizon_days"):
+        get_horizon_days("nohorizon")
+    with pytest.raises(ValueError, match="horizon_days"):
+        custom_strategy(["nohorizon"])
 
 
 @pytest.mark.parametrize("profile", [None, "dollar_neutral"])

@@ -20,7 +20,7 @@ from hedge_fund.llm import ThesisStream
 from hedge_fund.models import Signal
 from hedge_fund.pipeline import CycleRecord, DecisionRecord, SessionRecord
 from hedge_fund.tui.palette import BRIGHT, CYAN, GREEN, MUTED, RED, TEXT
-from hedge_fund.tui.shared import DISPLAY_NAMES, SHORT_NAMES
+from hedge_fund.tui.shared import DISPLAY_NAMES, horizon_label, SHORT_NAMES
 
 # One glyph and one colour per call, in one place: the live board knows only
 # the word the stream has decoded, the report has a whole Signal, and they must
@@ -292,6 +292,8 @@ def signal_detail(record: CycleRecord | DecisionRecord, si: int, sj: int) -> Gro
     header.append("  ·  ", style=MUTED)
     header.append(DISPLAY_NAMES.get(signal.model_name, signal.model_name),
                   style=f"bold {BRIGHT}")
+    if signal.horizon_days is not None:
+        header.append(f"  ·  {horizon_label(signal.horizon_days)} view", style=MUTED)
     facts = Text()
     facts.append(word, style=f"bold {tone}")
     if confidence is not None:

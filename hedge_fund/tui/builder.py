@@ -42,7 +42,7 @@ from hedge_fund.fund import (
 )
 from hedge_fund.fund.spec import EARLIEST_WINDOW, LATEST_WINDOW
 from hedge_fund.paper import deploy, validate_fund_name
-from hedge_fund.signals import ALPHA_MODEL_REGISTRY, get_investment_approach, LLMAgent
+from hedge_fund.signals import ALPHA_MODEL_REGISTRY, get_horizon_days, get_investment_approach, LLMAgent
 from hedge_fund.tui.backtest import BacktestScreen
 from hedge_fund.tui.funds import (
     ConfirmWipeScreen,
@@ -57,6 +57,7 @@ from hedge_fund.tui.shared import (
     DEFAULT_CAPITAL,
     DEFAULT_RISK,
     DISPLAY_NAMES,
+    horizon_label,
     MODE_LABELS,
     SHORT_NAMES,
     strategy_description,
@@ -612,7 +613,9 @@ class BuilderScreen(Screen):
     def _agent_prompt(key: str, cls: type) -> Text:
         name = DISPLAY_NAMES.get(key, key)
         tag = "" if issubclass(cls, LLMAgent) else "  quant"
-        return Text.assemble((f"{name:<24}", "bold"), (MODE_LABELS[get_investment_approach(key)] + tag, MUTED))
+        horizon = horizon_label(get_horizon_days(key))
+        return Text.assemble((f"{name:<24}", "bold"),
+                             (f"{MODE_LABELS[get_investment_approach(key)]} · {horizon} view{tag}", MUTED))
 
 
 def parse_interval(text: str) -> float:

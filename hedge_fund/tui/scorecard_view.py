@@ -13,18 +13,19 @@ from rich.text import Text
 
 from hedge_fund.scorecard import Scorecard
 from hedge_fund.tui.palette import BRIGHT, GREEN, MUTED, RED, TEXT
-from hedge_fund.tui.shared import SHORT_NAMES
+from hedge_fund.tui.shared import horizon_label, SHORT_NAMES
 
 _NONE = Text("–", style=MUTED)
 
 
 def analyst_table(card: Scorecard) -> Table:
     """Hit rate and slugging on benchmark-relative returns; IC as a per-date
-    series. Views are judged to the next decision: one cadence period."""
-    judged = f"judged over one {card.horizon} period" if card.horizon else "no decisions yet"
-    table = _table(f"ANALYSTS  ·  {judged}")
+    series. Each view is judged at the horizon its analyst declared."""
+    table = _table("ANALYSTS  ·  each view judged at its own horizon")
     table.add_column("analyst", style=f"bold {TEXT}")
+    table.add_column("horizon", justify="right")
     table.add_column("views", justify="right")
+    table.add_column("pending", justify="right")
     table.add_column("abstained", justify="right")
     table.add_column("hit rate", justify="right")
     table.add_column("slugging", justify="right")
@@ -32,14 +33,16 @@ def analyst_table(card: Scorecard) -> Table:
     table.add_column("IC t", justify="right")
     table.add_column("dates", justify="right")
     if not card.analysts:
-        table.caption = "nothing to grade yet: a view is scored once the next decision is made"
+        table.caption = "nothing to grade yet: a view is scored once its horizon arrives"
         table.caption_style = MUTED
         table.caption_justify = "left"
         return table
     for a in card.analysts:
         table.add_row(
             SHORT_NAMES.get(a.name, a.name),
+            horizon_label(a.horizon_days),
             str(a.n_views),
+            Text(str(a.n_pending), style=MUTED if a.n_pending == 0 else TEXT),
             Text(str(a.n_abstained), style=MUTED if a.n_abstained == 0 else TEXT),
             _rate(a.hit_rate, a.n_directional),
             _NONE if a.slugging is None else Text(f"{a.slugging:.2f}×", style=TEXT),

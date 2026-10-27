@@ -18,7 +18,7 @@ from pydantic import (
 
 from hedge_fund.brokers.costs import TradingCosts
 from hedge_fund.risk.limits import RiskLimits
-from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent, get_investment_approach
+from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent, get_horizon_days, get_investment_approach
 from hedge_fund.signals.base import AlphaModel
 
 PortfolioMode: TypeAlias = Literal["long_only", "long_short", "dollar_neutral"]
@@ -94,8 +94,9 @@ class ModelSpec(BaseModel):
 
     @field_validator("name")
     @classmethod
-    def _declared_approach(cls, name: str) -> str:
+    def _declared_profile(cls, name: str) -> str:
         get_investment_approach(name)
+        get_horizon_days(name)
         return name
 
 

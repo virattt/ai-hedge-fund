@@ -31,6 +31,7 @@ class FakeAnalyst:
     """Fixed conviction per ticker, on every date."""
 
     investment_approach = "long_short"
+    horizon_days = 1
 
     def __init__(self, name, views=None):
         self._name = name

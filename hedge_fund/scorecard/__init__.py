@@ -18,12 +18,10 @@ def score(records: list[SessionRecord]) -> Scorecard:
     """Grade *records*, in session order. Raises ValueError on an empty list."""
     if not records:
         raise ValueError("nothing to score: no sessions recorded")
-    first_decision = next((r.decision for r in records if r.decision is not None), None)
     return Scorecard(
         fund=records[0].fund,
         first_session=records[0].session,
         last_session=records[-1].session,
-        horizon=first_decision.spec.cadence_label if first_decision is not None else None,
         analysts=score_analysts(records),
         strategies=score_strategies(records),
         fund_pnl=fund_pnl(records),

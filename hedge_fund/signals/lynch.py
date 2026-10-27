@@ -15,6 +15,7 @@ class LynchAgent(LLMAgent):
     """Reasons over fundamentals in Peter Lynch's voice."""
 
     investment_approach = "long_only"
+    horizon_days = 252  # multi-year holds, reviewed each quarter
 
     @property
     def name(self) -> str:

@@ -38,6 +38,7 @@ class PEADModel(QuantModel):
     """
 
     investment_approach = "long_short"
+    horizon_days = 60  # the drift runs to about the next print (Bernard & Thomas)
 
     def __init__(
         self,

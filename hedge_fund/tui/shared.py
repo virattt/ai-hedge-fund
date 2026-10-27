@@ -53,6 +53,13 @@ SHORT_NAMES = {
 MODE_LABELS: dict[PortfolioMode, str] = {"long_only": "Long-only", "long_short": "Long/short", "dollar_neutral": "Dollar-neutral"}
 
 
+def horizon_label(days: int) -> str:
+    """`60d`, `1y`, `2y`: a horizon in trading days, as a desk says it."""
+    if days % 252 == 0:
+        return f"{days // 252}y"
+    return f"{days}d"
+
+
 # The LLM the investor agents reason with. Picked once, upfront; make_llm()
 # reads HEDGE_FUND_LLM_MODEL (hedge_fund/llm/client.py) and routes to the right provider, so
 # setting that env var steers every agent instance — the warm roster AND the

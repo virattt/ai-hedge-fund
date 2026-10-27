@@ -7,15 +7,17 @@ from pydantic import BaseModel, computed_field
 
 
 class AnalystScore(BaseModel):
-    """How one alpha model's views held up over the fund's own horizon.
+    """How one alpha model's views held up at the horizon it declared.
 
     Every rate carries its count so a hit rate from twelve calls reads as
     the noise it is. `None` means there was nothing to measure."""
 
     name: str
-    n_views: int                      # non-abstained views with a forward return
+    horizon_days: int                 # trading days a view is graded over
+    n_views: int                      # non-abstained views graded at the horizon
     n_directional: int                # views with a nonzero conviction
     n_abstained: int
+    n_pending: int                    # views whose horizon the ledger has not reached
     hit_rate: float | None            # directional views whose sign matched the excess return
     slugging: float | None            # mean gain on hits / mean loss on misses
     ic_mean: float | None             # mean of the per-date rank correlations
@@ -40,7 +42,6 @@ class Scorecard(BaseModel):
     fund: str
     first_session: str
     last_session: str
-    horizon: str | None               # the fund's cadence: the period every view is judged over
     analysts: list[AnalystScore]
     strategies: list[StrategyScore]
     fund_pnl: float                   # pre-fill equity, last execution minus first

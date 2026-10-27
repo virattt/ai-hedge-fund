@@ -20,6 +20,10 @@ class AlphaModel(ABC):
     # Every concrete registered analyst declares its own approach. This is
     # permission metadata, independent of its signed opinion or LLM prompt.
     investment_approach: ClassVar[InvestmentApproach]
+    # Trading days over which a view is expected to play out. The scorecard
+    # grades the view there: a value investor's call at a year, an earnings
+    # drift model's at the weeks before the next print.
+    horizon_days: ClassVar[int]
 
     @property
     @abstractmethod
