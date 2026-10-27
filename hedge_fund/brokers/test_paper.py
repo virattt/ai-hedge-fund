@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from hedge_fund.brokers.costs import TradingCosts
 from hedge_fund.brokers.models import Order
 from hedge_fund.brokers.paper import PaperBroker
 
@@ -42,3 +43,19 @@ def test_rejected_order_leaves_the_file_untouched(tmp_path):
     with pytest.raises(ValueError):
         broker.place_order(Order(ticker="A", side="buy", quantity=1, price=float("nan")))
     assert path.read_text() == before
+
+
+def test_costs_are_charged_whichever_way_the_book_is_opened(tmp_path):
+    path = tmp_path / "broker.json"
+    costs = TradingCosts(spread_bps=5, commission_per_share=0.005)
+    created = PaperBroker.create(path, cash=10_000, costs=costs)
+    created.place_order(Order(ticker="A", side="buy", quantity=100, price=100))
+    assert json.loads(path.read_text())["cash"] == pytest.approx(10_000 - 100 * 100.05 - 0.50)
+
+    reopened = PaperBroker(path, costs)
+    reopened.place_order(Order(ticker="A", side="sell", quantity=100, price=100))
+    assert reopened.cash() == pytest.approx(10_000 - 100 * 0.10 - 1.00)
+
+    restored = PaperBroker.restore(path, cash=1_000, shares={}, costs=costs)
+    restored.place_order(Order(ticker="A", side="buy", quantity=1, price=100))
+    assert restored.cash() == pytest.approx(1_000 - 100.05 - 0.005)

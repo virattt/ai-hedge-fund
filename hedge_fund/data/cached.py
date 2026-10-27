@@ -2,7 +2,12 @@
 
 Wraps any DataClient with a JSON file cache under ~/.hedge-fund/cache/data/. A warm
 cache reuses completed historical responses. Daily prices are reusable only
-when fetched after the requested end date has ended in New York.
+when fetched after the requested end date has ended in New York; anything
+else asked about a day that has not ended (today's headlines, today's
+minute bars) is reused for ten minutes, the news feed's own refresh, and
+fetched again after. `live=True` gives the date-less "latest" answers
+(earnings, company facts) the same ten minutes, for a process that stays
+up all day and would otherwise never see a new filing.
 
     fd = CachedDataClient(FDClient())
     prices = fd.get_prices("AAPL", "2024-01-01", "2024-12-31")  # API call
@@ -35,6 +40,7 @@ from hedge_fund.data.sessions import NEW_YORK
 from hedge_fund.paths import CACHE_DIR
 
 DEFAULT_CACHE_DIR = CACHE_DIR / "data"
+SAME_DAY_TTL = 600  # seconds an answer about an unfinished day stays fresh
 
 
 class CachedDataClient:
@@ -45,10 +51,12 @@ class CachedDataClient:
         client: DataClient,
         cache_dir: Path | str = DEFAULT_CACHE_DIR,
         refresh: bool = False,
+        live: bool = False,
     ) -> None:
         self._client = client
         self._dir = Path(cache_dir)
         self._refresh = refresh
+        self._live = live
 
     # ------------------------------------------------------------------
     # DataClient protocol
@@ -62,6 +70,10 @@ class CachedDataClient:
             lambda: self._client.get_prices(
                 ticker, start_date, end_date, interval, interval_multiplier),
         )
+
+    def get_snapshot(self, ticker):
+        # A quote is stale the moment it arrives; never served from disk.
+        return self._client.get_snapshot(ticker)
 
     def get_financial_metrics(self, ticker, end_date, period="ttm", limit=10):
         return self._cached_list(
@@ -132,55 +144,64 @@ class CachedDataClient:
         self._dir.mkdir(parents=True, exist_ok=True)
         (self._dir / f"{key}.json").write_text(json.dumps(payload))
 
+    def _fresh(self, hit: dict, method: str, params: dict) -> bool:
+        """Whether a cached answer can still be served.
+
+        Answers about a day that had ended when they were fetched are
+        final. Answers about an unfinished day are not: a daily bar for it
+        is never reused (the close is not in yet); anything else is reused
+        for SAME_DAY_TTL and then asked for again. Date-less "latest"
+        answers are final unless the client is live. Entries written before
+        fetch times were recorded are trusted, except the daily bar, which
+        was never trusted without one.
+        """
+        daily_bar = method == "get_prices" and params.get("interval") == "day"
+        end = params.get("end_date")
+        try:
+            fetched = datetime.fromisoformat(hit["fetched_at"])
+            if fetched.tzinfo is None:
+                raise ValueError("naive fetch time")
+        except (KeyError, TypeError, ValueError):
+            return not daily_bar
+        if method == "get_earnings_history":
+            today = datetime.now(NEW_YORK).date().isoformat()
+            return fetched.astimezone(NEW_YORK).date().isoformat() >= today
+        if end is None:
+            if not self._live:
+                return True
+        elif fetched.astimezone(NEW_YORK).date().isoformat() > end:
+            return True
+        elif daily_bar:
+            return False
+        return (datetime.now(NEW_YORK) - fetched).total_seconds() < SAME_DAY_TTL
+
     def _cached_list(self, method: str, model_cls, params: dict, fetch: Callable) -> list:
         key = self._key(method, params)
         hit = self._read(key)
-        
-        needs_freshness = method == "get_earnings_history" or (
-            method == "get_prices" and params.get("interval") == "day"
-        )
-        
-        if hit is not None and needs_freshness:
-            try:
-                fetched = datetime.fromisoformat(hit["fetched_at"])
-                if method == "get_prices":
-                    complete = fetched.tzinfo is not None and (
-                        fetched.astimezone(NEW_YORK).date().isoformat() > params["end_date"]
-                    )
-                else: 
-                    # get_earnings_history: complete if fetched today or later
-                    today = datetime.now(NEW_YORK).date().isoformat()
-                    complete = fetched.tzinfo is not None and (
-                        fetched.astimezone(NEW_YORK).date().isoformat() >= today
-                    )
-            except (KeyError, TypeError, ValueError):
-                complete = False
-            if not complete:
-                hit = None
-        if hit is not None:
+        if hit is not None and self._fresh(hit, method, params):
             return [model_cls(**row) for row in hit["data"]]
         fetched_at = datetime.now(NEW_YORK).isoformat()
         result = fetch()
-        payload = {"data": [r.model_dump() for r in result]}
-        if needs_freshness:
-            payload["fetched_at"] = fetched_at
-        self._write(key, payload)
+        self._write(key, {"data": [r.model_dump() for r in result], "fetched_at": fetched_at})
         return result
 
     def _cached_item(self, method: str, model_cls, params: dict, fetch: Callable):
         key = self._key(method, params)
         hit = self._read(key)
-        if hit is not None:
+        if hit is not None and self._fresh(hit, method, params):
             return model_cls(**hit["data"]) if hit["data"] is not None else None
+        fetched_at = datetime.now(NEW_YORK).isoformat()
         result = fetch()
-        self._write(key, {"data": result.model_dump() if result is not None else None})
+        self._write(key, {"data": result.model_dump() if result is not None else None,
+                          "fetched_at": fetched_at})
         return result
 
     def _cached_scalar(self, method: str, params: dict, fetch: Callable):
         key = self._key(method, params)
         hit = self._read(key)
-        if hit is not None:
+        if hit is not None and self._fresh(hit, method, params):
             return hit["data"]
+        fetched_at = datetime.now(NEW_YORK).isoformat()
         result = fetch()
-        self._write(key, {"data": result})
+        self._write(key, {"data": result, "fetched_at": fetched_at})
         return result

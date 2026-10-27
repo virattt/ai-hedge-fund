@@ -10,11 +10,13 @@ from pydantic import ValidationError
 from hedge_fund.fund import (
     custom_strategy,
     discover_funds,
+    format_interval,
     Fund,
     FundSpec,
     load_spec,
     load_strategy,
     normalize_universe,
+    save_spec,
     StrategySpec,
 )
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, get_investment_approach
@@ -62,8 +64,66 @@ def test_rebalance_cadence_validated():
         FundSpec(**{**MINIMAL, "rebalance": "hourly"})
 
 
+def test_minute_fund_has_an_interval_and_a_window():
+    spec = FundSpec(**{**MINIMAL, "rebalance": "minute"})
+    assert spec.is_intraday and spec.interval == 1.0 and spec.interval_seconds == 60
+    assert spec.window.start == "09:30" and spec.window.end == "16:00"
+    assert spec.cadence_label == "every 1m" and spec.window.label == "09:30–16:00 ET"
+    half = FundSpec(**{**MINIMAL, "rebalance": "minute", "interval": 0.5, "window": {"start": "07:00", "end": "17:30"}})
+    assert half.interval_seconds == 30 and half.cadence_label == "every 30s"
+    assert half.window.start_seconds == 7 * 3600 and half.window.end_seconds == 17 * 3600 + 30 * 60
+    assert FundSpec(**{**MINIMAL, "rebalance": "minute", "interval": 90}).cadence_label == "every 1h30m"
+    assert format_interval(150) == "2m30s" and format_interval(3600) == "1h"
+    # The round trip keeps both fields; a daily fund never writes them.
+    assert FundSpec.model_validate(half.model_dump()) == half
+    assert "interval" in half.model_dump_json() and "window" in half.model_dump_json()
+    assert "interval" not in FundSpec(**MINIMAL).model_dump_json()
+    assert "window" not in FundSpec(**MINIMAL).model_dump()
+    assert not FundSpec(**MINIMAL).is_intraday and FundSpec(**MINIMAL).cadence_label == "weekly"
+
+
+@pytest.mark.parametrize(
+    "overrides,message",
+    [
+        ({"interval": 0.005}, "floor is 1 second"),  # 0.3s rounds to no bar at all
+        ({"interval": 0}, "greater than 0"),
+        ({"interval": 60 * 7}, "longer than the 09:30–16:00 ET window"),
+        ({"window": {"start": "16:00", "end": "09:30"}}, "open before it closes"),
+        ({"window": {"start": "03:59"}}, "outside US extended hours"),
+        ({"window": {"end": "20:01"}}, "outside US extended hours"),
+        ({"window": {"start": "9:30"}}, "not a time of day"),
+        ({"window": {"start": "09:30", "lunch": "12:00"}}, "lunch"),
+    ],
+)
+def test_minute_fund_rejects_bad_intervals_and_windows(overrides, message):
+    with pytest.raises(ValidationError, match=message):
+        FundSpec(**{**MINIMAL, "rebalance": "minute", **overrides})
+
+
+def test_interval_and_window_are_refused_on_slower_cadences():
+    with pytest.raises(ValidationError, match="interval, window: only a minute fund"):
+        FundSpec(**{**MINIMAL, "rebalance": "daily", "interval": 5, "window": {"start": "10:00"}})
+    with pytest.raises(ValidationError, match="interval: only a minute fund"):
+        FundSpec(**{**MINIMAL, "interval": 5})
+
+
 def test_benchmark_uppercased():
     assert FundSpec(**{**MINIMAL, "benchmark": "qqq"}).benchmark == "QQQ"
+
+
+def test_costs_default_to_a_real_cost_model_and_serialize_only_when_changed():
+    spec = FundSpec(**MINIMAL)
+    assert spec.costs.spread_bps == 5.0 and spec.costs.commission_per_share == 0.005
+    # A mandate at the default serializes exactly as it did before costs
+    # existed, so every recorded hash still verifies.
+    assert "costs" not in spec.model_dump()
+    explicit = FundSpec(**{**MINIMAL, "costs": {"spread_bps": 5, "commission_per_share": 0.005}})
+    assert explicit.model_dump_json() == spec.model_dump_json()
+    free = FundSpec(**{**MINIMAL, "costs": {"spread_bps": 0, "commission_per_share": 0}})
+    assert free.model_dump()["costs"] == {"spread_bps": 0.0, "commission_per_share": 0.0}
+    assert FundSpec.model_validate(free.model_dump()) == free
+    with pytest.raises(ValidationError):
+        FundSpec(**{**MINIMAL, "costs": {"spread_bps": -1}})
 
 
 def test_typo_key_rejected():
@@ -253,3 +313,13 @@ def test_blind_reaches_llm_agents_only(monkeypatch, blind):
     expected = {"blind": True} if blind else {}
     assert seen["buffett"] == expected
     assert seen["druckenmiller"] == expected
+
+
+def test_save_spec_round_trips_and_never_overwrites(tmp_path):
+    spec = FundSpec(**MINIMAL)
+    path = save_spec(spec, tmp_path / "mandates")
+    assert path == tmp_path / "mandates" / "test-fund.yaml"
+    assert load_spec(path) == spec
+    with pytest.raises(FileExistsError):
+        save_spec(spec, tmp_path / "mandates")
+    assert load_spec(path) == spec

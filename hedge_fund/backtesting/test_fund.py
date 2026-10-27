@@ -2,7 +2,7 @@
 
 import pytest
 
-from hedge_fund.backtesting.fund import backtest_fund, rebalance_grid
+from hedge_fund.backtesting.fund import backtest_fund, FundBacktestMetrics, rebalance_grid
 from hedge_fund.data.models import Price
 from hedge_fund.fund.spec import Fund, FundSpec
 from hedge_fund.models import Signal
@@ -58,6 +58,7 @@ def _spec(**overrides):
         name="test-fund",
         strategies=[{"name": "solo", "models": [{"name": "a"}], "blend": {"mode": "long_short"}}],
         risk={"max_position_pct": 1.0, "max_gross_exposure": 1.0},
+        costs={"spread_bps": 0, "commission_per_share": 0},  # exact arithmetic below
         capital=100_000.0,
         rebalance="weekly",
     )
@@ -155,6 +156,27 @@ def test_happy_path_hand_computed():
     assert result.records[1].positions == {"AAPL": 500}
     assert result.records[-1].nav == 95_000.0
     assert result.records[-1].decision is None  # Friday is not a rebalance session
+
+
+def test_metrics_report_what_the_fills_cost():
+    result = _run(spec=_spec(costs={"spread_bps": 5, "commission_per_share": 0.005}))
+    first = result.cycles[0]
+    assert first.fills[0].price == pytest.approx(200.10)
+    assert first.trading_cost == pytest.approx(52.50) and first.traded_notional == pytest.approx(100_050.0)
+    # Cycle 2 re-sizes 1.0 of equity (now 99,947.50) at 200: 499 shares, so
+    # one share is sold at 199.90 less $0.005 to pay for the first cycle.
+    second = result.cycles[1]
+    assert [(f.side, f.quantity, f.price) for f in second.fills] == [("sell", 1, pytest.approx(199.90))]
+    assert second.trading_cost == pytest.approx(0.105)
+    assert result.cycles[2].fills == []
+    m = result.metrics
+    assert m.trading_cost == pytest.approx(52.605, abs=0.01)
+    assert m.traded_notional == pytest.approx(100_249.90, abs=0.01)
+    # NAV is net of every cost: 147.395 cash + 499 × 190.
+    assert result.nav[-1] == pytest.approx(94_957.395)
+    # A result saved before costs existed reads back as free.
+    free = FundBacktestMetrics.model_validate({**m.model_dump(exclude={"trading_cost", "traded_notional"})})
+    assert free.trading_cost == 0.0 and free.traded_notional == 0.0
 
 
 def test_positions_carry_across_cycles_not_restart():
@@ -323,3 +345,36 @@ def test_daily_replay_executes_the_prior_decision_then_assesses_anew():
     assert first.executed is None and first.decision.as_of == "2024-06-03"
     assert second.executed.as_of == "2024-06-03" and second.executed.execution_as_of == "2024-06-04"
     assert second.decision.as_of == "2024-06-04"  # made after the execution, still pending
+
+
+# ---------------------------------------------------------------------------
+# minute funds
+# ---------------------------------------------------------------------------
+
+class DailyOnly(FakeDataClient):
+    """Financial Datasets as it is: daily bars, and nothing finer."""
+
+    def get_prices(self, ticker, start_date, end_date, interval="day", interval_multiplier=1):
+        if interval != "day":
+            raise RuntimeError("GET /prices/ returned 400: Invalid interval")
+        return super().get_prices(ticker, start_date, end_date)
+
+
+def test_a_minute_fund_backtests_at_daily_closes_as_the_daily_fund_it_collapses_to():
+    """A minute fund decides every bar and fills at the next. On a daily
+    grid that is: decide at every close, fill at the next — a daily fund.
+    The sessions, fills and metrics match the daily mandate exactly, no
+    minute bars are asked for, and the cadence says how it was replayed."""
+    days = ["2024-06-03", "2024-06-04", "2024-06-05"]
+    series = {"SPY": {d: 500.0 for d in days}, "AAPL": dict(zip(days, (100.0, 104.0, 110.0)))}
+    results = {}
+    for cadence in ("minute", "daily"):
+        overrides = {"interval": 10, "window": {"start": "13:00", "end": "13:10"}} if cadence == "minute" else {}
+        fund = Fund(_spec(rebalance=cadence, **overrides), models={"solo": [FakeAnalyst("a", views={"AAPL": 1.0})]})
+        results[cadence] = backtest_fund(fund, days[0], days[-1], DailyOnly(series), ["AAPL"])
+    minute, daily = results["minute"], results["daily"]
+    assert minute.rebalance == "daily (mandate: every 10m · 13:00–13:10 ET)" and daily.rebalance == "daily"
+    assert minute.dates == daily.dates == days
+    assert minute.nav == daily.nav and minute.metrics == daily.metrics
+    assert minute.records[1].executed.execution_policy == "next_close"
+    assert minute.records[1].executed.fills[0].price == 104.0 and minute.metrics.n_cycles == 2

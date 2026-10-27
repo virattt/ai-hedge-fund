@@ -25,6 +25,7 @@ def _fund(**overrides):
         schema_version=2, name="session-fund",
         strategies=[{"name": "solo", "models": [{"name": "a"}], "blend": {"mode": "long_short"}}],
         risk={"max_position_pct": 1.0, "max_gross_exposure": 1.0},
+        costs={"spread_bps": 0, "commission_per_share": 0},  # exact arithmetic below
         capital=100_000.0, rebalance="weekly",
     )
     spec = FundSpec(**{**base, **overrides})
@@ -89,6 +90,30 @@ def test_decision_at_t_executes_at_t_plus_one_across_two_advances():
     assert state.last_session == tuesday.session
     assert state.pending is None and state.positions == {"AAPL": 500}
     assert state.prev_hash == tuesday.hash
+
+
+def test_costed_fills_land_in_cash_and_the_cycle_derives_them():
+    fund = _fund(costs={"spread_bps": 10, "commission_per_share": 0.01})
+    broker = SimBroker(cash=fund.spec.capital, costs=fund.spec.costs)
+    (monday, tuesday), state = _step(fund, WEEKDAYS[:2], broker=broker)
+    x = tuesday.executed
+    # 500 AAPL bought at 200 + 10 bps = 200.20, plus $0.01 a share.
+    assert x.fills[0].price == pytest.approx(200.20)
+    assert tuesday.cash == pytest.approx(-105.0) and state.cash == pytest.approx(-105.0)
+    assert tuesday.nav == pytest.approx(99_895.0)
+    assert x.traded_notional == pytest.approx(100_100.0)
+    assert x.slippage == pytest.approx(100.0)
+    assert x.commission == pytest.approx(5.0)
+    assert x.trading_cost == pytest.approx(105.0)
+    # The non-default cost model travels in the record's mandate.
+    assert "costs" in x.spec.model_dump() and tuesday.hash == tuesday.compute_hash()
+
+
+def test_a_free_fill_derives_zero_cost():
+    (_, tuesday), _ = _step(_fund(), WEEKDAYS[:2])
+    x = tuesday.executed
+    assert x.fills[0].price == 200.0
+    assert (x.traded_notional, x.slippage, x.commission, x.trading_cost) == (100_000.0, 0.0, 0.0, 0.0)
 
 
 def test_next_state_carries_the_decision_and_the_chain():

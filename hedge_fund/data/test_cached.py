@@ -1,7 +1,7 @@
 """CachedDataClient tests — counting fake, no network."""
 
 from hedge_fund.data.cached import CachedDataClient
-from hedge_fund.data.models import CompanyFacts, Price
+from hedge_fund.data.models import CompanyFacts, Price, PriceSnapshot
 
 
 class CountingClient:
@@ -16,9 +16,17 @@ class CountingClient:
         return [Price(open=1.0, close=2.0, high=2.0, low=1.0, volume=100,
                       time=f"{start_date}T00:00:00Z")]
 
+    def get_snapshot(self, ticker):
+        self.calls += 1
+        return PriceSnapshot(ticker=ticker, price=100.0 + self.calls, time="2026-10-05T14:28:39Z")
+
     def get_company_facts(self, ticker):
         self.calls += 1
         return self._facts
+
+    def get_news(self, ticker, end_date, start_date=None, limit=1000):
+        self.calls += 1
+        return []
 
     def get_market_cap(self, ticker, end_date):
         self.calls += 1
@@ -92,6 +100,18 @@ def test_scalar_cached(tmp_path):
     assert inner.calls == 1
 
 
+def test_snapshot_is_never_cached(tmp_path):
+    inner = CountingClient()
+    fd = CachedDataClient(inner, cache_dir=tmp_path)
+
+    first = fd.get_snapshot("AAPL")
+    second = fd.get_snapshot("AAPL")
+
+    assert inner.calls == 2
+    assert second.price != first.price
+    assert not list(tmp_path.glob("*.json"))
+
+
 def test_daily_price_entries_without_fetch_metadata_are_refreshed(tmp_path):
     import json
     inner = CountingClient()
@@ -103,6 +123,51 @@ def test_daily_price_entries_without_fetch_metadata_are_refreshed(tmp_path):
     path.write_text(json.dumps(payload))
     fd.get_prices("AAPL", "2024-01-01", "2024-01-01")
     assert inner.calls == 2
+
+
+def test_answers_about_an_unfinished_day_are_reused_for_ten_minutes(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta
+    from hedge_fund.data import cached
+
+    class Clock:
+        now_at = datetime(2024, 1, 1, 10, 0, tzinfo=cached.NEW_YORK)
+        @classmethod
+        def now(cls, tz):
+            return cls.now_at
+    Clock.fromisoformat = datetime.fromisoformat
+    monkeypatch.setattr(cached, "datetime", Clock)
+    inner = CountingClient()
+    fd = CachedDataClient(inner, cache_dir=tmp_path)
+
+    # Today's headlines: served from disk inside the window, fetched again after it.
+    fd.get_news("AAPL", "2024-01-01", "2024-01-01")
+    fd.get_news("AAPL", "2024-01-01", "2024-01-01")
+    assert inner.calls == 1
+    Clock.now_at += timedelta(seconds=cached.SAME_DAY_TTL + 1)
+    fd.get_news("AAPL", "2024-01-01", "2024-01-01")
+    assert inner.calls == 2
+    # Yesterday's are final.
+    fd.get_news("AAPL", "2023-12-29", "2023-12-29")
+    Clock.now_at += timedelta(days=1)
+    fd.get_news("AAPL", "2023-12-29", "2023-12-29")
+    assert inner.calls == 3
+    # Today's minute bars follow the same rule; today's daily bar is never reused.
+    fd.get_prices("AAPL", "2024-01-02", "2024-01-02", interval="minute")
+    fd.get_prices("AAPL", "2024-01-02", "2024-01-02", interval="minute")
+    assert inner.calls == 4
+    fd.get_prices("AAPL", "2024-01-02", "2024-01-02")
+    fd.get_prices("AAPL", "2024-01-02", "2024-01-02")
+    assert inner.calls == 6
+    # Date-less "latest" answers are final for a backtest, ten minutes for a live process.
+    fd.get_company_facts("AAPL")
+    Clock.now_at += timedelta(hours=1)
+    fd.get_company_facts("AAPL")
+    assert inner.calls == 7
+    live = CachedDataClient(inner, cache_dir=tmp_path, live=True)
+    live.get_company_facts("AAPL")
+    assert inner.calls == 8
+    live.get_company_facts("AAPL")
+    assert inner.calls == 8
 
 
 def test_incomplete_daily_price_cache_is_refreshed_after_date_ends(tmp_path, monkeypatch):

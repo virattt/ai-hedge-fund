@@ -10,9 +10,12 @@ from hedge_fund.backtesting.fund import backtest_fund
 from hedge_fund.backtesting.test_fund import FakeAnalyst, FakeDataClient, SERIES, WEEKDAYS
 from hedge_fund.brokers.paper import PaperBroker
 from hedge_fund.data import sessions
-from hedge_fund.fund import Fund, FundSpec
+from hedge_fund.data.sessions import NEW_YORK
+from hedge_fund.fund import Fund, FundSpec, TradingWindow
 from hedge_fund.paper import (
+    assessment_dates,
     deploy,
+    following_session,
     Ledger,
     list_deployed,
     load_deployed,
@@ -22,6 +25,7 @@ from hedge_fund.paper import (
     tick,
     validate_fund_name,
 )
+from hedge_fund.pipeline import DecisionRecord, FundState
 from hedge_fund.pipeline.session import FundHalted
 
 
@@ -48,7 +52,8 @@ def clock(monkeypatch):
 def SPEC(registered_fakes):
     return FundSpec(schema_version=2, name="paper-fund",
                     strategies=[{"name": "solo", "models": [{"name": "a"}], "blend": {"mode": "long_short"}}],
-                    risk={"max_position_pct": 1, "max_gross_exposure": 1}, capital=100_000)
+                    risk={"max_position_pct": 1, "max_gross_exposure": 1}, capital=100_000,
+                    costs={"spread_bps": 0, "commission_per_share": 0})
 
 
 def build_fund(spec):
@@ -101,14 +106,27 @@ def test_load_deployed_reports_the_path_on_bad_files(tmp_path, SPEC):
 # next_session
 # ---------------------------------------------------------------------------
 
-def test_next_session_is_latest_completed_for_a_fresh_fund_and_the_next_one_after(clock):
+def test_next_session_is_latest_completed_for_a_fresh_fund_and_the_next_one_after(clock, SPEC):
     clock("2024-06-13")  # completed through 06-12
     data = FakeDataClient(SERIES)
-    assert next_session(data, "SPY", None) == "2024-06-12"
-    assert next_session(data, "SPY", "2024-06-07") == "2024-06-10"
-    assert next_session(data, "SPY", "2024-06-12") is None
+    assert next_session(data, SPEC, None) == "2024-06-12"
+    assert next_session(data, SPEC, "2024-06-07") == "2024-06-10"
+    assert next_session(data, SPEC, "2024-06-12") is None
     clock("2024-06-03")  # nothing completed inside the series yet
-    assert next_session(data, "SPY", None) is None
+    assert next_session(data, SPEC, None) is None
+
+
+def test_next_session_of_a_minute_fund_is_the_latest_bar_passed_and_asks_nothing_of_the_market(SPEC):
+    spec = SPEC.model_copy(update={"rebalance": "minute", "interval": 5.0,
+                                   "window": TradingWindow(start="13:00", end="13:10")})
+    at = lambda hhmmss: datetime.fromisoformat(f"2024-06-04T{hhmmss}").replace(tzinfo=NEW_YORK)  # noqa: E731
+    assert next_session(None, spec, None, now=lambda: at("12:59:59")) is None
+    assert next_session(None, spec, None, now=lambda: at("13:07:30")) == "2024-06-04T13:05:00"
+    assert next_session(None, spec, "2024-06-04T13:05:00", now=lambda: at("13:07:30")) is None
+    assert next_session(None, spec, "2024-06-04T13:05:00", now=lambda: at("13:10:00")) == "2024-06-04T13:10:00"
+    assert next_session(None, spec, "2024-06-04T13:10:00", now=lambda: at("18:00:00")) is None  # the day is done
+    assert following_session(spec, "2024-06-04T13:10:00", at("18:00:00")) == "Wed 13:00:00 ET"
+    assert following_session(SPEC, "2024-06-07", at("18:00:00")) == "2024-06-10 close"  # a Friday: Monday
 
 
 # ---------------------------------------------------------------------------
@@ -239,3 +257,26 @@ def test_broker_drift_between_ticks_is_caught_and_halts(tmp_path, clock, SPEC):
         _tick(directory)
     assert "BookMismatch" in Ledger(directory).halted()
     assert PaperBroker(directory / "broker.json").positions() == {}  # nothing traded
+
+
+def test_assessment_dates_name_the_refresh_and_the_new_decision(SPEC):
+    """A weekly fund. A Friday decision run at Tuesday's close is refreshed on
+    Monday and followed by the week's new decision; a decision made at the
+    previous close needs no refresh and mid-week no new decision; a fresh
+    fund only decides."""
+    friday = DecisionRecord.model_construct(as_of="2025-01-17")
+    state = FundState(cash=100_000, last_session="2025-01-17", pending=friday)
+    assert assessment_dates(state, "2025-01-21", SPEC) == ["2025-01-20", "2025-01-21"]
+    monday = DecisionRecord.model_construct(as_of="2025-01-20")
+    state = FundState(cash=100_000, last_session="2025-01-20", pending=monday)
+    assert assessment_dates(state, "2025-01-21", SPEC) == []
+    assert assessment_dates(FundState(cash=100_000), "2025-01-21", SPEC) == ["2025-01-21"]
+    # On bars the refresh cutoff is the bar before, and every bar decides.
+    spec = SPEC.model_copy(update={"rebalance": "minute", "interval": 5.0,
+                                   "window": TradingWindow(start="13:00", end="13:10")})
+    stale = DecisionRecord.model_construct(as_of="2025-01-17T13:10:00")
+    state = FundState(cash=100_000, last_session="2025-01-17T13:10:00", pending=stale)
+    assert assessment_dates(state, "2025-01-21T13:05:00", spec) == ["2025-01-21T13:00:00", "2025-01-21T13:05:00"]
+    fresh = DecisionRecord.model_construct(as_of="2025-01-21T13:00:00")
+    state = FundState(cash=100_000, last_session="2025-01-21T13:00:00", pending=fresh)
+    assert assessment_dates(state, "2025-01-21T13:05:00", spec) == ["2025-01-21T13:05:00"]

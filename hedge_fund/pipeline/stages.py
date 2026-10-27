@@ -17,9 +17,9 @@ from math import isfinite
 from hedge_fund.brokers.models import Fill
 from hedge_fund.brokers.protocol import Broker
 from hedge_fund.data.protocol import DataClient
-from hedge_fund.data.sessions import completed_through, previous_day
 from hedge_fund.fund import Fund, normalize_universe
 from hedge_fund.models import Signal
+from hedge_fund.pipeline.clock import Clock, clock_for, execution_policy, PinnedQuotes
 from hedge_fund.pipeline.execution import build_orders
 from hedge_fund.pipeline.models import (
     CycleRecord,
@@ -39,15 +39,20 @@ _MARK_LOOKBACK_DAYS = 7
 
 def assess_fund(
     fund: Fund, as_of: str, data_client: DataClient, universe: list[str],
+    clock: Clock | None = None,
 ) -> DecisionRecord:
     """Construct validated target weights using only the assessment cutoff."""
-    if as_of > completed_through():
-        raise ValueError(f"assessment {as_of} requires incomplete daily data")
+    clock = clock or clock_for(fund.spec, data_client)
+    if not clock.is_complete(as_of):
+        raise ValueError(f"assessment {as_of} requires incomplete data")
     spec = fund.spec.model_copy(deep=True)
     universe = normalize_universe(universe)
-    marks, skipped = _mark_prices(universe, as_of, data_client)
+    marks, skipped = _mark_prices(universe, clock.session_date(as_of), data_client)
 
     tradeable = [t for t in universe if t in marks]
+    # Analysts read the session's print, not the wire: the same price the
+    # engine marks and executes with, and nothing from after the session.
+    view = PinnedQuotes(data_client, clock, as_of)
 
     # Each strategy runs its own analysts and blends its own sleeve; the fund
     # nets the sleeves by capital slice. A persona staffed into two strategies
@@ -59,7 +64,7 @@ def assess_fund(
         signals: list[Signal] = []
         for ticker in tradeable:
             for model in staff:
-                signals.append(model.predict(ticker, as_of, data_client))
+                signals.append(model.predict(ticker, as_of, view))
         blend = blend_signals(
             signals, strategy.model_weights, strategy.blend.gross_target,
             mode=strategy.blend.mode,
@@ -100,41 +105,25 @@ def assess_fund(
     )
 
 
-def exact_marks(tickers: list[str], session: str, data_client: DataClient) -> dict[str, float]:
-    """Require a finite, positive close for every name on the exact session."""
-    if session > completed_through():
-        raise ValueError(f"{session}: daily prices are not yet complete")
-    marks: dict[str, float] = {}
-    for ticker in sorted(set(tickers)):
-        bars = data_client.get_prices(ticker, session, session)
-        matches = [bar for bar in bars if bar.time[:10] == session]
-        if not matches:
-            raise ValueError(f"{ticker}: missing close on {session}; cannot value the book or execute")
-        close = max(matches, key=lambda bar: bar.time).close
-        if not isfinite(close) or close <= 0:
-            raise ValueError(f"{ticker}: close on {session} must be finite and positive, got {close}")
-        marks[ticker] = close
-    return marks
-
-
 def execute_decision(
     fund: Fund, original: DecisionRecord, session: str,
-    broker: Broker, data_client: DataClient,
+    broker: Broker, data_client: DataClient, clock: Clock | None = None,
 ) -> CycleRecord:
-    """Refresh views before sizing a complete rebalance at exact closing prices."""
-    if session <= original.as_of or session > completed_through():
+    """Refresh views before sizing a complete rebalance at exact session prices."""
+    clock = clock or clock_for(fund.spec, data_client)
+    if session <= original.as_of or not clock.is_complete(session):
         raise ValueError(f"execution session {session} must follow {original.as_of} and be complete")
     if fund.spec != original.spec:
         raise ValueError("fund mandate changed after assessment; create a new assessment")
-    cutoff = previous_day(session)
+    cutoff = clock.previous(session)
     effective = original if cutoff == original.as_of else assess_fund(
-        fund, cutoff, data_client, original.universe,
+        fund, cutoff, data_client, original.universe, clock,
     )
     spec = effective.spec
     validate_targets(spec, effective.strategies, effective.final_weights)
     held = broker.positions()
     targets = {t: w for t, w in effective.final_weights.items() if w != 0}
-    marks = exact_marks(list(set(held) | set(targets)), session, data_client)
+    marks = clock.marks(list(set(held) | set(targets)), session).prices
     cash_before = broker.cash()
     equity_before = cash_before + sum(p.shares * marks[t] for t, p in held.items())
     if not isfinite(equity_before) or equity_before <= 0:
@@ -162,8 +151,15 @@ def execute_decision(
         nav=cash + sum(shares * marks[t] for t, shares in positions.items()),
         original_assessment=original.model_copy(deep=True),
         refreshed_assessment=effective.model_copy(deep=True),
-        execution_as_of=session, execution_policy="next_close",
+        execution_as_of=session, execution_policy=execution_policy(session),
     )
+
+
+def mark_lookback_start(as_of: str) -> str:
+    """The first date a mark for *as_of* may come from: a week back, enough
+    to cover weekends, holiday clusters and short halts without reaching into
+    stale history. The backtest warm fetches exactly this window."""
+    return (_date.fromisoformat(as_of) - timedelta(days=_MARK_LOOKBACK_DAYS)).isoformat()
 
 
 # ---------------------------------------------------------------------------
@@ -176,7 +172,7 @@ def _mark_prices(
     data_client: DataClient,
 ) -> tuple[dict[str, float], list[TickerSkip]]:
     """Analytical lookback marks; names without data are excluded from assessment."""
-    start = (_date.fromisoformat(as_of) - timedelta(days=_MARK_LOOKBACK_DAYS)).isoformat()
+    start = mark_lookback_start(as_of)
     marks: dict[str, float] = {}
     skipped: list[TickerSkip] = []
 

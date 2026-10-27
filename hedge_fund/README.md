@@ -70,6 +70,8 @@ poetry run aihf backtest ~/.hedge-fund/mandates/example.yaml \
 poetry run aihf paper create alpha --mandate ~/.hedge-fund/mandates/example.yaml --universe AAPL,MSFT
 poetry run aihf paper tick alpha
 poetry run aihf paper tick alpha --again   # redo the latest session; the old record moves to ledger/superseded/
+poetry run aihf paper run fast             # a minute fund (`rebalance: minute`): stays up, one bar per interval
+poetry run aihf paper stop fast            #   ...and stops it after the bar in flight
 poetry run aihf paper status alpha
 poetry run aihf paper list
 poetry run aihf paper halt alpha --reason "..."     # the kill switch
@@ -91,8 +93,11 @@ paper/<name>/
   fund.yaml                     the deployed fund: mandate snapshot + universe
   broker.json                   the paper broker's book (cash, shares)
   ledger/<session>.json         one SessionRecord per session, hash-chained
+  ledger/<date>/<HHMMSS>.json   a minute fund's records, one directory per day
+  ledger/<date>/checkpoint.json the state after that day's last bar; replay starts here
   control.json                  the kill switch (halted, reason, since)
-  events.jsonl                  ticks, failures, halts, resumes
+  events.jsonl                  ticks, failures, halts, resumes, gaps, checkpoints
+  runner.pid                    the `aihf paper run` process holding a minute fund
 ```
 
 The ledger is the fund's memory. `tick` replays it into a `FundState`
@@ -117,11 +122,10 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | `strategies/` | Strategy library (fundamental-ls, deep-value, inflections, earnings-drift) — add yours as a YAML | ✅ |
 | `portfolio/` | View blending → target weights (conviction-weighted, optional market-neutral) | ✅ |
 | `risk/` | Hard limits — per-position and gross-exposure clamps | ✅ |
-| `brokers/` | `Broker` protocol + `SimBroker` (backtest) + `PaperBroker` (the same book, persisted to `broker.json`); live brokers planned | ◐ |
+| `brokers/` | `Broker` protocol + `SimBroker` (backtest) + `PaperBroker` (the same book, persisted to `broker.json`) + `TradingCosts` (half-spread and commission on every fill); live brokers planned | ◐ |
 | `pipeline/` | `advance` — one session of the fund, the same code path in every mode — over the two stages in `stages.py` (`assess_fund` → `DecisionRecord`, `execute_decision` → `CycleRecord`); `SessionRecord`, `FundState` | ✅ |
 | `paper/` | A deployed fund: `deploy`, the hash-chained `Ledger` (replay, halt/resume, events), `tick` | ✅ |
-| `backtesting/` | `backtest_fund` — `advance` looped over history — plus the per-model engine | ✅ |
-| `event_study/` | Market-model abnormal returns (CARs) | ✅ |
+| `backtesting/` | `backtest_fund` — `advance` looped over history | ✅ |
 | `validation/` | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO) | ⬜ |
 | `tui/` | The interactive app (Textual): backtest board, paper fund console, mandate builder | ✅ |
 
@@ -141,6 +145,10 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 - **Decide at T, execute at T+1.** Nothing is ever assessed and executed
   against the same close. The rebalance rule (first session of each period)
   is computable on a live tick, so backtest and paper agree by construction.
+  A minute fund (`rebalance: minute`, with `interval` in minutes and a
+  `window` in New York time) runs the same rule bar by bar: decide at one
+  bar, fill at the next bar's print. Live, the prints come from the
+  real-time snapshot; in a backtest, from 1-minute history.
 - **The ledger is append-only.** Records are hash-chained; replay verifies
   the chain and refuses an altered record. State is derived, never edited.
 

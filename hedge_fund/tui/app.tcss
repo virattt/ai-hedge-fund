@@ -409,6 +409,23 @@ RunConfirmScreen {
     width: 1fr;
 }
 
+#window-inputs {
+    height: auto;
+}
+
+#window-inputs Input {
+    width: 12;
+}
+
+.window-sep {
+    width: auto;
+    padding-top: 1;
+}
+
+#interval-line, #window-line {
+    margin-top: 1;
+}
+
 #stocks-preview {
     margin-top: 1;
 }
@@ -440,6 +457,11 @@ RunConfirmScreen {
     margin-right: 1;
     text-align: center;
     content-align: center middle;
+}
+
+#scorecard {
+    height: auto;
+    margin-top: 1;
 }
 
 #curve-box {

@@ -16,7 +16,7 @@ from hedge_fund.pipeline.session import (
     next_state,
     SessionRecord,
 )
-from hedge_fund.pipeline.stages import assess_fund, execute_decision
+from hedge_fund.pipeline.stages import assess_fund, execute_decision, mark_lookback_start
 
 __all__ = [
     "BookMismatch",
@@ -32,5 +32,6 @@ __all__ = [
     "build_orders",
     "execute_decision",
     "is_rebalance_session",
+    "mark_lookback_start",
     "next_state",
 ]

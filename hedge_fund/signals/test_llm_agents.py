@@ -169,6 +169,56 @@ def test_new_filing_forces_new_llm_call(tmp_path):
     assert first.metadata["snapshot_hash"] != second.metadata["snapshot_hash"]
 
 
+class BarClient(MockDataClient):
+    """Fundamentals plus a day: the quote at the bar, a prior close, headlines."""
+
+    def __init__(self, news=()):
+        super().__init__(metrics=_history())
+        self.news = list(news)
+
+    def get_prices(self, ticker, start_date, end_date, interval="day", interval_multiplier=1):
+        from hedge_fund.data.models import Price
+        return [Price(open=100, close=100, high=100, low=100, volume=1, time="2025-01-14T00:00:00Z")]
+
+    def get_snapshot(self, ticker):
+        from hedge_fund.data.models import PriceSnapshot
+        return PriceSnapshot(ticker=ticker, price=100.0, time="2025-01-15T09:30:00-05:00")
+
+    def get_news(self, ticker, end_date, start_date=None, limit=1000):
+        return self.news
+
+    def get_earnings_history(self, ticker, limit=12):
+        return []
+
+
+def test_quiet_bars_share_one_prompt_and_a_headline_changes_it(tmp_path):
+    """At a bar the prompt carries the day so far. Two quiet bars render the
+    same prompt (one LLM call); a headline landing between them changes it."""
+    from hedge_fund.data.models import CompanyNews
+    llm = FakeLLM(BULLISH)
+    agent = _agent(tmp_path, llm)
+    client = BarClient()
+
+    first = agent.predict("TEST", "2025-01-15T09:35:00", client)
+    second = agent.predict("TEST", "2025-01-15T09:40:00", client)
+    assert llm.calls == 1 and second.metadata["cached"] is True
+    record = json.loads(next((tmp_path / "llm").glob("*.json")).read_text())
+    assert "Since the previous close:" in record["user"] and "Headlines: none" in record["user"]
+    assert "09:35" not in record["user"] and "09:40" not in record["user"]
+
+    client.news.append(CompanyNews(ticker="TEST", title="Guidance cut", source="Wire", date="2025-01-15T14:42:00Z"))
+    third = agent.predict("TEST", "2025-01-15T09:45:00", client)
+    assert llm.calls == 2 and third.metadata["cached"] is False
+    assert third.metadata["prompt_key"] != first.metadata["prompt_key"]
+    assert third.metadata["snapshot_hash"] == first.metadata["snapshot_hash"]  # the fundamentals did not move
+
+    # A daily session carries no such block.
+    agent.predict("TEST", "2025-01-15", client)
+    daily = [json.loads(p.read_text()) for p in (tmp_path / "llm").glob("*.json")
+             if json.loads(p.read_text())["as_of"] == "2025-01-15"]
+    assert daily and "Since the previous close" not in daily[0]["user"]
+
+
 def test_prompt_and_response_persisted(tmp_path):
     agent = _agent(tmp_path, FakeLLM(BULLISH))
     agent.predict("TEST", "2025-01-15", MockDataClient(metrics=_history()))

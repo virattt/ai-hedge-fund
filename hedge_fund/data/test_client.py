@@ -29,6 +29,12 @@ def test_prices(fd: FDClient, ticker: str) -> None:
     print(f"  {ticker} prices: {len(prices)} bars  [{dates[0]} → {dates[-1]}]")
 
 
+def test_snapshot(fd: FDClient) -> None:
+    snap = fd.get_snapshot("AAPL")
+    assert snap is not None and snap.price > 0
+    print(f"  AAPL snapshot: {snap.price} @ {snap.time}")
+
+
 @pytest.mark.parametrize("ticker", TICKERS)
 def test_financial_metrics(fd: FDClient, ticker: str) -> None:
     metrics = fd.get_financial_metrics(ticker, PRICE_END, period="ttm", limit=4)

@@ -1,0 +1,97 @@
+{
+  "schema_version": 2,
+  "fund": "fixture",
+  "session": "2025-01-17",
+  "universe": [
+    "TEST"
+  ],
+  "nav": 100000.0,
+  "cash": 100000.0,
+  "positions": {},
+  "marks": {},
+  "benchmark": "SPY",
+  "benchmark_close": 500.0,
+  "rebalance": true,
+  "executed": null,
+  "decision": {
+    "schema_version": 2,
+    "fund": "fixture",
+    "as_of": "2025-01-17",
+    "spec": {
+      "schema_version": 2,
+      "name": "fixture",
+      "strategies": [
+        {
+          "name": "event",
+          "display_name": null,
+          "weight": 1.0,
+          "models": [
+            {
+              "name": "pead",
+              "weight": 1.0,
+              "params": {}
+            }
+          ],
+          "blend": {
+            "method": "conviction_weighted",
+            "gross_target": 1.0,
+            "mode": "long_short"
+          }
+        }
+      ],
+      "risk": {
+        "max_position_pct": 0.25,
+        "max_gross_exposure": 1.0
+      },
+      "capital": 100000.0,
+      "rebalance": "daily",
+      "benchmark": "SPY"
+    },
+    "universe": [
+      "TEST"
+    ],
+    "marks": {
+      "TEST": 100.0
+    },
+    "skipped": [],
+    "strategies": [
+      {
+        "name": "event",
+        "slice": 1.0,
+        "signals": [
+          {
+            "model_name": "pead",
+            "ticker": "TEST",
+            "date": "2025-01-17",
+            "value": 0.5,
+            "reasoning": "r",
+            "components": {},
+            "metadata": {}
+          }
+        ],
+        "convictions": {
+          "TEST": 0.5
+        },
+        "weights": {
+          "TEST": 1.0
+        },
+        "eligible_scores": {},
+        "flat_reason": null,
+        "final_contribution": {}
+      }
+    ],
+    "target_weights": {
+      "TEST": 1.0
+    },
+    "clamps": [],
+    "final_weights": {
+      "TEST": 0.25
+    },
+    "risk_scale_factor": null
+  },
+  "prev_hash": null,
+  "hash": "bb52f8bca6181379bca9ee620121cbcc4cdc4e5631026d5af10e8b3d4ac2a650",
+  "code_version": "2.4.0+abc1234",
+  "mandate_hash": "m",
+  "llm_model": null
+}

@@ -12,6 +12,7 @@ from hedge_fund.data.models import (
     FinancialMetrics,
     InsiderTrade,
     Price,
+    PriceSnapshot,
 )
 from hedge_fund.data.protocol import DataClient
 
@@ -29,4 +30,5 @@ __all__ = [
     "FinancialMetrics",
     "InsiderTrade",
     "Price",
+    "PriceSnapshot",
 ]
