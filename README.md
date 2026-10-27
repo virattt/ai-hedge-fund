@@ -41,6 +41,7 @@ The app asks for keys the first time it needs them and saves them to `~/.hedge-f
 
 - A [Financial Datasets](https://financialdatasets.ai) API key, for prices, fundamentals, and earnings.
 - One model API key for the investor agents. Supported providers: Anthropic, OpenAI, DeepSeek, Google, xAI, Kimi, TypeSafe (Jev).
+  Or run models locally with [Ollama](https://ollama.com), which needs no key: `ollama pull qwen3:8b`, then pick it with `m` in the app (or pass `--model qwen3:8b`). Set `OLLAMA_BASE_URL` if Ollama is not on `localhost:11434`.
 
 Keys exported in your shell always win over the saved file.
 

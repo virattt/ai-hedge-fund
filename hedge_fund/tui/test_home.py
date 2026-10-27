@@ -74,6 +74,29 @@ def test_missing_key_gate_save_resumes_and_cancel_does_not(monkeypatch, isolated
     asyncio.run(scenario())
 
 
+def test_ollama_is_pickable_and_needs_no_key(monkeypatch, isolated_configuration):
+    """A local model runs with only the data key; no LLM key prompt appears."""
+    monkeypatch.setenv("FINANCIAL_DATASETS_API_KEY", "fixture-fd-key")
+
+    async def scenario():
+        app = HedgeFundApp()
+        async with app.run_test(size=(100, 35)) as pilot:
+            await pilot.press("m")
+            picker = app.screen.query_one("#picker-list", OptionList)
+            index = picker.get_option_index("qwen3:8b")
+            assert not picker.get_option_at_index(index).disabled
+            picker.highlighted = index
+            await pilot.press("enter")
+            assert os.environ["HEDGE_FUND_LLM_MODEL"] == "qwen3:8b"
+            assert home.demand_run_keys(app, Mock()) is True
+            await pilot.press("k")
+            await pilot.pause()
+            assert isinstance(app.screen, home.HomeScreen)
+            assert not isolated_configuration.exists()
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize(
     "exported,local,expected",
     [
