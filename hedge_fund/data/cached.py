@@ -163,6 +163,9 @@ class CachedDataClient:
                 raise ValueError("naive fetch time")
         except (KeyError, TypeError, ValueError):
             return not daily_bar
+        if method == "get_earnings_history":
+            today = datetime.now(NEW_YORK).date().isoformat()
+            return fetched.astimezone(NEW_YORK).date().isoformat() >= today
         if end is None:
             if not self._live:
                 return True
