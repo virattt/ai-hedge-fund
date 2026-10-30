@@ -93,3 +93,51 @@ def test_proportional_within_limits_is_unchanged(weights):
 def test_nonfinite_weights_fail_before_risk_adjustment(value, proportional):
     with pytest.raises(ValueError, match="A.*finite"):
         apply_limits({"A": value}, LIMITS, preserve_proportions=proportional)
+
+
+# ---------------------------------------------------------------------------
+# Net exposure band
+# ---------------------------------------------------------------------------
+
+def test_net_clamp_scales_only_the_heavier_side():
+    limits = RiskLimits(max_position_pct=1.0, max_gross_exposure=2.0, max_net_exposure=0.2)
+    result = apply_limits({"A": 0.5, "B": 0.3, "C": -0.2}, limits)   # net +0.6
+    # Longs scaled by (0.2 + 0.2) / 0.8 = 0.5; the short is untouched.
+    assert result.weights == pytest.approx({"A": 0.25, "B": 0.15, "C": -0.2})
+    assert sum(result.weights.values()) == pytest.approx(0.2)
+    assert [c.limit for c in result.clamps] == ["max_net_exposure"]
+    assert result.clamps[0].ticker is None
+    assert (result.clamps[0].before, result.clamps[0].after) == (pytest.approx(0.6), pytest.approx(0.2))
+
+
+def test_net_clamp_mirrors_for_a_short_heavy_book():
+    limits = RiskLimits(max_position_pct=1.0, max_gross_exposure=2.0, max_net_exposure=0.1)
+    result = apply_limits({"A": 0.2, "B": -0.5, "C": -0.3}, limits)   # net -0.6
+    # Shorts scaled by (0.1 + 0.2) / 0.8 = 0.375.
+    assert result.weights == pytest.approx({"A": 0.2, "B": -0.1875, "C": -0.1125})
+    assert sum(result.weights.values()) == pytest.approx(-0.1)
+    assert result.clamps[0].after == pytest.approx(-0.1)
+
+
+def test_net_within_the_band_or_unset_passes_through():
+    banded = RiskLimits(max_position_pct=1.0, max_gross_exposure=2.0, max_net_exposure=0.5)
+    assert apply_limits({"A": 0.4, "B": -0.1}, banded).clamps == []
+    assert apply_limits({"A": 0.9, "B": 0.9}, RiskLimits(max_position_pct=1.0, max_gross_exposure=2.0)).clamps == []
+
+
+def test_net_then_gross_compose_and_never_reviolate():
+    limits = RiskLimits(max_position_pct=1.0, max_gross_exposure=0.8, max_net_exposure=0.2)
+    result = apply_limits({"A": 1.0, "B": 0.6, "C": -0.4}, limits)   # net 1.2, gross 2.0
+    # Net first: longs x 0.375 -> A .375, B .225, C -.4 (gross 1.0); then gross x 0.8.
+    assert result.weights == pytest.approx({"A": 0.3, "B": 0.18, "C": -0.32})
+    assert sum(result.weights.values()) <= 0.2 + 1e-12
+    assert sum(abs(w) for w in result.weights.values()) == pytest.approx(0.8)
+    assert [c.limit for c in result.clamps] == ["max_net_exposure", "max_gross_exposure"]
+
+
+def test_proportional_net_clamp_keeps_neutrality_and_reports_the_factor():
+    limits = RiskLimits(max_position_pct=1.0, max_gross_exposure=2.0, max_net_exposure=0.1)
+    result = apply_limits({"A": 0.5, "B": -0.3}, limits, preserve_proportions=True)   # net 0.2
+    assert result.weights == pytest.approx({"A": 0.25, "B": -0.15})
+    assert result.scale_factor == pytest.approx(0.5)
+    assert [c.limit for c in result.clamps] == ["max_net_exposure"]

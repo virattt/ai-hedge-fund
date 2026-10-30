@@ -180,6 +180,20 @@ def test_metrics_report_what_the_fills_cost():
     assert free.trading_cost == 0.0 and free.traded_notional == 0.0
 
 
+def test_a_stopped_out_backtest_keeps_marking_to_the_end():
+    series = {
+        "SPY": {day: 100.0 for day in WEEKDAYS},
+        "AAPL": {day: (200.0 if i < 2 else 150.0 if i < 4 else 140.0) for i, day in enumerate(WEEKDAYS)},
+    }
+    result = _run(series, _spec(risk={"max_position_pct": 1.0, "max_gross_exposure": 1.0, "max_drawdown_pct": 0.20}))
+    assert len(result.records) == len(WEEKDAYS)
+    assert result.records[2].decision.is_stopped_out
+    assert result.cycles[1].positions == {}                       # Thursday's sale
+    assert result.nav[3:] == [pytest.approx(75_000.0)] * 12       # flat in cash to the end
+    assert all(r.decision is None for r in result.records[3:])
+    assert result.metrics.n_cycles == 2 and result.metrics.max_drawdown_pct == pytest.approx(0.25)
+
+
 def test_positions_carry_across_cycles_not_restart():
     result = _run()
     # Positions persist across executions; only the marks moved.

@@ -10,7 +10,7 @@ from hedge_fund.data.models import Price
 from hedge_fund.fund.spec import Fund, FundSpec
 from hedge_fund.models import Signal
 from hedge_fund.pipeline.models import CycleRecord
-from hedge_fund.pipeline.stages import assess_fund, execute_decision, mark_lookback_start
+from hedge_fund.pipeline.stages import assess_fund, average_daily_volume, execute_decision, mark_lookback_start
 
 
 def _cycle(fund, as_of, broker, data, universe):
@@ -455,3 +455,44 @@ def test_strategy_gross_violation_is_rejected_even_when_fund_risk_clips_it(monke
 
 def test_mark_lookback_start_is_a_week_before():
     assert mark_lookback_start("2025-01-15") == "2025-01-08"
+
+
+# ---------------------------------------------------------------------------
+# The volume cap
+# ---------------------------------------------------------------------------
+
+class VolumeDataClient(FakeDataClient):
+    """Canned closes plus a daily volume series per ticker."""
+
+    def __init__(self, closes, volumes):
+        super().__init__(closes)
+        self._volumes = volumes
+
+    def get_prices(self, ticker, start_date, end_date, **kwargs):
+        if ticker not in self._volumes:
+            return super().get_prices(ticker, start_date, end_date, **kwargs)
+        close = self._closes[ticker]
+        end = _date.fromisoformat(end_date)
+        return [Price(open=close, close=close, high=close, low=close, volume=v,
+                      time=f"{(end - timedelta(days=len(self._volumes[ticker]) - 1 - i)).isoformat()}T00:00:00Z")
+                for i, v in enumerate(self._volumes[ticker])]
+
+
+def test_average_daily_volume_is_the_mean_of_the_last_twenty_bars():
+    data = VolumeDataClient(CLOSES, {"AAPL": [1_000_000] * 5 + [2_000_000] * 20, "MSFT": [500] * 3})
+    adv = average_daily_volume(["AAPL", "MSFT", "ZZZ"], "2024-06-04", data)
+    assert adv == {"AAPL": pytest.approx(2_000_000), "MSFT": pytest.approx(500)}   # ZZZ has no bars: absent
+
+
+def test_volume_cap_clips_the_order_and_records_the_clamp():
+    spec = FundSpec(**{**_spec().model_dump(), "risk": {"max_position_pct": 0.25, "max_gross_exposure": 1.0, "max_adv_pct": 0.05}})
+    fund = Fund(spec, models={"solo": [FakeAnalyst("a", views={"AAPL": 1.0, "MSFT": 1.0})]})
+    # AAPL: 20-day ADV 1,000 -> cap 50 shares; the target is 25% of 100k at 200 = 125.
+    # MSFT: ADV 100,000 -> cap 5,000, so its 62-share target (25% of 100k at 400) is untouched.
+    data = VolumeDataClient(CLOSES, {"AAPL": [1_000] * 20, "MSFT": [100_000] * 20})
+    record = _cycle(fund, "2024-06-03", SimBroker(cash=100_000.0), data, UNIVERSE)
+    assert {o.ticker: o.quantity for o in record.orders} == {"AAPL": 50, "MSFT": 62}
+    assert record.positions == {"AAPL": 50, "MSFT": 62}
+    liquidity = [c for c in record.clamps if c.limit == "max_adv_pct"]
+    assert [(c.ticker, c.before, c.after) for c in liquidity] == [("AAPL", pytest.approx(0.25), pytest.approx(0.10))]
+    assert record.final_weights["AAPL"] == pytest.approx(0.25)   # the decision is untouched; only the fill is capped

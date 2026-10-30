@@ -28,6 +28,9 @@ strategies:
 risk:
   max_position_pct: 0.25      # master risk: no single name above 25% of equity
   max_gross_exposure: 1.0     # unlevered, across the netted book
+  max_drawdown_pct: 0.20      # 20% off the NAV peak: sold to cash and kept there
+  # max_net_exposure: 0.3     # |longs - shorts| band, for a long/short book
+  # max_adv_pct: 0.05         # no order above 5% of 20-day average daily volume
 costs:                        # what every fill costs; these are the defaults
   spread_bps: 5               # half the bid-ask spread, paid on every side
   commission_per_share: 0.005 # dollars a share; zero on both means free fills

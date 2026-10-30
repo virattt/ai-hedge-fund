@@ -18,12 +18,17 @@ def build_orders(
     positions: dict[str, Position],
     marks: dict[str, float],
     equity: float,
+    max_shares: dict[str, int] | None = None,
 ) -> list[Order]:
     """Diff the target book against the broker's current book.
 
     Sizing: target_shares = int(weight * equity / mark) — floor toward zero,
     never overshoot the target; sub-share dust stays in cash and is
     re-evaluated next cycle. Orders below one share are not emitted.
+
+    *max_shares* caps an order's size per ticker (the volume cap). The rest
+    of the move is re-targeted next cycle, the way a desk slices a large
+    order over days. A cap below one share emits no order for that name.
 
     Ordering: all sells first, then buys, alphabetical within each group —
     deterministic, and sells free the cash that buys consume within the
@@ -40,6 +45,8 @@ def build_orders(
         target_shares = int(target_weights.get(ticker, 0.0) * equity / mark)
         current_shares = positions[ticker].shares if ticker in positions else 0
         delta = target_shares - current_shares
+        if max_shares is not None and ticker in max_shares:
+            delta = max(-max_shares[ticker], min(max_shares[ticker], delta))
         if delta == 0:
             continue
         order = Order(

@@ -5,7 +5,8 @@ import pytest
 from hedge_fund.brokers.models import Fill, Order
 from hedge_fund.models import Signal
 from hedge_fund.tui import report
-from hedge_fund.tui.fixtures import make_cycle, make_session, make_signal, render
+from hedge_fund.pipeline.stages import stop_out_decision
+from hedge_fund.tui.fixtures import make_cycle, make_session, make_signal, make_spec, render
 
 
 @pytest.mark.parametrize("direction,strength", [("bullish", 3.2), ("bearish", 1.6), ("neutral", 4), ("bullish", 0), ("bearish", 0)])
@@ -106,3 +107,12 @@ def test_cost_line_reads_as_bps_of_what_was_traded():
 
 def _session_with(record):
     return make_session(record.as_of, executed=record)
+
+
+def test_a_stop_out_reads_as_one_in_the_row_and_the_overview():
+    spec = make_spec().model_copy(update={"risk": make_spec().risk.model_copy(update={"max_drawdown_pct": 0.2})})
+    decision = stop_out_decision(spec, "2025-01-15", ["TEST"], {"TEST": 80.0}, {"TEST": 100}, 0.213)
+    session = make_session("2025-01-15", decision=decision, positions={"TEST": 100}, marks={"TEST": 80.0}, nav=80_000)
+    assert "stopped out" in render(report.session_row(session, 100_000))
+    text = render(report.session_overview(session))
+    assert "STOPPED OUT" in text and "drawdown 21.3% breached the 20.0% limit" in text

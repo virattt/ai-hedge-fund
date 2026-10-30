@@ -54,3 +54,16 @@ def test_short_target_sells_past_zero():
     assert len(orders) == 1
     assert orders[0].side == "sell"
     assert orders[0].quantity == 20
+
+
+def test_max_shares_caps_buys_and_sells_and_drops_subshare_caps():
+    orders = build_orders(
+        {"AAPL": 0.5, "MSFT": 0.0, "NVDA": 0.5},
+        _positions(MSFT=40),
+        {"AAPL": 100.0, "MSFT": 100.0, "NVDA": 100.0},
+        equity=10_000.0,
+        max_shares={"AAPL": 12, "MSFT": 15, "NVDA": 0},
+    )
+    assert [(o.ticker, o.side, o.quantity) for o in orders] == [("MSFT", "sell", 15), ("AAPL", "buy", 12)]
+    uncapped = build_orders({"AAPL": 0.5}, {}, {"AAPL": 100.0}, equity=10_000.0, max_shares={"MSFT": 1})
+    assert uncapped[0].quantity == 50   # a cap on another name changes nothing

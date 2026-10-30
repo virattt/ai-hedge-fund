@@ -137,7 +137,7 @@ def test_next_state_carries_the_decision_and_the_chain():
     fund = _fund()
     (monday,), state = _step(fund, WEEKDAYS[:1])
     assert state == FundState(positions={}, cash=100_000, last_session=monday.session,
-                              pending=monday.decision, prev_hash=monday.hash)
+                              pending=monday.decision, prev_hash=monday.hash, peak_nav=100_000)
     assert monday.prev_hash is None
     assert monday.hash == monday.compute_hash()
     assert SessionRecord.model_validate_json(monday.model_dump_json()) == monday
@@ -214,3 +214,80 @@ def test_analyst_failure_propagates_and_places_no_orders():
     with pytest.raises(ConnectionError):
         advance(fund, FundState.initial(100_000), WEEKDAYS[0], broker, FakeDataClient(SERIES), ["AAPL"])
     assert broker.positions() == {} and broker.cash() == 100_000
+
+
+# ---------------------------------------------------------------------------
+# The drawdown stop-out
+# ---------------------------------------------------------------------------
+
+def _aapl(closes_by_index: dict[int, float], default: float = 200.0) -> dict:
+    """Flat SPY, AAPL at *default* except where an index is overridden."""
+    return {
+        "SPY": {day: 100.0 for day in WEEKDAYS},
+        "AAPL": {day: closes_by_index.get(i, default) for i, day in enumerate(WEEKDAYS)},
+    }
+
+
+def _stop_fund(**overrides):
+    fund = _fund(risk={"max_position_pct": 1.0, "max_gross_exposure": 1.0, "max_drawdown_pct": 0.20}, **overrides)
+    analyst = fund.strategies[0][1][0]
+    analyst.predict = Mock(wraps=analyst.predict)
+    return fund, analyst
+
+
+def test_peak_nav_folds_the_high_water_mark():
+    assert FundState.initial(100_000).peak_nav == 100_000
+    records, state = _step(_fund(), WEEKDAYS[:12], data=FakeDataClient(_aapl({i: 210.0 for i in range(9, 12)})))
+    assert max(r.nav for r in records) == pytest.approx(105_000) and state.peak_nav == pytest.approx(105_000)
+
+
+def test_a_breach_on_a_valuation_day_stops_the_fund_out_and_keeps_it_in_cash():
+    fund, analyst = _stop_fund()
+    # Buy 500 at Tuesday's 200; Wednesday prints 150: NAV 75,000, 25% off the peak.
+    series = _aapl({i: 150.0 for i in range(2, 4)} | {i: 140.0 for i in range(4, 6)})
+    records, state = _step(fund, WEEKDAYS[:6], data=FakeDataClient(series))
+    monday, tuesday, wednesday, thursday, friday, next_monday = records
+
+    assert not wednesday.rebalance and wednesday.decision is not None
+    assert wednesday.decision.is_stopped_out
+    assert wednesday.decision.final_weights == {"AAPL": 0.0}
+    assert [(c.limit, c.ticker, c.before, c.after) for c in wednesday.decision.clamps] == [
+        ("max_drawdown_pct", None, pytest.approx(0.25), 0.0)]
+    assert all(sr.signals == [] for sr in wednesday.decision.strategies)
+
+    assert thursday.executed is not None and thursday.executed.positions == {}
+    assert thursday.cash == pytest.approx(75_000) and thursday.nav == pytest.approx(75_000)
+    # Friday is flat and Monday is a rebalance session: no decision, no analyst asked.
+    calls_after_stop = analyst.predict.call_count
+    assert friday.decision is None and next_monday.decision is None
+    assert next_monday.rebalance and next_monday.nav == pytest.approx(75_000)
+    assert analyst.predict.call_count == calls_after_stop
+    assert state.positions == {} and state.peak_nav == pytest.approx(100_000)
+
+
+def test_within_the_limit_nothing_changes():
+    fund, _ = _stop_fund()
+    records, _ = _step(fund, WEEKDAYS[:4], data=FakeDataClient(_aapl({2: 170.0, 3: 170.0})))   # 15% off
+    assert records[2].decision is None and records[3].positions == {"AAPL": 500}
+
+
+def test_a_friday_stop_out_is_not_refreshed_away_on_monday():
+    """Monday's execution refreshes a Friday decision at Sunday's cutoff; a
+    stop-out must stay a stop-out, with no analyst asked."""
+    fund, analyst = _stop_fund()
+    records, _ = _step(fund, WEEKDAYS[:6], data=FakeDataClient(_aapl({4: 150.0, 5: 150.0})))
+    friday, next_monday = records[4], records[5]
+    assert friday.decision.is_stopped_out
+    calls = analyst.predict.call_count
+    assert next_monday.executed.refreshed_assessment.is_stopped_out
+    assert next_monday.positions == {} and next_monday.cash == pytest.approx(75_000)
+    assert analyst.predict.call_count == calls
+
+
+def test_a_state_written_before_the_peak_was_tracked_measures_from_capital():
+    fund, _ = _stop_fund()
+    state = FundState.model_validate_json(FundState.initial(100_000).model_dump_json(exclude={"peak_nav"}))
+    assert state.peak_nav is None
+    record = advance(fund, state, WEEKDAYS[0], SimBroker(cash=100_000), FakeDataClient(_aapl({})), ["AAPL"])
+    assert record.decision is not None and not record.decision.is_stopped_out
+    assert next_state(state, record).peak_nav == pytest.approx(100_000)

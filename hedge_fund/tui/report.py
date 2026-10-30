@@ -389,7 +389,7 @@ def session_row(record: SessionRecord, prev_nav: float, *, time_only: bool = Fal
         n = len(record.executed.fills)
         row.append(f"  {n} {'fill' if n == 1 else 'fills'}", style=MUTED)
     if record.decision is not None:
-        row.append("  decided", style=MUTED)
+        row.append("  stopped out" if record.decision.is_stopped_out else "  decided", style=MUTED)
     return row
 
 
@@ -417,7 +417,16 @@ def session_overview(record: SessionRecord) -> Group:
         if len(x.fills) > 8:
             parts.append(Text(f"  … {len(x.fills) - 8} more", style=MUTED))
         parts.append(Text(""))
-    if record.decision is not None:
+    if record.decision is not None and record.decision.is_stopped_out:
+        d = record.decision
+        stop = next(c for c in d.clamps if c.limit == "max_drawdown_pct")
+        parts.append(Text.assemble(
+            ("STOPPED OUT  ", f"bold {RED}"),
+            (f"drawdown {stop.before:.1%} breached the {d.spec.risk.max_drawdown_pct:.1%} limit · "
+             f"sells everything at the next {'bar' if is_intraday(record.session) else 'session'}'s close",
+             MUTED)))
+        parts.append(Text(""))
+    elif record.decision is not None:
         d = record.decision
         n_signals = sum(len(sr.signals) for sr in d.strategies)
         parts.append(Text.assemble(

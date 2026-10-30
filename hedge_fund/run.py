@@ -387,7 +387,10 @@ def _tick_summary(name: str, record: SessionRecord) -> str:
     if record.executed is not None:
         costs = f", costs ${record.executed.trading_cost:,.2f}" if record.executed.trading_cost else ""
         parts.append(f"executed {len(record.executed.orders)} orders from {record.executed.as_of}{costs}")
-    if record.decision is not None:
+    if record.decision is not None and record.decision.is_stopped_out:
+        stop = next(c for c in record.decision.clamps if c.limit == "max_drawdown_pct")
+        parts.append(f"stopped out at {stop.before:.1%} drawdown; sells everything next session")
+    elif record.decision is not None:
         n_signals = sum(len(sr.signals) for sr in record.decision.strategies)
         when = "bar" if is_intraday(record.session) else "close"
         parts.append(f"decided on {n_signals} signals, {len(record.decision.clamps)} clamps; executes next {when}")

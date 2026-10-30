@@ -17,7 +17,7 @@ from math import isfinite
 from hedge_fund.brokers.models import Fill
 from hedge_fund.brokers.protocol import Broker
 from hedge_fund.data.protocol import DataClient
-from hedge_fund.fund import Fund, normalize_universe
+from hedge_fund.fund import Fund, FundSpec, normalize_universe
 from hedge_fund.models import Signal
 from hedge_fund.pipeline.clock import Clock, clock_for, execution_policy, PinnedQuotes
 from hedge_fund.pipeline.execution import build_orders
@@ -29,12 +29,15 @@ from hedge_fund.pipeline.models import (
 )
 from hedge_fund.portfolio.construction import blend_signals, WEIGHT_TOLERANCE
 from hedge_fund.portfolio.validation import validate_targets
-from hedge_fund.risk.limits import apply_limits
+from hedge_fund.risk.limits import apply_limits, ClampEvent
 from hedge_fund.signals import get_investment_approach
 
 # How far back to look for the most recent close: covers weekends, holiday
 # clusters, and short trading halts without reaching into stale history.
 _MARK_LOOKBACK_DAYS = 7
+# Average daily volume: the last 20 daily bars, found within 30 calendar days.
+_ADV_BARS = 20
+_ADV_LOOKBACK_DAYS = 30
 
 
 def assess_fund(
@@ -119,7 +122,9 @@ def execute_decision(
     if fund.spec != original.spec:
         raise ValueError("fund mandate changed after assessment; create a new assessment")
     cutoff = clock.previous(session)
-    effective = original if cutoff == original.as_of else assess_fund(
+    # A stop-out is never refreshed: the analysts were not asked, and asking
+    # them across a calendar gap would put the book back on.
+    effective = original if cutoff == original.as_of or original.is_stopped_out else assess_fund(
         fund, cutoff, data_client, original.universe, clock,
     )
     spec = effective.spec
@@ -131,13 +136,27 @@ def execute_decision(
     equity_before = cash_before + sum(p.shares * marks[t] for t, p in held.items())
     if not isfinite(equity_before) or equity_before <= 0:
         raise ValueError(f"{spec.name}: equity on {session} must be finite and positive")
-    orders = build_orders(targets, held, marks, equity_before)
+    max_shares: dict[str, int] | None = None
+    if spec.risk.max_adv_pct is not None:
+        volume = average_daily_volume(sorted(set(held) | set(targets)), clock.session_date(session), data_client)
+        max_shares = {t: int(spec.risk.max_adv_pct * adv) for t, adv in volume.items()}
+    orders = build_orders(targets, held, marks, equity_before, max_shares)
     projected = {t: p.shares for t, p in held.items()}
     for order in orders:
         projected[order.ticker] = projected.get(order.ticker, 0) + (
             order.quantity if order.side == "buy" else -order.quantity
         )
     weights = {t: shares * marks[t] / equity_before for t, shares in projected.items()}
+    liquidity_clamps: list[ClampEvent] = []
+    if max_shares is not None:
+        wanted = {o.ticker: o.quantity for o in build_orders(targets, held, marks, equity_before)}
+        got = {o.ticker: o.quantity for o in orders}
+        for ticker in sorted(wanted):
+            if got.get(ticker, 0) < wanted[ticker]:
+                liquidity_clamps.append(ClampEvent(
+                    limit="max_adv_pct", ticker=ticker,
+                    before=targets.get(ticker, 0.0), after=weights.get(ticker, 0.0),
+                ))
     for ticker, weight in weights.items():
         if not isfinite(weight) or abs(weight) > spec.risk.max_position_pct + WEIGHT_TOLERANCE:
             raise ValueError(f"{ticker}: projected position violates max_position_pct")
@@ -146,9 +165,9 @@ def execute_decision(
     fills: list[Fill] = [broker.place_order(order) for order in orders]
     positions = {t: p.shares for t, p in broker.positions().items()}
     cash = broker.cash()
-    fields = effective.model_dump(exclude={"as_of", "marks"})
+    fields = effective.model_dump(exclude={"as_of", "marks", "clamps"})
     return CycleRecord(
-        **fields, as_of=original.as_of, marks=marks,
+        **fields, as_of=original.as_of, marks=marks, clamps=[*effective.clamps, *liquidity_clamps],
         equity_before=equity_before, cash_before=cash_before,
         orders=orders, fills=fills, positions=positions, cash=cash,
         nav=cash + sum(shares * marks[t] for t, shares in positions.items()),
@@ -156,6 +175,41 @@ def execute_decision(
         refreshed_assessment=effective.model_copy(deep=True),
         execution_as_of=session, execution_policy=execution_policy(session),
     )
+
+
+def stop_out_decision(
+    spec: FundSpec, as_of: str, universe: list[str], marks: dict[str, float],
+    positions: dict[str, int], drawdown: float,
+) -> DecisionRecord:
+    """The decision a drawdown stop-out makes: close every held name, ask no
+    analyst. One whole-book clamp records the drawdown that fired it."""
+    total_slice = sum(s.weight for s in spec.strategies)
+    flat = {ticker: 0.0 for ticker in sorted(positions)}
+    return DecisionRecord(
+        fund=spec.name, as_of=as_of, spec=spec, universe=universe,
+        marks={ticker: marks[ticker] for ticker in sorted(positions)}, skipped=[],
+        strategies=[
+            StrategyRecord(name=strategy.name, slice=strategy.weight / total_slice, signals=[],
+                           convictions={}, weights={}, flat_reason="no_eligible_positions")
+            for strategy in spec.strategies
+        ],
+        target_weights=flat, final_weights=flat,
+        clamps=[ClampEvent(limit="max_drawdown_pct", before=drawdown, after=0.0)],
+    )
+
+
+def average_daily_volume(tickers: list[str], as_of: str, data_client: DataClient) -> dict[str, float]:
+    """Mean volume of each name's last 20 daily bars on or before *as_of*
+    (fewer when fewer printed). A name with no bars is absent: a missing
+    number must not silently freeze a name, so it is left uncapped."""
+    start = (_date.fromisoformat(as_of) - timedelta(days=_ADV_LOOKBACK_DAYS)).isoformat()
+    volume: dict[str, float] = {}
+    for ticker in tickers:
+        bars = [p for p in data_client.get_prices(ticker, start, as_of) if start <= p.time[:10] <= as_of]
+        recent = sorted(bars, key=lambda p: p.time)[-_ADV_BARS:]
+        if recent:
+            volume[ticker] = sum(p.volume for p in recent) / len(recent)
+    return volume
 
 
 def mark_lookback_start(as_of: str) -> str:

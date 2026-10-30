@@ -56,6 +56,11 @@ class DecisionRecord(BaseModel):
     final_weights: dict[str, float]
     risk_scale_factor: float | None = None
 
+    @property
+    def is_stopped_out(self) -> bool:
+        """A drawdown stop-out: every target is zero and no analyst was asked."""
+        return any(c.limit == "max_drawdown_pct" for c in self.clamps)
+
 
 class CycleRecord(BaseModel):
     """One tick of the fund, fully serialized — every stage's inputs and

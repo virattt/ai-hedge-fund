@@ -126,6 +126,19 @@ def test_costs_default_to_a_real_cost_model_and_serialize_only_when_changed():
         FundSpec(**{**MINIMAL, "costs": {"spread_bps": -1}})
 
 
+def test_optional_risk_limits_serialize_only_when_set():
+    spec = FundSpec(**MINIMAL)
+    assert spec.risk.max_net_exposure is None and spec.risk.max_drawdown_pct is None and spec.risk.max_adv_pct is None
+    assert set(spec.model_dump()["risk"]) == {"max_position_pct", "max_gross_exposure"}
+    full = FundSpec(**{**MINIMAL, "risk": {**MINIMAL["risk"], "max_net_exposure": 0.3,
+                                            "max_drawdown_pct": 0.2, "max_adv_pct": 0.05}})
+    assert full.model_dump()["risk"]["max_drawdown_pct"] == 0.2
+    assert FundSpec.model_validate_json(full.model_dump_json()) == full
+    for bad in ({"max_drawdown_pct": 1.0}, {"max_adv_pct": 0}, {"max_net_exposure": -0.1}):
+        with pytest.raises(ValidationError):
+            FundSpec(**{**MINIMAL, "risk": {**MINIMAL["risk"], **bad}})
+
+
 def test_typo_key_rejected():
     with pytest.raises(ValidationError):
         FundSpec(**{**MINIMAL, "capitol": 1000})

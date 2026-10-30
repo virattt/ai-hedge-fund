@@ -44,7 +44,7 @@ from hedge_fund.fund import Cadence, Fund, FundSpec, normalize_universe
 from hedge_fund.llm import DEFAULT_MODEL
 from hedge_fund.pipeline.clock import Clock, clock_for
 from hedge_fund.pipeline.models import CycleRecord, DecisionRecord
-from hedge_fund.pipeline.stages import assess_fund, execute_decision
+from hedge_fund.pipeline.stages import assess_fund, execute_decision, stop_out_decision
 from hedge_fund.signals import LLMAgent
 
 __all__ = ["Cadence"]  # re-exported for callers that typed against the engine
@@ -72,10 +72,11 @@ class FundState(BaseModel):
     pending: DecisionRecord | None = None       # assessed, awaiting execution
     prev_hash: str | None = None                # hash of the last record
     halted: str | None = None                   # reason, when the kill switch is set
+    peak_nav: float | None = None               # highest NAV so far; the drawdown stop measures from it
 
     @classmethod
     def initial(cls, capital: float) -> FundState:
-        return cls(cash=capital)
+        return cls(cash=capital, peak_nav=capital)
 
 
 class SessionRecord(BaseModel):
@@ -173,7 +174,16 @@ def advance(
     nav = cash + sum(shares * marks[t] for t, shares in positions.items())
 
     rebalance = is_rebalance_session(session, state.last_session, spec.rebalance)
-    decision = assess_fund(fund, session, data_client, universe, clock) if rebalance else None
+    # A state written before the peak was tracked measures from the capital.
+    peak = state.peak_nav if state.peak_nav is not None else spec.capital
+    drawdown = max(0.0, 1 - nav / peak)
+    if spec.risk.max_drawdown_pct is not None and drawdown >= spec.risk.max_drawdown_pct:
+        # Stopped out: sell everything at the next close, then sit in cash.
+        # A fund in cash never climbs back over the line, so no analyst is
+        # asked again until the operator raises the limit.
+        decision = stop_out_decision(spec, session, universe, marks, positions, drawdown) if positions else None
+    else:
+        decision = assess_fund(fund, session, data_client, universe, clock) if rebalance else None
 
     record = SessionRecord(
         fund=spec.name,
@@ -207,6 +217,7 @@ def next_state(state: FundState, record: SessionRecord) -> FundState:
         pending=record.decision,
         prev_hash=record.hash,
         halted=state.halted,
+        peak_nav=max(state.peak_nav if state.peak_nav is not None else record.nav, record.nav),
     )
 
 
