@@ -114,7 +114,7 @@ class JevLLM:
     ENDPOINT = "https://api.typesafe.ai/v1/systemone"
     _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504, 529})
 
-    def __init__(self, api_key: str, model: str = "jev-1.13.0", timeout: float = 60.0) -> None:
+    def __init__(self, api_key: str, model: str = "jev-1.13.0", timeout: float = 60.0, base_url: str | None = None) -> None:
         if not isinstance(api_key, str) or not api_key.strip():
             raise ValueError("A non-empty TypeSafe API key is required")
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
@@ -122,6 +122,9 @@ class JevLLM:
         self.model = model
         self._api_key = api_key
         self._timeout = timeout
+        if base_url:
+            # Same meaning as the SDK's TYPESAFE_BASE_URL: the host, without /v1/systemone.
+            self.ENDPOINT = base_url.rstrip("/") + "/v1/systemone"
 
     def cache_key(self, agent: str, system: str, user: str) -> str:
         """Hash semantic inputs only; do not disturb legacy prompt keys."""
@@ -250,7 +253,8 @@ def make_llm(
 
     if provider == "TypeSafe":
         # Typed judgments have no generated tokens or output-token budget.
-        return JevLLM(api_key=api_key, model=model, timeout=timeout)
+        return JevLLM(api_key=api_key, model=model, timeout=timeout,
+                      base_url=os.getenv("TYPESAFE_BASE_URL"))
 
     if provider == "Anthropic":
         from langchain_anthropic import ChatAnthropic
