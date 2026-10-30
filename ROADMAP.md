@@ -15,8 +15,7 @@ backtest and paper, on one verb (`advance`), and a paper fund carries its book
 between sessions in a hash-chained ledger with a kill switch. `aihf paper tick` is
 idempotent and cron-safe, so the next step is the scheduler itself (market-calendar
 timing, notifications, a heartbeat) and observability over the event log. In
-parallel: retiring the v1 CLI, which needs Ollama (the free, local, no-key path) and
-the remaining investor personas ported.
+parallel: retiring the v1 CLI, which needs the remaining investor personas ported.
 
 The tables below are a capability map, not a strict order; where items depend on
 each other, the dependency is noted.
@@ -35,7 +34,7 @@ through one session in backtest or paper mode, live later (see [VISION.md](./VIS
 | Persistent ledger — positions, every decision + thesis, orders, fills, NAV history | ✅ (append-only `SessionRecord`s, hash-chained; replay verifies the chain and rebuilds state; the broker book is reconciled against it before every tick) |
 | Kill switch — halt/resume a paper fund; any failure inside a tick halts it | ✅ |
 | Transaction cost model — half-spread and commission charged on every fill, in backtest and paper; the mandate's `costs:` block | ✅ (market impact from daily volume, and cost-aware sizing, next) |
-| LLM provider layer — one client factory (`make_llm`) routed by the model registry: Anthropic · OpenAI · DeepSeek · Google · xAI · Kimi | ✅ (Ollama next — the free local path, and the last blocker v1 holds over v2) |
+| LLM provider layer — one client factory (`make_llm`) routed by the model registry: Anthropic · OpenAI · DeepSeek · Google · xAI · Kimi · Ollama | ✅ (Ollama is the free local path: no key) |
 | Point-in-time data correctness — as-of / filing-date queries, no lookahead | 🚧 |
 | Validation gate — CPCV, probability of backtest overfitting (PBO) | ⬜ |
 
