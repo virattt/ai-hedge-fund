@@ -59,7 +59,7 @@ def _spec(**overrides):
         name="test-fund",
         strategies=[{"name": "solo", "models": [{"name": "a"}], "blend": {"mode": "long_short"}}],
         risk={"max_position_pct": 1.0, "max_gross_exposure": 1.0},
-        costs={"spread_bps": 0, "commission_per_share": 0},  # exact arithmetic below
+        costs={"spread_bps": 0, "commission_per_share": 0, "impact_coefficient": 0},  # exact arithmetic below
         capital=100_000.0,
         rebalance="weekly",
     )
@@ -323,9 +323,11 @@ def test_schedule_lists_rebalance_and_execution_sessions():
     schedule = build_schedule(FakeDataClient(SERIES), "SPY", WEEKDAYS[0], WEEKDAYS[-1], "weekly")
     assert schedule.execution_dates == dict(zip(MONDAYS, TUESDAYS))
     assert schedule.assessment_dates == MONDAYS
+    assert schedule.warm_dates == sorted(set(MONDAYS) | set(TUESDAYS))   # liquidity at each execution too
     daily = build_schedule(FakeDataClient(SERIES), "SPY", "2024-06-03", "2024-06-04", "daily")
     assert daily.execution_dates == {"2024-06-03": "2024-06-04", "2024-06-04": None}
     assert daily.assessment_dates == ["2024-06-03", "2024-06-04"]
+    assert daily.warm_dates == ["2024-06-03", "2024-06-04"]
 
 
 def test_backtest_excludes_current_session_even_if_provider_returns_it(monkeypatch):

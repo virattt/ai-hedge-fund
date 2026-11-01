@@ -88,16 +88,20 @@ def test_portfolio_report_explains_rounding_scaling_and_flat_strategies():
 
 def test_orders_report_shows_the_fill_beside_the_mark_and_what_it_cost():
     record = make_cycle(make_signal())
-    record.orders = [Order(ticker="TEST", side="buy", quantity=100, price=100.0)]
+    record.orders = [Order(ticker="TEST", side="buy", quantity=100, price=100.0, adv=10_000, volatility=0.0)]
     record.fills = [Fill(ticker="TEST", side="buy", quantity=100, price=100.05)]
     record.cash_before, record.cash = 100_000, 100_000 - 100 * 100.05 - 0.50
     text = render(report.session_detail(_session_with(record), "x:sec:orders"))
-    assert "Mark" in text and "Fill" in text
-    assert "$100.00" in text and "$100.05" in text
-    assert "slippage $5.00 · commission $0.50" in text
+    assert "Mark" in text and "Fill" in text and "% ADV" in text
+    assert "$100.00" in text and "$100.05" in text and "1.00%" in text
+    # $5 of slippage splits into what the mandate's spread explains and the rest.
+    spread = 100 * 100.0 * record.spec.costs.spread_bps / 10_000
+    assert f"spread ${spread:,.2f} · impact ${5.0 - spread:,.2f} · commission $0.50" in text
+    record.orders = [Order(ticker="TEST", side="buy", quantity=100, price=100.0)]
     record.fills = [Fill(ticker="TEST", side="buy", quantity=100, price=100.0)]
     record.cash = 100_000 - 100 * 100.0
-    assert "slippage" not in render(report.session_detail(_session_with(record), "x:sec:orders"))
+    text = render(report.session_detail(_session_with(record), "x:sec:orders"))
+    assert "spread" not in text and "% ADV" not in text
 
 
 def test_cost_line_reads_as_bps_of_what_was_traded():

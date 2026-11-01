@@ -106,6 +106,18 @@ class CycleRecord(BaseModel):
         )
 
     @property
+    def spread_cost(self) -> float:
+        """The half-spread the mandate's cost model charges on these orders,
+        at their marks: the part of the slippage the spread explains."""
+        return sum(o.quantity * o.price * self.spec.costs.spread_bps / 10_000 for o in self.orders)
+
+    @property
+    def impact(self) -> float:
+        """The slippage beyond the modelled spread: market impact on a
+        simulated fill; on a live broker, whatever the venue did beyond it."""
+        return self.slippage - self.spread_cost
+
+    @property
     def commission(self) -> float:
         """The cash the fills do not explain. Derived from the book, not from
         the mandate's cost model, so a record filled free reports zero and a

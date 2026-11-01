@@ -1,10 +1,10 @@
 """SimBroker — deterministic simulated broker for backtests.
 
 Fills every order completely. With a cost model, the fill price sits half a
-spread away from the order's reference price and the commission comes out
-of cash; without one, the fill is exactly at the reference price. Either
-way the fill is deterministic: given the same orders, a backtest replays to
-the same book.
+spread plus the order's market impact away from the reference price and the
+commission comes out of cash; without one, the fill is exactly at the
+reference price. Either way the fill is deterministic: given the same
+orders, a backtest replays to the same book.
 
 Margin is not modeled: cash may go negative and stays visible. With an
 unlevered mandate (gross_target <= 1), sells-before-buys ordering, and
@@ -47,7 +47,9 @@ class SimBroker:
                 "the caller must price every order"
             )
 
-        price = order.price if self._costs is None else self._costs.fill_price(order.side, order.price)
+        price = order.price if self._costs is None else self._costs.fill_price(
+            order.side, order.price, order.participation, order.volatility or 0.0,
+        )
         commission = 0.0 if self._costs is None else self._costs.commission(order.quantity)
 
         if order.side == "buy":

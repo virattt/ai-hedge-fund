@@ -12,9 +12,10 @@ from __future__ import annotations
 
 from datetime import date as _date
 from datetime import timedelta
-from math import isfinite
+from math import isfinite, log
+from statistics import stdev
 
-from hedge_fund.brokers.models import Fill
+from hedge_fund.brokers.models import Fill, Liquidity, Order
 from hedge_fund.brokers.protocol import Broker
 from hedge_fund.data.protocol import DataClient
 from hedge_fund.fund import Fund, FundSpec, normalize_universe
@@ -32,12 +33,13 @@ from hedge_fund.portfolio.validation import validate_targets
 from hedge_fund.risk.limits import apply_limits, ClampEvent
 from hedge_fund.signals import get_investment_approach
 
-# How far back to look for the most recent close: covers weekends, holiday
-# clusters, and short trading halts without reaching into stale history.
+# The one window of daily history the pipeline fetches at a date: 30 calendar
+# days, enough for the 20 bars liquidity needs.
+_HISTORY_DAYS = 30
+_LIQUIDITY_BARS = 20
+# A mark must be fresher than this: covers weekends, holiday clusters, and
+# short trading halts without reaching into stale history.
 _MARK_LOOKBACK_DAYS = 7
-# Average daily volume: the last 20 daily bars, found within 30 calendar days.
-_ADV_BARS = 20
-_ADV_LOOKBACK_DAYS = 30
 
 
 def assess_fund(
@@ -136,11 +138,12 @@ def execute_decision(
     equity_before = cash_before + sum(p.shares * marks[t] for t, p in held.items())
     if not isfinite(equity_before) or equity_before <= 0:
         raise ValueError(f"{spec.name}: equity on {session} must be finite and positive")
+    liquid = liquidity(sorted(set(held) | set(targets)), clock.session_date(session), data_client)
     max_shares: dict[str, int] | None = None
     if spec.risk.max_adv_pct is not None:
-        volume = average_daily_volume(sorted(set(held) | set(targets)), clock.session_date(session), data_client)
-        max_shares = {t: int(spec.risk.max_adv_pct * adv) for t, adv in volume.items()}
-    orders = build_orders(targets, held, marks, equity_before, max_shares)
+        max_shares = {t: int(spec.risk.max_adv_pct * name.adv) for t, name in liquid.items()}
+    min_notional = spec.costs.min_trade_pct * equity_before
+    orders = build_orders(targets, held, marks, equity_before, max_shares, min_notional, liquid)
     projected = {t: p.shares for t, p in held.items()}
     for order in orders:
         projected[order.ticker] = projected.get(order.ticker, 0) + (
@@ -149,7 +152,7 @@ def execute_decision(
     weights = {t: shares * marks[t] / equity_before for t, shares in projected.items()}
     liquidity_clamps: list[ClampEvent] = []
     if max_shares is not None:
-        wanted = {o.ticker: o.quantity for o in build_orders(targets, held, marks, equity_before)}
+        wanted = {o.ticker: o.quantity for o in build_orders(targets, held, marks, equity_before, min_notional=min_notional)}
         got = {o.ticker: o.quantity for o in orders}
         for ticker in sorted(wanted):
             if got.get(ticker, 0) < wanted[ticker]:
@@ -198,25 +201,35 @@ def stop_out_decision(
     )
 
 
-def average_daily_volume(tickers: list[str], as_of: str, data_client: DataClient) -> dict[str, float]:
-    """Mean volume of each name's last 20 daily bars on or before *as_of*
-    (fewer when fewer printed). A name with no bars is absent: a missing
-    number must not silently freeze a name, so it is left uncapped."""
-    start = (_date.fromisoformat(as_of) - timedelta(days=_ADV_LOOKBACK_DAYS)).isoformat()
-    volume: dict[str, float] = {}
+def liquidity(tickers: list[str], as_of: str, data_client: DataClient) -> dict[str, Liquidity]:
+    """Each name's liquidity from its last 20 daily bars on or before *as_of*
+    (fewer when fewer printed): mean volume, and the sample sigma of the
+    daily log returns. A name with no bars is absent: a missing number must
+    not silently freeze a name, so it trades uncapped and pays no impact.
+    Fewer than three bars give no sigma, and the name pays no impact either.
+
+    Daily bars price a minute fund's orders too: a bar's order is measured
+    against a whole day's volume, which overstates what a bar can absorb."""
+    start = history_start(as_of)
+    liquid: dict[str, Liquidity] = {}
     for ticker in tickers:
         bars = [p for p in data_client.get_prices(ticker, start, as_of) if start <= p.time[:10] <= as_of]
-        recent = sorted(bars, key=lambda p: p.time)[-_ADV_BARS:]
-        if recent:
-            volume[ticker] = sum(p.volume for p in recent) / len(recent)
-    return volume
+        recent = sorted(bars, key=lambda p: p.time)[-_LIQUIDITY_BARS:]
+        if not recent:
+            continue
+        returns = [log(b.close / a.close) for a, b in zip(recent, recent[1:])]
+        liquid[ticker] = Liquidity(
+            adv=sum(p.volume for p in recent) / len(recent),
+            volatility=stdev(returns) if len(returns) >= 2 else 0.0,
+        )
+    return liquid
 
 
-def mark_lookback_start(as_of: str) -> str:
-    """The first date a mark for *as_of* may come from: a week back, enough
-    to cover weekends, holiday clusters and short halts without reaching into
-    stale history. The backtest warm fetches exactly this window."""
-    return (_date.fromisoformat(as_of) - timedelta(days=_MARK_LOOKBACK_DAYS)).isoformat()
+def history_start(as_of: str) -> str:
+    """The first date of the daily history the pipeline fetches for *as_of*:
+    30 days back, one window that serves the mark and the liquidity. The
+    backtest warm fetches exactly this window."""
+    return (_date.fromisoformat(as_of) - timedelta(days=_HISTORY_DAYS)).isoformat()
 
 
 # ---------------------------------------------------------------------------
@@ -228,14 +241,16 @@ def _mark_prices(
     as_of: str,
     data_client: DataClient,
 ) -> tuple[dict[str, float], list[TickerSkip]]:
-    """Analytical lookback marks; names without data are excluded from assessment."""
-    start = mark_lookback_start(as_of)
+    """Analytical lookback marks; names without a fresh close are excluded
+    from assessment. Fetches the full history window, so the liquidity call
+    at the same date is a cache hit."""
+    fresh = (_date.fromisoformat(as_of) - timedelta(days=_MARK_LOOKBACK_DAYS)).isoformat()
     marks: dict[str, float] = {}
     skipped: list[TickerSkip] = []
 
     for ticker in tickers:
-        prices = data_client.get_prices(ticker, start, as_of)
-        bars = [p for p in prices if start <= p.time[:10] <= as_of]
+        prices = data_client.get_prices(ticker, history_start(as_of), as_of)
+        bars = [p for p in prices if fresh <= p.time[:10] <= as_of]
         if bars:
             marks[ticker] = max(bars, key=lambda p: p.time).close
             if not isfinite(marks[ticker]) or marks[ticker] <= 0:

@@ -50,6 +50,14 @@ class ReplaySchedule(BaseModel):
             if session is not None
         })
 
+    @property
+    def warm_dates(self) -> list[str]:
+        """Every date the replay fetches daily history at: each assessment
+        (marks) and each execution session (liquidity)."""
+        return sorted(set(self.assessment_dates) | {
+            session for session in self.execution_dates.values() if session is not None
+        })
+
 
 def build_schedule(data: DataClient, benchmark: str, start: str, end: str, cadence: str) -> ReplaySchedule:
     closes = session_closes(data, benchmark, start, end)

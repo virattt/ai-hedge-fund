@@ -38,7 +38,7 @@ from hedge_fund.backtesting.research import last_universe, save_result
 from hedge_fund.brokers import Fill
 from hedge_fund.data import CachedDataClient, FDClient
 from hedge_fund.fund import discover_funds, Fund, FundSpec, normalize_universe
-from hedge_fund.pipeline import CycleRecord, mark_lookback_start
+from hedge_fund.pipeline import CycleRecord, history_start
 from hedge_fund.scorecard import score
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent
 from hedge_fund.tui.home import demand_run_keys, HomeScreen
@@ -240,11 +240,10 @@ class BacktestScreen(Screen):
         try:
             with FDClient() as raw:
                 schedule = build_schedule(CachedDataClient(raw), spec.benchmark, start, end, spec.rebalance)
-            grid = schedule.assessment_dates
-            app.call_from_thread(self._begin_warm, spec, universe, len(grid))
-            self._warm_market(spec, universe, grid)
+            app.call_from_thread(self._begin_warm, spec, universe, len(schedule.warm_dates))
+            self._warm_market(spec, universe, schedule.warm_dates)
             app.call_from_thread(self._begin_agents, spec)
-            self._warm_agents(spec, universe, grid)
+            self._warm_agents(spec, universe, schedule.assessment_dates)
             app.call_from_thread(self._begin_replay, spec, schedule.closes, len(schedule.closes))
 
             fund = Fund(spec, blind=True)  # same prompts _warm_agents cached
@@ -286,7 +285,7 @@ class BacktestScreen(Screen):
                 if has_agents:
                     fd.get_company_facts(ticker)
                 for as_of in dates:
-                    fd.get_prices(ticker, mark_lookback_start(as_of), as_of)
+                    fd.get_prices(ticker, history_start(as_of), as_of)
                     if has_agents:
                         fd.get_financial_metrics(ticker, as_of,
                                                  period="ttm", limit=20)

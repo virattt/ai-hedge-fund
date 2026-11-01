@@ -621,17 +621,25 @@ def _orders_detail(record: CycleRecord) -> Group:
     table.add_column("Ticker", style=f"bold {CYAN}")
     table.add_column("Mark", justify="right")
     table.add_column("Fill", justify="right")
+    sized = any(o.adv is not None for o in record.orders)
+    if sized:
+        table.add_column("% ADV", justify="right")
     for o, fill in zip(record.orders, record.fills):
         tone = f"bold {GREEN}" if o.side == "buy" else f"bold {RED}"
-        table.add_row(
+        row = [
             Text(o.side.upper(), style=tone),
             Text(f"{o.quantity:,}", style=tone),
             o.ticker,
             f"${o.price:,.2f}",
             f"${fill.price:,.2f}",
-        )
+        ]
+        if sized:
+            row.append(f"{o.participation:.2%}" if o.adv is not None else "")
+        table.add_row(*row)
     if record.slippage or record.commission:
-        table.caption = f"slippage ${record.slippage:,.2f} · commission ${record.commission:,.2f}"
+        # Rounding first keeps a float's -0.00 off the screen.
+        spread, impact, commission = (round(x, 2) + 0.0 for x in (record.spread_cost, record.impact, record.commission))
+        table.caption = f"spread ${spread:,.2f} · impact ${impact:,.2f} · commission ${commission:,.2f}"
         table.caption_style = MUTED
         table.caption_justify = "left"
     return Group(Text("ORDERS", style=f"bold {BRIGHT}"), Text(""), table)

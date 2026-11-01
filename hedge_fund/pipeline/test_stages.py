@@ -2,6 +2,8 @@
 
 from datetime import date as _date
 from datetime import timedelta
+from math import log, sqrt
+from statistics import stdev
 
 import pytest
 
@@ -10,7 +12,7 @@ from hedge_fund.data.models import Price
 from hedge_fund.fund.spec import Fund, FundSpec
 from hedge_fund.models import Signal
 from hedge_fund.pipeline.models import CycleRecord
-from hedge_fund.pipeline.stages import assess_fund, average_daily_volume, execute_decision, mark_lookback_start
+from hedge_fund.pipeline.stages import assess_fund, execute_decision, history_start, liquidity
 
 
 def _cycle(fund, as_of, broker, data, universe):
@@ -453,8 +455,21 @@ def test_strategy_gross_violation_is_rejected_even_when_fund_risk_clips_it(monke
     broker.place_order.assert_not_called()
 
 
-def test_mark_lookback_start_is_a_week_before():
-    assert mark_lookback_start("2025-01-15") == "2025-01-08"
+def test_history_start_is_thirty_days_before():
+    assert history_start("2025-01-15") == "2024-12-16"
+
+
+def test_a_close_older_than_a_week_does_not_mark():
+    class StaleDataClient(FakeDataClient):
+        def get_prices(self, ticker, start_date, end_date, **kwargs):
+            # One bar, ten days before the date asked for: inside the history
+            # window, outside the mark's freshness.
+            stale = (_date.fromisoformat(end_date) - timedelta(days=10)).isoformat()
+            return [Price(open=1, close=1, high=1, low=1, volume=1, time=f"{stale}T00:00:00Z")]
+
+    decision = assess_fund(Fund(_spec(), models={"solo": [FakeAnalyst("a", views={})]}),
+                           "2024-06-03", StaleDataClient({}), ["AAPL"])
+    assert decision.marks == {} and [s.ticker for s in decision.skipped] == ["AAPL"]
 
 
 # ---------------------------------------------------------------------------
@@ -478,10 +493,51 @@ class VolumeDataClient(FakeDataClient):
                 for i, v in enumerate(self._volumes[ticker])]
 
 
-def test_average_daily_volume_is_the_mean_of_the_last_twenty_bars():
+class SeriesDataClient(FakeDataClient):
+    """Canned (close, volume) daily series per ticker, ending on the date asked for."""
+
+    def __init__(self, closes, series):
+        super().__init__(closes)
+        self._series = series
+
+    def get_prices(self, ticker, start_date, end_date, **kwargs):
+        if ticker not in self._series:
+            return super().get_prices(ticker, start_date, end_date, **kwargs)
+        end = _date.fromisoformat(end_date)
+        return [Price(open=c, close=c, high=c, low=c, volume=v,
+                      time=f"{(end - timedelta(days=len(self._series[ticker]) - 1 - i)).isoformat()}T00:00:00Z")
+                for i, (c, v) in enumerate(self._series[ticker])]
+
+
+def test_liquidity_is_the_mean_volume_of_the_last_twenty_bars():
     data = VolumeDataClient(CLOSES, {"AAPL": [1_000_000] * 5 + [2_000_000] * 20, "MSFT": [500] * 3})
-    adv = average_daily_volume(["AAPL", "MSFT", "ZZZ"], "2024-06-04", data)
-    assert adv == {"AAPL": pytest.approx(2_000_000), "MSFT": pytest.approx(500)}   # ZZZ has no bars: absent
+    liquid = liquidity(["AAPL", "MSFT", "ZZZ"], "2024-06-04", data)
+    assert sorted(liquid) == ["AAPL", "MSFT"]   # ZZZ has no bars: absent
+    assert liquid["AAPL"].adv == pytest.approx(2_000_000) and liquid["MSFT"].adv == pytest.approx(500)
+    assert liquid["AAPL"].volatility == 0.0   # a flat series has no vol
+
+
+def test_liquidity_volatility_is_the_sample_sigma_of_daily_log_returns():
+    data = SeriesDataClient(CLOSES, {"AAPL": [(100.0, 1_000), (110.0, 2_000), (100.0, 3_000)]})
+    liquid = liquidity(["AAPL", "MSFT"], "2024-06-04", data)
+    assert liquid["AAPL"].adv == pytest.approx(2_000)
+    assert liquid["AAPL"].volatility == pytest.approx(stdev([log(1.1), log(100 / 110)]))
+    assert liquid["MSFT"].volatility == 0.0   # one bar: no return to measure
+
+
+def test_the_fill_pays_square_root_impact_and_the_cycle_derives_it():
+    fund = Fund(_spec(), models={"solo": [FakeAnalyst("a", views={"AAPL": 1.0})]})
+    data = SeriesDataClient(CLOSES, {"AAPL": [(100.0, 1_000), (110.0, 2_000), (100.0, 3_000)]})
+    broker = SimBroker(cash=100_000.0, costs=fund.spec.costs)   # spread and commission 0: impact alone
+    record = _cycle(fund, "2024-06-03", broker, data, UNIVERSE)
+    [order], [fill] = record.orders, record.fills
+    assert (order.ticker, order.price, order.adv) == ("AAPL", 100.0, 2_000.0)
+    sigma = stdev([log(1.1), log(100 / 110)])
+    impact = sigma * sqrt(order.quantity / 2_000)
+    assert fill.price == pytest.approx(100.0 * (1 + impact))
+    assert record.spread_cost == 0.0
+    assert record.impact == pytest.approx(order.quantity * 100.0 * impact)
+    assert record.trading_cost == pytest.approx(record.impact)
 
 
 def test_volume_cap_clips_the_order_and_records_the_clamp():

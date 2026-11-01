@@ -33,7 +33,9 @@ risk:
   # max_adv_pct: 0.05         # no order above 5% of 20-day average daily volume
 costs:                        # what every fill costs; these are the defaults
   spread_bps: 5               # half the bid-ask spread, paid on every side
-  commission_per_share: 0.005 # dollars a share; zero on both means free fills
+  commission_per_share: 0.005 # dollars a share
+  impact_coefficient: 1.0     # Y in the square-root law: Y x daily vol x sqrt(order / ADV)
+  min_trade_pct: 0.005        # an add under 0.5% of equity waits; trims and closes always trade
 capital: 100000
 rebalance: weekly             # daily | weekly | monthly — how often the fund trades
 benchmark: SPY                # measured against; also the backtest's trading-day grid
