@@ -67,6 +67,7 @@ def horizon_label(days: int) -> str:
 DEFAULT_MODEL_LABEL = "Opus 5.5"
 
 DEFAULT_RISK = {"max_position_pct": 0.25, "max_gross_exposure": 1.0, "max_drawdown_pct": 0.20}
+DEFAULT_ALLOCATION: dict = {}  # the allocator at its defaults: the scorecard moves the weights
 DEFAULT_CAPITAL = 100_000.0
 BACKTEST_WEEKS = 78  # ~18 months of history for the default backtest window
 BOARD_REFRESH = 1 / 12  # seconds between run-board repaints — smooth, not frantic

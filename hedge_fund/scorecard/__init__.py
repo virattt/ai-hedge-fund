@@ -1,14 +1,16 @@
 """The scorecard — who is right, and which sleeve makes the money.
 
-The first half of the feedback loop: measurement only. `score` reads a
-fund's SessionRecords (a backtest's `records`, a paper fund's ledger) and
-grades every analyst and every strategy on what happened next. Nothing is
-stored; the scorecard is derived from the ledger at the point of use.
+The feedback loop. `score` reads a fund's SessionRecords (a backtest's
+`records`, a paper fund's ledger) and grades every analyst and every
+strategy on what happened next; `allocate` turns those grades into the
+weights the next decision uses. Nothing is stored; both are derived from
+the ledger at the point of use, and the decision records what it used.
 """
 
 from __future__ import annotations
 
 from hedge_fund.pipeline.session import SessionRecord
+from hedge_fund.scorecard.allocation import allocate, current_allocation
 from hedge_fund.scorecard.analysts import score_analysts
 from hedge_fund.scorecard.models import AnalystScore, Scorecard, StrategyScore
 from hedge_fund.scorecard.strategies import fund_pnl, score_strategies, trading_cost
@@ -29,4 +31,7 @@ def score(records: list[SessionRecord]) -> Scorecard:
     )
 
 
-__all__ = ["AnalystScore", "Scorecard", "StrategyScore", "score", "score_analysts", "score_strategies"]
+__all__ = [
+    "AnalystScore", "Scorecard", "StrategyScore", "allocate", "current_allocation",
+    "score", "score_analysts", "score_strategies",
+]

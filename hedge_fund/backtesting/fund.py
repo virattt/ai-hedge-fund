@@ -35,6 +35,7 @@ from hedge_fund.pipeline.session import (
     next_state,
     SessionRecord,
 )
+from hedge_fund.scorecard import current_allocation
 
 
 class ReplaySchedule(BaseModel):
@@ -151,7 +152,9 @@ def backtest_fund(
     base_close: float | None = None
     n_executed = 0
     for i, session in enumerate(dates):
-        record = advance(fund, state, session, broker, data_client, universe, clock)
+        allocation = (current_allocation(spec, state, session, lambda: records)
+                      if is_rebalance_session(session, state.last_session, spec.rebalance) else None)
+        record = advance(fund, state, session, broker, data_client, universe, clock, allocation)
         state = next_state(state, record)
         records.append(record)
         nav.append(record.nav)

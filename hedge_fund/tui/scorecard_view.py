@@ -61,6 +61,7 @@ def strategy_table(card: Scorecard) -> Table:
     table.add_column("P&L", justify="right")
     table.add_column("return", justify="right")
     table.add_column("win rate", justify="right")
+    table.add_column("t-stat", justify="right")
     table.add_column("max DD", justify="right")
     table.add_column("share", justify="right")
     if not card.strategies:
@@ -75,6 +76,7 @@ def strategy_table(card: Scorecard) -> Table:
             Text(f"{s.pnl:+,.0f}", style=_signed(s.pnl)),
             Text(f"{s.return_pct:+.2%}", style=_signed(s.return_pct)),
             _rate(s.win_rate, s.n_periods),
+            _NONE if s.t_stat is None else Text(f"{s.t_stat:+.1f}", style=_signed(s.t_stat)),
             Text(f"{s.max_drawdown_pct:.1%}", style=RED if s.max_drawdown_pct > 0 else MUTED),
             _NONE if s.share_of_pnl is None else Text(f"{s.share_of_pnl:+.0%}", style=TEXT),
         )

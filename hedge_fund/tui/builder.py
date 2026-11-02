@@ -55,6 +55,7 @@ from hedge_fund.tui.palette import BRIGHT, GREEN, MUTED, RED, TEXT
 from hedge_fund.tui.shared import (
     cadence_identity,
     DEFAULT_CAPITAL,
+    DEFAULT_ALLOCATION,
     DEFAULT_RISK,
     DISPLAY_NAMES,
     horizon_label,
@@ -472,6 +473,7 @@ class BuilderScreen(Screen):
             name=self._state["name"],
             strategies=[s.model_dump() for s in self._state["strategies"]],
             risk=DEFAULT_RISK,
+            allocation=DEFAULT_ALLOCATION,
             capital=self._state["capital"],
             rebalance=self._state["rebalance"],
             **({"interval": self._state["interval"], "window": self._state["window"]} if intraday else {}),

@@ -13,6 +13,9 @@ scorecard's `unattributed`, never spread over the sleeves.
 
 from __future__ import annotations
 
+from math import sqrt
+from statistics import mean, stdev
+
 from hedge_fund.pipeline.session import SessionRecord
 from hedge_fund.scorecard.models import StrategyScore
 
@@ -48,6 +51,7 @@ def score_strategies(records: list[SessionRecord]) -> list[StrategyScore]:
             pnl=dollars[name],
             return_pct=_compound(returns),
             win_rate=sum(1 for r in returns if r > 0) / len(returns),
+            t_stat=_t_stat(returns),
             share_of_pnl=dollars[name] / total if total != 0 else None,
             max_drawdown_pct=_max_drawdown(returns),
         ))
@@ -73,6 +77,18 @@ def trading_cost(records: list[SessionRecord]) -> float:
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+def _t_stat(returns: list[float]) -> float | None:
+    """Mean over sample standard deviation, times sqrt(n): the Sharpe-shaped
+    number a multi-manager judges a pod by, in periods rather than years.
+    None with fewer than two periods or a series that never varies."""
+    if len(returns) < 2:
+        return None
+    spread = stdev(returns)
+    if spread == 0:
+        return None
+    return mean(returns) / spread * sqrt(len(returns))
+
 
 def _compound(returns: list[float]) -> float:
     value = 1.0

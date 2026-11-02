@@ -3,7 +3,9 @@
 import pytest
 
 from hedge_fund.brokers.models import Fill, Order
+from hedge_fund.fund import AllocationPolicy
 from hedge_fund.models import Signal
+from hedge_fund.pipeline.models import Allocated, AllocationRecord
 from hedge_fund.tui import report
 from hedge_fund.pipeline.stages import stop_out_decision
 from hedge_fund.tui.fixtures import make_cycle, make_session, make_signal, make_spec, render
@@ -120,3 +122,19 @@ def test_a_stop_out_reads_as_one_in_the_row_and_the_overview():
     assert "stopped out" in render(report.session_row(session, 100_000))
     text = render(report.session_overview(session))
     assert "STOPPED OUT" in text and "drawdown 21.3% breached the 20.0% limit" in text
+
+
+def test_allocation_section_shows_each_weight_beside_the_mandate_and_its_evidence():
+    record = make_cycle(make_signal())
+    record.spec.allocation = AllocationPolicy()
+    record.allocation = AllocationRecord(
+        as_of="2025-01-15",
+        strategies={"value": Allocated(mandate=1.0, t_stat=1.5, n=24, weight=1.375)},
+        models={"value": {"buffett": Allocated(mandate=1.0, t_stat=-1.0, n=31, weight=0.75),
+                          "munger": Allocated(mandate=1.0, t_stat=None, n=8, weight=1.0)}},
+    )
+    text = render(report.session_detail(_session_with(record), "x:sec:allocation"))
+    assert "scored from the ledger at 2025-01-15" in text
+    assert "value  slice 1.00 → 1.38  (t +1.5 over 24 periods)" in text
+    assert "weight 1.00 → 0.75  (IC t -1.0 over 31 dates)" in text
+    assert "weight 1.00 → 1.00  (8 of 20 dates)" in text

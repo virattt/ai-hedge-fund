@@ -34,6 +34,7 @@ class StrategyScore(BaseModel):
     pnl: float                        # dollars attributed
     return_pct: float                 # compounded period returns
     win_rate: float | None            # periods with a positive return; flat is not a win
+    t_stat: float | None              # mean period return / sample std * sqrt(n); the allocator's evidence
     share_of_pnl: float | None        # pnl / fund_pnl; None when the fund made nothing
     max_drawdown_pct: float           # peak-to-trough of the sleeve's compounded curve
 

@@ -395,3 +395,14 @@ def test_a_minute_fund_backtests_at_daily_closes_as_the_daily_fund_it_collapses_
     assert minute.nav == daily.nav and minute.metrics == daily.metrics
     assert minute.records[1].executed.execution_policy == "next_close"
     assert minute.records[1].executed.fills[0].price == 104.0 and minute.metrics.n_cycles == 2
+
+
+def test_a_mandate_with_an_allocator_records_the_weights_each_decision_used():
+    result = _run(spec=_spec(allocation={}))
+    decisions = [r.decision for r in result.records if r.decision is not None]
+    assert [d.allocation.as_of for d in decisions] == MONDAYS
+    # Three weeks is far short of the evidence: every weight is the mandate's.
+    assert [d.allocation.strategies["solo"].weight for d in decisions] == [1.0, 1.0, 1.0]
+    assert [d.allocation.strategies["solo"].n for d in decisions] == [0, 0, 1]
+    assert all(r.hash == r.compute_hash() for r in result.records)
+    assert all(r.decision.allocation is None for r in _run().records if r.decision is not None)

@@ -43,7 +43,7 @@ from hedge_fund.data.protocol import DataClient
 from hedge_fund.fund import Cadence, Fund, FundSpec, normalize_universe
 from hedge_fund.llm import DEFAULT_MODEL
 from hedge_fund.pipeline.clock import Clock, clock_for
-from hedge_fund.pipeline.models import CycleRecord, DecisionRecord
+from hedge_fund.pipeline.models import AllocationRecord, CycleRecord, DecisionRecord
 from hedge_fund.pipeline.stages import assess_fund, execute_decision, stop_out_decision
 from hedge_fund.signals import LLMAgent
 
@@ -73,6 +73,7 @@ class FundState(BaseModel):
     prev_hash: str | None = None                # hash of the last record
     halted: str | None = None                   # reason, when the kill switch is set
     peak_nav: float | None = None               # highest NAV so far; the drawdown stop measures from it
+    allocation: AllocationRecord | None = None  # the last allocation a decision used
 
     @classmethod
     def initial(cls, capital: float) -> FundState:
@@ -136,6 +137,7 @@ def advance(
     data_client: DataClient,
     universe: list[str],
     clock: Clock | None = None,
+    allocation: AllocationRecord | None = None,
 ) -> SessionRecord:
     """Advance *fund* through one completed *session*: a date (YYYY-MM-DD)
     for a daily/weekly/monthly fund, a bar (YYYY-MM-DDTHH:MM:SS, New York)
@@ -144,7 +146,10 @@ def advance(
     The caller owns the state: fold the returned record into it with
     `next_state` before advancing again. *clock* says what "complete" and
     "the price at a session" mean; without one, the mandate's own (daily
-    closes, or historical minute bars). Raises FundHalted if the kill
+    closes, or historical minute bars). *allocation* is what the scorecard
+    made of the mandate's weights for a decision at this session; the
+    caller derives it from the ledger (`scorecard.current_allocation`),
+    which `advance` cannot see. Raises FundHalted if the kill
     switch is set, BookMismatch if the broker disagrees with the state, and
     ValueError for a session that is out of order or not yet complete.
     """
@@ -183,7 +188,7 @@ def advance(
         # asked again until the operator raises the limit.
         decision = stop_out_decision(spec, session, universe, marks, positions, drawdown) if positions else None
     else:
-        decision = assess_fund(fund, session, data_client, universe, clock) if rebalance else None
+        decision = assess_fund(fund, session, data_client, universe, clock, allocation) if rebalance else None
 
     record = SessionRecord(
         fund=spec.name,
@@ -218,6 +223,9 @@ def next_state(state: FundState, record: SessionRecord) -> FundState:
         prev_hash=record.hash,
         halted=state.halted,
         peak_nav=max(state.peak_nav if state.peak_nav is not None else record.nav, record.nav),
+        allocation=(record.decision.allocation
+                    if record.decision is not None and record.decision.allocation is not None
+                    else state.allocation),
     )
 
 

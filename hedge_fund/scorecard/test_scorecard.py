@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from math import sqrt
+from statistics import mean, stdev
 
 import numpy as np
 import pytest
@@ -328,3 +329,16 @@ def test_max_drawdown_of_a_sleeve():
     assert momo.max_drawdown_pct == pytest.approx(0.2)
     assert momo.return_pct == pytest.approx(-0.076)
     assert momo.win_rate == pytest.approx(2 / 3)
+    returns = [0.10, -0.20, 0.05]
+    assert momo.t_stat == pytest.approx(mean(returns) / stdev(returns) * sqrt(3))
+
+
+def test_a_sleeve_has_no_t_stat_from_one_period_or_a_flat_series():
+    assert score(_attribution_ledger()).strategies[0].t_stat is None          # one period
+    days = ["2024-06-03", "2024-06-04", "2024-06-05"]
+    records = [
+        _session(day, executed=_cycle(day, {"AAA": price}, {"momo": {"AAA": 1.0}}, 100_000.0, {"AAA": 1}, 0.0),
+                 marks={"AAA": price}, positions={"AAA": 1})
+        for day, price in zip(days, [100.0, 110.0, 121.0])                 # +10%, +10%: no spread
+    ]
+    assert score(records).strategies[0].t_stat is None

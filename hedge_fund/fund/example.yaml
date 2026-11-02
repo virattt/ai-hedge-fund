@@ -36,6 +36,11 @@ costs:                        # what every fill costs; these are the defaults
   commission_per_share: 0.005 # dollars a share
   impact_coefficient: 1.0     # Y in the square-root law: Y x daily vol x sqrt(order / ADV)
   min_trade_pct: 0.005        # an add under 0.5% of equity waits; trims and closes always trade
+allocation:                   # the scorecard moves the weights above; remove the block to keep them as written
+  min_evidence: 20            # graded dates (analyst) or periods (strategy) before a weight moves
+  slope: 0.25                 # weight = mandate x clip(1 + slope x t-stat, floor, cap)
+  floor: 0.25                 # a cut analyst keeps a quarter, so it can earn its way back
+  cap: 2.0
 capital: 100000
 rebalance: weekly             # daily | weekly | monthly — how often the fund trades
 benchmark: SPY                # measured against; also the backtest's trading-day grid

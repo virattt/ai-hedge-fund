@@ -1,6 +1,7 @@
 """Fund configuration, model construction, and saved mandates."""
 
 from hedge_fund.fund.spec import (
+    AllocationPolicy,
     BlendPolicy,
     Cadence,
     custom_strategy,
@@ -19,6 +20,7 @@ from hedge_fund.fund.spec import (
 from hedge_fund.fund.storage import discover_funds, save_spec, SavedFund
 
 __all__ = [
+    "AllocationPolicy",
     "BlendPolicy",
     "Cadence",
     "Fund",

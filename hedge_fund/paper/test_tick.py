@@ -11,7 +11,7 @@ from hedge_fund.backtesting.test_fund import FakeAnalyst, FakeDataClient, SERIES
 from hedge_fund.brokers.paper import PaperBroker
 from hedge_fund.data import sessions
 from hedge_fund.data.sessions import NEW_YORK
-from hedge_fund.fund import Fund, FundSpec, TradingWindow
+from hedge_fund.fund import AllocationPolicy, Fund, FundSpec, TradingWindow
 from hedge_fund.paper import (
     assessment_dates,
     deploy,
@@ -157,6 +157,22 @@ def test_ticks_advance_one_session_each_and_match_the_backtest(tmp_path, clock, 
     assert Ledger(directory).records() == replayed.records
     kinds = [e["kind"] for e in Ledger(directory).events()]
     assert kinds == ["tick", "tick", "tick"]
+
+
+def test_a_ticking_fund_with_an_allocator_records_what_it_used_and_replays_it(tmp_path, clock, SPEC):
+    spec = SPEC.model_copy(update={"allocation": AllocationPolicy()})
+    clock("2024-06-04")  # deployed Tuesday morning: Monday is the latest close
+    directory = deploy("alpha", spec, ["AAPL"], root=tmp_path)
+    monday = _tick(directory)
+    clock("2024-06-06")
+    tuesday, wednesday = _tick(directory), _tick(directory)
+    assert monday.decision.allocation.as_of == "2024-06-03"
+    assert monday.decision.allocation.strategies["solo"].weight == 1.0     # nothing graded yet
+    assert tuesday.decision is None and wednesday.decision is None
+    ledger = Ledger(directory)
+    assert ledger.replay(spec.capital).allocation == monday.decision.allocation   # carried, not rescored
+    replayed = backtest_fund(build_fund(spec), WEEKDAYS[0], WEEKDAYS[2], FakeDataClient(SERIES), ["AAPL"])
+    assert ledger.records() == replayed.records
 
 
 def test_explicit_session_is_idempotent_and_must_be_the_next_one(tmp_path, clock, SPEC):

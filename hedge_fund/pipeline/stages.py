@@ -23,6 +23,7 @@ from hedge_fund.models import Signal
 from hedge_fund.pipeline.clock import Clock, clock_for, execution_policy, PinnedQuotes
 from hedge_fund.pipeline.execution import build_orders
 from hedge_fund.pipeline.models import (
+    AllocationRecord,
     CycleRecord,
     DecisionRecord,
     StrategyRecord,
@@ -44,9 +45,11 @@ _MARK_LOOKBACK_DAYS = 7
 
 def assess_fund(
     fund: Fund, as_of: str, data_client: DataClient, universe: list[str],
-    clock: Clock | None = None,
+    clock: Clock | None = None, allocation: AllocationRecord | None = None,
 ) -> DecisionRecord:
-    """Construct validated target weights using only the assessment cutoff."""
+    """Construct validated target weights using only the assessment cutoff.
+    *allocation* is what the scorecard made of the mandate's weights; without
+    one, every slice and blend weight is as the mandate wrote it."""
     clock = clock or clock_for(fund.spec, data_client)
     if not clock.is_complete(as_of):
         raise ValueError(f"assessment {as_of} requires incomplete data")
@@ -62,7 +65,11 @@ def assess_fund(
     # Each strategy runs its own analysts and blends its own sleeve; the fund
     # nets the sleeves by capital slice. A persona staffed into two strategies
     # is asked twice, but the second ask is a prompt-cache hit, not spend.
-    total_slice = sum(s.weight for s, _ in fund.strategies)
+    slices = {
+        s.name: allocation.strategies[s.name].weight if allocation is not None else s.weight
+        for s, _ in fund.strategies
+    }
+    total_slice = sum(slices.values())
     strategy_records: list[StrategyRecord] = []
     netted: dict[str, float] = {t: 0.0 for t in tradeable}
     for strategy, staff in fund.strategies:
@@ -73,12 +80,16 @@ def assess_fund(
                 # view, so no analyst has to remember to.
                 signals.append(model.predict(ticker, as_of, view).model_copy(
                     update={"horizon_days": model.horizon_days}))
+        model_weights = (
+            {m: a.weight for m, a in allocation.models[strategy.name].items()}
+            if allocation is not None else strategy.model_weights
+        )
         blend = blend_signals(
-            signals, strategy.model_weights, strategy.blend.gross_target,
+            signals, model_weights, strategy.blend.gross_target,
             mode=strategy.blend.mode,
             investment_approaches={m.name: get_investment_approach(m.name) for m in strategy.models},
         )
-        slice_ = strategy.weight / total_slice
+        slice_ = slices[strategy.name] / total_slice
         for ticker, weight in blend.weights.items():
             netted[ticker] += slice_ * weight
         strategy_records.append(StrategyRecord(
@@ -103,13 +114,14 @@ def assess_fund(
             ticker: record.slice * weight * multipliers[ticker]
             for ticker, weight in record.weights.items()
         }
-    validate_targets(spec, strategy_records, risk.weights)
+    validate_targets(spec, strategy_records, risk.weights, allocation)
 
     return DecisionRecord(
         fund=spec.name, as_of=as_of, spec=spec, universe=universe,
         marks=marks, skipped=skipped, strategies=strategy_records,
         target_weights=netted, clamps=risk.clamps,
         risk_scale_factor=risk.scale_factor, final_weights=risk.weights,
+        allocation=allocation,
     )
 
 
@@ -127,10 +139,10 @@ def execute_decision(
     # A stop-out is never refreshed: the analysts were not asked, and asking
     # them across a calendar gap would put the book back on.
     effective = original if cutoff == original.as_of or original.is_stopped_out else assess_fund(
-        fund, cutoff, data_client, original.universe, clock,
+        fund, cutoff, data_client, original.universe, clock, original.allocation,
     )
     spec = effective.spec
-    validate_targets(spec, effective.strategies, effective.final_weights)
+    validate_targets(spec, effective.strategies, effective.final_weights, effective.allocation)
     held = broker.positions()
     targets = {t: w for t, w in effective.final_weights.items() if w != 0}
     marks = clock.marks(list(set(held) | set(targets)), session).prices

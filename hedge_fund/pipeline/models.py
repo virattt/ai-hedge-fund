@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from hedge_fund.brokers.models import Fill, Order
 from hedge_fund.fund.spec import FundSpec
@@ -40,6 +40,26 @@ class StrategyRecord(BaseModel):
     final_contribution: dict[str, float] = Field(default_factory=dict)  # fraction of fund equity
 
 
+class Allocated(BaseModel):
+    """One weight the allocator set: the mandate's number, the evidence it
+    was judged on, and the weight the decision used."""
+
+    mandate: float
+    t_stat: float | None                # None when nothing was graded
+    n: int                              # graded dates (analyst) or periods (strategy)
+    weight: float                       # mandate x multiplier
+
+
+class AllocationRecord(BaseModel):
+    """What the scorecard made of the mandate's weights at one session:
+    every strategy's capital slice and, inside it, every model's blend
+    weight. The decision carries the one it was made with."""
+
+    as_of: str
+    strategies: dict[str, Allocated]
+    models: dict[str, dict[str, Allocated]]   # strategy -> model -> weight
+
+
 class DecisionRecord(BaseModel):
     """An auditable assessment, without orders or broker accounting."""
 
@@ -55,6 +75,16 @@ class DecisionRecord(BaseModel):
     clamps: list[ClampEvent]
     final_weights: dict[str, float]
     risk_scale_factor: float | None = None
+    allocation: AllocationRecord | None = None
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler):
+        """A decision made without an allocator serializes exactly as every
+        decision did before one existed: it sits inside a hashed record."""
+        data = handler(self)
+        if self.allocation is None:
+            data.pop("allocation", None)
+        return data
 
     @property
     def is_stopped_out(self) -> bool:
@@ -90,6 +120,14 @@ class CycleRecord(BaseModel):
     refreshed_assessment: DecisionRecord | None = None
     execution_as_of: str | None = None
     execution_policy: Literal["next_close", "next_bar"] | None = None
+    allocation: AllocationRecord | None = None
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler):
+        data = handler(self)
+        if self.allocation is None:
+            data.pop("allocation", None)
+        return data
 
     @property
     def traded_notional(self) -> float:

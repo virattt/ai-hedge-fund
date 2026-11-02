@@ -18,7 +18,9 @@ from hedge_fund.brokers import Fill
 from hedge_fund.data.bars import is_intraday
 from hedge_fund.llm import ThesisStream
 from hedge_fund.models import Signal
+from hedge_fund.fund import AllocationPolicy
 from hedge_fund.pipeline import CycleRecord, DecisionRecord, SessionRecord
+from hedge_fund.pipeline.models import Allocated, AllocationRecord
 from hedge_fund.tui.palette import BRIGHT, CYAN, GREEN, MUTED, RED, TEXT
 from hedge_fund.tui.shared import DISPLAY_NAMES, horizon_label, SHORT_NAMES
 
@@ -243,6 +245,8 @@ def report_nav(record: CycleRecord | DecisionRecord, prefix: str = "") -> list[O
     if isinstance(record, CycleRecord):
         options.append(Option(
             Text(f" Orders ({len(record.orders)})", style=TEXT), id=f"{prefix}sec:orders"))
+    if record.allocation is not None:
+        options.append(Option(Text(" Allocation", style=TEXT), id=f"{prefix}sec:allocation"))
     options.append(Option(Text(" Portfolio" if isinstance(record, CycleRecord) else " Proposed allocations", style=TEXT), id=f"{prefix}sec:portfolio"))
     return options
 
@@ -535,6 +539,8 @@ def _report_detail(record: CycleRecord | DecisionRecord, oid: str) -> Group | No
         return _risk_detail(record)
     if oid == "sec:orders" and isinstance(record, CycleRecord):
         return _orders_detail(record)
+    if oid == "sec:allocation" and record.allocation is not None:
+        return _allocation_detail(record.allocation, record.spec.allocation)
     if oid == "sec:portfolio":
         return (portfolio_detail(record) if isinstance(record, CycleRecord)
                 else _proposal_detail(record))
@@ -643,6 +649,35 @@ def _orders_detail(record: CycleRecord) -> Group:
         table.caption_style = MUTED
         table.caption_justify = "left"
     return Group(Text("ORDERS", style=f"bold {BRIGHT}"), Text(""), table)
+
+
+def _allocation_detail(allocation: AllocationRecord, policy: AllocationPolicy | None) -> Group:
+    """Every weight the decision used beside the mandate's, with the
+    evidence that moved it or the evidence still missing."""
+    needed = policy.min_evidence if policy is not None else None
+    lines: list[Text] = [
+        Text("ALLOCATION", style=f"bold {BRIGHT}"),
+        Text(f"scored from the ledger at {allocation.as_of} · mandate → used", style=MUTED),
+        Text(""),
+    ]
+    for name, pod in allocation.strategies.items():
+        lines.append(_allocated_line(name, "slice", pod, "periods", needed))
+        for model, analyst in allocation.models.get(name, {}).items():
+            lines.append(_allocated_line(f"  {SHORT_NAMES.get(model, model)}", "weight", analyst, "dates", needed, ic=True))
+    return Group(*lines)
+
+
+def _allocated_line(label: str, noun: str, a: Allocated, unit: str, needed: int | None, ic: bool = False) -> Text:
+    line = Text(f"{label}  {noun} {a.mandate:.2f} → ", style=TEXT)
+    tone = TEXT if a.weight == a.mandate else (GREEN if a.weight > a.mandate else RED)
+    line.append(f"{a.weight:.2f}", style=f"bold {tone}")
+    if needed is not None and a.n < needed:
+        line.append(f"  ({a.n} of {needed} {unit})", style=MUTED)
+    elif a.t_stat is not None:
+        line.append(f"  ({'IC ' if ic else ''}t {a.t_stat:+.1f} over {a.n} {unit})", style=MUTED)
+    else:
+        line.append("  (no t-stat)", style=MUTED)
+    return line
 
 
 def _proposal_detail(record: DecisionRecord) -> Group:

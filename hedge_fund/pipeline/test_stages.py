@@ -11,7 +11,7 @@ from hedge_fund.brokers.sim import SimBroker
 from hedge_fund.data.models import Price
 from hedge_fund.fund.spec import Fund, FundSpec
 from hedge_fund.models import Signal
-from hedge_fund.pipeline.models import CycleRecord
+from hedge_fund.pipeline.models import Allocated, AllocationRecord, CycleRecord
 from hedge_fund.pipeline.stages import assess_fund, execute_decision, history_start, liquidity
 
 
@@ -159,6 +159,38 @@ def test_netting_math_two_strategies_unequal_slices():
     # Netted: AAPL = .75*.5 = .375 ; MSFT = .75*.5 + .25*(-1) = .125
     assert record.target_weights["AAPL"] == pytest.approx(0.375)
     assert record.target_weights["MSFT"] == pytest.approx(0.125)
+
+
+def test_an_allocation_replaces_the_mandate_slices_and_blend_weights():
+    spec = _spec(strategies=[
+        {"name": "s1", "weight": 3.0, "models": [{"name": "a"}, {"name": "b"}]},
+        {"name": "s2", "weight": 1.0, "models": [{"name": "a"}]},
+    ], max_position_pct=1.0)
+    fund = Fund(spec, models={
+        "s1": [FakeAnalyst("a", views={"AAPL": 1.0}), FakeAnalyst("b", views={"AAPL": 0.0})],
+        "s2": [FakeAnalyst("a", views={"MSFT": -1.0})],
+    })
+    one = Allocated(mandate=1.0, t_stat=None, n=0, weight=1.0)
+    allocation = AllocationRecord(
+        as_of="2024-06-03",
+        strategies={"s1": Allocated(mandate=3.0, t_stat=-3.0, n=20, weight=0.75), "s2": one},
+        models={"s1": {"a": Allocated(mandate=1.0, t_stat=2.0, n=20, weight=3.0), "b": one}, "s2": {"a": one}},
+    )
+    decision = assess_fund(fund, "2024-06-03", FakeDataClient(CLOSES), UNIVERSE, allocation=allocation)
+    s1, s2 = decision.strategies
+    # Slices come from the allocated 0.75 : 1, not the mandate's 3 : 1.
+    assert (s1.slice, s2.slice) == (pytest.approx(0.75 / 1.75), pytest.approx(1 / 1.75))
+    # a at weight 3 and b at weight 1 vote 1.0 and 0.0: conviction 0.75, not the equal-weight 0.5.
+    assert s1.convictions["AAPL"] == pytest.approx(0.75)
+    assert decision.allocation == allocation
+    plain = assess_fund(fund, "2024-06-03", FakeDataClient(CLOSES), UNIVERSE)
+    assert plain.strategies[0].convictions["AAPL"] == pytest.approx(0.5) and plain.allocation is None
+    assert "allocation" not in plain.model_dump() and "allocation" in decision.model_dump()
+    # A refresh across a calendar gap re-asks with the same allocation.
+    wednesday = assess_fund(fund, "2024-06-05", FakeDataClient(CLOSES), UNIVERSE, allocation=allocation)
+    record = execute_decision(fund, wednesday, "2024-06-07", SimBroker(cash=100_000.0), FakeDataClient(CLOSES))
+    assert record.refreshed_assessment.as_of == "2024-06-06"
+    assert record.refreshed_assessment.allocation == allocation and record.allocation == allocation
 
 
 def test_slices_normalize():

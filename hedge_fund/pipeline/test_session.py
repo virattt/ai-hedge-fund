@@ -10,6 +10,7 @@ from hedge_fund.brokers.models import Order
 from hedge_fund.brokers.sim import SimBroker
 from hedge_fund.fund import Fund, FundSpec
 from hedge_fund.models import Signal
+from hedge_fund.pipeline.models import AllocationRecord
 from hedge_fund.pipeline.session import (
     advance,
     BookMismatch,
@@ -291,3 +292,15 @@ def test_a_state_written_before_the_peak_was_tracked_measures_from_capital():
     record = advance(fund, state, WEEKDAYS[0], SimBroker(cash=100_000), FakeDataClient(_aapl({})), ["AAPL"])
     assert record.decision is not None and not record.decision.is_stopped_out
     assert next_state(state, record).peak_nav == pytest.approx(100_000)
+
+
+def test_the_state_carries_the_last_allocation_a_decision_used():
+    (monday, tuesday), state = _step(_fund(), WEEKDAYS[:2])
+    assert state.allocation is None and "allocation" not in monday.decision.model_dump()
+    assert monday.hash == monday.compute_hash()
+    allocation = AllocationRecord(as_of="2024-06-03", strategies={}, models={})
+    decided = monday.model_copy(update={"decision": monday.decision.model_copy(update={"allocation": allocation})})
+    state = next_state(FundState.initial(100_000.0), decided)
+    assert state.allocation == allocation
+    assert next_state(state, tuesday).allocation == allocation      # Tuesday decided nothing: carried
+    assert FundState.model_validate_json('{"cash": 1.0}').allocation is None   # an old checkpoint
