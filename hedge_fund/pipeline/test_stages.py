@@ -601,7 +601,7 @@ def _risk_spec(**risk):
 
 
 class FactorDataClient(FakeDataClient):
-    """A year of daily bars per ticker from canned log returns, ending on the
+    """Eighty-one daily bars per ticker from canned log returns, ending on the
     date asked for; records every window it was asked for."""
 
     MARKET = [0.01 if i % 2 == 0 else -0.01 for i in range(80)]
@@ -655,9 +655,9 @@ def test_a_refresh_across_a_gap_keeps_the_original_drawdown():
     assert [c.limit for c in cycle.clamps] == ["halve_drawdown_pct"]
 
 
-def test_a_factor_limit_fits_the_model_on_a_year_of_bars_and_records_it():
+def test_a_factor_limit_fits_the_model_on_a_quarter_of_bars_and_records_it():
     spec = _risk_spec(max_position_pct=1.0, max_beta=0.01, max_sector_pct=0.3)
-    assert history_days(spec) == 365 and history_days(_spec()) == 30
+    assert history_days(spec) == 100 and history_days(_spec()) == 30
     fund = Fund(spec, models={"solo": [FakeAnalyst("a", views={"AAPL": 1.0})]})
     data = FactorDataClient(CLOSES, {"AAPL": 2.0, "MSFT": 1.0}, {"AAPL": "Technology"})
     decision = assess_fund(fund, "2024-06-03", data, UNIVERSE)
@@ -671,6 +671,6 @@ def test_a_factor_limit_fits_the_model_on_a_year_of_bars_and_records_it():
     assert (sector.limit, sector.sector, sector.before, sector.after) == ("max_sector_pct", "Technology", 1.0, pytest.approx(0.3))
     assert (beta.limit, beta.before) == ("max_beta", pytest.approx(0.3 * (0.67 * 2 + 0.33)))
     assert decision.final_weights["AAPL"] == pytest.approx(0.01 / (0.67 * 2 + 0.33))
-    # Marks, liquidity, and the model all fetch the one year-long window.
-    assert {start for _, start, _ in data.windows} == {history_start("2024-06-03", 365)}
+    # Marks, liquidity, and the model all fetch the one 100-day window.
+    assert {start for _, start, _ in data.windows} == {history_start("2024-06-03", 100)}
     assert decision.model_dump()["exposures"]["names"]["AAPL"]["sector"] == "Technology"

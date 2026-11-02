@@ -33,6 +33,11 @@ pydantic = "^2.4.2"
 scipy = "^1.11.0"
 pyyaml = "^6.0.3"
 textual = "^8.2.8"
+# Pay Financial Datasets per call with x402 instead of an API key: `pip install aihf[x402]`.
+x402 = {version = "^2.26", extras = ["evm", "requests"], optional = true}
+
+[tool.poetry.extras]
+x402 = ["x402"]
 
 [tool.poetry.scripts]
 aihf = "hedge_fund.run:main"

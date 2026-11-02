@@ -47,7 +47,7 @@ from hedge_fund.tui.report import cost_line, roster_table, tape_table
 from hedge_fund.tui.scorecard_view import analyst_table, strategy_table
 from hedge_fund.tui.shared import (
     agent_names,
-    BACKTEST_WEEKS,
+    BACKTEST_DAYS,
     DISPLAY_NAMES,
     fund_label,
     render_area_chart,
@@ -175,7 +175,7 @@ class BacktestScreen(Screen):
             if last:
                 tickers.value = ", ".join(last)
         if not start.value:
-            start.value = (today - timedelta(weeks=BACKTEST_WEEKS)).isoformat()
+            start.value = (today - timedelta(days=BACKTEST_DAYS)).isoformat()
         if not end.value:
             end.value = today.isoformat()
         self.query_one("#bt-panes", ContentSwitcher).current = "bt-dates"

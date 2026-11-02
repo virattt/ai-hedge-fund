@@ -85,7 +85,7 @@ from hedge_fund.scorecard import score
 from hedge_fund.tui.keys import apply_credentials
 from hedge_fund.tui.report import cost_line
 from hedge_fund.tui.scorecard_view import analyst_table, strategy_table
-from hedge_fund.tui.shared import BACKTEST_WEEKS
+from hedge_fund.tui.shared import BACKTEST_DAYS
 
 
 def main() -> None:
@@ -143,7 +143,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     backtest.add_argument("mandate", help="path to a mandate YAML, e.g. ~/.hedge-fund/mandates/example.yaml")
     backtest.add_argument("--universe", required=True, help=_UNIVERSE_HELP)
-    backtest.add_argument("--start", help=f"first session YYYY-MM-DD (default: {BACKTEST_WEEKS} weeks before --end)")
+    backtest.add_argument("--start", help=f"first session YYYY-MM-DD (default: {BACKTEST_DAYS} days before --end)")
     backtest.add_argument("--end", help="last session YYYY-MM-DD (default: the latest completed session)")
     backtest.add_argument("--out", help="also write the result JSON to this file")
 
@@ -217,7 +217,7 @@ def _backtest(args, parser: argparse.ArgumentParser, console: Console) -> None:
     except ValueError as exc:
         parser.error(str(exc))
     end = args.end or completed_through()
-    start = args.start or (_date.fromisoformat(end) - timedelta(weeks=BACKTEST_WEEKS)).isoformat()
+    start = args.start or (_date.fromisoformat(end) - timedelta(days=BACKTEST_DAYS)).isoformat()
     # A backtest blinds the investor agents' prompts (no ticker, industry or
     # calendar dates): the LLM may have been trained on what those companies
     # did over the window, and that memory would otherwise score as skill.

@@ -9,7 +9,6 @@ that compose these live in paper.py.
 
 from __future__ import annotations
 
-import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
@@ -19,7 +18,7 @@ from rich.table import Table
 from rich.text import Text
 
 from hedge_fund.backtesting import performance_metrics
-from hedge_fund.data import FDClient, FDClientError, PriceSnapshot
+from hedge_fund.data import FDClient, FDClientError, has_data_credential, PriceSnapshot
 from hedge_fund.data.bars import bar_time, bars_per_day, is_intraday
 from hedge_fund.data.sessions import NEW_YORK
 from hedge_fund.fund import FundSpec
@@ -300,9 +299,9 @@ def paper_detail(
 
 def fetch_snapshots(tickers: list[str]) -> dict[str, PriceSnapshot]:
     """One real-time quote per ticker, fetched together. Empty when there is
-    no key to ask with or the API refuses: the pane then shows the last close
-    and nothing else, which is the honest fallback."""
-    if not tickers or not os.environ.get("FINANCIAL_DATASETS_API_KEY"):
+    no credential to ask with or the API refuses: the pane then shows the
+    last close and nothing else, which is the honest fallback."""
+    if not tickers or not has_data_credential():
         return {}
     quotes: dict[str, PriceSnapshot] = {}
     try:

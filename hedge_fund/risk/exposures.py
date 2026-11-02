@@ -9,15 +9,16 @@ record can carry. From it the risk stage reads three things about a book:
 - its modelled volatility, `sqrt(beta_p^2 sigma_m^2 + sum(w_i^2 sigma_eps,i^2))`,
   annualized, with the residuals taken as uncorrelated.
 
-Betas come from an ordinary least squares fit of a year of daily log returns
-on the benchmark's, then shrunk toward one the way Bloomberg prints them
-(Blume 1975: 0.67 x fitted + 0.33). A name with fewer than sixty paired
-returns gets the prior outright: beta one and no residual, so it adds market
-risk and nothing else. A missing history must not silently freeze a name.
+Betas come from an ordinary least squares fit of about a quarter of daily
+log returns (the pipeline's 100-day window) on the benchmark's, then shrunk
+toward one the way Bloomberg prints them (Blume 1975: 0.67 x fitted + 0.33).
+A name with fewer than sixty paired returns gets the prior outright: beta
+one and no residual, so it adds market risk and nothing else. A missing
+history must not silently freeze a name.
 
 One window serves beta and volatility. A desk often measures volatility on
 a shorter window so the cap reacts to a regime change; this model keeps one
-window so every number on the record comes from the same year of bars.
+window so every number on the record comes from the same bars.
 """
 
 from __future__ import annotations
@@ -80,7 +81,7 @@ def exposures(
     """Fit the model from the daily bars in [*start*, *as_of*]: the caller
     owns the window, so its fetch is the same one the marks and the
     liquidity made. Raises when the benchmark itself has too few bars: a
-    factor mandate needs a year of its benchmark's history."""
+    factor mandate needs sixty daily returns of its benchmark."""
     market = _log_returns(benchmark, start, as_of, data_client)
     if len(market) < _MIN_FACTOR_BARS:
         raise ValueError(f"{benchmark}: {len(market)} daily returns in [{start}, {as_of}]; "

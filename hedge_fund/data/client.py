@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import os
 import time
@@ -18,10 +20,34 @@ from hedge_fund.data.models import (
     Price,
     PriceSnapshot,
 )
+from hedge_fund.data.wallet import payment_session, WALLET_KEY_ENV
 
 logger = logging.getLogger(__name__)
 
 NEWS_PAGE = 10  # the most /news/ returns per request
+API_KEY_ENV = "FINANCIAL_DATASETS_API_KEY"
+# x402 answers only this far back; older dates get a 403 with the window start.
+X402_HISTORY_DAYS = 365
+
+
+def payment_error(resp: requests.Response) -> str:
+    """Why a paid retry still came back 402. The body carries only the
+    generic "Payment required"; the reason (no USDC, a rejected signature,
+    a blocked payer) is the ``error`` field of the base64 JSON in the
+    PAYMENT-REQUIRED header."""
+    header = resp.headers.get("PAYMENT-REQUIRED", "")
+    try:
+        terms = json.loads(base64.b64decode(header + "=" * (-len(header) % 4)))
+    except (ValueError, UnicodeDecodeError):
+        return "no payment terms in the response"
+    return str(terms.get("error") or "no reason given")[:300]
+
+
+def has_data_credential() -> bool:
+    """True when the environment holds something a request can be billed to:
+    an API key, or a wallet to pay per call with x402. The one place that
+    decides it, so the TUI gates and the client cannot disagree."""
+    return bool(os.environ.get(API_KEY_ENV) or os.environ.get(WALLET_KEY_ENV))
 
 
 class FDClientError(Exception):
@@ -51,12 +77,27 @@ class FDClient:
     def __init__(
         self,
         api_key: str | None = None,
+        wallet_key: str | None = None,
         timeout: float = 30.0,
     ) -> None:
-        self._api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY", "")
+        """An API key bills the account; otherwise a wallet key pays each
+        call with x402. Both set means the key wins, which is the API's own
+        rule: a request carrying X-API-KEY is never charged to a wallet."""
+        self._api_key = api_key or os.environ.get(API_KEY_ENV, "")
+        self._wallet_key = wallet_key or os.environ.get(WALLET_KEY_ENV, "")
         self._timeout = timeout
-        self._session = requests.Session()
-        self._session.headers["X-API-Key"] = self._api_key
+        if self.pays_per_call():
+            try:
+                self._session = payment_session(self._wallet_key)
+            except ImportError as exc:
+                raise FDClientError(str(exc)) from exc
+        else:
+            self._session = requests.Session()
+            self._session.headers["X-API-Key"] = self._api_key
+
+    def pays_per_call(self) -> bool:
+        """Whether requests go out keyless and pay with x402."""
+        return not self._api_key and bool(self._wallet_key)
 
     # ------------------------------------------------------------------
     # Context manager
@@ -269,13 +310,16 @@ class FDClient:
         path: str,
         **kwargs,
     ) -> requests.Response | None:
-        """HTTP request with retry on 429.
+        """HTTP request with retry on 429 and 503.
 
         Fail-loud contract: raises FDClientError on network errors, HTTP
-        errors, and exhausted rate-limit retries. Returns None ONLY for
-        404 — "this data doesn't exist" is a data fact, not a failure.
-        Silently returning empty on real failures poisons backtests
-        (missing data reads as "no signal").
+        errors, and exhausted retries. Returns None ONLY for 404 — "this
+        data doesn't exist" is a data fact, not a failure. Silently
+        returning empty on real failures poisons backtests (missing data
+        reads as "no signal").
+
+        503 is retried like 429: x402's payment facilitator answers 503 with
+        Retry-After when it is briefly down, and nothing is charged for it.
 
         *path* may be an absolute URL (a ``next_page_url`` from a previous
         response), which is requested verbatim.
@@ -291,10 +335,10 @@ class FDClient:
                     f"{method} {path} failed: {exc}", path=path,
                 ) from exc
 
-            if resp.status_code == 429 and delay is not None:
+            if resp.status_code in (429, 503) and delay is not None:
                 logger.info(
-                    "Rate limited (429), retrying in %ds (attempt %d/%d)",
-                    delay, attempt + 1, len(self._RETRY_DELAYS),
+                    "Got %d, retrying in %ds (attempt %d/%d)",
+                    resp.status_code, delay, attempt + 1, len(self._RETRY_DELAYS),
                 )
                 time.sleep(delay)
                 continue
@@ -303,14 +347,19 @@ class FDClient:
                 return None
 
             if resp.status_code >= 400:
-                raise FDClientError(
-                    f"{method} {path} returned {resp.status_code}: {resp.text[:200]}",
-                    status_code=resp.status_code, path=path,
-                )
+                message = f"{method} {path} returned {resp.status_code}: {resp.text[:200]}"
+                if resp.status_code == 402 and self.pays_per_call():
+                    message += f" (x402 payment from the wallet failed: {payment_error(resp)})"
+                if resp.status_code == 403 and self.pays_per_call():
+                    message += (
+                        f" (x402 serves the last {X402_HISTORY_DAYS} days; move the start "
+                        f"date later or set {API_KEY_ENV} for older data)"
+                    )
+                raise FDClientError(message, status_code=resp.status_code, path=path)
 
             return resp
 
         raise FDClientError(
-            f"{method} {path} rate limited (429) after {len(self._RETRY_DELAYS)} retries",
-            status_code=429, path=path,
+            f"{method} {path} returned {resp.status_code} after {len(self._RETRY_DELAYS)} retries",
+            status_code=resp.status_code, path=path,
         )

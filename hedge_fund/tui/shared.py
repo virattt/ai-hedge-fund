@@ -70,7 +70,9 @@ DEFAULT_RISK = {"max_position_pct": 0.25, "max_gross_exposure": 1.0,
                 "halve_drawdown_pct": 0.10, "max_drawdown_pct": 0.20}
 DEFAULT_ALLOCATION: dict = {}  # the allocator at its defaults: the scorecard moves the weights
 DEFAULT_CAPITAL = 100_000.0
-BACKTEST_WEEKS = 78  # ~18 months of history for the default backtest window
+# The default backtest window. With the 100-day factor warm-up the replay
+# reaches 360 days back, inside the 365 days x402 serves a wallet.
+BACKTEST_DAYS = 260
 BOARD_REFRESH = 1 / 12  # seconds between run-board repaints — smooth, not frantic
 WARM_CHUNK = 10      # dates per warm task — small enough that one stock still fans out
 

@@ -36,10 +36,12 @@ from hedge_fund.risk.limits import apply_limits, ClampEvent
 from hedge_fund.signals import get_investment_approach
 
 # The one window of daily history the pipeline fetches at a date: 30 calendar
-# days, enough for the 20 bars liquidity needs; a year when a factor limit
-# needs betas fitted on it.
+# days, enough for the 20 bars liquidity needs; 100 days (about 68 trading
+# bars, over the model's 60-bar minimum) when a factor limit needs betas
+# fitted on it. Short on purpose: with the 260-day default backtest the
+# replay stays inside the 365 days x402 serves a wallet.
 _HISTORY_DAYS = 30
-_FACTOR_HISTORY_DAYS = 365
+_FACTOR_HISTORY_DAYS = 100
 _LIQUIDITY_BARS = 20
 # A mark must be fresher than this: covers weekends, holiday clusters, and
 # short trading halts without reaching into stale history.
@@ -263,7 +265,7 @@ def history_start(as_of: str, days: int = _HISTORY_DAYS) -> str:
 
 
 def history_days(spec: FundSpec) -> int:
-    """How far back the mandate's history window reaches: a year when a
+    """How far back the mandate's history window reaches: 100 days when a
     factor limit fits betas on it, else the 30 days liquidity needs."""
     return _FACTOR_HISTORY_DAYS if spec.risk.has_factor_limits else _HISTORY_DAYS
 

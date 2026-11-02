@@ -1,17 +1,16 @@
 """Week 1 data exploration — pull and inspect FD data for 5 tickers."""
 
-import os
 import pytest
 
-from hedge_fund.data import FDClient
+from hedge_fund.data import FDClient, has_data_credential
 
 TICKERS = ["AAPL", "MSFT", "NVDA", "JPM", "XOM"]
 PRICE_START = "2024-01-01"
 PRICE_END = "2026-04-15"
 
 pytestmark = pytest.mark.skipif(
-    not os.environ.get("FINANCIAL_DATASETS_API_KEY"),
-    reason="live Financial Datasets smoke tests require FINANCIAL_DATASETS_API_KEY",
+    not has_data_credential(),
+    reason="live Financial Datasets smoke tests require FINANCIAL_DATASETS_API_KEY or X402_WALLET_PRIVATE_KEY",
 )
 
 
