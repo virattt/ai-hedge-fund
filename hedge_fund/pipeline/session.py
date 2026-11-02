@@ -188,7 +188,7 @@ def advance(
         # asked again until the operator raises the limit.
         decision = stop_out_decision(spec, session, universe, marks, positions, drawdown) if positions else None
     else:
-        decision = assess_fund(fund, session, data_client, universe, clock, allocation) if rebalance else None
+        decision = assess_fund(fund, session, data_client, universe, clock, allocation, drawdown) if rebalance else None
 
     record = SessionRecord(
         fund=spec.name,

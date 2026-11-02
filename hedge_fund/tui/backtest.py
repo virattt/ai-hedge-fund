@@ -38,7 +38,7 @@ from hedge_fund.backtesting.research import last_universe, save_result
 from hedge_fund.brokers import Fill
 from hedge_fund.data import CachedDataClient, FDClient
 from hedge_fund.fund import discover_funds, Fund, FundSpec, normalize_universe
-from hedge_fund.pipeline import CycleRecord, history_start
+from hedge_fund.pipeline import CycleRecord, history_days, history_start
 from hedge_fund.scorecard import score
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent
 from hedge_fund.tui.home import demand_run_keys, HomeScreen
@@ -240,8 +240,10 @@ class BacktestScreen(Screen):
         try:
             with FDClient() as raw:
                 schedule = build_schedule(CachedDataClient(raw), spec.benchmark, start, end, spec.rebalance)
-            app.call_from_thread(self._begin_warm, spec, universe, len(schedule.warm_dates))
-            self._warm_market(spec, universe, schedule.warm_dates)
+            # A factor mandate fits betas on the benchmark's bars at every date too.
+            names = [*universe, spec.benchmark] if spec.risk.has_factor_limits else universe
+            app.call_from_thread(self._begin_warm, spec, names, len(schedule.warm_dates))
+            self._warm_market(spec, names, schedule.warm_dates)
             app.call_from_thread(self._begin_agents, spec)
             self._warm_agents(spec, universe, schedule.assessment_dates)
             app.call_from_thread(self._begin_replay, spec, schedule.closes, len(schedule.closes))
@@ -272,6 +274,8 @@ class BacktestScreen(Screen):
             issubclass(ALPHA_MODEL_REGISTRY[m.name], LLMAgent)
             for s in spec.strategies for m in s.models
         )
+        needs_facts = has_agents or spec.risk.max_sector_pct is not None
+        days = history_days(spec)
         chunks = [
             (ticker, grid[j:j + WARM_CHUNK])
             for ticker in universe
@@ -282,10 +286,10 @@ class BacktestScreen(Screen):
         def prefetch(ticker: str, dates: list[str]) -> None:
             with FDClient() as raw:  # own client per task (requests isn't shared-safe)
                 fd = CachedDataClient(raw)
-                if has_agents:
+                if needs_facts:
                     fd.get_company_facts(ticker)
                 for as_of in dates:
-                    fd.get_prices(ticker, history_start(as_of), as_of)
+                    fd.get_prices(ticker, history_start(as_of, days), as_of)
                     if has_agents:
                         fd.get_financial_metrics(ticker, as_of,
                                                  period="ttm", limit=20)

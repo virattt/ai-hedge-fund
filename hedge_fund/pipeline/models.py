@@ -17,6 +17,7 @@ from hedge_fund.brokers.models import Fill, Order
 from hedge_fund.fund.spec import FundSpec
 from hedge_fund.models import Signal
 from hedge_fund.portfolio.construction import FlatReason
+from hedge_fund.risk.exposures import Exposures
 from hedge_fund.risk.limits import ClampEvent
 
 
@@ -76,14 +77,18 @@ class DecisionRecord(BaseModel):
     final_weights: dict[str, float]
     risk_scale_factor: float | None = None
     allocation: AllocationRecord | None = None
+    drawdown: float | None = None       # fall from the NAV peak, when the mandate has a halving tier
+    exposures: Exposures | None = None  # the factor model the clamps were measured with
 
     @model_serializer(mode="wrap")
     def _serialize(self, handler):
-        """A decision made without an allocator serializes exactly as every
-        decision did before one existed: it sits inside a hashed record."""
+        """A decision made without an allocator, a halving tier, or a factor
+        limit serializes exactly as every decision did before they existed:
+        it sits inside a hashed record."""
         data = handler(self)
-        if self.allocation is None:
-            data.pop("allocation", None)
+        for name in ("allocation", "drawdown", "exposures"):
+            if getattr(self, name) is None:
+                data.pop(name, None)
         return data
 
     @property
@@ -121,12 +126,15 @@ class CycleRecord(BaseModel):
     execution_as_of: str | None = None
     execution_policy: Literal["next_close", "next_bar"] | None = None
     allocation: AllocationRecord | None = None
+    drawdown: float | None = None
+    exposures: Exposures | None = None
 
     @model_serializer(mode="wrap")
     def _serialize(self, handler):
         data = handler(self)
-        if self.allocation is None:
-            data.pop("allocation", None)
+        for name in ("allocation", "drawdown", "exposures"):
+            if getattr(self, name) is None:
+                data.pop(name, None)
         return data
 
     @property

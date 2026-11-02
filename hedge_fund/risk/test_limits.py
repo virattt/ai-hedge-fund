@@ -141,3 +141,78 @@ def test_proportional_net_clamp_keeps_neutrality_and_reports_the_factor():
     assert result.weights == pytest.approx({"A": 0.25, "B": -0.15})
     assert result.scale_factor == pytest.approx(0.5)
     assert [c.limit for c in result.clamps] == ["max_net_exposure"]
+
+
+# ---------------------------------------------------------------------------
+# The whole-book scalers: sector, beta, volatility, the drawdown halving
+# ---------------------------------------------------------------------------
+
+from hedge_fund.risk.exposures import Exposures, NameExposure  # noqa: E402
+
+WIDE = dict(max_position_pct=1.0, max_gross_exposure=1.0)
+
+
+def _model(**names):
+    """beta, residual vol, sector per name; benchmark vol 0.2."""
+    return Exposures(as_of="2024-06-03", benchmark_volatility=0.2, names={
+        t: NameExposure(beta=b, residual_volatility=r, sector=s, n_bars=250) for t, (b, r, s) in names.items()
+    })
+
+
+def test_sector_cap_scales_the_whole_book_and_names_the_sector():
+    model = _model(A=(1, 0, "Tech"), B=(1, 0, "Tech"), C=(1, 0, "Energy"), D=(1, 0, None))
+    result = apply_limits({"A": 0.4, "B": 0.2, "C": -0.1, "D": 0.2}, RiskLimits(**WIDE, max_sector_pct=0.3),
+                          exposures=model)
+    assert result.weights == {"A": pytest.approx(0.2), "B": pytest.approx(0.1),
+                              "C": pytest.approx(-0.05), "D": pytest.approx(0.1)}
+    assert [(c.limit, c.ticker, c.sector, c.before, c.after) for c in result.clamps] == [
+        ("max_sector_pct", None, "Tech", pytest.approx(0.6), pytest.approx(0.3))]
+
+
+@pytest.mark.parametrize("sign", [1, -1])
+def test_beta_cap_scales_the_book_to_the_signed_cap(sign):
+    result = apply_limits({"A": sign * 0.4}, RiskLimits(**WIDE, max_beta=0.5), exposures=_model(A=(2.0, 0, None)))
+    assert result.weights["A"] == pytest.approx(sign * 0.25)
+    assert [(c.limit, c.before, c.after) for c in result.clamps] == [
+        ("max_beta", pytest.approx(sign * 0.8), pytest.approx(sign * 0.5))]
+
+
+def test_volatility_cap_scales_the_book_to_the_cap():
+    result = apply_limits({"A": 1.0}, RiskLimits(**WIDE, max_volatility=0.1), exposures=_model(A=(1.0, 0, None)))
+    assert result.weights["A"] == pytest.approx(0.5)
+    assert [(c.limit, c.before, c.after) for c in result.clamps] == [
+        ("max_volatility", pytest.approx(0.2), pytest.approx(0.1))]
+
+
+def test_the_halving_tier_fires_at_the_line_and_not_under_it():
+    limits = RiskLimits(**WIDE, halve_drawdown_pct=0.10, max_drawdown_pct=0.20)
+    halved = apply_limits({"A": 0.8, "B": -0.2}, limits, drawdown=0.10)
+    assert halved.weights == {"A": pytest.approx(0.4), "B": pytest.approx(-0.1)}
+    assert [(c.limit, c.before, c.after) for c in halved.clamps] == [("halve_drawdown_pct", 0.10, 0.5)]
+    assert apply_limits({"A": 0.8, "B": -0.2}, limits, drawdown=0.0999).clamps == []
+
+
+def test_a_halved_book_under_the_gross_cap_records_no_gross_clamp():
+    result = apply_limits({"A": 0.8, "B": 0.8}, RiskLimits(**WIDE, halve_drawdown_pct=0.10), drawdown=0.15)
+    assert result.weights == {"A": pytest.approx(0.4), "B": pytest.approx(0.4)}
+    assert [c.limit for c in result.clamps] == ["halve_drawdown_pct"]
+
+
+def test_the_proportional_path_folds_every_book_factor_into_the_scale_factor():
+    limits = RiskLimits(**WIDE, max_beta=0.5, halve_drawdown_pct=0.10)
+    result = apply_limits({"A": 0.4, "B": -0.4}, limits, preserve_proportions=True, drawdown=0.12,
+                          exposures=_model(A=(2.0, 0, None), B=(0.5, 0, None)))
+    factor = (0.5 / 0.6) * 0.5
+    assert result.scale_factor == pytest.approx(factor)
+    assert result.weights == {"A": pytest.approx(0.4 * factor), "B": pytest.approx(-0.4 * factor)}
+    assert sum(result.weights.values()) == pytest.approx(0.0)
+    assert [c.limit for c in result.clamps] == ["max_beta", "halve_drawdown_pct"]
+
+
+def test_a_factor_cap_needs_exposures_for_every_name():
+    with pytest.raises(ValueError, match="needs the book's exposures"):
+        apply_limits({"A": 0.1}, RiskLimits(**WIDE, max_beta=0.5))
+    with pytest.raises(ValueError, match="no exposure for B"):
+        apply_limits({"A": 0.1, "B": 0.1}, RiskLimits(**WIDE, max_beta=0.5), exposures=_model(A=(1, 0, None)))
+    with pytest.raises(ValueError, match="drawdown"):
+        apply_limits({"A": 0.1}, RiskLimits(**WIDE), drawdown=-0.1)

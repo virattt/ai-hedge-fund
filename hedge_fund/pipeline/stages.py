@@ -31,12 +31,15 @@ from hedge_fund.pipeline.models import (
 )
 from hedge_fund.portfolio.construction import blend_signals, WEIGHT_TOLERANCE
 from hedge_fund.portfolio.validation import validate_targets
+from hedge_fund.risk.exposures import exposures
 from hedge_fund.risk.limits import apply_limits, ClampEvent
 from hedge_fund.signals import get_investment_approach
 
 # The one window of daily history the pipeline fetches at a date: 30 calendar
-# days, enough for the 20 bars liquidity needs.
+# days, enough for the 20 bars liquidity needs; a year when a factor limit
+# needs betas fitted on it.
 _HISTORY_DAYS = 30
+_FACTOR_HISTORY_DAYS = 365
 _LIQUIDITY_BARS = 20
 # A mark must be fresher than this: covers weekends, holiday clusters, and
 # short trading halts without reaching into stale history.
@@ -46,16 +49,20 @@ _MARK_LOOKBACK_DAYS = 7
 def assess_fund(
     fund: Fund, as_of: str, data_client: DataClient, universe: list[str],
     clock: Clock | None = None, allocation: AllocationRecord | None = None,
+    drawdown: float = 0.0,
 ) -> DecisionRecord:
     """Construct validated target weights using only the assessment cutoff.
     *allocation* is what the scorecard made of the mandate's weights; without
-    one, every slice and blend weight is as the mandate wrote it."""
+    one, every slice and blend weight is as the mandate wrote it. *drawdown*
+    is the fund's fall from its NAV peak, which the halving tier reads."""
     clock = clock or clock_for(fund.spec, data_client)
     if not clock.is_complete(as_of):
         raise ValueError(f"assessment {as_of} requires incomplete data")
     spec = fund.spec.model_copy(deep=True)
     universe = normalize_universe(universe)
-    marks, skipped = _mark_prices(universe, clock.session_date(as_of), data_client)
+    session_date = clock.session_date(as_of)
+    start = history_start(session_date, history_days(spec))
+    marks, skipped = _mark_prices(universe, session_date, data_client, start)
 
     tradeable = [t for t in universe if t in marks]
     # Analysts read the session's print, not the wire: the same price the
@@ -103,7 +110,10 @@ def assess_fund(
         ))
 
     preserve_proportions = any(s.blend.mode == "dollar_neutral" for s in spec.strategies)
-    risk = apply_limits(netted, spec.risk, preserve_proportions=preserve_proportions)
+    exposure = (exposures(tradeable, spec.benchmark, session_date, data_client, start)
+                if spec.risk.has_factor_limits else None)
+    risk = apply_limits(netted, spec.risk, preserve_proportions=preserve_proportions,
+                        drawdown=drawdown, exposures=exposure)
     if risk.scale_factor is not None:
         multipliers = dict.fromkeys(netted, risk.scale_factor)
     else:
@@ -122,6 +132,8 @@ def assess_fund(
         target_weights=netted, clamps=risk.clamps,
         risk_scale_factor=risk.scale_factor, final_weights=risk.weights,
         allocation=allocation,
+        drawdown=drawdown if spec.risk.halve_drawdown_pct is not None else None,
+        exposures=exposure,
     )
 
 
@@ -140,6 +152,7 @@ def execute_decision(
     # them across a calendar gap would put the book back on.
     effective = original if cutoff == original.as_of or original.is_stopped_out else assess_fund(
         fund, cutoff, data_client, original.universe, clock, original.allocation,
+        drawdown=original.drawdown or 0.0,
     )
     spec = effective.spec
     validate_targets(spec, effective.strategies, effective.final_weights, effective.allocation)
@@ -150,7 +163,8 @@ def execute_decision(
     equity_before = cash_before + sum(p.shares * marks[t] for t, p in held.items())
     if not isfinite(equity_before) or equity_before <= 0:
         raise ValueError(f"{spec.name}: equity on {session} must be finite and positive")
-    liquid = liquidity(sorted(set(held) | set(targets)), clock.session_date(session), data_client)
+    liquid = liquidity(sorted(set(held) | set(targets)), clock.session_date(session), data_client,
+                       history_days(spec))
     max_shares: dict[str, int] | None = None
     if spec.risk.max_adv_pct is not None:
         max_shares = {t: int(spec.risk.max_adv_pct * name.adv) for t, name in liquid.items()}
@@ -213,16 +227,20 @@ def stop_out_decision(
     )
 
 
-def liquidity(tickers: list[str], as_of: str, data_client: DataClient) -> dict[str, Liquidity]:
+def liquidity(
+    tickers: list[str], as_of: str, data_client: DataClient, days: int = _HISTORY_DAYS,
+) -> dict[str, Liquidity]:
     """Each name's liquidity from its last 20 daily bars on or before *as_of*
     (fewer when fewer printed): mean volume, and the sample sigma of the
     daily log returns. A name with no bars is absent: a missing number must
     not silently freeze a name, so it trades uncapped and pays no impact.
     Fewer than three bars give no sigma, and the name pays no impact either.
+    *days* is the mandate's history window, so the fetch is the one the
+    marks made.
 
     Daily bars price a minute fund's orders too: a bar's order is measured
     against a whole day's volume, which overstates what a bar can absorb."""
-    start = history_start(as_of)
+    start = history_start(as_of, days)
     liquid: dict[str, Liquidity] = {}
     for ticker in tickers:
         bars = [p for p in data_client.get_prices(ticker, start, as_of) if start <= p.time[:10] <= as_of]
@@ -237,11 +255,17 @@ def liquidity(tickers: list[str], as_of: str, data_client: DataClient) -> dict[s
     return liquid
 
 
-def history_start(as_of: str) -> str:
+def history_start(as_of: str, days: int = _HISTORY_DAYS) -> str:
     """The first date of the daily history the pipeline fetches for *as_of*:
-    30 days back, one window that serves the mark and the liquidity. The
-    backtest warm fetches exactly this window."""
-    return (_date.fromisoformat(as_of) - timedelta(days=_HISTORY_DAYS)).isoformat()
+    *days* back, one window that serves the mark, the liquidity, and the
+    factor model. The backtest warm fetches exactly this window."""
+    return (_date.fromisoformat(as_of) - timedelta(days=days)).isoformat()
+
+
+def history_days(spec: FundSpec) -> int:
+    """How far back the mandate's history window reaches: a year when a
+    factor limit fits betas on it, else the 30 days liquidity needs."""
+    return _FACTOR_HISTORY_DAYS if spec.risk.has_factor_limits else _HISTORY_DAYS
 
 
 # ---------------------------------------------------------------------------
@@ -252,16 +276,17 @@ def _mark_prices(
     tickers: list[str],
     as_of: str,
     data_client: DataClient,
+    start: str,
 ) -> tuple[dict[str, float], list[TickerSkip]]:
     """Analytical lookback marks; names without a fresh close are excluded
-    from assessment. Fetches the full history window, so the liquidity call
-    at the same date is a cache hit."""
+    from assessment. Fetches the full history window from *start*, so the
+    liquidity and factor fetches at the same date are cache hits."""
     fresh = (_date.fromisoformat(as_of) - timedelta(days=_MARK_LOOKBACK_DAYS)).isoformat()
     marks: dict[str, float] = {}
     skipped: list[TickerSkip] = []
 
     for ticker in tickers:
-        prices = data_client.get_prices(ticker, history_start(as_of), as_of)
+        prices = data_client.get_prices(ticker, start, as_of)
         bars = [p for p in prices if fresh <= p.time[:10] <= as_of]
         if bars:
             marks[ticker] = max(bars, key=lambda p: p.time).close

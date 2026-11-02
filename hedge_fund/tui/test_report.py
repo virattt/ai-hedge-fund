@@ -138,3 +138,18 @@ def test_allocation_section_shows_each_weight_beside_the_mandate_and_its_evidenc
     assert "value  slice 1.00 → 1.38  (t +1.5 over 24 periods)" in text
     assert "weight 1.00 → 0.75  (IC t -1.0 over 31 dates)" in text
     assert "weight 1.00 → 1.00  (8 of 20 dates)" in text
+
+
+def test_exposures_section_shows_the_book_and_every_name_and_a_sector_clamp_names_its_sector():
+    from hedge_fund.risk import ClampEvent, Exposures, NameExposure
+    record = make_cycle(make_signal())
+    record.final_weights = {"TEST": 0.5}
+    record.exposures = Exposures(as_of="2025-01-15", benchmark_volatility=0.18, names={
+        "TEST": NameExposure(beta=1.2, residual_volatility=0.25, sector="Technology", n_bars=250)})
+    record.clamps = [ClampEvent(limit="max_sector_pct", sector="Technology", before=0.6, after=0.3)]
+    text = render(report.session_detail(_session_with(record), "x:sec:exposures"))
+    assert "single-index model fitted at 2025-01-15" in text
+    assert "book  beta +0.60 · vol 16.5% · benchmark vol 18.0%" in text
+    assert "TEST" in text and "+1.20" in text and "25.0%" in text and "Technology" in text and "250" in text
+    risk = render(report.session_detail(_session_with(record), "x:sec:risk"))
+    assert "Technology" in risk and "max_sector_pct" in risk and "+0.60" in risk and "+0.30" in risk

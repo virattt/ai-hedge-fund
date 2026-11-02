@@ -304,3 +304,20 @@ def test_the_state_carries_the_last_allocation_a_decision_used():
     assert state.allocation == allocation
     assert next_state(state, tuesday).allocation == allocation      # Tuesday decided nothing: carried
     assert FundState.model_validate_json('{"cash": 1.0}').allocation is None   # an old checkpoint
+
+
+def test_a_drawdown_past_the_halving_line_decides_at_half_size_until_it_recovers():
+    fund = _fund(risk={"max_position_pct": 1.0, "max_gross_exposure": 1.0,
+                       "halve_drawdown_pct": 0.10, "max_drawdown_pct": 0.20}, rebalance="daily")
+    # Buy 500 at Tuesday's 200; Wednesday prints 176: NAV 88,000, 12% off the peak.
+    records, _ = _step(fund, WEEKDAYS[:5], data=FakeDataClient(_aapl({2: 176.0})))
+    monday, tuesday, wednesday, thursday, friday = records
+    assert monday.decision.drawdown == 0.0 and monday.decision.clamps == []
+    assert wednesday.decision.drawdown == pytest.approx(0.12)
+    assert [(c.limit, c.before, c.after) for c in wednesday.decision.clamps] == [
+        ("halve_drawdown_pct", pytest.approx(0.12), 0.5)]
+    assert wednesday.decision.final_weights == {"AAPL": pytest.approx(0.5)}
+    assert thursday.executed.positions == {"AAPL": 250}
+    # Thursday prints 200 again: back under the line, full size with no new state.
+    assert thursday.decision.drawdown < 0.10 and thursday.decision.clamps == []
+    assert friday.executed.positions == {"AAPL": 500}
