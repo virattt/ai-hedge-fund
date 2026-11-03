@@ -237,6 +237,15 @@ def test_factory_missing_jev_key_names_variable(monkeypatch):
         make_llm("jev-1.13.0")
 
 
+def test_factory_jev_honors_base_url(monkeypatch, http):
+    monkeypatch.setenv("TYPESAFE_API_KEY", API_KEY)
+    monkeypatch.setenv("TYPESAFE_BASE_URL", "http://localhost:8080/")
+    llm = make_llm("jev-1.13.0")
+    _serve(http, _http_response())
+    llm.complete("investor", "snapshot")
+    assert http[0].call_args.args[0] == "http://localhost:8080/v1/systemone"
+
+
 def test_cli_jev_cycle_and_saved_replay(tmp_path, monkeypatch, http, capsys):
     """`aihf backtest` over two sessions with a Jev model: the first close
     decides, the second executes; a second run replays from the prompt cache
