@@ -31,7 +31,7 @@ from hedge_fund.llm import (
     SUPPORTED_PROVIDERS,
 )
 from hedge_fund.llm.client import _flatten, JevLLM
-from hedge_fund.llm.registry import PROVIDER_ENV_VARS
+from hedge_fund.llm.registry import env_var_for, PROVIDER_ENV_VARS
 from hedge_fund.llm.test_contract import _response
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, BuffettAgent, LLMAgent, MungerAgent
 from hedge_fund.signals.test_llm_agents import (
@@ -96,6 +96,46 @@ def test_kimi_accepts_moonshot_key(monkeypatch):
     monkeypatch.delenv("KIMI_API_KEY", raising=False)
     monkeypatch.setenv("MOONSHOT_API_KEY", "test-key-not-real")
     assert make_llm(_BY_PROVIDER["Kimi"]).model == _BY_PROVIDER["Kimi"]
+
+
+@pytest.fixture
+def no_keys(monkeypatch):
+    """No provider key and no Ollama location in the environment."""
+    for env_var in (*PROVIDER_ENV_VARS.values(), "MOONSHOT_API_KEY",
+                    "OLLAMA_BASE_URL", "OLLAMA_HOST", "HEDGE_FUND_LLM_MODEL"):
+        monkeypatch.delenv(env_var, raising=False)
+
+
+def test_ollama_runs_without_any_key(no_keys):
+    """The free, local path: nothing to sign up for, nothing to set."""
+    llm = make_llm(_BY_PROVIDER["Ollama"])
+    assert isinstance(llm, ChatLLM)
+    assert llm.model == _BY_PROVIDER["Ollama"]
+    assert llm._chat.openai_api_base == "http://localhost:11434/v1"
+    assert env_var_for("Ollama") is None
+
+
+@pytest.mark.parametrize(
+    "variable,value,expected",
+    [
+        ("OLLAMA_BASE_URL", "http://ollama:11434", "http://ollama:11434/v1"),
+        ("OLLAMA_BASE_URL", "http://gpu-box:8080/v1/", "http://gpu-box:8080/v1"),
+        ("OLLAMA_HOST", "host.docker.internal", "http://host.docker.internal:11434/v1"),
+        ("OLLAMA_HOST", "10.0.0.5:9999", "http://10.0.0.5:9999/v1"),
+        ("OLLAMA_HOST", "https://ollama.example.com", "https://ollama.example.com/v1"),
+    ],
+)
+def test_ollama_location_comes_from_the_v1_variables(variable, value, expected,
+                                                     no_keys, monkeypatch):
+    """Same variables v1 read, so an existing Docker or remote setup carries over."""
+    monkeypatch.setenv(variable, value)
+    assert make_llm(_BY_PROVIDER["Ollama"])._chat.openai_api_base == expected
+
+
+def test_ollama_base_url_wins_over_host(no_keys, monkeypatch):
+    monkeypatch.setenv("OLLAMA_HOST", "ignored-host")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://chosen:11434")
+    assert make_llm(_BY_PROVIDER["Ollama"])._chat.openai_api_base == "http://chosen:11434/v1"
 
 
 def test_provider_for_reads_the_registry():
