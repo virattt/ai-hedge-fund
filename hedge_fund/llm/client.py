@@ -238,8 +238,10 @@ def make_llm(
     provider = provider_for(model)
     if provider is None:
         # Unlisted ids still work: a model newer than the registry should not
-        # need a code change. Anthropic is the default transport.
-        provider = "Anthropic"
+        # need a code change. A custom OpenAI base URL means the id belongs to
+        # that endpoint (Groq, Ollama, OpenRouter, ...); otherwise Anthropic is
+        # the default transport.
+        provider = "OpenAI" if _openai_base_url() else "Anthropic"
     if not is_supported(provider):
         raise ValueError(
             f"No v2 client for {provider} (model {model}). "
@@ -259,7 +261,7 @@ def make_llm(
     elif provider == "OpenAI":
         from langchain_openai import ChatOpenAI
         chat = ChatOpenAI(model=model, api_key=api_key, timeout=timeout,
-                          max_retries=1, base_url=os.getenv("OPENAI_API_BASE"))
+                          max_retries=1, base_url=_openai_base_url())
     elif provider == "DeepSeek":
         from langchain_deepseek import ChatDeepSeek
         chat = ChatDeepSeek(model=model, api_key=api_key, timeout=timeout,
@@ -315,6 +317,12 @@ def _flatten(content, sep: str = "\n") -> str:
                 parts.append(block.get("text", ""))
         return sep.join(parts)
     return "" if content is None else str(content)
+
+
+def _openai_base_url() -> str | None:
+    """A custom OpenAI-compatible endpoint, if one is configured. Accepts the
+    langchain name (OPENAI_API_BASE) and the openai SDK's (OPENAI_BASE_URL)."""
+    return os.getenv("OPENAI_API_BASE") or os.getenv("OPENAI_BASE_URL") or None
 
 
 def _require_key(provider: str) -> str:
