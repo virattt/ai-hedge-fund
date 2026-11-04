@@ -26,3 +26,5 @@ python contrib/alpha_glue/run_backtest.py ~/.hedge-fund/mandates/example.yaml \
 
 Needs `pip install yfinance requests` next to the package's own dependencies. Backtest only: `aihf paper`
 still builds its own Financial Datasets client.
+
+Tests: `python -m unittest test_alpha_client` from this folder. They are offline and cover the as-filed arithmetic and the Form 4 parser.
