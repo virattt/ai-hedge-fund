@@ -2,6 +2,8 @@
 
 from datetime import date as _date
 from datetime import timedelta
+from math import log, sqrt
+from statistics import stdev
 
 import pytest
 
@@ -9,8 +11,8 @@ from hedge_fund.brokers.sim import SimBroker
 from hedge_fund.data.models import Price
 from hedge_fund.fund.spec import Fund, FundSpec
 from hedge_fund.models import Signal
-from hedge_fund.pipeline.models import CycleRecord
-from hedge_fund.pipeline.stages import assess_fund, execute_decision, mark_lookback_start
+from hedge_fund.pipeline.models import Allocated, AllocationRecord, CycleRecord
+from hedge_fund.pipeline.stages import assess_fund, execute_decision, history_start, liquidity
 
 
 def _cycle(fund, as_of, broker, data, universe):
@@ -46,6 +48,7 @@ class FakeAnalyst:
     """Fixed conviction per ticker; counts predict calls."""
 
     investment_approach = "long_short"
+    horizon_days = 1
 
     def __init__(self, name, views=None, abstain=False, error=None):
         self._name = name
@@ -117,6 +120,8 @@ def test_full_cycle_record_is_consistent():
     assert record.equity_before == pytest.approx(100_000.0)
     assert len(record.strategies) == 2
     assert all(len(sr.signals) == 3 for sr in record.strategies)  # 3 tickers x 1 analyst
+    # The engine stamps each model's declared horizon on its views.
+    assert all(sig.horizon_days == 1 for sr in record.strategies for sig in sr.signals)
     # Weights respect the hard caps
     for w in record.final_weights.values():
         assert abs(w) <= 0.25 + 1e-12
@@ -154,6 +159,38 @@ def test_netting_math_two_strategies_unequal_slices():
     # Netted: AAPL = .75*.5 = .375 ; MSFT = .75*.5 + .25*(-1) = .125
     assert record.target_weights["AAPL"] == pytest.approx(0.375)
     assert record.target_weights["MSFT"] == pytest.approx(0.125)
+
+
+def test_an_allocation_replaces_the_mandate_slices_and_blend_weights():
+    spec = _spec(strategies=[
+        {"name": "s1", "weight": 3.0, "models": [{"name": "a"}, {"name": "b"}]},
+        {"name": "s2", "weight": 1.0, "models": [{"name": "a"}]},
+    ], max_position_pct=1.0)
+    fund = Fund(spec, models={
+        "s1": [FakeAnalyst("a", views={"AAPL": 1.0}), FakeAnalyst("b", views={"AAPL": 0.0})],
+        "s2": [FakeAnalyst("a", views={"MSFT": -1.0})],
+    })
+    one = Allocated(mandate=1.0, t_stat=None, n=0, weight=1.0)
+    allocation = AllocationRecord(
+        as_of="2024-06-03",
+        strategies={"s1": Allocated(mandate=3.0, t_stat=-3.0, n=20, weight=0.75), "s2": one},
+        models={"s1": {"a": Allocated(mandate=1.0, t_stat=2.0, n=20, weight=3.0), "b": one}, "s2": {"a": one}},
+    )
+    decision = assess_fund(fund, "2024-06-03", FakeDataClient(CLOSES), UNIVERSE, allocation=allocation)
+    s1, s2 = decision.strategies
+    # Slices come from the allocated 0.75 : 1, not the mandate's 3 : 1.
+    assert (s1.slice, s2.slice) == (pytest.approx(0.75 / 1.75), pytest.approx(1 / 1.75))
+    # a at weight 3 and b at weight 1 vote 1.0 and 0.0: conviction 0.75, not the equal-weight 0.5.
+    assert s1.convictions["AAPL"] == pytest.approx(0.75)
+    assert decision.allocation == allocation
+    plain = assess_fund(fund, "2024-06-03", FakeDataClient(CLOSES), UNIVERSE)
+    assert plain.strategies[0].convictions["AAPL"] == pytest.approx(0.5) and plain.allocation is None
+    assert "allocation" not in plain.model_dump() and "allocation" in decision.model_dump()
+    # A refresh across a calendar gap re-asks with the same allocation.
+    wednesday = assess_fund(fund, "2024-06-05", FakeDataClient(CLOSES), UNIVERSE, allocation=allocation)
+    record = execute_decision(fund, wednesday, "2024-06-07", SimBroker(cash=100_000.0), FakeDataClient(CLOSES))
+    assert record.refreshed_assessment.as_of == "2024-06-06"
+    assert record.refreshed_assessment.allocation == allocation and record.allocation == allocation
 
 
 def test_slices_normalize():
@@ -450,5 +487,190 @@ def test_strategy_gross_violation_is_rejected_even_when_fund_risk_clips_it(monke
     broker.place_order.assert_not_called()
 
 
-def test_mark_lookback_start_is_a_week_before():
-    assert mark_lookback_start("2025-01-15") == "2025-01-08"
+def test_history_start_is_thirty_days_before():
+    assert history_start("2025-01-15") == "2024-12-16"
+
+
+def test_a_close_older_than_a_week_does_not_mark():
+    class StaleDataClient(FakeDataClient):
+        def get_prices(self, ticker, start_date, end_date, **kwargs):
+            # One bar, ten days before the date asked for: inside the history
+            # window, outside the mark's freshness.
+            stale = (_date.fromisoformat(end_date) - timedelta(days=10)).isoformat()
+            return [Price(open=1, close=1, high=1, low=1, volume=1, time=f"{stale}T00:00:00Z")]
+
+    decision = assess_fund(Fund(_spec(), models={"solo": [FakeAnalyst("a", views={})]}),
+                           "2024-06-03", StaleDataClient({}), ["AAPL"])
+    assert decision.marks == {} and [s.ticker for s in decision.skipped] == ["AAPL"]
+
+
+# ---------------------------------------------------------------------------
+# The volume cap
+# ---------------------------------------------------------------------------
+
+class VolumeDataClient(FakeDataClient):
+    """Canned closes plus a daily volume series per ticker."""
+
+    def __init__(self, closes, volumes):
+        super().__init__(closes)
+        self._volumes = volumes
+
+    def get_prices(self, ticker, start_date, end_date, **kwargs):
+        if ticker not in self._volumes:
+            return super().get_prices(ticker, start_date, end_date, **kwargs)
+        close = self._closes[ticker]
+        end = _date.fromisoformat(end_date)
+        return [Price(open=close, close=close, high=close, low=close, volume=v,
+                      time=f"{(end - timedelta(days=len(self._volumes[ticker]) - 1 - i)).isoformat()}T00:00:00Z")
+                for i, v in enumerate(self._volumes[ticker])]
+
+
+class SeriesDataClient(FakeDataClient):
+    """Canned (close, volume) daily series per ticker, ending on the date asked for."""
+
+    def __init__(self, closes, series):
+        super().__init__(closes)
+        self._series = series
+
+    def get_prices(self, ticker, start_date, end_date, **kwargs):
+        if ticker not in self._series:
+            return super().get_prices(ticker, start_date, end_date, **kwargs)
+        end = _date.fromisoformat(end_date)
+        return [Price(open=c, close=c, high=c, low=c, volume=v,
+                      time=f"{(end - timedelta(days=len(self._series[ticker]) - 1 - i)).isoformat()}T00:00:00Z")
+                for i, (c, v) in enumerate(self._series[ticker])]
+
+
+def test_liquidity_is_the_mean_volume_of_the_last_twenty_bars():
+    data = VolumeDataClient(CLOSES, {"AAPL": [1_000_000] * 5 + [2_000_000] * 20, "MSFT": [500] * 3})
+    liquid = liquidity(["AAPL", "MSFT", "ZZZ"], "2024-06-04", data)
+    assert sorted(liquid) == ["AAPL", "MSFT"]   # ZZZ has no bars: absent
+    assert liquid["AAPL"].adv == pytest.approx(2_000_000) and liquid["MSFT"].adv == pytest.approx(500)
+    assert liquid["AAPL"].volatility == 0.0   # a flat series has no vol
+
+
+def test_liquidity_volatility_is_the_sample_sigma_of_daily_log_returns():
+    data = SeriesDataClient(CLOSES, {"AAPL": [(100.0, 1_000), (110.0, 2_000), (100.0, 3_000)]})
+    liquid = liquidity(["AAPL", "MSFT"], "2024-06-04", data)
+    assert liquid["AAPL"].adv == pytest.approx(2_000)
+    assert liquid["AAPL"].volatility == pytest.approx(stdev([log(1.1), log(100 / 110)]))
+    assert liquid["MSFT"].volatility == 0.0   # one bar: no return to measure
+
+
+def test_the_fill_pays_square_root_impact_and_the_cycle_derives_it():
+    fund = Fund(_spec(), models={"solo": [FakeAnalyst("a", views={"AAPL": 1.0})]})
+    data = SeriesDataClient(CLOSES, {"AAPL": [(100.0, 1_000), (110.0, 2_000), (100.0, 3_000)]})
+    broker = SimBroker(cash=100_000.0, costs=fund.spec.costs)   # spread and commission 0: impact alone
+    record = _cycle(fund, "2024-06-03", broker, data, UNIVERSE)
+    [order], [fill] = record.orders, record.fills
+    assert (order.ticker, order.price, order.adv) == ("AAPL", 100.0, 2_000.0)
+    sigma = stdev([log(1.1), log(100 / 110)])
+    impact = sigma * sqrt(order.quantity / 2_000)
+    assert fill.price == pytest.approx(100.0 * (1 + impact))
+    assert record.spread_cost == 0.0
+    assert record.impact == pytest.approx(order.quantity * 100.0 * impact)
+    assert record.trading_cost == pytest.approx(record.impact)
+
+
+def test_volume_cap_clips_the_order_and_records_the_clamp():
+    spec = FundSpec(**{**_spec().model_dump(), "risk": {"max_position_pct": 0.25, "max_gross_exposure": 1.0, "max_adv_pct": 0.05}})
+    fund = Fund(spec, models={"solo": [FakeAnalyst("a", views={"AAPL": 1.0, "MSFT": 1.0})]})
+    # AAPL: 20-day ADV 1,000 -> cap 50 shares; the target is 25% of 100k at 200 = 125.
+    # MSFT: ADV 100,000 -> cap 5,000, so its 62-share target (25% of 100k at 400) is untouched.
+    data = VolumeDataClient(CLOSES, {"AAPL": [1_000] * 20, "MSFT": [100_000] * 20})
+    record = _cycle(fund, "2024-06-03", SimBroker(cash=100_000.0), data, UNIVERSE)
+    assert {o.ticker: o.quantity for o in record.orders} == {"AAPL": 50, "MSFT": 62}
+    assert record.positions == {"AAPL": 50, "MSFT": 62}
+    liquidity = [c for c in record.clamps if c.limit == "max_adv_pct"]
+    assert [(c.ticker, c.before, c.after) for c in liquidity] == [("AAPL", pytest.approx(0.25), pytest.approx(0.10))]
+    assert record.final_weights["AAPL"] == pytest.approx(0.25)   # the decision is untouched; only the fill is capped
+
+
+# ---------------------------------------------------------------------------
+# The halving tier and the factor limits
+# ---------------------------------------------------------------------------
+
+from math import exp  # noqa: E402
+
+from hedge_fund.data.models import CompanyFacts  # noqa: E402
+from hedge_fund.pipeline.stages import history_days  # noqa: E402
+
+
+def _risk_spec(**risk):
+    return FundSpec(**{**_spec().model_dump(), "risk": {"max_position_pct": 0.25, "max_gross_exposure": 1.0, **risk}})
+
+
+class FactorDataClient(FakeDataClient):
+    """Eighty-one daily bars per ticker from canned log returns, ending on the
+    date asked for; records every window it was asked for."""
+
+    MARKET = [0.01 if i % 2 == 0 else -0.01 for i in range(80)]
+
+    def __init__(self, closes, multipliers, sectors):
+        super().__init__(closes)
+        self._multipliers = multipliers
+        self._sectors = sectors
+        self.windows = []
+
+    def get_prices(self, ticker, start_date, end_date, **kwargs):
+        self.windows.append((ticker, start_date, end_date))
+        multiplier = 1.0 if ticker == "SPY" else self._multipliers.get(ticker)
+        if multiplier is None:
+            return super().get_prices(ticker, start_date, end_date, **kwargs)
+        end = _date.fromisoformat(end_date)
+        closes = [self._closes.get(ticker, 100.0)]
+        for r in self.MARKET:
+            closes.append(closes[-1] * exp(multiplier * r))
+        return [Price(open=c, close=c, high=c, low=c, volume=1000,
+                      time=f"{(end - timedelta(days=len(closes) - 1 - i)).isoformat()}T00:00:00Z")
+                for i, c in enumerate(closes)]
+
+    def get_company_facts(self, ticker):
+        return CompanyFacts(ticker=ticker, sector=self._sectors.get(ticker))
+
+
+def test_the_halving_tier_halves_the_book_and_records_the_drawdown():
+    fund = Fund(_risk_spec(max_position_pct=1.0, halve_drawdown_pct=0.10, max_drawdown_pct=0.20),
+                models={"solo": [FakeAnalyst("a", views={"AAPL": 1.0, "MSFT": -0.5})]})
+    full = assess_fund(fund, "2024-06-03", FakeDataClient(CLOSES), UNIVERSE)
+    halved = assess_fund(fund, "2024-06-03", FakeDataClient(CLOSES), UNIVERSE, drawdown=0.12)
+    assert full.drawdown == 0.0 and full.clamps == []
+    assert halved.drawdown == 0.12
+    assert [(c.limit, c.before, c.after) for c in halved.clamps] == [("halve_drawdown_pct", 0.12, 0.5)]
+    assert halved.final_weights == {t: pytest.approx(w / 2) for t, w in full.final_weights.items()}
+    for record in halved.strategies:
+        assert record.final_contribution == {t: pytest.approx(w / 2) for t, w in full.strategies[0].final_contribution.items()}
+    # Without the tier the decision does not carry a drawdown at all.
+    plain = assess_fund(Fund(_spec(), models={"solo": [FakeAnalyst("a")]}), "2024-06-03", FakeDataClient(CLOSES), UNIVERSE)
+    assert plain.drawdown is None and "drawdown" not in plain.model_dump() and "exposures" not in plain.model_dump()
+
+
+def test_a_refresh_across_a_gap_keeps_the_original_drawdown():
+    fund = Fund(_risk_spec(max_position_pct=1.0, halve_drawdown_pct=0.10),
+                models={"solo": [FakeAnalyst("a", views={"AAPL": 1.0})]})
+    friday = assess_fund(fund, "2024-06-07", FakeDataClient(CLOSES), UNIVERSE, drawdown=0.12)
+    cycle = execute_decision(fund, friday, "2024-06-10", SimBroker(cash=100_000.0), FakeDataClient(CLOSES))
+    assert cycle.refreshed_assessment.as_of == "2024-06-09"
+    assert cycle.refreshed_assessment.drawdown == 0.12 and cycle.drawdown == 0.12
+    assert [c.limit for c in cycle.clamps] == ["halve_drawdown_pct"]
+
+
+def test_a_factor_limit_fits_the_model_on_a_quarter_of_bars_and_records_it():
+    spec = _risk_spec(max_position_pct=1.0, max_beta=0.01, max_sector_pct=0.3)
+    assert history_days(spec) == 100 and history_days(_spec()) == 30
+    fund = Fund(spec, models={"solo": [FakeAnalyst("a", views={"AAPL": 1.0})]})
+    data = FactorDataClient(CLOSES, {"AAPL": 2.0, "MSFT": 1.0}, {"AAPL": "Technology"})
+    decision = assess_fund(fund, "2024-06-03", data, UNIVERSE)
+    model = decision.exposures
+    assert model is not None and model.as_of == "2024-06-03"
+    assert model.names["AAPL"].beta == pytest.approx(0.67 * 2 + 0.33) and model.names["AAPL"].n_bars == 80
+    assert model.names["AAPL"].sector == "Technology" and model.names["MSFT"].sector is None
+    assert model.names["NVDA"].beta == 1.0 and model.names["NVDA"].n_bars == 0   # one bar: the prior
+    # The whole book sits in AAPL: Technology is over its cap, then beta is.
+    sector, beta = decision.clamps
+    assert (sector.limit, sector.sector, sector.before, sector.after) == ("max_sector_pct", "Technology", 1.0, pytest.approx(0.3))
+    assert (beta.limit, beta.before) == ("max_beta", pytest.approx(0.3 * (0.67 * 2 + 0.33)))
+    assert decision.final_weights["AAPL"] == pytest.approx(0.01 / (0.67 * 2 + 0.33))
+    # Marks, liquidity, and the model all fetch the one 100-day window.
+    assert {start for _, start, _ in data.windows} == {history_start("2024-06-03", 100)}
+    assert decision.model_dump()["exposures"]["names"]["AAPL"]["sector"] == "Technology"

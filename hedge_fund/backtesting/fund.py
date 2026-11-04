@@ -35,6 +35,7 @@ from hedge_fund.pipeline.session import (
     next_state,
     SessionRecord,
 )
+from hedge_fund.scorecard import current_allocation
 
 
 class ReplaySchedule(BaseModel):
@@ -48,6 +49,14 @@ class ReplaySchedule(BaseModel):
         return sorted(set(self.execution_dates) | {
             previous_day(session) for session in self.execution_dates.values()
             if session is not None
+        })
+
+    @property
+    def warm_dates(self) -> list[str]:
+        """Every date the replay fetches daily history at: each assessment
+        (marks) and each execution session (liquidity)."""
+        return sorted(set(self.assessment_dates) | {
+            session for session in self.execution_dates.values() if session is not None
         })
 
 
@@ -143,7 +152,9 @@ def backtest_fund(
     base_close: float | None = None
     n_executed = 0
     for i, session in enumerate(dates):
-        record = advance(fund, state, session, broker, data_client, universe, clock)
+        allocation = (current_allocation(spec, state, session, lambda: records)
+                      if is_rebalance_session(session, state.last_session, spec.rebalance) else None)
+        record = advance(fund, state, session, broker, data_client, universe, clock, allocation)
         state = next_state(state, record)
         records.append(record)
         nav.append(record.nav)

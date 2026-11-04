@@ -24,7 +24,7 @@ def isolated_configuration(tmp_path, monkeypatch):
     monkeypatch.setattr(keys, "ENV_PATH", saved)
     monkeypatch.setattr(paths, "ENV_PATH", saved)
     monkeypatch.setattr(paths, "ensure_mandates_dir", lambda: mandates)
-    for variable in (*PROVIDER_ENV_VARS.values(), "MOONSHOT_API_KEY", "FINANCIAL_DATASETS_API_KEY", "HEDGE_FUND_LLM_MODEL", "UNRELATED_KEY"):
+    for variable in (*PROVIDER_ENV_VARS.values(), "MOONSHOT_API_KEY", "FINANCIAL_DATASETS_API_KEY", "X402_WALLET_PRIVATE_KEY", "HEDGE_FUND_LLM_MODEL", "UNRELATED_KEY"):
         # Track even initially absent keys, since dotenv and the UI set them
         # directly rather than through monkeypatch.
         monkeypatch.setenv(variable, "")

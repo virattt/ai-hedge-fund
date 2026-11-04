@@ -10,32 +10,45 @@ from hedge_fund.signals import get_investment_approach
 
 if TYPE_CHECKING:
     from hedge_fund.fund.spec import FundSpec
-    from hedge_fund.pipeline.models import StrategyRecord
+    from hedge_fund.pipeline.models import AllocationRecord, StrategyRecord
 
 
-def validate_targets(spec: FundSpec, strategies: list[StrategyRecord], final_weights: dict[str, float]) -> None:
+def validate_targets(
+    spec: FundSpec, strategies: list[StrategyRecord], final_weights: dict[str, float],
+    allocation: AllocationRecord | None = None,
+) -> None:
     """Raise ValueError if the proposed book violates its recorded mandate.
 
     Short evidence is recomputed from the signals and declared profiles rather
     than trusting the sizing output. All checks run before any orders are sent.
-    Contributions are fractions of fund equity, not of strategy capital.
+    Contributions are fractions of fund equity, not of strategy capital. With
+    an *allocation*, the slices and blend weights it set are the ones the book
+    is checked against; the mandate's limits apply either way.
     """
     by_name = {s.name: s for s in spec.strategies}
     if len(strategies) != len(by_name) or {s.name for s in strategies} != set(by_name):
         raise ValueError(f"{spec.name}: strategy contributions do not match the mandate")
-    total_slice = sum(s.weight for s in spec.strategies)
+    slices = {
+        s.name: allocation.strategies[s.name].weight if allocation is not None else s.weight
+        for s in spec.strategies
+    }
+    total_slice = sum(slices.values())
     if not isfinite(total_slice) or total_slice <= 0:
         raise ValueError(f"{spec.name}: strategy allocations must have a finite, positive total")
     combined: dict[str, float] = {}
     for record in strategies:
         strategy = by_name[record.name]
         scope = f"strategy {strategy.name!r}"
-        expected_slice = strategy.weight / total_slice
+        expected_slice = slices[strategy.name] / total_slice
         if not isfinite(record.slice) or record.slice <= 0 or abs(record.slice - expected_slice) > WEIGHT_TOLERANCE:
             raise ValueError(f"{scope}: capital slice does not match the mandate")
+        model_weights = (
+            {m: a.weight for m, a in allocation.models[strategy.name].items()}
+            if allocation is not None else strategy.model_weights
+        )
         evidence = blend_signals(
             record.signals,
-            strategy.model_weights,
+            model_weights,
             strategy.blend.gross_target,
             mode=strategy.blend.mode,
             investment_approaches={m.name: get_investment_approach(m.name) for m in strategy.models},

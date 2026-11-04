@@ -14,6 +14,7 @@ from textual.widgets import Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
 from hedge_fund import paths
+from hedge_fund.data.client import API_KEY_ENV, has_data_credential, WALLET_KEY_ENV
 from hedge_fund.llm import is_supported, load_api_models, provider_for
 from hedge_fund.tui.keys import masked, missing_key, PROVIDER_ENV_VARS, save_credential
 from hedge_fund.tui.palette import BRIGHT, GREEN, MUTED, TEXT
@@ -172,6 +173,72 @@ class KeyPromptScreen(ModalScreen[bool]):
         self.dismiss(False)
 
 
+class DataKeyPromptScreen(ModalScreen[bool]):
+    """Ask for the one credential Financial Datasets needs: an API key, or a
+    wallet private key to pay per call with x402. Two fields, so a pasted
+    value never has to be guessed at; enter in either saves that one.
+
+    Returns True if a credential is now in the environment.
+    """
+
+    BINDINGS = [Binding("escape", "cancel", "cancel")]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="datakeyprompt"):
+            yield Static(Text.assemble(
+                ("Financial Datasets credential needed", f"bold {BRIGHT}")),
+                id="key-q")
+            yield Static(Text.assemble(
+                ("The fund cannot run without one. Paste either below and it "
+                 "is saved to\n", MUTED),
+                (str(paths.ENV_PATH), TEXT),
+                ("\nwhich is owner-read-only and loaded automatically on "
+                 "every start.", MUTED)),
+                id="key-blurb")
+            yield Static(Text.assemble(
+                ("API key", f"bold {TEXT}"),
+                ("  full history, any use", MUTED)),
+                classes="key-label")
+            yield Input(password=True, placeholder=API_KEY_ENV, id="api-key-input")
+            yield Static(Text.assemble(
+                ("Wallet private key", f"bold {TEXT}"),
+                ("  pay per call with x402", MUTED)),
+                classes="key-label")
+            yield Input(password=True, placeholder=WALLET_KEY_ENV, id="wallet-key-input")
+            yield Static(Text(
+                "A Base wallet holding USDC. Use a small, separate wallet. "
+                "x402 serves the last 365 days, non-professional use.", style=MUTED),
+                classes="key-note")
+            yield Static(Text.assemble(
+                ("enter", f"bold {GREEN}"), ("  save and continue   ", MUTED),
+                ("esc", f"bold {BRIGHT}"), ("  cancel", MUTED)),
+                classes="hint")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self.query_one("#api-key-input", Input).focus()
+
+    @on(Input.Submitted, "#api-key-input")
+    def _save_api_key(self, event: Input.Submitted) -> None:
+        self._save(API_KEY_ENV, event.value)
+
+    @on(Input.Submitted, "#wallet-key-input")
+    def _save_wallet_key(self, event: Input.Submitted) -> None:
+        self._save(WALLET_KEY_ENV, event.value)
+
+    def _save(self, env_var: str, value: str) -> None:
+        key = value.strip()
+        if not key:
+            self.notify("No key entered", severity="warning")
+            return
+        path = save_credential(env_var, key)
+        self.notify(f"Saved {env_var} ({masked(key)}) to {path}")
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+
 class ModelPickerScreen(ModalScreen[str | None]):
     """Every model in the repo's registry, grouped by provider.
 
@@ -240,17 +307,16 @@ class ModelPickerScreen(ModalScreen[str | None]):
 
 
 def demand_run_keys(app, resume) -> bool:
-    """True if every key a run needs is in the environment: the data key
-    first, then the selected model's LLM key. Otherwise open the prompt for
-    the first missing one; each save calls ``resume``, which should re-enter
-    this gate so the next missing key is asked for in turn. Ask here, not
-    deep inside a worker thread: a run that dies on a missing credential has
-    already spent minutes of warming."""
-    if not os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        app.push_screen(
-            KeyPromptScreen("Financial Datasets",
-                            "FINANCIAL_DATASETS_API_KEY"),
-            lambda saved: resume() if saved else None)
+    """True if every key a run needs is in the environment: the data
+    credential first (an API key or an x402 wallet), then the selected
+    model's LLM key. Otherwise open the prompt for the first missing one;
+    each save calls ``resume``, which should re-enter this gate so the next
+    missing key is asked for in turn. Ask here, not deep inside a worker
+    thread: a run that dies on a missing credential has already spent
+    minutes of warming."""
+    if not has_data_credential():
+        app.push_screen(DataKeyPromptScreen(),
+                        lambda saved: resume() if saved else None)
         return False
     provider = provider_for(os.environ.get("HEDGE_FUND_LLM_MODEL", ""))
     env_var = missing_key(provider) if provider else None

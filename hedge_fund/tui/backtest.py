@@ -38,7 +38,7 @@ from hedge_fund.backtesting.research import last_universe, save_result
 from hedge_fund.brokers import Fill
 from hedge_fund.data import CachedDataClient, FDClient
 from hedge_fund.fund import discover_funds, Fund, FundSpec, normalize_universe
-from hedge_fund.pipeline import CycleRecord, mark_lookback_start
+from hedge_fund.pipeline import CycleRecord, history_days, history_start
 from hedge_fund.scorecard import score
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent
 from hedge_fund.tui.home import demand_run_keys, HomeScreen
@@ -47,7 +47,7 @@ from hedge_fund.tui.report import cost_line, roster_table, tape_table
 from hedge_fund.tui.scorecard_view import analyst_table, strategy_table
 from hedge_fund.tui.shared import (
     agent_names,
-    BACKTEST_WEEKS,
+    BACKTEST_DAYS,
     DISPLAY_NAMES,
     fund_label,
     render_area_chart,
@@ -175,7 +175,7 @@ class BacktestScreen(Screen):
             if last:
                 tickers.value = ", ".join(last)
         if not start.value:
-            start.value = (today - timedelta(weeks=BACKTEST_WEEKS)).isoformat()
+            start.value = (today - timedelta(days=BACKTEST_DAYS)).isoformat()
         if not end.value:
             end.value = today.isoformat()
         self.query_one("#bt-panes", ContentSwitcher).current = "bt-dates"
@@ -240,11 +240,12 @@ class BacktestScreen(Screen):
         try:
             with FDClient() as raw:
                 schedule = build_schedule(CachedDataClient(raw), spec.benchmark, start, end, spec.rebalance)
-            grid = schedule.assessment_dates
-            app.call_from_thread(self._begin_warm, spec, universe, len(grid))
-            self._warm_market(spec, universe, grid)
+            # A factor mandate fits betas on the benchmark's bars at every date too.
+            names = [*universe, spec.benchmark] if spec.risk.has_factor_limits else universe
+            app.call_from_thread(self._begin_warm, spec, names, len(schedule.warm_dates))
+            self._warm_market(spec, names, schedule.warm_dates)
             app.call_from_thread(self._begin_agents, spec)
-            self._warm_agents(spec, universe, grid)
+            self._warm_agents(spec, universe, schedule.assessment_dates)
             app.call_from_thread(self._begin_replay, spec, schedule.closes, len(schedule.closes))
 
             fund = Fund(spec, blind=True)  # same prompts _warm_agents cached
@@ -273,6 +274,8 @@ class BacktestScreen(Screen):
             issubclass(ALPHA_MODEL_REGISTRY[m.name], LLMAgent)
             for s in spec.strategies for m in s.models
         )
+        needs_facts = has_agents or spec.risk.max_sector_pct is not None
+        days = history_days(spec)
         chunks = [
             (ticker, grid[j:j + WARM_CHUNK])
             for ticker in universe
@@ -283,10 +286,10 @@ class BacktestScreen(Screen):
         def prefetch(ticker: str, dates: list[str]) -> None:
             with FDClient() as raw:  # own client per task (requests isn't shared-safe)
                 fd = CachedDataClient(raw)
-                if has_agents:
+                if needs_facts:
                     fd.get_company_facts(ticker)
                 for as_of in dates:
-                    fd.get_prices(ticker, mark_lookback_start(as_of), as_of)
+                    fd.get_prices(ticker, history_start(as_of, days), as_of)
                     if has_agents:
                         fd.get_financial_metrics(ticker, as_of,
                                                  period="ttm", limit=20)

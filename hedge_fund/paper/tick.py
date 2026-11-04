@@ -34,6 +34,7 @@ from hedge_fund.paper.deployed import BROKER_FILE, load_deployed
 from hedge_fund.paper.ledger import Ledger
 from hedge_fund.pipeline.clock import Clock, LiveClock, Marked
 from hedge_fund.pipeline.session import advance, FundHalted, FundState, is_rebalance_session, next_state, SessionRecord
+from hedge_fund.scorecard import current_allocation
 
 # A fresh fund starts at the most recent completed session; this is how far
 # back to look for one (covers a long weekend plus a holiday cluster).
@@ -260,7 +261,9 @@ def _run(
     broker = PaperBroker(directory / BROKER_FILE, deployed.spec.costs)
     fund = fund or (build_fund or Fund)(deployed.spec)
     try:
-        record = advance(fund, state, session, broker, data_client, deployed.universe, clock)
+        allocation = (current_allocation(deployed.spec, state, session, ledger.records)
+                      if is_rebalance_session(session, state.last_session, deployed.spec.rebalance) else None)
+        record = advance(fund, state, session, broker, data_client, deployed.universe, clock, allocation)
         ledger.append(record)
     except FundHalted:
         raise

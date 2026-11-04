@@ -216,12 +216,12 @@ Bar > .bar--complete {
 
 /* ---------------- api key prompt ---------------- */
 
-KeyPromptScreen {
+KeyPromptScreen, DataKeyPromptScreen {
     align: center middle;
     background: #0b100e 70%;
 }
 
-#keyprompt {
+#keyprompt, #datakeyprompt {
     width: 72;
     max-width: 92%;
     height: auto;
@@ -236,6 +236,14 @@ KeyPromptScreen {
 
 #key-blurb {
     margin-bottom: 1;
+}
+
+#datakeyprompt .key-label {
+    margin-top: 1;
+}
+
+#datakeyprompt .key-note {
+    margin-top: 1;
 }
 
 /* ---------------- model picker ---------------- */

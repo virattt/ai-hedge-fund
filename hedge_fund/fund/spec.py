@@ -18,7 +18,7 @@ from pydantic import (
 
 from hedge_fund.brokers.costs import TradingCosts
 from hedge_fund.risk.limits import RiskLimits
-from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent, get_investment_approach
+from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent, get_horizon_days, get_investment_approach
 from hedge_fund.signals.base import AlphaModel
 
 PortfolioMode: TypeAlias = Literal["long_only", "long_short", "dollar_neutral"]
@@ -94,8 +94,9 @@ class ModelSpec(BaseModel):
 
     @field_validator("name")
     @classmethod
-    def _declared_approach(cls, name: str) -> str:
+    def _declared_profile(cls, name: str) -> str:
         get_investment_approach(name)
+        get_horizon_days(name)
         return name
 
 
@@ -137,6 +138,36 @@ class StrategySpec(BaseModel):
         return {m.name: m.weight for m in self.models}
 
 
+class AllocationPolicy(BaseModel):
+    """How the scorecard moves the mandate's weights: a confidence multiplier
+    on each strategy's capital slice and each model's blend weight.
+
+    `weight = mandate * clip(1 + slope * t, floor, cap)`, where t is the
+    analyst's IC t-stat or the sleeve's mean period return over its standard
+    deviation times sqrt(n). A t-stat pays for evidence of skill, not for one
+    lucky month; below `min_evidence` graded dates or periods the mandate
+    weight stands. The floor keeps a cut analyst producing graded views, so
+    it can earn its weight back. This is the multi-manager's rule for pods
+    and the quant desk's IC weighting for signals, shrunk to the mandate
+    while the record is short.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    min_evidence: int = Field(
+        default=20, ge=2, description="graded dates (analyst) or periods (strategy) before a weight moves"
+    )
+    slope: float = Field(default=0.25, ge=0, description="multiplier change per unit of t-stat")
+    floor: float = Field(default=0.25, gt=0, le=1, description="lowest multiplier")
+    cap: float = Field(default=2.0, ge=1, description="highest multiplier")
+
+    def multiplier(self, t_stat: float | None, n: int) -> float:
+        """What a mandate weight is multiplied by, given the evidence."""
+        if t_stat is None or n < self.min_evidence:
+            return 1.0
+        return min(self.cap, max(self.floor, 1 + self.slope * t_stat))
+
+
 class FundSpec(BaseModel):
     """A mandate with fund-level risk limits and no fixed ticker universe.
 
@@ -153,6 +184,10 @@ class FundSpec(BaseModel):
     costs: TradingCosts = Field(
         default_factory=TradingCosts,
         description="what every fill costs: half-spread per side and commission per share",
+    )
+    allocation: AllocationPolicy | None = Field(
+        default=None,
+        description="how the scorecard moves strategy slices and model weights; absent keeps every weight as written",
     )
     capital: float = Field(default=100_000.0, gt=0)
     rebalance: Cadence = Field(
@@ -216,6 +251,8 @@ class FundSpec(BaseModel):
             data.pop("window", None)
         if self.costs == TradingCosts():
             data.pop("costs", None)
+        if self.allocation is None:
+            data.pop("allocation", None)
         return data
 
     @property

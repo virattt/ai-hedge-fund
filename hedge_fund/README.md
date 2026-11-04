@@ -49,6 +49,7 @@ poetry install                          # dependencies
 
 # .env needs (at repo root):
 #   FINANCIAL_DATASETS_API_KEY=...      # market/fundamentals data
+#   X402_WALLET_PRIVATE_KEY=0x...       # or pay per call with x402 (needs aihf[x402])
 #   ANTHROPIC_API_KEY=...               # only for LLM agents (Buffett)
 
 # THE command. No arguments: launch the interactive app (a Textual TUI).

@@ -15,6 +15,7 @@ class BuffettAgent(LLMAgent):
     """Reasons over fundamentals in Warren Buffett's voice."""
 
     investment_approach = "long_only"
+    horizon_days = 252  # a year: the shortest honest grade of a business-owner's view
 
     @property
     def name(self) -> str:

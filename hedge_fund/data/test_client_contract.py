@@ -10,17 +10,23 @@ Pins the two Phase 0 guarantees:
    future into a backtest).
 """
 
+import base64
+import json
+
 import pytest
 import requests
 
-from hedge_fund.data import FDClient, FDClientError
+from hedge_fund.data import FDClient, FDClientError, has_data_credential
+from hedge_fund.data import client as client_module
+from hedge_fund.data.wallet import PaymentFailed
 
 
 class _FakeResponse:
-    def __init__(self, status_code=200, payload=None, text=""):
+    def __init__(self, status_code=200, payload=None, text="", headers=None):
         self.status_code = status_code
         self._payload = payload or {}
         self.text = text
+        self.headers = headers or {}
 
     def json(self):
         return self._payload
@@ -100,6 +106,120 @@ def test_429_then_success_recovers(client, monkeypatch):
     ])
     prices = client.get_prices("AAPL", "2024-01-01", "2024-12-31")
     assert len(prices) == 1
+
+
+def test_503_retries_like_429(client, monkeypatch):
+    """x402's facilitator answers 503 with Retry-After when it is briefly
+    down and charges nothing for it; the client waits and asks again."""
+    monkeypatch.setattr("hedge_fund.data.client.time.sleep", lambda s: None)
+    _stub(client, [_FakeResponse(503), _FakeResponse(200, {"prices": []})])
+    assert client.get_prices("AAPL", "2024-01-01", "2024-12-31") == []
+    _stub(client, [_FakeResponse(503)] * (len(FDClient._RETRY_DELAYS) + 1))
+    with pytest.raises(FDClientError) as exc_info:
+        client.get_prices("AAPL", "2024-01-01", "2024-12-31")
+    assert exc_info.value.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# Credentials: an API key, or a wallet that pays per call with x402
+# ---------------------------------------------------------------------------
+
+def _plain_session(private_key):
+    session = requests.Session()
+    session.wallet = private_key
+    return session
+
+
+@pytest.fixture
+def no_env_credentials(monkeypatch):
+    """conftest loads .env, so a developer's real key is in the environment;
+    these tests must see only what they pass in."""
+    monkeypatch.delenv("FINANCIAL_DATASETS_API_KEY", raising=False)
+    monkeypatch.delenv("X402_WALLET_PRIVATE_KEY", raising=False)
+
+
+def test_wallet_alone_pays_per_call_and_sends_no_key(monkeypatch, no_env_credentials):
+    monkeypatch.setattr(client_module, "payment_session", _plain_session)
+    with FDClient(api_key="", wallet_key="0xabc") as c:
+        assert c.pays_per_call()
+        assert c._session.wallet == "0xabc"
+        assert "X-API-Key" not in c._session.headers
+
+
+def test_api_key_wins_over_a_wallet(monkeypatch, no_env_credentials):
+    """The API's own rule: a request carrying X-API-KEY bills the account,
+    never the wallet. So the client never pays when it has a key."""
+    monkeypatch.setattr(client_module, "payment_session", lambda key: pytest.fail("built a paying session"))
+    with FDClient(api_key="test-key", wallet_key="0xabc") as c:
+        assert not c.pays_per_call()
+        assert c._session.headers["X-API-Key"] == "test-key"
+
+
+def test_credentials_come_from_the_environment(monkeypatch, no_env_credentials):
+    monkeypatch.setattr(client_module, "payment_session", _plain_session)
+    assert not has_data_credential()
+    with FDClient() as c:
+        assert not c.pays_per_call() and c._session.headers["X-API-Key"] == ""
+    monkeypatch.setenv("X402_WALLET_PRIVATE_KEY", "0xenv")
+    assert has_data_credential()
+    with FDClient() as c:
+        assert c.pays_per_call() and c._session.wallet == "0xenv"
+    monkeypatch.setenv("FINANCIAL_DATASETS_API_KEY", "env-key")
+    assert has_data_credential()
+    with FDClient() as c:
+        assert not c.pays_per_call()
+
+
+def test_missing_x402_package_fails_with_the_install_command(monkeypatch, no_env_credentials):
+    def no_package(private_key):
+        raise ImportError("X402_WALLET_PRIVATE_KEY is set but the x402 package is not installed: pip install 'aihf[x402]'")
+    monkeypatch.setattr(client_module, "payment_session", no_package)
+    with pytest.raises(FDClientError, match=r"pip install 'aihf\[x402\]'"):
+        FDClient(api_key="", wallet_key="0xabc")
+
+
+def test_payment_failure_fails_loud(monkeypatch, no_env_credentials):
+    monkeypatch.setattr(client_module, "payment_session", _plain_session)
+    with FDClient(api_key="", wallet_key="0xabc") as c:
+        _stub(c, [PaymentFailed("insufficient USDC")])
+        with pytest.raises(FDClientError, match="insufficient USDC"):
+            c.get_prices("AAPL", "2024-01-01", "2024-12-31")
+
+
+def test_402_on_a_wallet_names_the_reason_from_the_payment_header(monkeypatch, no_env_credentials):
+    """After the adapter pays, a 402 means the payment was refused. The body
+    says only "Payment required"; the reason is in the PAYMENT-REQUIRED
+    header, so the error names it."""
+    monkeypatch.setattr(client_module, "payment_session", _plain_session)
+    terms = base64.b64encode(json.dumps({"x402Version": 2, "error": "payer_blocked", "accepts": []}).encode()).decode()
+    with FDClient(api_key="", wallet_key="0xabc") as c:
+        _stub(c, [_FakeResponse(402, text='{"error": "Payment required"}', headers={"PAYMENT-REQUIRED": terms})])
+        with pytest.raises(FDClientError, match="payment from the wallet failed: payer_blocked") as exc_info:
+            c.get_snapshot("AAPL")
+    assert exc_info.value.status_code == 402
+    with FDClient(api_key="", wallet_key="0xabc") as c:
+        _stub(c, [_FakeResponse(402, text="Payment required")])
+        with pytest.raises(FDClientError, match="no payment terms in the response"):
+            c.get_snapshot("AAPL")
+
+
+def test_403_on_a_wallet_explains_the_history_window(monkeypatch, no_env_credentials):
+    """x402 serves the last 365 days; the API's 403 names the window start,
+    and the client adds what to do about it. A keyed client gets a 403 for
+    other reasons, so it gets no such hint."""
+    monkeypatch.setattr(client_module, "payment_session", _plain_session)
+    with FDClient(api_key="", wallet_key="0xabc") as c:
+        _stub(c, [_FakeResponse(403, text="window starts 2025-01-01")])
+        with pytest.raises(FDClientError) as exc_info:
+            c.get_prices("AAPL", "2024-01-01", "2024-12-31")
+    message = str(exc_info.value)
+    assert "window starts 2025-01-01" in message and "last 365 days" in message
+    assert "FINANCIAL_DATASETS_API_KEY" in message
+    with FDClient(api_key="test-key") as c:
+        _stub(c, [_FakeResponse(403, text="forbidden")])
+        with pytest.raises(FDClientError) as exc_info:
+            c.get_prices("AAPL", "2024-01-01", "2024-12-31")
+    assert "last 365 days" not in str(exc_info.value)
 
 
 # ---------------------------------------------------------------------------

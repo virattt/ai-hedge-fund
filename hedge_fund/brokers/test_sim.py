@@ -84,6 +84,24 @@ def test_a_short_and_its_cover_pay_the_same_way():
     assert broker.cash() == pytest.approx(-(10 * 0.40) - 0.20)
 
 
+def test_an_order_with_liquidity_pays_impact_on_top_of_the_spread():
+    # 100 shares against an ADV of 10,000 is 1% participation; at 2% daily
+    # vol that is 20 bps of impact, plus the 5 bps half-spread.
+    costs = TradingCosts(spread_bps=5, commission_per_share=0)
+    broker = SimBroker(cash=0.0, costs=costs)
+    bought = broker.place_order(Order(ticker="AAPL", side="buy", quantity=100, price=100.0, adv=10_000, volatility=0.02))
+    assert bought.price == pytest.approx(100.25)
+    sold = broker.place_order(Order(ticker="AAPL", side="sell", quantity=100, price=100.0, adv=10_000, volatility=0.02))
+    assert sold.price == pytest.approx(99.75)
+    assert broker.cash() == pytest.approx(-50.0)
+
+
+def test_an_order_without_liquidity_pays_the_spread_alone():
+    broker = SimBroker(cash=0.0, costs=TradingCosts(spread_bps=5, commission_per_share=0))
+    fill = broker.place_order(Order(ticker="AAPL", side="buy", quantity=100, price=100.0))
+    assert fill.price == pytest.approx(100.05)
+
+
 def test_no_cost_model_fills_at_the_reference_price():
     broker = SimBroker(cash=1_000.0)
     fill = broker.place_order(Order(ticker="AAPL", side="buy", quantity=1, price=100.0))

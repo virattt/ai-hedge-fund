@@ -20,6 +20,8 @@ MONDAY = "2024-06-10"
 
 
 class DatedAnalyst:
+    horizon_days = 1
+
     def __init__(self, views=None):
         self.views = views or {FRIDAY: 1, "2024-06-09": -1}
         self.calls = []

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from math import sqrt
+from statistics import mean, stdev
 
 import numpy as np
 import pytest
@@ -44,13 +45,14 @@ MUNGER = {day: {t: -v for t, v in views.items()} for day, views in BUFFETT.items
 # Builders
 # ---------------------------------------------------------------------------
 
-def _signal(name: str, ticker: str, value: float, *, abstained: bool = False) -> Signal:
+def _signal(name: str, ticker: str, value: float, *, abstained: bool = False,
+            horizon_days: int | None = 1) -> Signal:
     return Signal(model_name=name, ticker=ticker, date="2024-01-01", value=value,
-                  metadata={"abstained": True} if abstained else {})
+                  horizon_days=horizon_days, metadata={"abstained": True} if abstained else {})
 
 
-def _signals(name: str, views: dict[str, float]) -> list[Signal]:
-    return [_signal(name, ticker, value) for ticker, value in views.items()]
+def _signals(name: str, views: dict[str, float], horizon_days: int | None = 1) -> list[Signal]:
+    return [_signal(name, ticker, value, horizon_days=horizon_days) for ticker, value in views.items()]
 
 
 def _decision(as_of: str, marks: dict[str, float], strategies: dict[str, list[Signal]], spec=SPEC) -> DecisionRecord:
@@ -89,17 +91,17 @@ def _session(session: str, *, decision: DecisionRecord | None = None, executed: 
 
 
 def _analyst_ledger(buffett=BUFFETT, munger=MUNGER, marks=MARKS, benchmark=(100.0, 100.0, 100.0),
-                    both_pods: bool = True) -> list[SessionRecord]:
+                    both_pods: bool = True, horizon_days: int | None = 1) -> list[SessionRecord]:
     """Three daily decisions. Buffett sits in both pods; Munger in one. D3's
-    decision has no following decision, so its views must never count."""
+    decision has no day after it on the ledger, so its views are pending."""
     def pods(day):
-        value = _signals("buffett", buffett[day]) + _signals("munger", munger[day])
-        momo = _signals("buffett", buffett[day]) if both_pods else []
+        value = _signals("buffett", buffett[day], horizon_days) + _signals("munger", munger[day], horizon_days)
+        momo = _signals("buffett", buffett[day], horizon_days) if both_pods else []
         return {"value": value, "momo": momo}
     return [
         _session(D1, decision=_decision(D1, marks[D1], pods(D1)), benchmark_close=benchmark[0]),
         _session(D2, decision=_decision(D2, marks[D2], pods(D2)), benchmark_close=benchmark[1]),
-        _session(D3, decision=_decision(D3, marks[D3], {"value": _signals("buffett", {"AAA": 0.9})}),
+        _session(D3, decision=_decision(D3, marks[D3], {"value": _signals("buffett", {"AAA": 0.9}, horizon_days)}),
                  benchmark_close=benchmark[2]),
     ]
 
@@ -125,8 +127,24 @@ def test_always_right_and_always_wrong():
     assert munger.hit_rate == 0.0
     assert munger.ic_mean == pytest.approx(-1.0)
     assert munger.slugging is None            # no hits
-    assert card.horizon == "daily"
+    assert (buffett.horizon_days, buffett.n_pending) == (1, 1)   # D3's view has no day after it
     assert (card.first_session, card.last_session) == (D1, D3)
+
+
+def test_a_view_is_graded_at_its_own_horizon_and_pending_before_it():
+    """Horizon 2 grades D1 at D3 and leaves D2 (and D3) pending."""
+    buffett = _by_name(score(_analyst_ledger(horizon_days=2)))["buffett"]
+    # D1 -> D3: AAA +21%, BBB -2.8%, CCC -0.25%, DDD +8%; the CCC call misses.
+    assert (buffett.horizon_days, buffett.n_views, buffett.n_pending) == (2, 4, 5)
+    assert buffett.hit_rate == pytest.approx(0.75)
+
+
+def test_a_view_with_no_horizon_is_graded_at_the_one_its_model_declares_today():
+    """A ledger written before horizons existed: Buffett declares a year, so
+    every view on a three-day ledger is pending."""
+    buffett = _by_name(score(_analyst_ledger(horizon_days=None)))["buffett"]
+    assert (buffett.horizon_days, buffett.n_views, buffett.n_pending) == (252, 0, 9)
+    assert buffett.hit_rate is None and buffett.ic_mean is None
 
 
 def test_persona_in_two_strategies_counts_once():
@@ -200,8 +218,8 @@ def test_ic_series_mean_std_and_t_stat():
     assert b.ic_t_stat == pytest.approx(1.0)
 
 
-def test_minute_fund_scores_bar_prints_never_the_daily_close():
-    bars = ["2024-06-03T13:00:00", "2024-06-03T13:05:00", "2024-06-03T13:10:00"]
+def test_minute_fund_grades_at_the_next_days_last_bar_never_the_daily_close():
+    bars = ["2024-06-03T13:00:00", "2024-06-03T13:05:00", "2024-06-04T13:00:00", "2024-06-04T13:05:00"]
     daily_close = {"AAA": 100.0}  # what the assessment marks every bar of the day with
     def decision(bar):
         return _decision(bar, daily_close, {"value": _signals("buffett", {"AAA": 0.5})}, spec=MINUTE_SPEC)
@@ -213,12 +231,14 @@ def test_minute_fund_scores_bar_prints_never_the_daily_close():
                  marks={"AAA": 104.0}, positions={"AAA": 480}),
         _session(bars[2], decision=decision(bars[2]), executed=cycle(bars[2], 106.0),
                  marks={"AAA": 106.0}, positions={"AAA": 480}),
+        _session(bars[3], decision=decision(bars[3]), executed=cycle(bars[3], 108.0),
+                 marks={"AAA": 108.0}, positions={"AAA": 480}),
     ]
-    card = score(records)
-    buffett = _by_name(card)["buffett"]
-    assert buffett.n_views == 1               # bar 1 has no print; bar 3 is last
+    buffett = _by_name(score(records))["buffett"]
+    # Day 1's first bar has no print and drops; its second bar is graded at
+    # day 2's last bar (104 -> 108). Day 2's two views have no day after them.
+    assert (buffett.n_views, buffett.n_pending) == (1, 2)
     assert buffett.hit_rate == 1.0
-    assert card.horizon == "every 5m"
 
 
 # ---------------------------------------------------------------------------
@@ -309,3 +329,16 @@ def test_max_drawdown_of_a_sleeve():
     assert momo.max_drawdown_pct == pytest.approx(0.2)
     assert momo.return_pct == pytest.approx(-0.076)
     assert momo.win_rate == pytest.approx(2 / 3)
+    returns = [0.10, -0.20, 0.05]
+    assert momo.t_stat == pytest.approx(mean(returns) / stdev(returns) * sqrt(3))
+
+
+def test_a_sleeve_has_no_t_stat_from_one_period_or_a_flat_series():
+    assert score(_attribution_ledger()).strategies[0].t_stat is None          # one period
+    days = ["2024-06-03", "2024-06-04", "2024-06-05"]
+    records = [
+        _session(day, executed=_cycle(day, {"AAA": price}, {"momo": {"AAA": 1.0}}, 100_000.0, {"AAA": 1}, 0.0),
+                 marks={"AAA": price}, positions={"AAA": 1})
+        for day, price in zip(days, [100.0, 110.0, 121.0])                 # +10%, +10%: no spread
+    ]
+    assert score(records).strategies[0].t_stat is None

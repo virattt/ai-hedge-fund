@@ -39,6 +39,20 @@ def get_investment_approach(name: str) -> InvestmentApproach:
     return cast(InvestmentApproach, approach)
 
 
+def get_horizon_days(name: str) -> int:
+    """Read an analyst's declared horizon, in trading days, without constructing it.
+
+    Raise ValueError for an unknown analyst or a horizon that is missing,
+    inherited, or not a positive whole number of days.
+    """
+    if name not in ALPHA_MODEL_REGISTRY:
+        raise ValueError(f"unknown analyst {name!r}; available: {', '.join(sorted(ALPHA_MODEL_REGISTRY))}")
+    horizon = vars(ALPHA_MODEL_REGISTRY[name]).get("horizon_days")
+    if type(horizon) is not int or horizon <= 0:
+        raise ValueError(f"analyst {name!r} must declare horizon_days as a positive number of trading days")
+    return horizon
+
+
 __all__ = [
     "AlphaModel",
     "InvestmentApproach",
@@ -52,4 +66,5 @@ __all__ = [
     "PEADModel",
     "ALPHA_MODEL_REGISTRY",
     "get_investment_approach",
+    "get_horizon_days",
 ]

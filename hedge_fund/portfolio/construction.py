@@ -44,7 +44,9 @@ def blend_signals(
 
     Eligible scores are normalized to gross_target. Dollar-neutral strategies
     allocate half to each side, or target zero when either side is missing.
-    This relative sizing does not calibrate conviction into expected returns.
+    This relative sizing does not calibrate conviction into expected returns,
+    and it does not scale views by horizon: a strategy should hold one
+    horizon, and the mandate's strategies are where horizons are kept apart.
     Invalid modes, profiles, weights, or signal values raise ValueError.
     """
     if mode not in ("long_only", "long_short", "dollar_neutral"):

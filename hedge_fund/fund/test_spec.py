@@ -8,6 +8,7 @@ import yaml
 from pydantic import ValidationError
 
 from hedge_fund.fund import (
+    AllocationPolicy,
     custom_strategy,
     discover_funds,
     format_interval,
@@ -19,7 +20,7 @@ from hedge_fund.fund import (
     save_spec,
     StrategySpec,
 )
-from hedge_fund.signals import ALPHA_MODEL_REGISTRY, get_investment_approach
+from hedge_fund.signals import ALPHA_MODEL_REGISTRY, get_horizon_days, get_investment_approach
 
 MINIMAL = {
     "schema_version": 2,
@@ -114,16 +115,35 @@ def test_benchmark_uppercased():
 def test_costs_default_to_a_real_cost_model_and_serialize_only_when_changed():
     spec = FundSpec(**MINIMAL)
     assert spec.costs.spread_bps == 5.0 and spec.costs.commission_per_share == 0.005
+    assert spec.costs.impact_coefficient == 1.0 and spec.costs.min_trade_pct == 0.005
     # A mandate at the default serializes exactly as it did before costs
     # existed, so every recorded hash still verifies.
     assert "costs" not in spec.model_dump()
     explicit = FundSpec(**{**MINIMAL, "costs": {"spread_bps": 5, "commission_per_share": 0.005}})
     assert explicit.model_dump_json() == spec.model_dump_json()
     free = FundSpec(**{**MINIMAL, "costs": {"spread_bps": 0, "commission_per_share": 0}})
-    assert free.model_dump()["costs"] == {"spread_bps": 0.0, "commission_per_share": 0.0}
+    assert free.model_dump()["costs"] == {
+        "spread_bps": 0.0, "commission_per_share": 0.0, "impact_coefficient": 1.0, "min_trade_pct": 0.005,
+    }
+    tuned = FundSpec(**{**MINIMAL, "costs": {"impact_coefficient": 0.5, "min_trade_pct": 0.01}})
+    assert tuned.model_dump()["costs"]["impact_coefficient"] == 0.5
+    assert FundSpec.model_validate_json(tuned.model_dump_json()) == tuned
     assert FundSpec.model_validate(free.model_dump()) == free
     with pytest.raises(ValidationError):
         FundSpec(**{**MINIMAL, "costs": {"spread_bps": -1}})
+
+
+def test_optional_risk_limits_serialize_only_when_set():
+    spec = FundSpec(**MINIMAL)
+    assert spec.risk.max_net_exposure is None and spec.risk.max_drawdown_pct is None and spec.risk.max_adv_pct is None
+    assert set(spec.model_dump()["risk"]) == {"max_position_pct", "max_gross_exposure"}
+    full = FundSpec(**{**MINIMAL, "risk": {**MINIMAL["risk"], "max_net_exposure": 0.3,
+                                            "max_drawdown_pct": 0.2, "max_adv_pct": 0.05}})
+    assert full.model_dump()["risk"]["max_drawdown_pct"] == 0.2
+    assert FundSpec.model_validate_json(full.model_dump_json()) == full
+    for bad in ({"max_drawdown_pct": 1.0}, {"max_adv_pct": 0}, {"max_net_exposure": -0.1}):
+        with pytest.raises(ValidationError):
+            FundSpec(**{**MINIMAL, "risk": {**MINIMAL["risk"], **bad}})
 
 
 def test_typo_key_rejected():
@@ -226,6 +246,34 @@ def test_initial_analyst_approaches(name, expected):
     assert get_investment_approach(name) == expected
 
 
+@pytest.mark.parametrize("name", sorted(ALPHA_MODEL_REGISTRY))
+def test_all_horizons_are_explicit(name):
+    assert get_horizon_days(name) > 0
+
+
+def test_initial_analyst_horizons():
+    assert {name: get_horizon_days(name) for name in ALPHA_MODEL_REGISTRY} == {
+        "buffett": 252, "munger": 252, "graham": 252, "lynch": 252, "druckenmiller": 126, "pead": 60,
+    }
+
+
+@pytest.mark.parametrize("horizon", [None, 0, 1.5, "1y"])
+def test_missing_or_invalid_horizon_is_configuration_error(monkeypatch, horizon):
+    class NoHorizon:
+        investment_approach = "long_only"
+
+        def __init__(self):
+            raise AssertionError("must not instantiate")
+
+    if horizon is not None:
+        NoHorizon.horizon_days = horizon
+    monkeypatch.setitem(ALPHA_MODEL_REGISTRY, "nohorizon", NoHorizon)
+    with pytest.raises(ValueError, match="horizon_days"):
+        get_horizon_days("nohorizon")
+    with pytest.raises(ValueError, match="horizon_days"):
+        custom_strategy(["nohorizon"])
+
+
 @pytest.mark.parametrize("profile", [None, "dollar_neutral"])
 def test_missing_or_invalid_profile_is_configuration_error(monkeypatch, profile):
     class InvalidAnalyst:
@@ -323,3 +371,41 @@ def test_save_spec_round_trips_and_never_overwrites(tmp_path):
     with pytest.raises(FileExistsError):
         save_spec(spec, tmp_path / "mandates")
     assert load_spec(path) == spec
+
+
+def test_allocation_policy_multiplier_by_hand():
+    policy = AllocationPolicy()
+    assert (policy.min_evidence, policy.slope, policy.floor, policy.cap) == (20, 0.25, 0.25, 2.0)
+    assert policy.multiplier(2.0, 20) == pytest.approx(1.5)
+    assert policy.multiplier(-2.0, 20) == pytest.approx(0.5)
+    assert policy.multiplier(-4.0, 20) == 0.25      # the floor
+    assert policy.multiplier(8.0, 20) == 2.0        # the cap
+    assert policy.multiplier(2.0, 19) == 1.0        # not enough evidence
+    assert policy.multiplier(None, 50) == 1.0       # nothing graded
+    for bad in ({"min_evidence": 1}, {"slope": -0.1}, {"floor": 0}, {"floor": 1.5}, {"cap": 0.9}, {"tilt": 1}):
+        with pytest.raises(ValidationError):
+            AllocationPolicy(**bad)
+
+
+def test_allocation_is_absent_unless_the_mandate_names_it():
+    # A mandate without the allocator serializes exactly as it did before one existed.
+    assert "allocation" not in FundSpec(**MINIMAL).model_dump()
+    on = FundSpec(**{**MINIMAL, "allocation": {}})
+    assert on.allocation == AllocationPolicy()
+    assert on.model_dump()["allocation"] == {"min_evidence": 20, "slope": 0.25, "floor": 0.25, "cap": 2.0}
+    assert FundSpec.model_validate_json(on.model_dump_json()) == on
+
+
+def test_the_halving_tier_and_factor_caps_serialize_only_when_set():
+    spec = FundSpec(**MINIMAL)
+    assert not spec.risk.has_factor_limits
+    assert set(spec.model_dump()["risk"]) == {"max_position_pct", "max_gross_exposure"}
+    full = FundSpec(**{**MINIMAL, "risk": {**MINIMAL["risk"], "halve_drawdown_pct": 0.1, "max_drawdown_pct": 0.2,
+                                            "max_beta": 0.5, "max_sector_pct": 0.3, "max_volatility": 0.15}})
+    assert full.risk.has_factor_limits
+    assert FundSpec.model_validate_json(full.model_dump_json()) == full
+    with pytest.raises(ValidationError, match="halve_drawdown_pct must be below max_drawdown_pct"):
+        FundSpec(**{**MINIMAL, "risk": {**MINIMAL["risk"], "halve_drawdown_pct": 0.2, "max_drawdown_pct": 0.2}})
+    for bad in ({"max_beta": 0}, {"max_sector_pct": 1.5}, {"max_volatility": -0.1}, {"halve_drawdown_pct": 1.0}):
+        with pytest.raises(ValidationError):
+            FundSpec(**{**MINIMAL, "risk": {**MINIMAL["risk"], **bad}})

@@ -31,6 +31,7 @@ class FakeAnalyst:
     """Fixed conviction per ticker, on every date."""
 
     investment_approach = "long_short"
+    horizon_days = 1
 
     def __init__(self, name, views=None):
         self._name = name
@@ -58,7 +59,7 @@ def _spec(**overrides):
         name="test-fund",
         strategies=[{"name": "solo", "models": [{"name": "a"}], "blend": {"mode": "long_short"}}],
         risk={"max_position_pct": 1.0, "max_gross_exposure": 1.0},
-        costs={"spread_bps": 0, "commission_per_share": 0},  # exact arithmetic below
+        costs={"spread_bps": 0, "commission_per_share": 0, "impact_coefficient": 0},  # exact arithmetic below
         capital=100_000.0,
         rebalance="weekly",
     )
@@ -177,6 +178,20 @@ def test_metrics_report_what_the_fills_cost():
     # A result saved before costs existed reads back as free.
     free = FundBacktestMetrics.model_validate({**m.model_dump(exclude={"trading_cost", "traded_notional"})})
     assert free.trading_cost == 0.0 and free.traded_notional == 0.0
+
+
+def test_a_stopped_out_backtest_keeps_marking_to_the_end():
+    series = {
+        "SPY": {day: 100.0 for day in WEEKDAYS},
+        "AAPL": {day: (200.0 if i < 2 else 150.0 if i < 4 else 140.0) for i, day in enumerate(WEEKDAYS)},
+    }
+    result = _run(series, _spec(risk={"max_position_pct": 1.0, "max_gross_exposure": 1.0, "max_drawdown_pct": 0.20}))
+    assert len(result.records) == len(WEEKDAYS)
+    assert result.records[2].decision.is_stopped_out
+    assert result.cycles[1].positions == {}                       # Thursday's sale
+    assert result.nav[3:] == [pytest.approx(75_000.0)] * 12       # flat in cash to the end
+    assert all(r.decision is None for r in result.records[3:])
+    assert result.metrics.n_cycles == 2 and result.metrics.max_drawdown_pct == pytest.approx(0.25)
 
 
 def test_positions_carry_across_cycles_not_restart():
@@ -308,9 +323,11 @@ def test_schedule_lists_rebalance_and_execution_sessions():
     schedule = build_schedule(FakeDataClient(SERIES), "SPY", WEEKDAYS[0], WEEKDAYS[-1], "weekly")
     assert schedule.execution_dates == dict(zip(MONDAYS, TUESDAYS))
     assert schedule.assessment_dates == MONDAYS
+    assert schedule.warm_dates == sorted(set(MONDAYS) | set(TUESDAYS))   # liquidity at each execution too
     daily = build_schedule(FakeDataClient(SERIES), "SPY", "2024-06-03", "2024-06-04", "daily")
     assert daily.execution_dates == {"2024-06-03": "2024-06-04", "2024-06-04": None}
     assert daily.assessment_dates == ["2024-06-03", "2024-06-04"]
+    assert daily.warm_dates == ["2024-06-03", "2024-06-04"]
 
 
 def test_backtest_excludes_current_session_even_if_provider_returns_it(monkeypatch):
@@ -378,3 +395,14 @@ def test_a_minute_fund_backtests_at_daily_closes_as_the_daily_fund_it_collapses_
     assert minute.nav == daily.nav and minute.metrics == daily.metrics
     assert minute.records[1].executed.execution_policy == "next_close"
     assert minute.records[1].executed.fills[0].price == 104.0 and minute.metrics.n_cycles == 2
+
+
+def test_a_mandate_with_an_allocator_records_the_weights_each_decision_used():
+    result = _run(spec=_spec(allocation={}))
+    decisions = [r.decision for r in result.records if r.decision is not None]
+    assert [d.allocation.as_of for d in decisions] == MONDAYS
+    # Three weeks is far short of the evidence: every weight is the mandate's.
+    assert [d.allocation.strategies["solo"].weight for d in decisions] == [1.0, 1.0, 1.0]
+    assert [d.allocation.strategies["solo"].n for d in decisions] == [0, 0, 1]
+    assert all(r.hash == r.compute_hash() for r in result.records)
+    assert all(r.decision.allocation is None for r in _run().records if r.decision is not None)
