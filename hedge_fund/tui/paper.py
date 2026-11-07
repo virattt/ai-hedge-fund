@@ -400,9 +400,9 @@ class RunConfirmScreen(ModalScreen[str | None]):
         self.dismiss(self._verdict)
 
     def action_review_research(self) -> None:
-        if not self._research_file or not self._research_tickers:
+        if not self._research_tickers:
             return
-        review = PaperResearchScreen(Path(self._research_file), self._research_tickers)
+        review = PaperResearchScreen(Path(self._research_file) if self._research_file else None, self._research_tickers)
         self._ready = False
         self._verdict = None
         self._research_tickers = []
@@ -430,7 +430,7 @@ class RunConfirmScreen(ModalScreen[str | None]):
             return
         self._verdict = "run" if due is not None else "redo" if state.last_session else None
         self._research_tickers = []
-        if self._research_file and due is not None and state.pending is not None:
+        if due is not None and state.pending is not None:
             self._research_tickers = sorted(
                 {ticker for ticker, weight in state.pending.final_weights.items() if weight}
                 | {ticker for ticker, shares in state.positions.items() if shares}

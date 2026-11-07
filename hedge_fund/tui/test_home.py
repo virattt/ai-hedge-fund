@@ -133,7 +133,7 @@ def test_home_offers_paper_trading_first_and_an_empty_paper_screen_builds():
         app = HedgeFundApp()
         async with app.run_test(size=(100, 35)) as pilot:
             menu = app.screen.query_one("#home-menu", OptionList)
-            assert [menu.get_option_at_index(i).id for i in range(menu.option_count)] == ["paper", "backtest"]
+            assert [menu.get_option_at_index(i).id for i in range(menu.option_count)] == ["paper", "backtest", "research"]
             assert menu.highlighted == 0
             await pilot.press("enter")
             assert isinstance(app.screen, paper.PaperScreen)

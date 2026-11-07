@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import os
+
 from textual.app import App
 from textual.binding import Binding
 
 from hedge_fund import paths
+from hedge_fund.research import API_KEY_ENV, BeliefStateClient
 from hedge_fund.tui.home import HomeScreen
 from hedge_fund.tui.keys import apply_credentials
 from hedge_fund.tui.palette import ANSI_THEME
@@ -30,5 +33,6 @@ class HedgeFundApp(App):
         # Saved keys become environment variables before any screen builds an
         # agent. Anything already exported wins — see hedge_fund/tui/keys.py.
         apply_credentials()
+        self.research_client = BeliefStateClient(os.environ.get(API_KEY_ENV, ""))
         paths.ensure_mandates_dir()
         self.push_screen(HomeScreen())
