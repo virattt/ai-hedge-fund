@@ -191,7 +191,7 @@ class PaperResearchScreen(Screen[None]):
             for company in companies
         ])
         self.query_one("#detail-pane", Static).update(Text("Select a ticker and press Enter to load its available research."))
-        status = error or (f"{len(companies)} companies. Enter loads research using your allowance or credits." if companies else "No matching company found.")
+        status = error or (f"{len(companies)} companies. Enter loads research using your allowance or credits." if companies else "No matching company found. Try the listing's ticker or company name.")
         self.query_one("#research-status", Static).update(Text(status))
         if companies:
             menu.highlighted = 0

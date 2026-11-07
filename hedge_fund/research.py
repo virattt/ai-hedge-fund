@@ -50,6 +50,12 @@ class _Coverage(BaseModel):
     coverage: list[_CompanyCoverage]
     discovery: _Discovery | None = None
 
+    @model_validator(mode="after")
+    def _consistent_coverage(self):
+        if set(self.tickers) != {company.ticker for company in self.coverage}:
+            raise ValueError("inconsistent released coverage")
+        return self
+
 
 class Evidence(BaseModel):
     source_url: HttpUrl
@@ -172,7 +178,18 @@ class BeliefStateClient:
         self._api_key = api_key.strip()
         self._read_lock = Lock()
         self._companies: dict[str, tuple[float, list[Company]]] = {}
-        self._briefs: dict[str, tuple[float, CurrentBrief | None]] = {}
+        self._briefs: dict[str, tuple[float, CurrentBrief]] = {}
+        self._library: tuple[float, _Coverage] | None = None
+
+    def _released_library(self) -> tuple[float, _Coverage]:
+        if self._library and monotonic() - self._library[0] < CACHE_SECONDS:
+            return self._library
+        try:
+            coverage = _Coverage.model_validate(_read("/v1/tickers", {}))
+        except ValueError:
+            raise ResearchError("BeliefState returned an invalid coverage directory.") from None
+        self._library = (monotonic(), coverage)
+        return self._library
 
     def search(self, query: str) -> list[Company]:
         query = query.strip()
@@ -181,20 +198,35 @@ class BeliefStateClient:
         cached = self._companies.get(query.upper())
         if cached and monotonic() - cached[0] < CACHE_SECONDS:
             return cached[1]
+        cached_at = monotonic()
+        search_error = None
         try:
             coverage = _Coverage.model_validate(_read("/v1/tickers", {"q": query}))
             released = set(coverage.tickers)
-            if released != {company.ticker for company in coverage.coverage}:
-                raise ValueError("inconsistent released coverage")
-        except ValueError:
-            raise ResearchError("BeliefState returned an invalid company search response.") from None
-        companies = {company.ticker: company for company in coverage.discovery.results} if coverage.discovery else {}
-        for company in companies.values():
-            company.direct_research = company.ticker in released
-        for company in coverage.coverage:
-            companies[company.ticker] = Company(ticker=company.ticker, name=company.security_name, direct_research=True)
+            companies = {company.ticker: company for company in coverage.discovery.results} if coverage.discovery else {}
+            for company in companies.values():
+                company.direct_research = company.ticker in released
+            for company in coverage.coverage:
+                companies[company.ticker] = Company(ticker=company.ticker, name=company.security_name, direct_research=True)
+        except (ResearchError, ValueError) as exc:
+            search_error = exc if isinstance(exc, ResearchError) else ResearchError("BeliefState returned an invalid company search response.")
+            companies = {}
+        if not any(company.direct_research for company in companies.values()):
+            try:
+                library_at, library = self._released_library()
+            except ResearchError as library_error:
+                if not companies:
+                    raise (search_error or library_error) from None
+            else:
+                words = query.upper().split()
+                for company in library.coverage:
+                    if all(word in f"{company.ticker} {company.security_name}".upper() for word in words):
+                        companies[company.ticker] = Company(ticker=company.ticker, name=company.security_name, direct_research=True)
+                cached_at = min(cached_at, library_at)
+        if search_error and not companies:
+            raise search_error
         result = list(companies.values())
-        self._companies[query.upper()] = (monotonic(), result)
+        self._companies[query.upper()] = (cached_at, result)
         return result
 
     def read(self, ticker: str, *, cancelled: Callable[[], bool]) -> CurrentBrief | None:
@@ -209,7 +241,6 @@ class BeliefStateClient:
                 raise ResearchError("Research cancelled.")
             companies = self.search(ticker)
             if not any(company.ticker == ticker and company.direct_research for company in companies):
-                self._briefs[ticker] = (monotonic(), None)
                 return None
             if not self._api_key:
                 raise ResearchError(f"Set {API_KEY_ENV} to your BeliefState API key, or press Ctrl+K to add it.")

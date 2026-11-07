@@ -64,7 +64,10 @@ Choose **Investor research** on the home screen. Enter a ticker or company name
 and press Enter to search BeliefState's company directory and available research.
 Search is free and labels companies with released direct research separately.
 The company directory covers SEC-registered U.S. listings. Released research can
-include additional tickers.
+include additional tickers. If directory search finds no covered company, the
+app also searches the released library by ticker and name. This includes covered
+companies outside the U.S. directory. Available library matches can still be
+shown during a company-directory outage.
 
 Select a result and press Enter to load its current investor views. Each brief
 includes up to three views, with authors, source links, publication dates,

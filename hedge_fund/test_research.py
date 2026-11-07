@@ -137,9 +137,9 @@ def test_invalid_briefs_fail_with_request_id_without_echoing_payload(monkeypatch
 
 def test_discovery_flag_does_not_override_absent_released_coverage(monkeypatch):
     payload = {**COVERAGE, "tickers": [], "coverage": []}
-    factory, _ = stub_http(monkeypatch, (200, payload))
+    factory, _ = stub_http(monkeypatch, (200, payload), (200, payload))
     assert research.BeliefStateClient("fixture-secret").read("NBIS", cancelled=lambda: False) is None
-    factory.assert_called_once()
+    assert factory.call_count == 2
 
 
 def test_no_fit_preserves_coverage_limits_and_warnings(monkeypatch):
@@ -176,3 +176,78 @@ def test_concurrent_reads_of_one_ticker_share_one_metered_response(monkeypatch):
         release.set()
         assert first.result(5) is second.result(5)
     assert factory.call_count == 2
+
+
+@pytest.mark.parametrize("ticker", ["A", "GOOGL", "BRK-B", "BRK.B", "005930.KS", "0700.HK", "VOW3.DE", "ABC-P-A"])
+def test_covered_stock_symbols_pass_through_unchanged(monkeypatch, ticker):
+    coverage = {**COVERAGE, "tickers": [ticker], "coverage": [{"ticker": ticker, "security_name": "Example Company"}], "discovery": {"results": []}}
+    brief = {**BRIEF, "scope": {"ticker": ticker}}
+    factory, (_, paid) = stub_http(monkeypatch, (200, coverage), (200, brief))
+    result = research.BeliefStateClient("fixture-secret").read(ticker.lower(), cancelled=lambda: False)
+    assert result.scope.ticker == ticker
+    assert parse_qs(urlsplit(paid.request.call_args.args[1]).query)["ticker"] == [ticker]
+    assert factory.call_count == 2
+
+
+def test_directory_outage_cannot_hide_released_research_or_duplicate_its_charge(monkeypatch):
+    factory, _ = stub_http(monkeypatch, (503, {}), (200, COVERAGE), (200, BRIEF))
+    client = research.BeliefStateClient("fixture-secret")
+    result = client.read("NBIS", cancelled=lambda: False)
+    assert result.beliefs[0].thesis == BRIEF["beliefs"][0]["thesis"]
+    assert client.read("NBIS", cancelled=lambda: False) is result
+    assert factory.call_count == 3
+
+
+def test_directory_outage_with_no_library_match_stays_an_error_and_unpaid(monkeypatch):
+    factory, _ = stub_http(monkeypatch, (503, {}), (200, COVERAGE))
+    with pytest.raises(research.ResearchError, match="HTTP 503"):
+        research.BeliefStateClient("fixture-secret").read("UNKNOWN", cancelled=lambda: False)
+    assert factory.call_count == 2
+
+
+def test_valid_directory_results_survive_a_library_outage(monkeypatch):
+    uncovered = {**COVERAGE, "tickers": [], "coverage": []}
+    factory, _ = stub_http(monkeypatch, (200, uncovered), (503, {}))
+    companies = research.BeliefStateClient().search("Another")
+    assert any(company.ticker == "OTHER" for company in companies)
+    assert not any(company.direct_research for company in companies)
+    assert factory.call_count == 2
+
+
+def test_empty_directory_with_unavailable_library_stays_an_error(monkeypatch):
+    empty = {**COVERAGE, "tickers": [], "coverage": [], "discovery": {"results": []}}
+    factory, _ = stub_http(monkeypatch, (200, empty), (503, {}))
+    with pytest.raises(research.ResearchError, match="HTTP 503"):
+        research.BeliefStateClient().search("Unknown")
+    assert factory.call_count == 2
+
+
+def test_missing_coverage_does_not_extend_the_original_search_expiry(monkeypatch):
+    missing = {**COVERAGE, "tickers": ["OTHERX"], "coverage": [{"ticker": "OTHERX", "security_name": "Another Company"}]}
+    available = {**COVERAGE, "tickers": ["OTHER"], "coverage": [{"ticker": "OTHER", "security_name": "Another Company"}]}
+    brief = {**BRIEF, "scope": {"ticker": "OTHER"}}
+    factory, _ = stub_http(monkeypatch, (200, missing), (200, available), (200, brief))
+    clock = [100]
+    monkeypatch.setattr(research, "monotonic", lambda: clock[0])
+    client = research.BeliefStateClient("fixture-secret")
+    client.search("OTHER")
+    clock[0] = 159
+    assert client.read("OTHER", cancelled=lambda: False) is None
+    clock[0] = 161
+    assert client.read("OTHER", cancelled=lambda: False).scope.ticker == "OTHER"
+    assert factory.call_count == 3
+
+
+def test_partial_foreign_names_use_the_library_and_keep_its_original_expiry(monkeypatch):
+    empty = {**COVERAGE, "tickers": [], "coverage": [], "discovery": {"results": []}}
+    foreign = {**COVERAGE, "tickers": ["005930.KS"], "coverage": [{"ticker": "005930.KS", "security_name": "Example Overseas Company"}], "discovery": None}
+    factory, _ = stub_http(monkeypatch, (200, empty), (200, foreign), (200, empty), (200, empty), (200, foreign))
+    clock = [100]
+    monkeypatch.setattr(research, "monotonic", lambda: clock[0])
+    client = research.BeliefStateClient()
+    assert client.search("Overseas")[0].ticker == "005930.KS"
+    clock[0] = 159
+    assert client.search("005930")[0].direct_research
+    clock[0] = 161
+    assert client.search("005930")[0].direct_research
+    assert factory.call_count == 5
