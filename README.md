@@ -57,6 +57,38 @@ With no arguments, this launches the interactive terminal app. It has two modes:
 - **Paper trading** — your funds, each with a ledger of real market days and fake money. Highlight a fund to see what its next run will do; press enter to run it through the next completed session (an approval step shows the exact decision about to execute before anything trades), `s` for its full session history, `h`/`r` for the kill switch. Build a new fund from the same list: strategies, capital, cadence, tickers, and it is live. Every session is appended to a hash-chained ledger in `~/.hedge-fund/paper/<name>/`, so NAV is a track record, not a reset.
 - **Backtesting** — replay a fund over history and watch its equity curve draw against its benchmark. Results are saved to `~/.hedge-fund/research/`. Fund definitions live in `~/.hedge-fund/mandates/` and carry no tickers; you pick the universe per backtest.
 
+### Optional research at paper approval
+
+Set `HEDGE_FUND_PAPER_RESEARCH_FILE` to the path of a local JSON file (up to
+1 MiB). When a paper run has a pending decision, press `i` at approval, select a
+pending or held ticker with the arrow keys, and press Enter to open its research.
+Escape returns to approval and refreshes the run preview. The research panel
+reads the file locally and leaves the paper decision unchanged.
+
+Use uppercase ticker keys and timestamps with time zones. This example uses
+fictional research.
+
+```json
+{
+  "EXAMPLE": {
+    "as_of": "2025-01-17T21:00:00Z",
+    "views": [
+      {
+        "author": "Example Analyst",
+        "published_at": "2025-01-17T15:00:00Z",
+        "source_url": "https://example.com/research",
+        "stance": "neutral",
+        "thesis": "New customers may offset slower renewals.",
+        "watch": "Check renewal rates at the next earnings release."
+      }
+    ]
+  }
+}
+```
+
+The `stance` field is optional. A missing ticker or empty `views` list is shown
+as missing research. Each publication timestamp must be at or before its
+research cutoff.
 
 
 ## Development

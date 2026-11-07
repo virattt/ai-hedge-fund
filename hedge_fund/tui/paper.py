@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import as_completed, ThreadPoolExecutor
+import os
 from pathlib import Path
 
 from rich.console import Group
@@ -46,6 +47,7 @@ from hedge_fund.tui.builder import BuilderScreen
 from hedge_fund.tui.funds import ConfirmWipeScreen, wipe_fund
 from hedge_fund.tui.home import demand_run_keys
 from hedge_fund.tui.palette import BRIGHT, CYAN, GREEN, MUTED, RED, TEXT
+from hedge_fund.tui.paper_research import PaperResearchScreen, RESEARCH_FILE_ENV
 from hedge_fund.tui.paper_view import (
     APP_HALT,
     day_heading,
@@ -360,6 +362,7 @@ class RunConfirmScreen(ModalScreen[str | None]):
     BINDINGS = [
         Binding("escape", "cancel", "cancel"),
         Binding("enter", "confirm", "run", priority=True),
+        Binding("i", "review_research", "review cited research"),
     ]
 
     def __init__(self, directory: Path) -> None:
@@ -367,6 +370,8 @@ class RunConfirmScreen(ModalScreen[str | None]):
         self._directory = directory
         self._verdict: str | None = None  # what enter will do once resolved
         self._ready = False
+        self._research_file = os.environ.get(RESEARCH_FILE_ENV)
+        self._research_tickers: list[str] = []
 
     def compose(self) -> ComposeResult:
         with Vertical(id="run-confirm"):
@@ -384,6 +389,8 @@ class RunConfirmScreen(ModalScreen[str | None]):
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
         if action == "confirm":
             return self._ready and self._verdict is not None
+        if action == "review_research":
+            return bool(self._research_tickers)
         return True
 
     def action_cancel(self) -> None:
@@ -391,6 +398,22 @@ class RunConfirmScreen(ModalScreen[str | None]):
 
     def action_confirm(self) -> None:
         self.dismiss(self._verdict)
+
+    def action_review_research(self) -> None:
+        if not self._research_file or not self._research_tickers:
+            return
+        review = PaperResearchScreen(Path(self._research_file), self._research_tickers)
+        self._ready = False
+        self._verdict = None
+        self._research_tickers = []
+        self.query_one("#run-body", Static).update(Text("Checking the next paper session…", style=MUTED))
+        self.query_one("#run-keys", Static).update(Text("esc  cancel", style=MUTED))
+        self.refresh_bindings()
+        self.app.push_screen(review, self._after_research)
+
+    def _after_research(self, _: None) -> None:
+        if self.is_attached:
+            self._resolve()
 
     @work(thread=True, exclusive=True)
     def _resolve(self) -> None:
@@ -403,7 +426,15 @@ class RunConfirmScreen(ModalScreen[str | None]):
         app.call_from_thread(self._show, deployed, state, due)
 
     def _show(self, deployed: DeployedFund, state: FundState, due: str | None) -> None:
+        if not self.is_attached:
+            return
         self._verdict = "run" if due is not None else "redo" if state.last_session else None
+        self._research_tickers = []
+        if self._research_file and due is not None and state.pending is not None:
+            self._research_tickers = sorted(
+                {ticker for ticker, weight in state.pending.final_weights.items() if weight}
+                | {ticker for ticker, shares in state.positions.items() if shares}
+            )
         self._ready = True
         self.query_one("#run-q", Static).update(Text.assemble(
             ("Run ", f"bold {BRIGHT}"), (deployed.name, f"bold {GREEN}"),
@@ -417,10 +448,15 @@ class RunConfirmScreen(ModalScreen[str | None]):
             keys.append("  run   " if self._verdict == "run" else "  run again   ", style=MUTED)
         keys.append("esc", style=f"bold {BRIGHT}")
         keys.append("  cancel", style=MUTED)
+        if self._research_tickers:
+            keys.append("   i", style=f"bold {BRIGHT}")
+            keys.append("  review cited research", style=MUTED)
         self.query_one("#run-keys", Static).update(keys)
         self.refresh_bindings()
 
     def _show_error(self, exc: Exception) -> None:
+        if not self.is_attached:
+            return
         self._ready = True
         self.query_one("#run-body", Static).update(
             Text.assemble(("✗ ", f"bold {RED}"), (f"{type(exc).__name__}: {exc}", RED)))
