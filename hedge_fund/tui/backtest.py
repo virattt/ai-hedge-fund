@@ -46,9 +46,9 @@ from hedge_fund.tui.palette import BRIGHT, CYAN, GREEN, MUTED, RED, TEXT
 from hedge_fund.tui.report import (
     book_summary,
     cost_line,
+    decision_overview,
+    decision_row,
     roster_table,
-    session_overview,
-    session_row,
     tape_table,
 )
 from hedge_fund.tui.scorecard_view import analyst_table, strategy_table
@@ -83,7 +83,11 @@ class BacktestScreen(Screen):
     afterward is the source of truth.
     """
 
-    BINDINGS = [Binding("escape", "back", "back")]
+    BINDINGS = [
+        Binding("escape", "back", "back"),
+        Binding("d", "decisions", "decisions"),
+        Binding("s", "scorecard", "scorecard"),
+    ]
 
     def __init__(self, spec: FundSpec | None = None, *, saved: Path | None = None) -> None:
         super().__init__()
@@ -129,14 +133,14 @@ class BacktestScreen(Screen):
                 with Vertical(id="tape-box", classes="hidden"):
                     yield Static("", id="tape")
                 yield Static("", id="cycle-line")
-                yield Static("", id="result-summary", classes="hidden")
-                yield Static("", id="scorecard", classes="hidden")
                 yield OptionList(
                     Option("Browse decisions", id="bt-decisions"),
+                    Option("Scorecard", id="bt-scorecard"),
                     Option("Back to home", id="bt-home"),
                     id="bt-done-menu",
                     classes="hidden",
                 )
+                yield Static("", id="result-summary", classes="hidden")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -168,7 +172,17 @@ class BacktestScreen(Screen):
         # replaying the fund; leaving the screen would orphan them.
         if action == "back" and self._phase == "run":
             return False
+        if action in ("decisions", "scorecard"):  # only once the results have landed
+            return self._phase == "done"
         return True
+
+    def action_decisions(self) -> None:
+        assert self._result is not None
+        self.app.push_screen(BacktestDecisionsScreen(self._result))
+
+    def action_scorecard(self) -> None:
+        assert self._result is not None
+        self.app.push_screen(BacktestScorecardScreen(self._result))
 
     def action_back(self) -> None:
         pane = self.query_one("#bt-panes", ContentSwitcher).current
@@ -263,8 +277,10 @@ class BacktestScreen(Screen):
     @on(OptionList.OptionSelected, "#bt-done-menu")
     def _after_done(self, event: OptionList.OptionSelected) -> None:
         if event.option.id == "bt-decisions":
-            assert self._result is not None
-            self.app.push_screen(BacktestDecisionsScreen(self._result))
+            self.action_decisions()
+            return
+        if event.option.id == "bt-scorecard":
+            self.action_scorecard()
             return
         # "Back to home" means home, however deep the stack got here.
         while not isinstance(self.app.screen, HomeScreen):
@@ -486,11 +502,7 @@ class BacktestScreen(Screen):
         self.query_one("#phase-line", Static).update(Text.assemble(
             ("BACKTEST RESULTS  ", f"bold {BRIGHT}"),
             (result.fund, f"bold {CYAN}"),
-            (f"  {result.start} → {result.end} · {result.rebalance} "
-             f"rebalance · {m.n_cycles} executed cycles · {m.n_orders} orders · "
-             f"{cost_line(m.trading_cost, m.traded_notional)} · "
-             f"{m.annualized_return_pct:+.1%} annualized",
-             MUTED),
+            (f"  {result.start} → {result.end} · {result.rebalance} rebalance", MUTED),
         ))
         self._update_stats(
             result.benchmark, result.nav[-1],
@@ -500,21 +512,19 @@ class BacktestScreen(Screen):
         self._draw_curve(result.nav, result.benchmark_nav, result.capital)
         self._tape = tape_rows(result.cycles)
         self.query_one("#tape", Static).update(tape_table(self._tape))
+        n_decisions = sum(1 for r in result.records if r.decision is not None)
         self.query_one("#cycle-line", Static).update(Text(
-            f"{len(result.dates)} sessions · {result.start} → {result.end}", style=MUTED))
+            f"{n_decisions} decisions · {m.n_orders} orders · "
+            f"{cost_line(m.trading_cost, m.traded_notional)} · "
+            f"{m.annualized_return_pct:+.1%} annualized", style=MUTED))
         self.query_one("#result-summary", Static).update(
-            Text.assemble(("✓ ", f"bold {GREEN}"),
-                          ("Saved backtest record · ", TEXT),
-                          (str(path), f"bold {BRIGHT}")))
+            Text.assemble(("saved · ", MUTED), (str(path), MUTED)))
         self.query_one("#result-summary", Static).remove_class("hidden")
-        card = score(result.records)
-        scorecard = self.query_one("#scorecard", Static)
-        scorecard.update(Group(analyst_table(card), strategy_table(card)))
-        scorecard.remove_class("hidden")
         menu = self.query_one("#bt-done-menu", OptionList)
         menu.remove_class("hidden")
         menu.highlighted = 0  # "Browse decisions" under the cursor
         menu.focus()
+        self.refresh_bindings()  # d / s join the footer now that there is a result
 
     def _fail(self, exc: Exception) -> None:
         self._phase = "failed"
@@ -526,28 +536,26 @@ class BacktestScreen(Screen):
 
 
 class BacktestDecisionsScreen(Screen):
-    """A backtest's decisions, browsable: every session that decided or
-    executed, newest first, with the session overview beside it. Enter
-    opens the same session report the paper fund uses — signals, theses,
-    risk limits, orders. Valuation-only days are left out: on a daily fund
-    they are most of the list and none of the story."""
+    """A backtest's decisions, browsable: one row per decision, newest first,
+    each paired with the session that filled it. The overview beside the
+    rail shows what was decided and what was filled; Enter opens the same
+    session report the paper fund uses — signals, theses, risk limits, orders."""
 
     BINDINGS = [Binding("escape", "back", "back")]
 
     def __init__(self, result: FundBacktestResult) -> None:
         super().__init__()
         self._result = result
-        acted = [(i, r) for i, r in enumerate(result.records)
-                 if r.executed is not None or r.decision is not None]
-        self._shown: list[SessionRecord] = [r for _, r in reversed(acted)]
-        navs = [result.capital, *(r.nav for r in result.records)]
-        self._prev_nav: list[float] = [navs[i] for i, _ in reversed(acted)]
+        self._weeks: list[tuple[SessionRecord, SessionRecord | None]] = list(reversed(pair_decisions(result.records)))
+        # The change on each row is since the previous decision (the capital before the first).
+        navs = [result.capital, *(d.nav for d, _ in pair_decisions(result.records))]
+        self._prev_nav: list[float] = list(reversed(navs[:-1]))
 
     def compose(self) -> ComposeResult:
         with Vertical(id="pf"):
             yield Static("", id="pf-head")
             with Horizontal(id="pf-panes"):
-                with Vertical(id="report-rail"):
+                with Vertical(id="report-rail", classes="wide"):
                     yield Static(Text("DECISIONS", style=MUTED), classes="rail-title")
                     yield OptionList(id="pf-sessions")
                 with VerticalScroll(id="report-detail"):
@@ -557,18 +565,18 @@ class BacktestDecisionsScreen(Screen):
 
     def on_mount(self) -> None:
         r = self._result
+        n = len(self._weeks)
         self.query_one("#pf-head", Static).update(Text.assemble(
             (r.fund, f"bold {BRIGHT}"),
-            (f"  ·  {r.start} → {r.end}  ·  {r.rebalance} rebalance  ·  "
-             f"{len(self._shown)} of {len(r.records)} sessions decided or executed", MUTED),
+            (f"  ·  {r.start} → {r.end}  ·  {r.rebalance}  ·  {n} {'decision' if n == 1 else 'decisions'}", MUTED),
         ))
         menu = self.query_one("#pf-sessions", OptionList)
-        if not self._shown:
+        if not self._weeks:
             self.query_one("#detail-pane", Static).update(
                 Text("No decisions in this window.", style=MUTED))
             return
-        for i, (record, prev_nav) in enumerate(zip(self._shown, self._prev_nav)):
-            menu.add_option(Option(session_row(record, prev_nav), id=f"s:{i}"))
+        for i, ((decided, executed), prev_nav) in enumerate(zip(self._weeks, self._prev_nav)):
+            menu.add_option(Option(decision_row(decided, executed, prev_nav), id=f"w:{i}"))
         menu.highlighted = 0
         menu.focus()
 
@@ -578,15 +586,57 @@ class BacktestDecisionsScreen(Screen):
     @on(OptionList.OptionHighlighted, "#pf-sessions")
     def _highlight(self, event: OptionList.OptionHighlighted) -> None:
         oid = (event.option.id or "") if event.option else ""
-        if oid.startswith("s:"):
-            record = self._shown[int(oid.split(":")[1])]
-            self.query_one("#detail-pane", Static).update(session_overview(record))
-            self.query_one("#report-foot", Static).update(book_summary(record))
+        if oid.startswith("w:"):
+            decided, executed = self._weeks[int(oid.split(":")[1])]
+            self.query_one("#detail-pane", Static).update(decision_overview(decided, executed))
+            self.query_one("#report-foot", Static).update(book_summary(executed or decided))
             self.query_one("#report-detail", VerticalScroll).scroll_home(animate=False)
 
     @on(OptionList.OptionSelected, "#pf-sessions")
     def _open(self, event: OptionList.OptionSelected) -> None:
         oid = event.option.id or ""
-        if oid.startswith("s:"):
-            record = self._shown[int(oid.split(":")[1])]
-            self.app.push_screen(SessionReportScreen(self._result.fund, record))
+        if oid.startswith("w:"):
+            decided, executed = self._weeks[int(oid.split(":")[1])]
+            self.app.push_screen(SessionReportScreen(self._result.fund, executed or decided))
+
+
+class BacktestScorecardScreen(Screen):
+    """The backtest's scorecard on a screen of its own: every analyst graded
+    at its horizon, every strategy's P&L between executions."""
+
+    BINDINGS = [Binding("escape", "back", "back")]
+
+    def __init__(self, result: FundBacktestResult) -> None:
+        super().__init__()
+        self._result = result
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="pf"):
+            yield Static("", id="pf-head")
+            with VerticalScroll(id="report-detail", can_focus=False):
+                yield Static("", id="scorecard")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        r = self._result
+        self.query_one("#pf-head", Static).update(Text.assemble(
+            (r.fund, f"bold {BRIGHT}"), ("  ·  scorecard  ·  ", MUTED),
+            (f"{r.start} → {r.end}", MUTED)))
+        card = score(r.records)
+        self.query_one("#scorecard", Static).update(Group(analyst_table(card), strategy_table(card)))
+
+    def action_back(self) -> None:
+        self.app.pop_screen()
+
+
+def pair_decisions(records: list[SessionRecord]) -> list[tuple[SessionRecord, SessionRecord | None]]:
+    """Each session that decided, with the first later session that executed
+    that decision (None when the window ended first). In order."""
+    pairs: list[tuple[SessionRecord, SessionRecord | None]] = []
+    for i, decided in enumerate(records):
+        if decided.decision is None:
+            continue
+        executed = next((r for r in records[i + 1:]
+                         if r.executed is not None and r.executed.as_of == decided.session), None)
+        pairs.append((decided, executed))
+    return pairs

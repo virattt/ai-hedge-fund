@@ -49,7 +49,7 @@ _EXECUTED = "x:"
 _DECIDED = "d:"
 
 
-_TAPE_ROWS = 12
+_TAPE_ROWS = 10
 
 
 def verdict(signal: Signal) -> tuple[str, str, str]:
@@ -388,7 +388,7 @@ def session_row(record: SessionRecord, prev_nav: float, *, time_only: bool = Fal
     """One session in the fund's history rail: date, day change, what happened.
     *time_only* shows a bar as its clock time, for a list already grouped by day."""
     change = record.nav / prev_nav - 1 if prev_nav else 0.0
-    row = Text()
+    row = Text(no_wrap=True, overflow="ellipsis")  # one line, whatever the rail's width
     label = record.session[11:] if time_only and is_intraday(record.session) else record.session
     row.append(f" {label}", style=TEXT)
     row.append(f"  {change:+.2%}", style=GREEN if change >= 0 else RED)
@@ -396,15 +396,20 @@ def session_row(record: SessionRecord, prev_nav: float, *, time_only: bool = Fal
         n = len(record.executed.fills)
         row.append(f"  {n} {'fill' if n == 1 else 'fills'}", style=MUTED)
     if record.decision is not None:
-        row.append("  stopped out" if record.decision.is_stopped_out else "  decided", style=MUTED)
-        if record.decision.is_halved:
+        # One word for what the decision did; a halve or a stop-out is a decision too.
+        if record.decision.is_stopped_out:
+            row.append("  stopped out", style=RED)
+        elif record.decision.is_halved:
             row.append("  halved", style=RED)
+        else:
+            row.append("  decided", style=MUTED)
     return row
 
 
 def session_overview(record: SessionRecord) -> Group:
     """The detail pane for a highlighted session: what it did to the book,
     in a few lines. Enter opens the full report."""
+    intraday = is_intraday(record.session)
     parts: list = [
         Text.assemble((record.session, f"bold {BRIGHT}"),
                       ("  ·  rebalance session" if record.rebalance
@@ -414,53 +419,107 @@ def session_overview(record: SessionRecord) -> Group:
         Text(""),
     ]
     if record.executed is not None:
-        x = record.executed
-        costs = f" · costs ${x.trading_cost:,.2f}" if x.trading_cost else ""
-        parts.append(Text.assemble(
-            ("EXECUTED  ", f"bold {GREEN}"),
-            (f"decision from {x.as_of} · {len(x.orders)} orders · {len(x.fills)} fills{costs}", MUTED)))
-        for fill in x.fills[:8]:
-            tone = GREEN if fill.side == "buy" else RED
-            parts.append(Text.assemble(
-                (f"  {fill.side.upper():<4} ", f"bold {tone}"),
-                (f"{fill.quantity:,} {fill.ticker}", TEXT),
-                (f" @ ${fill.price:,.2f}", MUTED)))
-        if len(x.fills) > 8:
-            parts.append(Text(f"  … {len(x.fills) - 8} more", style=MUTED))
-        parts.append(Text(""))
-    if record.decision is not None and record.decision.is_stopped_out:
-        d = record.decision
-        stop = next(c for c in d.clamps if c.limit == "max_drawdown_pct")
-        parts.append(Text.assemble(
-            ("STOPPED OUT  ", f"bold {RED}"),
-            (f"drawdown {stop.before:.1%} breached the {d.spec.risk.max_drawdown_pct:.1%} limit · "
-             f"sells everything at the next {'bar' if is_intraday(record.session) else 'session'}'s close",
-             MUTED)))
-        parts.append(Text(""))
-    elif record.decision is not None:
-        d = record.decision
-        if d.is_halved:
-            halve = next(c for c in d.clamps if c.limit == "halve_drawdown_pct")
-            parts.append(Text.assemble(
-                ("HALVED  ", f"bold {RED}"),
-                (f"drawdown {halve.before:.1%} past the {d.spec.risk.halve_drawdown_pct:.1%} line · "
-                 "the book runs at half size until it recovers", MUTED)))
-            parts.append(Text(""))
-        n_signals = sum(len(sr.signals) for sr in d.strategies)
-        parts.append(Text.assemble(
-            ("DECIDED  ", f"bold {CYAN}"),
-            (f"{n_signals} signals · executes at the next "
-             f"{'bar' if is_intraday(record.session) else 'session'}'s close", MUTED)))
-        targets = sorted(((t, w) for t, w in d.final_weights.items() if w), key=lambda x: -abs(x[1]))
-        for ticker, weight in targets[:8]:
-            parts.append(Text.assemble(
-                (f"  {ticker:<6}", f"bold {CYAN}"),
-                (f"{weight:+.1%}", GREEN if weight > 0 else RED)))
-        if not targets:
-            parts.append(Text(f"  {_flat_line(d)}", style=MUTED))
+        parts.extend(_executed_block(record.executed, f"decision from {record.executed.as_of}"))
+    if record.decision is not None:
+        parts.extend(_decision_block(record.decision, intraday))
+    parts.append(Text("enter for the full report", style=MUTED))
+    return Group(*parts)
+
+
+def decision_overview(decided: SessionRecord, executed: SessionRecord | None) -> Group:
+    """The detail pane for one decision of a backtest: what the fund decided
+    at this close, and what it filled at the next. Enter opens the report."""
+    d = decided.decision
+    assert d is not None
+    intraday = is_intraday(decided.session)
+    parts: list = [
+        Text.assemble((decided.session, f"bold {BRIGHT}"),
+                      ("  ·  stop-out" if d.is_stopped_out else "  ·  rebalance session", MUTED)),
+        book_summary(executed or decided),
+        Text(""),
+    ]
+    parts.extend(_decision_block(d, intraday))
+    if executed is not None and executed.executed is not None:
+        parts.extend(_executed_block(executed.executed, f"at {executed.session}"))
+    else:
+        parts.append(Text("NOT EXECUTED  ", style=f"bold {MUTED}").append("the window ends before the next close", style=MUTED))
         parts.append(Text(""))
     parts.append(Text("enter for the full report", style=MUTED))
     return Group(*parts)
+
+
+def decision_row(decided: SessionRecord, executed: SessionRecord | None, prev_nav: float) -> Text:
+    """One decision of a backtest as a rail row: the date, the change since
+    the last decision, one word for what it did, and the fills it led to."""
+    d = decided.decision
+    assert d is not None
+    change = decided.nav / prev_nav - 1 if prev_nav else 0.0
+    row = Text(no_wrap=True, overflow="ellipsis")
+    row.append(f" {decided.session}", style=TEXT)
+    row.append(f"  {change:+.1%}", style=GREEN if change >= 0 else RED)
+    if d.is_stopped_out:
+        row.append("  stopped out", style=RED)
+    elif d.is_halved:
+        row.append("  halved", style=RED)
+    else:
+        row.append("  decided", style=MUTED)
+    if executed is not None and executed.executed is not None:
+        n = len(executed.executed.fills)
+        row.append(f" · {n} {'fill' if n == 1 else 'fills'}", style=MUTED)
+    else:
+        row.append(" · pending", style=MUTED)
+    return row
+
+
+def _executed_block(x: CycleRecord, when: str) -> list[Text]:
+    """EXECUTED, the fills, and what they cost. *when* says which decision
+    or which session, whichever the caller's pane has not already said."""
+    costs = f" · costs ${x.trading_cost:,.2f}" if x.trading_cost else ""
+    parts = [Text.assemble(
+        ("EXECUTED  ", f"bold {GREEN}"),
+        (f"{when} · {len(x.orders)} orders · {len(x.fills)} fills{costs}", MUTED))]
+    for fill in x.fills[:8]:
+        tone = GREEN if fill.side == "buy" else RED
+        parts.append(Text.assemble(
+            (f"  {fill.side.upper():<4} ", f"bold {tone}"),
+            (f"{fill.quantity:,} {fill.ticker}", TEXT),
+            (f" @ ${fill.price:,.2f}", MUTED)))
+    if len(x.fills) > 8:
+        parts.append(Text(f"  … {len(x.fills) - 8} more", style=MUTED))
+    parts.append(Text(""))
+    return parts
+
+
+def _decision_block(d: DecisionRecord, intraday: bool) -> list[Text]:
+    """STOPPED OUT, or HALVED then DECIDED with the targets."""
+    close = f"the next {'bar' if intraday else 'session'}'s close"
+    if d.is_stopped_out:
+        stop = next(c for c in d.clamps if c.limit == "max_drawdown_pct")
+        return [Text.assemble(
+            ("STOPPED OUT  ", f"bold {RED}"),
+            (f"drawdown {stop.before:.1%} breached the {d.spec.risk.max_drawdown_pct:.1%} limit · "
+             f"sells everything at {close}", MUTED)), Text("")]
+    parts: list[Text] = []
+    if d.is_halved:
+        halve = next(c for c in d.clamps if c.limit == "halve_drawdown_pct")
+        parts.append(Text.assemble(
+            ("HALVED  ", f"bold {RED}"),
+            (f"drawdown {halve.before:.1%} past the {d.spec.risk.halve_drawdown_pct:.1%} line · "
+             "the book runs at half size until it recovers", MUTED)))
+        parts.append(Text(""))
+    n_signals = sum(len(sr.signals) for sr in d.strategies)
+    parts.append(Text.assemble(
+        ("DECIDED  ", f"bold {CYAN}"),
+        (f"{n_signals} signals · executes at {close}", MUTED)))
+    targets = sorted(((t, w) for t, w in d.final_weights.items() if w), key=lambda x: -abs(x[1]))
+    for ticker, weight in targets[:8]:
+        parts.append(Text.assemble(
+            (f"  {ticker:<6}", f"bold {CYAN}"),
+            (f"{weight:+.1%}", GREEN if weight > 0 else RED)))
+    if not targets:
+        parts.append(Text(f"  {_flat_line(d)}", style=MUTED))
+    parts.append(Text(""))
+    return parts
 
 
 def cost_line(trading_cost: float, traded_notional: float) -> str:

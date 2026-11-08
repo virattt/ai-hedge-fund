@@ -131,9 +131,25 @@ def test_a_halve_reads_as_one_in_the_row_and_the_overview():
     assert decision.is_halved and not decision.is_stopped_out
     session = make_session(decision.as_of, decision=decision)
     row = render(report.session_row(session, 100_000))
-    assert "decided" in row and "halved" in row
+    assert "halved" in row and "decided" not in row
     text = render(report.session_overview(session))
     assert "HALVED" in text and "drawdown 10.3% past the 10.0% line" in text
+
+
+def test_a_decision_row_and_overview_pair_the_decision_with_its_fills():
+    decision = make_halved_decision("2025-01-16")
+    decided = make_session("2025-01-16", decision=decision, nav=89_700)
+    cycle = make_cycle(make_signal())
+    cycle.as_of = "2025-01-16"
+    cycle.fills = [Fill(ticker="TEST", side="buy", quantity=2, price=100), Fill(ticker="TEST", side="sell", quantity=1, price=101)]
+    executed = make_session("2025-01-17", executed=cycle, nav=90_000)
+    row = render(report.decision_row(decided, executed, 100_000))
+    assert row.strip() == "2025-01-16  -10.3%  halved · 2 fills"
+    assert "halved · pending" in render(report.decision_row(decided, None, 100_000))
+    text = render(report.decision_overview(decided, executed))
+    assert "HALVED" in text and "DECIDED" in text and "EXECUTED  at 2025-01-17" in text
+    assert "BUY  2 TEST" in text and "SELL 1 TEST" in text
+    assert "NOT EXECUTED" in render(report.decision_overview(decided, None))
 
 
 def make_halved_decision(as_of="2025-01-16"):

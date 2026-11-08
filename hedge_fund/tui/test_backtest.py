@@ -49,7 +49,9 @@ def test_backtest_daily_board_matches_final_metrics_and_uses_fill_dates(size, tm
             after = {name: render(screen.query_one(f"#stat-{name}", Static).content) for name in before}
             assert before == after
             phase = render(screen.query_one("#phase-line", Static).content)
-            assert "1 executed cycles" in phase and "pending" not in phase
+            facts = render(screen.query_one("#cycle-line", Static).content)
+            assert "BACKTEST RESULTS" in phase and "executed cycles" not in phase
+            assert "0 decisions" in facts and "0 orders" in facts and "annualized" in facts
             tape = render(screen.query_one("#tape", Static).content)
             # Reopening the saved file lands on the same view, pixel for pixel
             # where it matters: the tiles, the header, the tape.
@@ -63,6 +65,7 @@ def test_backtest_daily_board_matches_final_metrics_and_uses_fill_dates(size, tm
             assert {name: render(reopened.query_one(f"#stat-{name}", Static).content)
                     for name in after} == after
             assert render(reopened.query_one("#phase-line", Static).content) == phase
+            assert render(reopened.query_one("#cycle-line", Static).content) == facts
             assert render(reopened.query_one("#tape", Static).content) == tape
             assert reopened._tape[0][0] == "2025-01-16"
             assert str(path) in render(reopened.query_one("#result-summary", Static).content)
@@ -103,7 +106,9 @@ def test_browse_decisions_lists_only_sessions_that_acted_and_opens_the_report(tm
     record = make_cycle(make_signal())
     record.fills = [Fill(ticker="TEST", side="buy", quantity=1, price=100)]
     dates = ["2025-01-15", "2025-01-16", "2025-01-17"]
+    record.as_of = dates[1]  # the decision this execution fills
     decision = make_halved_decision(dates[1])
+    record.clamps = decision.clamps  # the executed cycle carries the decision's clamps, as the engine does
     nav, benchmark_nav = [100000, 89700, 90000], [100000, 101000, 102000]
     sessions = [make_session(dates[0]),
                 make_session(dates[1], decision=decision, nav=nav[1]),
@@ -129,15 +134,11 @@ def test_browse_decisions_lists_only_sessions_that_acted_and_opens_the_report(tm
             assert isinstance(browser, backtest.BacktestDecisionsScreen)
             rail = browser.query_one("#pf-sessions", OptionList)
             rows = [render(rail.get_option_at_index(i).prompt) for i in range(rail.option_count)]
-            assert len(rows) == 2 and dates[0] not in "".join(rows)   # the valuation day is left out
-            assert dates[2] in rows[0] and "1 fill" in rows[0]           # newest first
-            assert dates[1] in rows[1] and "halved" in rows[1]
-            assert "2 of 3 sessions" in render(browser.query_one("#pf-head", Static).content)
+            assert len(rows) == 1                                        # one row per decision
+            assert dates[1] in rows[0] and "halved · 1 fill" in rows[0] and "-10.3%" in rows[0]
+            assert "1 decision" in render(browser.query_one("#pf-head", Static).content)
             overview = render(browser.query_one("#detail-pane", Static).content)
-            assert "EXECUTED" in overview and "execution session" in overview
-            await pilot.press("down")
-            await pilot.pause()
-            assert "HALVED" in render(browser.query_one("#detail-pane", Static).content)
+            assert "HALVED" in overview and f"EXECUTED  at {dates[2]}" in overview and "BUY  1 TEST" in overview
             await pilot.press("enter")
             await pilot.pause()
             assert isinstance(app.screen, SessionReportScreen)
@@ -148,4 +149,28 @@ def test_browse_decisions_lists_only_sessions_that_acted_and_opens_the_report(tm
             assert app.screen is browser
             await pilot.press("escape")
             assert app.screen is results
+            # The keys: d opens the decisions, s the scorecard, from the results view.
+            await pilot.press("d")
+            await pilot.pause()
+            assert isinstance(app.screen, backtest.BacktestDecisionsScreen)
+            await pilot.press("escape")
+            await pilot.press("s")
+            await pilot.pause()
+            assert isinstance(app.screen, backtest.BacktestScorecardScreen)
+            assert "ANALYSTS" in render(app.screen.query_one("#scorecard", Static).content)
+            await pilot.press("escape")
+            assert app.screen is results
     asyncio.run(scenario())
+
+
+def test_pair_decisions_matches_each_decision_to_the_session_that_filled_it():
+    from hedge_fund.tui.test_report import make_halved_decision
+    first = make_cycle(make_signal()); first.as_of = "2025-01-13"
+    sessions = [make_session("2025-01-13", decision=make_halved_decision("2025-01-13")),
+                make_session("2025-01-14", executed=first),
+                make_session("2025-01-15"),
+                make_session("2025-01-16", decision=make_halved_decision("2025-01-16"))]
+    pairs = backtest.pair_decisions(sessions)
+    assert [(d.session, e.session if e else None) for d, e in pairs] == [
+        ("2025-01-13", "2025-01-14"), ("2025-01-16", None)]
+    assert "pending" in render(backtest.decision_row(*pairs[1], 100_000))

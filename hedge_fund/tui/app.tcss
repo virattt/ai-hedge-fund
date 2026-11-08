@@ -403,6 +403,12 @@ RunConfirmScreen {
     max-height: 100%;
 }
 
+/* The decisions rail carries a longer row (date, change, verdict, fills),
+   so it takes a few more cells than the signal rail. */
+#report-rail.wide {
+    width: 46;
+}
+
 #report-detail {
     width: 1fr;
     padding: 0 2;
