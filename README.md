@@ -44,6 +44,10 @@ The app asks for keys the first time it needs them and saves them to `~/.hedge-f
 
 Keys exported in your shell always win over the saved file.
 
+### ProCrowdSentimentScore (CrowdWisdom Trading)
+
+The `crowdwisdom` model buys the ProCrowdSentimentScore for a ticker from [CrowdWisdom Trading](https://api.crowdwisdomtrading.com/x402/catalog): what 21,576+ pro traders on YouTube, X, StockTwits, Reddit, broker platforms, podcasts and newsletters are saying, as of the backtest date (-100 short to +100 long), with ProTraders (how many traders stand behind it). It pays with the same x402 wallet as the market data ($0.10 per ticker-day, cached, so a backtest pays once per ticker per day) or uses a `CWT_API_KEY`. Free sample: `https://api.crowdwisdomtrading.com/x402/sample`.
+
 ## How to Run
 
 ### Interactive app
