@@ -219,7 +219,15 @@ Bar > .bar--complete {
     height: auto;
 }
 
+/* The run list shows a cursor only while it is the active pane. Blurred, its
+   highlighted row looks like every other row, so the screen opens with one
+   cursor (on the mandate), not two. */
 #select-history > .option-list--option-highlighted {
+    background: transparent;
+    text-style: none;
+}
+
+#select-history:focus > .option-list--option-highlighted {
     background: #0f2e1e;
     color: #2bd97c;
     text-style: bold;

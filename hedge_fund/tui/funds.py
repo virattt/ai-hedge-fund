@@ -35,18 +35,39 @@ class FundSelectScreen(Screen):
     """'Backtest a mandate', master-detail: mandate slots on the left, the
     highlighted mandate's latest backtest stats and its backtest history
     (newest first) on the right. Enter on a mandate opens the backtest window
-    picker; tab to the history, then enter on a run, reopens its results.
+    picker; right arrow (or tab) moves to the history, where enter on a run
+    reopens its results and left arrow returns.
     Refreshes on resume.
     """
 
     BINDINGS = [
         Binding("escape", "back", "back"),
+        # Priority: the option lists bind the arrows to horizontal scroll
+        # (which they never need) and would otherwise swallow the keys.
+        Binding("right", "focus_history", "past runs", priority=True),
+        Binding("left", "focus_mandates", "mandates", show=False, priority=True),
         Binding("d", "delete", "delete mandate"),
     ]
 
     def __init__(self) -> None:
         super().__init__()
         self._summaries: dict[tuple[str, float], dict | None] = {}
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
+        # The arrow keys cross between the two lists only when there is
+        # somewhere to go, so the footer never offers a dead key.
+        if action == "focus_history":
+            runs = self.query_one("#select-history", OptionList)
+            return runs.option_count > 0 and self.app.focused is not runs
+        if action == "focus_mandates":
+            return self.app.focused is self.query_one("#select-history", OptionList)
+        return True
+
+    def action_focus_history(self) -> None:
+        self.query_one("#select-history", OptionList).focus()
+
+    def action_focus_mandates(self) -> None:
+        self.query_one("#select-menu", OptionList).focus()
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="select"):
@@ -162,11 +183,12 @@ class FundSelectScreen(Screen):
         title = self.query_one("#history-title", Static)
         runs = self.query_one("#select-history", OptionList)
         runs.clear_options()
+        self.refresh_bindings()  # the footer's "→ past runs" follows whether there are any
         if not history:
             title.update("")
             return
         title.update(Text.assemble(("\nBACKTESTS", f"bold {BRIGHT}"),
-                                   ("  ·  tab here, enter opens a run's results", MUTED)))
+                                   ("  ·  → here, enter opens a run's results", MUTED)))
         for h in history[:12]:
             runs.add_option(Option(_history_row(h), id=f"result:{h['path']}"))
         runs.highlighted = 0  # options added after mount leave it unset; enter needs a row

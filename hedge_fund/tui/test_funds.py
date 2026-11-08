@@ -113,6 +113,10 @@ def test_history_rows_reopen_the_saved_result():
             assert "2025-01-15 → 2025-01-16" in row and "TEST" in row and "+10.0%" in row
             assert "BACKTESTS" in render(picker.query_one("#history-title", Static).content)
             assert "BACKTESTS" not in render(picker.query_one("#detail-body", Static).content)
+            await pilot.press("right")
+            assert app.focused is runs
+            await pilot.press("left")
+            assert app.focused is picker.query_one("#select-menu", OptionList)
             await pilot.press("tab")
             assert app.focused is runs
             await pilot.press("enter")
@@ -134,6 +138,8 @@ def test_a_mandate_with_no_history_has_an_empty_run_list():
         async with app.run_test() as pilot:
             await app.push_screen(funds.FundSelectScreen())
             assert app.screen.query_one("#select-history", OptionList).option_count == 0
+            await pilot.press("right")  # nowhere to go: focus stays on the mandates
+            assert app.focused is app.screen.query_one("#select-menu", OptionList)
             assert render(app.screen.query_one("#history-title", Static).content).strip() == ""
             assert "No backtests yet." in render(app.screen.query_one("#detail-body", Static).content)
     asyncio.run(scenario())
