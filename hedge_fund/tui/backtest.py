@@ -58,8 +58,17 @@ from hedge_fund.tui.shared import (
 from hedge_fund.tui.widgets import first_selectable, StatTiles
 
 
+def tape_rows(cycles: list[CycleRecord]) -> list[tuple[str, Fill, int]]:
+    """The trade tape's rows for *cycles*, in order: the date the fill
+    happened (the execution session when there was one), the fill, and the
+    position it left behind."""
+    return [(record.execution_as_of or record.as_of, fill, record.positions.get(fill.ticker, 0))
+            for record in cycles for fill in record.fills]
+
+
 class BacktestScreen(Screen):
     """Pick a mandate → pick a window → warm → replay with a live equity curve.
+    Or, given a saved result, open it straight in the results view.
 
     Warm-then-replay: threads only warm the disk caches (market data first,
     then every agent across the whole window); the sequential `backtest_fund`
@@ -68,10 +77,11 @@ class BacktestScreen(Screen):
 
     BINDINGS = [Binding("escape", "back", "back")]
 
-    def __init__(self, spec: FundSpec | None = None) -> None:
+    def __init__(self, spec: FundSpec | None = None, *, saved: Path | None = None) -> None:
         super().__init__()
         self._spec = spec  # preselected by the mandate picker or the builder
         self._preselected = spec is not None
+        self._saved = saved  # a result file to reopen instead of running
         self._specs: list[FundSpec | None] = []
         self._phase = "pick"
         self._roster_order: list[str] = []
@@ -120,6 +130,9 @@ class BacktestScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        if self._saved is not None:
+            self._reopen(self._saved)
+            return
         if self._spec is not None:
             self._begin_dates()
             return
@@ -155,6 +168,18 @@ class BacktestScreen(Screen):
             self.query_one("#fund-list", OptionList).focus()
         else:
             self.app.pop_screen()
+
+    def _reopen(self, path: Path) -> None:
+        """Open a saved result in the same view a live run ends on. The file
+        holds the curve, the stats, and every session, so nothing is fetched;
+        the largest result on disk parses in well under a second."""
+        self.query_one("#bt-panes", ContentSwitcher).current = "bt-run"
+        try:
+            result = FundBacktestResult.model_validate_json(path.read_text())
+        except (OSError, ValueError) as exc:  # fail loud, in the UI
+            self._fail(exc)
+            return
+        self._show_result(result, path)
 
     @on(OptionList.OptionSelected, "#fund-list")
     def _pick_fund(self, event: OptionList.OptionSelected) -> None:
@@ -380,10 +405,16 @@ class BacktestScreen(Screen):
             ("  ·  daily valuations and next-close execution",
              MUTED),
         ))
+        self._show_board(spec.benchmark)
+
+    def _show_board(self, benchmark: str) -> None:
+        """Reveal the stat tiles, the equity curve, and the trade tape, titled.
+        The live replay shows them as it starts; a reopened result shows
+        them filled in."""
         box_widget = self.query_one("#curve-box", Vertical)
         box_widget.border_title = "equity curve"
         box_widget.border_subtitle = (
-            f"[{GREEN}]██[/] fund   [{CYAN}]──[/] {spec.benchmark}"
+            f"[{GREEN}]██[/] fund   [{CYAN}]──[/] {benchmark}"
         )
         tape_box = self.query_one("#tape-box", Vertical)
         tape_box.border_title = "trades (newest first)"
@@ -392,9 +423,7 @@ class BacktestScreen(Screen):
         tape_box.remove_class("hidden")
 
     def _board_tick(self, record: CycleRecord) -> None:
-        for fill in record.fills:
-            self._tape.append((record.execution_as_of or record.as_of, fill,
-                               record.positions.get(fill.ticker, 0)))
+        self._tape.extend(tape_rows([record]))
         self.query_one("#tape", Static).update(tape_table(self._tape))
 
     def _board_valuation(self, value: DailyValuation) -> None:
@@ -405,31 +434,40 @@ class BacktestScreen(Screen):
         benchmark_curve = [capital * self._closes[d] / self._closes[self._dates[0]]
                            for d in self._dates]
         metrics = performance_metrics(capital, self._dates, self._nav, benchmark_curve, [])
-        self._update_stats(value.nav, metrics.total_return_pct, metrics.benchmark_return_pct,
+        self._update_stats(self._spec.benchmark, value.nav,
+                           metrics.total_return_pct, metrics.benchmark_return_pct,
                            metrics.excess_return_pct, metrics.sharpe_ratio, metrics.max_drawdown_pct)
-        curve_widget = self.query_one("#curve", Static)
-        width = curve_widget.content_size.width or 80
-        curve_widget.update(Group(*render_area_chart(
-            self._nav, benchmark_curve, capital, min(width, 100))))
+        self._draw_curve(self._nav, benchmark_curve, capital)
         self.query_one("#cycle-line", Static).update(Text(
             f"session {len(self._nav)}/{self._n_cycles} · {value.as_of}", style=MUTED))
 
-    def _update_stats(self, nav: float, fund_return: float,
+    def _update_stats(self, benchmark: str, nav: float, fund_return: float,
                       benchmark_return: float, excess: float,
                       sharpe: float, max_dd: float) -> None:
         """One row of running tallies, live during the replay and refreshed
         with the engine's authoritative numbers at the end."""
-        assert self._spec is not None
         self.query_one("#stats", StatTiles).update(
-            self._spec.benchmark, nav, fund_return, benchmark_return, excess, sharpe, max_dd)
+            benchmark, nav, fund_return, benchmark_return, excess, sharpe, max_dd)
+
+    def _draw_curve(self, nav: list[float], benchmark_curve: list[float], capital: float) -> None:
+        curve_widget = self.query_one("#curve", Static)
+        width = curve_widget.content_size.width or 80
+        curve_widget.update(Group(*render_area_chart(
+            nav, benchmark_curve, capital, min(width, 100))))
 
     def _finish(self, result: FundBacktestResult, path: Path) -> None:
-        self._phase = "done"
-        m = result.metrics
-        # The graph is the trophy: stay on the run pane, land the header and
-        # receipt around it, and let the stat tiles carry the final numbers.
         self.query_one("#warm-progress", ProgressBar).add_class("hidden")
         self.query_one("#roster", Static).add_class("hidden")
+        self._show_result(result, path)
+
+    def _show_result(self, result: FundBacktestResult, path: Path) -> None:
+        """The results view, drawn from the saved result alone — the live run
+        ends here, and a reopened file starts here, so the two cannot drift.
+        The graph is the trophy: stay on the run pane, land the header and
+        receipt around it, and let the stat tiles carry the final numbers."""
+        self._phase = "done"
+        m = result.metrics
+        self._show_board(result.benchmark)
         self.query_one("#phase-line", Static).update(Text.assemble(
             ("BACKTEST RESULTS  ", f"bold {BRIGHT}"),
             (result.fund, f"bold {CYAN}"),
@@ -440,13 +478,18 @@ class BacktestScreen(Screen):
              MUTED),
         ))
         self._update_stats(
-            result.nav[-1],
+            result.benchmark, result.nav[-1],
             m.total_return_pct, m.benchmark_return_pct,
             m.excess_return_pct, m.sharpe_ratio, m.max_drawdown_pct,
         )
+        self._draw_curve(result.nav, result.benchmark_nav, result.capital)
+        self._tape = tape_rows(result.cycles)
+        self.query_one("#tape", Static).update(tape_table(self._tape))
+        self.query_one("#cycle-line", Static).update(Text(
+            f"{len(result.dates)} sessions · {result.start} → {result.end}", style=MUTED))
         self.query_one("#result-summary", Static).update(
             Text.assemble(("✓ ", f"bold {GREEN}"),
-                          ("Saved backtest record to ", TEXT),
+                          ("Saved backtest record · ", TEXT),
                           (str(path), f"bold {BRIGHT}")))
         self.query_one("#result-summary", Static).remove_class("hidden")
         card = score(result.records)

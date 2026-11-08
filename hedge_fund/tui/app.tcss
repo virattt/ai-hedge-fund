@@ -214,6 +214,17 @@ Bar > .bar--complete {
     padding: 2 2;
 }
 
+#select-history {
+    background: transparent;
+    height: auto;
+}
+
+#select-history > .option-list--option-highlighted {
+    background: #0f2e1e;
+    color: #2bd97c;
+    text-style: bold;
+}
+
 /* ---------------- api key prompt ---------------- */
 
 KeyPromptScreen, DataKeyPromptScreen {

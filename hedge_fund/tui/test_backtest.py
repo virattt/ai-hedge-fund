@@ -50,4 +50,47 @@ def test_backtest_daily_board_matches_final_metrics_and_uses_fill_dates(size, tm
             assert before == after
             phase = render(screen.query_one("#phase-line", Static).content)
             assert "1 executed cycles" in phase and "pending" not in phase
+            tape = render(screen.query_one("#tape", Static).content)
+            # Reopening the saved file lands on the same view, pixel for pixel
+            # where it matters: the tiles, the header, the tape.
+            path = tmp_path / "saved.json"
+            path.write_text(result.model_dump_json())
+            await app.push_screen(backtest.BacktestScreen(record.spec, saved=path))
+            await pilot.pause()
+            reopened = app.screen
+            assert reopened is not screen and reopened._phase == "done"
+            assert reopened.query_one("#bt-panes", ContentSwitcher).current == "bt-run"
+            assert {name: render(reopened.query_one(f"#stat-{name}", Static).content)
+                    for name in after} == after
+            assert render(reopened.query_one("#phase-line", Static).content) == phase
+            assert render(reopened.query_one("#tape", Static).content) == tape
+            assert reopened._tape[0][0] == "2025-01-16"
+            assert str(path) in render(reopened.query_one("#result-summary", Static).content)
+            assert "hidden" not in reopened.query_one("#curve-box").classes
+            await pilot.press("escape")
+            assert app.screen is screen
+    asyncio.run(scenario())
+
+
+def test_tape_rows_use_the_execution_date_and_the_position_after_the_fill():
+    record = make_cycle(make_signal())
+    record.fills = [Fill(ticker="TEST", side="buy", quantity=3, price=100)]
+    record.positions = {"TEST": 3}
+    assert backtest.tape_rows([record]) == [(record.as_of, record.fills[0], 3)]
+    record.execution_as_of = "2025-01-16"
+    assert backtest.tape_rows([record]) == [("2025-01-16", record.fills[0], 3)]
+    assert backtest.tape_rows([]) == []
+
+
+def test_reopening_an_unreadable_result_fails_loud(tmp_path):
+    record = make_cycle(make_signal())
+    path = tmp_path / "broken.json"
+    path.write_text("{not json")
+    async def scenario():
+        app = HedgeFundApp()
+        async with app.run_test() as pilot:
+            await app.push_screen(backtest.BacktestScreen(record.spec, saved=path))
+            await pilot.pause()
+            assert app.screen._phase == "failed"
+            assert "✗" in render(app.screen.query_one("#phase-line", Static).content)
     asyncio.run(scenario())
