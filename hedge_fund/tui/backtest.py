@@ -13,7 +13,7 @@ from rich.text import Text
 from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import (
     ContentSwitcher,
@@ -38,13 +38,21 @@ from hedge_fund.backtesting.research import last_universe, save_result
 from hedge_fund.brokers import Fill
 from hedge_fund.data import CachedDataClient, FDClient
 from hedge_fund.fund import discover_funds, Fund, FundSpec, normalize_universe
-from hedge_fund.pipeline import CycleRecord, history_days, history_start
+from hedge_fund.pipeline import CycleRecord, history_days, history_start, SessionRecord
 from hedge_fund.scorecard import score
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent
 from hedge_fund.tui.home import demand_run_keys, HomeScreen
 from hedge_fund.tui.palette import BRIGHT, CYAN, GREEN, MUTED, RED, TEXT
-from hedge_fund.tui.report import cost_line, roster_table, tape_table
+from hedge_fund.tui.report import (
+    book_summary,
+    cost_line,
+    roster_table,
+    session_overview,
+    session_row,
+    tape_table,
+)
 from hedge_fund.tui.scorecard_view import analyst_table, strategy_table
+from hedge_fund.tui.session_report import SessionReportScreen
 from hedge_fund.tui.shared import (
     agent_names,
     BACKTEST_DAYS,
@@ -82,6 +90,7 @@ class BacktestScreen(Screen):
         self._spec = spec  # preselected by the mandate picker or the builder
         self._preselected = spec is not None
         self._saved = saved  # a result file to reopen instead of running
+        self._result: FundBacktestResult | None = None  # set when the results view lands
         self._specs: list[FundSpec | None] = []
         self._phase = "pick"
         self._roster_order: list[str] = []
@@ -123,6 +132,7 @@ class BacktestScreen(Screen):
                 yield Static("", id="result-summary", classes="hidden")
                 yield Static("", id="scorecard", classes="hidden")
                 yield OptionList(
+                    Option("Browse decisions", id="bt-decisions"),
                     Option("Back to home", id="bt-home"),
                     id="bt-done-menu",
                     classes="hidden",
@@ -252,6 +262,10 @@ class BacktestScreen(Screen):
 
     @on(OptionList.OptionSelected, "#bt-done-menu")
     def _after_done(self, event: OptionList.OptionSelected) -> None:
+        if event.option.id == "bt-decisions":
+            assert self._result is not None
+            self.app.push_screen(BacktestDecisionsScreen(self._result))
+            return
         # "Back to home" means home, however deep the stack got here.
         while not isinstance(self.app.screen, HomeScreen):
             self.app.pop_screen()
@@ -466,6 +480,7 @@ class BacktestScreen(Screen):
         The graph is the trophy: stay on the run pane, land the header and
         receipt around it, and let the stat tiles carry the final numbers."""
         self._phase = "done"
+        self._result = result
         m = result.metrics
         self._show_board(result.benchmark)
         self.query_one("#phase-line", Static).update(Text.assemble(
@@ -498,6 +513,7 @@ class BacktestScreen(Screen):
         scorecard.remove_class("hidden")
         menu = self.query_one("#bt-done-menu", OptionList)
         menu.remove_class("hidden")
+        menu.highlighted = 0  # "Browse decisions" under the cursor
         menu.focus()
 
     def _fail(self, exc: Exception) -> None:
@@ -507,3 +523,70 @@ class BacktestScreen(Screen):
             (f"{type(exc).__name__}: {exc}", RED),
         ))
         self.notify(str(exc), title="Backtest failed", severity="error")
+
+
+class BacktestDecisionsScreen(Screen):
+    """A backtest's decisions, browsable: every session that decided or
+    executed, newest first, with the session overview beside it. Enter
+    opens the same session report the paper fund uses — signals, theses,
+    risk limits, orders. Valuation-only days are left out: on a daily fund
+    they are most of the list and none of the story."""
+
+    BINDINGS = [Binding("escape", "back", "back")]
+
+    def __init__(self, result: FundBacktestResult) -> None:
+        super().__init__()
+        self._result = result
+        acted = [(i, r) for i, r in enumerate(result.records)
+                 if r.executed is not None or r.decision is not None]
+        self._shown: list[SessionRecord] = [r for _, r in reversed(acted)]
+        navs = [result.capital, *(r.nav for r in result.records)]
+        self._prev_nav: list[float] = [navs[i] for i, _ in reversed(acted)]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="pf"):
+            yield Static("", id="pf-head")
+            with Horizontal(id="pf-panes"):
+                with Vertical(id="report-rail"):
+                    yield Static(Text("DECISIONS", style=MUTED), classes="rail-title")
+                    yield OptionList(id="pf-sessions")
+                with VerticalScroll(id="report-detail"):
+                    yield Static("", id="detail-pane")
+            yield Static("", id="report-foot")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        r = self._result
+        self.query_one("#pf-head", Static).update(Text.assemble(
+            (r.fund, f"bold {BRIGHT}"),
+            (f"  ·  {r.start} → {r.end}  ·  {r.rebalance} rebalance  ·  "
+             f"{len(self._shown)} of {len(r.records)} sessions decided or executed", MUTED),
+        ))
+        menu = self.query_one("#pf-sessions", OptionList)
+        if not self._shown:
+            self.query_one("#detail-pane", Static).update(
+                Text("No decisions in this window.", style=MUTED))
+            return
+        for i, (record, prev_nav) in enumerate(zip(self._shown, self._prev_nav)):
+            menu.add_option(Option(session_row(record, prev_nav), id=f"s:{i}"))
+        menu.highlighted = 0
+        menu.focus()
+
+    def action_back(self) -> None:
+        self.app.pop_screen()
+
+    @on(OptionList.OptionHighlighted, "#pf-sessions")
+    def _highlight(self, event: OptionList.OptionHighlighted) -> None:
+        oid = (event.option.id or "") if event.option else ""
+        if oid.startswith("s:"):
+            record = self._shown[int(oid.split(":")[1])]
+            self.query_one("#detail-pane", Static).update(session_overview(record))
+            self.query_one("#report-foot", Static).update(book_summary(record))
+            self.query_one("#report-detail", VerticalScroll).scroll_home(animate=False)
+
+    @on(OptionList.OptionSelected, "#pf-sessions")
+    def _open(self, event: OptionList.OptionSelected) -> None:
+        oid = event.option.id or ""
+        if oid.startswith("s:"):
+            record = self._shown[int(oid.split(":")[1])]
+            self.app.push_screen(SessionReportScreen(self._result.fund, record))

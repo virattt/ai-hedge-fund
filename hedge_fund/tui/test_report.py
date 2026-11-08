@@ -8,7 +8,8 @@ from hedge_fund.models import Signal
 from hedge_fund.pipeline.models import Allocated, AllocationRecord
 from hedge_fund.tui import report
 from hedge_fund.pipeline.stages import stop_out_decision
-from hedge_fund.tui.fixtures import make_cycle, make_session, make_signal, make_spec, render
+from hedge_fund.risk.limits import ClampEvent
+from hedge_fund.tui.fixtures import make_cycle, make_pending, make_session, make_signal, make_spec, render
 
 
 @pytest.mark.parametrize("direction,strength", [("bullish", 3.2), ("bearish", 1.6), ("neutral", 4), ("bullish", 0), ("bearish", 0)])
@@ -122,6 +123,27 @@ def test_a_stop_out_reads_as_one_in_the_row_and_the_overview():
     assert "stopped out" in render(report.session_row(session, 100_000))
     text = render(report.session_overview(session))
     assert "STOPPED OUT" in text and "drawdown 21.3% breached the 20.0% limit" in text
+    assert "HALVED" not in text and not decision.is_halved
+
+
+def test_a_halve_reads_as_one_in_the_row_and_the_overview():
+    decision = make_halved_decision()
+    assert decision.is_halved and not decision.is_stopped_out
+    session = make_session(decision.as_of, decision=decision)
+    row = render(report.session_row(session, 100_000))
+    assert "decided" in row and "halved" in row
+    text = render(report.session_overview(session))
+    assert "HALVED" in text and "drawdown 10.3% past the 10.0% line" in text
+
+
+def make_halved_decision(as_of="2025-01-16"):
+    """A decision made 10.3% off the peak with a 10% halving tier: one
+    whole-book clamp, size 0.5."""
+    decision = make_pending(as_of)
+    decision.spec = decision.spec.model_copy(
+        update={"risk": decision.spec.risk.model_copy(update={"halve_drawdown_pct": 0.10})})
+    decision.clamps = [ClampEvent(limit="halve_drawdown_pct", before=0.103, after=0.5)]
+    return decision
 
 
 def test_allocation_section_shows_each_weight_beside_the_mandate_and_its_evidence():

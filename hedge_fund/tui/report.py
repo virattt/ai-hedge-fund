@@ -397,6 +397,8 @@ def session_row(record: SessionRecord, prev_nav: float, *, time_only: bool = Fal
         row.append(f"  {n} {'fill' if n == 1 else 'fills'}", style=MUTED)
     if record.decision is not None:
         row.append("  stopped out" if record.decision.is_stopped_out else "  decided", style=MUTED)
+        if record.decision.is_halved:
+            row.append("  halved", style=RED)
     return row
 
 
@@ -405,7 +407,9 @@ def session_overview(record: SessionRecord) -> Group:
     in a few lines. Enter opens the full report."""
     parts: list = [
         Text.assemble((record.session, f"bold {BRIGHT}"),
-                      ("  ·  rebalance session" if record.rebalance else "  ·  valuation only", MUTED)),
+                      ("  ·  rebalance session" if record.rebalance
+                       else "  ·  execution session" if record.executed is not None
+                       else "  ·  valuation only", MUTED)),
         book_summary(record),
         Text(""),
     ]
@@ -435,6 +439,13 @@ def session_overview(record: SessionRecord) -> Group:
         parts.append(Text(""))
     elif record.decision is not None:
         d = record.decision
+        if d.is_halved:
+            halve = next(c for c in d.clamps if c.limit == "halve_drawdown_pct")
+            parts.append(Text.assemble(
+                ("HALVED  ", f"bold {RED}"),
+                (f"drawdown {halve.before:.1%} past the {d.spec.risk.halve_drawdown_pct:.1%} line · "
+                 "the book runs at half size until it recovers", MUTED)))
+            parts.append(Text(""))
         n_signals = sum(len(sr.signals) for sr in d.strategies)
         parts.append(Text.assemble(
             ("DECIDED  ", f"bold {CYAN}"),

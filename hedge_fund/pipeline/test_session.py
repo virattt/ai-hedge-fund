@@ -250,7 +250,7 @@ def test_a_breach_on_a_valuation_day_stops_the_fund_out_and_keeps_it_in_cash():
     monday, tuesday, wednesday, thursday, friday, next_monday = records
 
     assert not wednesday.rebalance and wednesday.decision is not None
-    assert wednesday.decision.is_stopped_out
+    assert wednesday.decision.is_stopped_out and not wednesday.decision.is_halved
     assert wednesday.decision.final_weights == {"AAPL": 0.0}
     assert [(c.limit, c.ticker, c.before, c.after) for c in wednesday.decision.clamps] == [
         ("max_drawdown_pct", None, pytest.approx(0.25), 0.0)]

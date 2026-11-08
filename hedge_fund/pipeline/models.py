@@ -96,6 +96,11 @@ class DecisionRecord(BaseModel):
         """A drawdown stop-out: every target is zero and no analyst was asked."""
         return any(c.limit == "max_drawdown_pct" for c in self.clamps)
 
+    @property
+    def is_halved(self) -> bool:
+        """The halving tier fired: the book runs at half size until it recovers."""
+        return any(c.limit == "halve_drawdown_pct" for c in self.clamps)
+
 
 class CycleRecord(BaseModel):
     """One tick of the fund, fully serialized — every stage's inputs and
