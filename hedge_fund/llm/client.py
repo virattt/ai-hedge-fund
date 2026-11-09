@@ -246,6 +246,15 @@ def make_llm(
             f"Supported: {', '.join(sorted(SUPPORTED_PROVIDERS))}."
         )
 
+    if provider == "Ollama":
+        # Ollama serves an OpenAI-compatible API on your machine, so the
+        # OpenAI client talks to it with no extra dependency and no key. The
+        # client insists on a key string; Ollama ignores whatever is sent.
+        from langchain_openai import ChatOpenAI
+        chat = ChatOpenAI(model=model, api_key="ollama", timeout=timeout,
+                          max_retries=1, base_url=_ollama_base_url())
+        return ChatLLM(model, chat, on_token)
+
     api_key = _require_key(provider)
 
     if provider == "TypeSafe":
@@ -315,6 +324,24 @@ def _flatten(content, sep: str = "\n") -> str:
                 parts.append(block.get("text", ""))
         return sep.join(parts)
     return "" if content is None else str(content)
+
+
+def _ollama_base_url() -> str:
+    """Where the Ollama server's OpenAI-compatible API lives.
+
+    Reads the same variables v1 did: OLLAMA_BASE_URL (e.g.
+    http://ollama:11434 under Docker), else OLLAMA_HOST, else localhost.
+    OLLAMA_HOST follows Ollama's own rules: a bare host gets http and port
+    11434; a full URL is taken as written.
+    """
+    base = os.getenv("OLLAMA_BASE_URL")
+    if not base:
+        host = os.getenv("OLLAMA_HOST") or "localhost"
+        if "://" not in host:
+            host = f"http://{host}" if ":" in host else f"http://{host}:11434"
+        base = host
+    base = base.rstrip("/")
+    return base if base.endswith("/v1") else f"{base}/v1"
 
 
 def _require_key(provider: str) -> str:
