@@ -22,7 +22,7 @@ def offline(tmp_path, monkeypatch):
     tick_module = importlib.import_module("hedge_fund.paper.tick")
 
     class OfflineClient(FakeDataClient):
-        def __init__(self):
+        def __init__(self, meter=None):
             super().__init__({ticker: {"2025-01-06": 100, "2025-01-07": 100, "2025-01-08": 110, "2025-01-13": 110}
                               for ticker in ("AAPL", "MSFT", "SPY")})
         def __enter__(self):
@@ -224,7 +224,7 @@ def test_paper_minute_fund_ticks_and_runs_like_a_daily_one(tmp_path, monkeypatch
     tape = CliTape({"AAPL": {"2025-01-07T09:30:00": 100.0, "2025-01-07T09:30:30": 101.0},
                     "SPY": {"2025-01-07T09:30:00": 500.0}},
                    now=datetime(2025, 1, 7, 9, 30, 40, tzinfo=NEW_YORK))  # 10s into the 09:30:30 bar
-    monkeypatch.setattr(run, "FDClient", lambda: tape)
+    monkeypatch.setattr(run, "FDClient", lambda meter=None: tape)
     tick_module = importlib.import_module("hedge_fund.paper.tick")
     class Clock(datetime):  # the tick's wall clock is the tape's; everything else is datetime's
         @classmethod

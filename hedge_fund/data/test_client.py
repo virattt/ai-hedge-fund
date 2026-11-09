@@ -99,3 +99,21 @@ def test_earnings_history(fd: FDClient, ticker: str) -> None:
     print(f"  {ticker} earnings history: {len(records)} records")
     for r in records:
         print(f"    {r.report_period}  {r.source_type:5s}  {r.filing_date}  q={'yes' if r.quarterly else 'no'}  a={'yes' if r.annual else 'no'}")
+
+
+def test_screen_point_in_time(fd: FDClient) -> None:
+    from hedge_fund.data import ScreenFilter
+    as_of = "2026-08-06"
+    rows = fd.screen(as_of, [ScreenFilter(field="market_cap", operator="gt", value=1e9)])
+    assert len(rows) > 1000, f"only {len(rows)} names above $1B as of {as_of}"
+    assert all(r.filing_date <= as_of for r in rows), "a filing from after as_of answered"
+    assert all("market_cap" in r.values for r in rows)
+    print(f"  screen as of {as_of}: {len(rows)} names above $1B, newest filing {max(r.filing_date for r in rows)}")
+
+
+def test_screener_fields(fd: FDClient) -> None:
+    fields = fd.screener_fields()
+    assert {"market_cap", "pe_ratio", "revenue_growth"} <= fields.numeric
+    assert "Financials" in fields.sectors and "Banks" in fields.industries
+    assert "stock_price" in fields.unavailable_as_of
+    print(f"  screener vocabulary: {len(fields.numeric)} numeric fields, {len(fields.sectors)} sectors, {len(fields.industries)} industries")

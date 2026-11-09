@@ -61,7 +61,7 @@ from pathlib import Path
 from rich.console import Console
 
 from hedge_fund.backtesting import backtest_fund, save_result
-from hedge_fund.data import CachedDataClient, FDClient
+from hedge_fund.data import CachedDataClient, CallMeter, FDClient
 from hedge_fund.data.bars import is_intraday
 from hedge_fund.data.sessions import completed_through
 from hedge_fund.fund import Fund, load_spec, normalize_universe
@@ -223,7 +223,8 @@ def _backtest(args, parser: argparse.ArgumentParser, console: Console) -> None:
     # did over the window, and that memory would otherwise score as skill.
     fund = Fund(spec, blind=True)
 
-    with FDClient() as raw:
+    meter = CallMeter()
+    with FDClient(meter=meter) as raw:
         fd = CachedDataClient(raw)
         with console.status(
             f"[cyan]{spec.name}: backtesting {start} → {end} "
@@ -244,7 +245,8 @@ def _backtest(args, parser: argparse.ArgumentParser, console: Console) -> None:
         f"{len(result.dates)} sessions  ·  {m.n_cycles} rebalances  ·  {m.n_orders} orders  ·  "
         f"{cost_line(m.trading_cost, m.traded_notional)}  ·  "
         f"return {m.total_return_pct:+.1%} vs {spec.benchmark} {m.benchmark_return_pct:+.1%}  ·  "
-        f"sharpe {m.sharpe_ratio:.2f}  ·  max drawdown {m.max_drawdown_pct:.1%}"
+        f"sharpe {m.sharpe_ratio:.2f}  ·  max drawdown {m.max_drawdown_pct:.1%}  ·  "
+        f"{meter.calls} data calls"
     )
     card = score(result.records)
     console.print(analyst_table(card))

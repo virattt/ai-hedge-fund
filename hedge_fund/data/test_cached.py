@@ -186,3 +186,55 @@ def test_incomplete_daily_price_cache_is_refreshed_after_date_ends(tmp_path, mon
     assert inner.calls == 3
     fd.get_prices("AAPL", "2024-01-01", "2024-01-01")
     assert inner.calls == 3
+
+
+def test_a_screen_is_cached_by_date_and_filters_and_a_past_date_is_final(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta
+    from hedge_fund.data import cached
+    from hedge_fund.data.screener import ScreenerFields, ScreenFilter, ScreenRow
+
+    class Clock:
+        now_at = datetime(2026, 8, 7, 10, 0, tzinfo=cached.NEW_YORK)
+        @classmethod
+        def now(cls, tz):
+            return cls.now_at
+    Clock.fromisoformat = datetime.fromisoformat
+    monkeypatch.setattr(cached, "datetime", Clock)
+
+    class Screener:
+        def __init__(self):
+            self.calls = 0
+        def screen(self, as_of, filters, *, order_by=None, limit=20_000):
+            self.calls += 1
+            return [ScreenRow(ticker="JPM", filing_date="2026-07-31", report_period="2026-06-30",
+                              sector="Financials", values={"market_cap": 8e11})]
+        def screener_fields(self):
+            self.calls += 1
+            return ScreenerFields(numeric=frozenset({"market_cap"}), sectors=frozenset({"Financials"}),
+                                  industries=frozenset(), operators=frozenset({"gt"}))
+
+    inner = Screener()
+    fd = CachedDataClient(inner, cache_dir=tmp_path)
+    big = [ScreenFilter(field="market_cap", operator="gt", value=1e9)]
+    first = fd.screen("2026-08-06", big)
+    again = fd.screen("2026-08-06", big)
+    assert inner.calls == 1 and again == first and again[0].values == {"market_cap": 8e11}
+    # A different date or filter is a different question.
+    fd.screen("2026-08-05", big)
+    fd.screen("2026-08-06", [ScreenFilter(field="market_cap", operator="gt", value=2e9)])
+    assert inner.calls == 3
+    # Yesterday's screen never changes; today's is reused for ten minutes, like any unfinished day.
+    Clock.now_at += timedelta(days=30)
+    fd.screen("2026-08-06", big)
+    assert inner.calls == 3
+    fd.screen("2026-09-06", big)
+    Clock.now_at += timedelta(seconds=cached.SAME_DAY_TTL + 1)
+    fd.screen("2026-09-06", big)
+    assert inner.calls == 5
+    # The vocabulary comes back as sets and is refetched after a day.
+    fields = fd.screener_fields()
+    assert fd.screener_fields() == fields and fields.sectors == {"Financials"}
+    assert inner.calls == 6
+    Clock.now_at += timedelta(seconds=cached.VOCABULARY_TTL + 1)
+    fd.screener_fields()
+    assert inner.calls == 7
