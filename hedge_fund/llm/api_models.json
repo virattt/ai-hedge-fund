@@ -5,8 +5,8 @@
     "provider": "Anthropic"
   },
   {
-    "display_name": "Fable 5.1",
-    "model_name": "claude-fable-5-1",
+    "display_name": "Fable 5.2",
+    "model_name": "claude-fable-5-2",
     "provider": "Anthropic"
   },
   {
