@@ -22,7 +22,7 @@ from hedge_fund.tui.shared import DEFAULT_MODEL_LABEL
 
 
 class HomeScreen(Screen):
-    """The clean landing: wordmark, the two modes, the reasoning-model picker.
+    """The landing screen, with fund modes, investor research, and model picker.
     Paper trading runs a fund on real market days; backtesting replays one
     over history. Building a fund lives inside each mode, not up here.
     """
@@ -50,6 +50,12 @@ class HomeScreen(Screen):
                         ("Backtesting\n", "bold"),
                         ("test a fund over history", MUTED)),
                     id="backtest"),
+                None,
+                Option(
+                    Text.assemble(
+                        ("Investor research\n", "bold"),
+                        ("search companies and read cited views", MUTED)),
+                    id="research"),
                 id="home-menu",
             )
             yield Static("", id="model-line")
@@ -117,10 +123,13 @@ class HomeScreen(Screen):
         # module's key gate, and the home screen is the root of the stack.
         from hedge_fund.tui.funds import FundSelectScreen
         from hedge_fund.tui.paper import PaperScreen
+        from hedge_fund.tui.paper_research import PaperResearchScreen
         if event.option.id == "paper":
             self.app.push_screen(PaperScreen())
         elif event.option.id == "backtest":
             self.app.push_screen(FundSelectScreen())
+        elif event.option.id == "research":
+            self.app.push_screen(PaperResearchScreen())
 
 
 class KeyPromptScreen(ModalScreen[bool]):
@@ -132,10 +141,11 @@ class KeyPromptScreen(ModalScreen[bool]):
 
     BINDINGS = [Binding("escape", "cancel", "cancel")]
 
-    def __init__(self, provider: str, env_var: str) -> None:
+    def __init__(self, provider: str, env_var: str, *, purpose: str = "The fund cannot run without it.") -> None:
         super().__init__()
         self._provider = provider
         self._env_var = env_var
+        self._purpose = purpose
 
     def compose(self) -> ComposeResult:
         with Vertical(id="keyprompt"):
@@ -143,7 +153,7 @@ class KeyPromptScreen(ModalScreen[bool]):
                 (f"{self._provider} API key needed", f"bold {BRIGHT}")),
                 id="key-q")
             yield Static(Text.assemble(
-                ("The fund cannot run without it. Paste it below and it "
+                (f"{self._purpose} Paste it below and it "
                  "is saved to\n", MUTED),
                 (str(paths.ENV_PATH), TEXT),
                 ("\nwhich is owner-read-only and loaded automatically on "

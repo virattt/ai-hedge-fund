@@ -1,6 +1,7 @@
 """The paper screens: approval step, kill switch, history, live prints, runner start/stop."""
 
 import asyncio
+import json
 import os
 from datetime import datetime
 from unittest.mock import Mock
@@ -12,16 +13,84 @@ from textual.widgets import ContentSwitcher, Input, OptionList, Static
 from hedge_fund import paths
 from hedge_fund.data.sessions import NEW_YORK
 from hedge_fund.paper import deploy, Ledger, load_deployed, PID_FILE
-from hedge_fund.tui import backtest, funds, paper, paper_view, report
+from hedge_fund.tui import backtest, funds, paper, paper_research, paper_view, report
 from hedge_fund.tui.app import HedgeFundApp
 from hedge_fund.tui.fixtures import (
     executed_and_decided,
     make_minute_spec,
+    make_pending,
     make_quote,
     make_session,
     make_spec,
+    make_state,
     render,
 )
+
+
+def test_reviewing_cited_research_returns_to_fresh_approval(monkeypatch, tmp_path):
+    snapshot = tmp_path / "research.json"
+    snapshot.write_text(json.dumps({
+        "TEST": {
+            "as_of": "2025-01-17T21:00:00Z",
+            "views": [{
+                "author": "Example Analyst",
+                "published_at": "2025-01-17T15:00:00Z",
+                "source_url": "https://example.com/research",
+                "stance": "neutral",
+                "thesis": "[bold]New customers may offset slower renewals.\x1b",
+                "watch": "Check renewal rates.",
+            }],
+        },
+    }))
+    monkeypatch.setenv(paper_research.RESEARCH_FILE_ENV, str(snapshot))
+    directory = deploy("alpha", make_spec(), ["HELD", "TEST", "ZERO"], root=paths.PAPER_DIR)
+    deployed = load_deployed(directory)
+    state = make_state(pending=make_pending(weights={"TEST": .25, "ZERO": 0}), positions={"HELD": 10})
+    resolve = Mock(side_effect=[(deployed, state, "2025-01-21"), (deployed, state, "2025-01-22")])
+    monkeypatch.setattr(paper, "_resolve_next_session", resolve)
+    read = Mock(wraps=paper_research._read_details)
+    monkeypatch.setattr(paper_research, "_read_details", read)
+    verdicts = []
+
+    async def scenario():
+        app = HedgeFundApp()
+        async with app.run_test(size=(80, 24)) as pilot:
+            approval = paper.RunConfirmScreen(directory)
+            await app.push_screen(approval, verdicts.append)
+            await approval.workers.wait_for_complete()
+            assert "2025-01-21 close" in render(approval.query_one("#run-body", Static).content)
+            await pilot.press("i")
+            review = app.screen
+            assert isinstance(review, paper_research.PaperResearchScreen)
+            assert not approval.check_action("confirm", ())
+            menu = review.query_one("#report-nav", OptionList)
+            assert [menu.get_option_at_index(i).id for i in range(menu.option_count)] == ["HELD", "TEST"]
+            read.assert_not_called()
+            pane = review.query_one("#detail-pane", Static)
+            await pilot.press("enter")
+            assert "No cited research" in render(pane.content)
+            await pilot.press("down", "enter")
+            detail = pane.content.plain
+            assert "Example Analyst · neutral" in detail
+            assert "Research cutoff: 2025-01-17T21:00:00+00:00" in detail
+            assert "Published: 2025-01-17T15:00:00+00:00" in detail
+            assert "https://example.com/research" in detail
+            assert "Watch: Check renewal rates." in detail
+            assert "[bold]New customers" in detail and "\x1b" not in detail
+            await pilot.press("up")
+            assert render(pane.content).strip() == "Press Enter to read research for HELD."
+            assert read.call_count == 2
+            snapshot.write_text("invalid JSON")
+            await pilot.press("enter")
+            assert "Could not read cited research" in render(pane.content)
+            assert app.screen is review and not verdicts
+            await pilot.press("escape")
+            assert app.screen is approval and not verdicts
+            await approval.workers.wait_for_complete()
+            assert "2025-01-22 close" in render(approval.query_one("#run-body", Static).content)
+            await pilot.press("enter")
+            assert verdicts == ["run"]
+    asyncio.run(scenario())
 
 
 @pytest.mark.parametrize("mode", ["long_only", "long_short", "dollar_neutral"])
