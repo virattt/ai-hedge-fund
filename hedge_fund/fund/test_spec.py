@@ -253,7 +253,7 @@ def test_all_horizons_are_explicit(name):
 
 def test_initial_analyst_horizons():
     assert {name: get_horizon_days(name) for name in ALPHA_MODEL_REGISTRY} == {
-        "buffett": 252, "munger": 252, "graham": 252, "lynch": 252, "druckenmiller": 126, "pead": 60,
+        "buffett": 252, "munger": 252, "graham": 252, "lynch": 252, "druckenmiller": 126, "pead": 60, "crowdwisdom": 5,
     }
 
 
