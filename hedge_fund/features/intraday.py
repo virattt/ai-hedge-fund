@@ -72,7 +72,7 @@ class IntradayContext:
             lines.append(f"  Headlines ({len(self.headlines)}, newest last):")
             day = session_date(self.as_of)
             for h in self.headlines[-_HEADLINES:]:
-                stamp = h.when.strftime("%H:%M") if h.when.date().isoformat() == day else h.when.strftime("%b %-d %H:%M")
+                stamp = h.when.strftime("%H:%M") if h.when.date().isoformat() == day else f"{h.when:%b} {h.when.day} {h.when:%H:%M}"
                 lines.append(f"    {stamp} ET  {h.source}: {h.title}")
         return "\n".join(lines)
 
