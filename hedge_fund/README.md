@@ -132,6 +132,30 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 
 ✅ built · ◐ partial · ⬜ planned
 
+### Bringing your own broker
+
+`advance` talks to execution through the `Broker` protocol in `brokers/protocol.py`. It is structural: any object with these three methods works, no inheritance needed.
+
+```python
+class MyBroker:
+    def positions(self) -> dict[str, Position]: ...   # signed whole-share counts; negative is short
+    def cash(self) -> float: ...
+    def place_order(self, order: Order) -> Fill: ...  # fill completely or raise
+```
+
+`SimBroker` and `PaperBroker` are the two that ship, and the commands use those. To run another broker, call `advance` yourself and fold each record into the state with `next_state`. Before every session `reconcile` requires the broker to hold exactly the shares, and the cash to the cent, of the last record.
+
+Live brokers are not part of this repo. One external implementation is [`borro-live`](https://borro.markets/go-live), which places orders in tokenized stocks on Robinhood Chain through Borro:
+
+```python
+from borro_live import Broker
+from borro_live.ai_hedge_fund import BorroBroker
+
+broker = BorroBroker(Broker.from_env(), simulate_fills=True)   # a dry run: simulated fills on a paper book, nothing sent
+```
+
+It is opt-in (live needs `live=True` and `BORRO_LIVE=1` together), capped per order and per day in USDG, and experimental against this engine. It has run `advance` through daily sessions on a local fork of the chain only, with stand-in data and a stub analyst. A short there is closed whole and an order may not cross zero in one step, so both are refused rather than half filled, and a short carried to the next session fails `reconcile` on cash, because the money held against it earns interest. Its README lists what was tested and what was not. Everything in the disclaimer still holds. This project is for education and research, stock tokens are not shares, a short can be liquidated, and nothing here is investment advice.
+
 ## Principles (non-negotiable)
 
 - **Point-in-time by construction.** On any simulated date, only data actually
