@@ -8,7 +8,8 @@ from hedge_fund.models import Signal
 from hedge_fund.pipeline.models import Allocated, AllocationRecord
 from hedge_fund.tui import report
 from hedge_fund.pipeline.stages import stop_out_decision
-from hedge_fund.tui.fixtures import make_cycle, make_session, make_signal, make_spec, render
+from hedge_fund.risk.limits import ClampEvent
+from hedge_fund.tui.fixtures import make_cycle, make_pending, make_session, make_signal, make_spec, render
 
 
 @pytest.mark.parametrize("direction,strength", [("bullish", 3.2), ("bearish", 1.6), ("neutral", 4), ("bullish", 0), ("bearish", 0)])
@@ -122,6 +123,43 @@ def test_a_stop_out_reads_as_one_in_the_row_and_the_overview():
     assert "stopped out" in render(report.session_row(session, 100_000))
     text = render(report.session_overview(session))
     assert "STOPPED OUT" in text and "drawdown 21.3% breached the 20.0% limit" in text
+    assert "HALVED" not in text and not decision.is_halved
+
+
+def test_a_halve_reads_as_one_in_the_row_and_the_overview():
+    decision = make_halved_decision()
+    assert decision.is_halved and not decision.is_stopped_out
+    session = make_session(decision.as_of, decision=decision)
+    row = render(report.session_row(session, 100_000))
+    assert "halved" in row and "decided" not in row
+    text = render(report.session_overview(session))
+    assert "HALVED" in text and "drawdown 10.3% past the 10.0% line" in text
+
+
+def test_a_decision_row_and_overview_pair_the_decision_with_its_fills():
+    decision = make_halved_decision("2025-01-16")
+    decided = make_session("2025-01-16", decision=decision, nav=89_700)
+    cycle = make_cycle(make_signal())
+    cycle.as_of = "2025-01-16"
+    cycle.fills = [Fill(ticker="TEST", side="buy", quantity=2, price=100), Fill(ticker="TEST", side="sell", quantity=1, price=101)]
+    executed = make_session("2025-01-17", executed=cycle, nav=90_000)
+    row = render(report.decision_row(decided, executed, 100_000))
+    assert row.strip() == "2025-01-16  -10.3%  halved · 2 fills"
+    assert "halved · pending" in render(report.decision_row(decided, None, 100_000))
+    text = render(report.decision_overview(decided, executed))
+    assert "HALVED" in text and "DECIDED" in text and "EXECUTED  at 2025-01-17" in text
+    assert "BUY  2 TEST" in text and "SELL 1 TEST" in text
+    assert "NOT EXECUTED" in render(report.decision_overview(decided, None))
+
+
+def make_halved_decision(as_of="2025-01-16"):
+    """A decision made 10.3% off the peak with a 10% halving tier: one
+    whole-book clamp, size 0.5."""
+    decision = make_pending(as_of)
+    decision.spec = decision.spec.model_copy(
+        update={"risk": decision.spec.risk.model_copy(update={"halve_drawdown_pct": 0.10})})
+    decision.clamps = [ClampEvent(limit="halve_drawdown_pct", before=0.103, after=0.5)]
+    return decision
 
 
 def test_allocation_section_shows_each_weight_beside_the_mandate_and_its_evidence():

@@ -34,12 +34,18 @@ from hedge_fund.tui.shared import cadence_identity, MODE_LABELS, strategy_descri
 class FundSelectScreen(Screen):
     """'Backtest a mandate', master-detail: mandate slots on the left, the
     highlighted mandate's latest backtest stats and its backtest history
-    (newest first) on the right. Enter opens the backtest window picker.
+    (newest first) on the right. Enter on a mandate opens the backtest window
+    picker; right arrow (or tab) moves to the history, where enter on a run
+    reopens its results and left arrow returns.
     Refreshes on resume.
     """
 
     BINDINGS = [
         Binding("escape", "back", "back"),
+        # Priority: the option lists bind the arrows to horizontal scroll
+        # (which they never need) and would otherwise swallow the keys.
+        Binding("right", "focus_history", "past runs", priority=True),
+        Binding("left", "focus_mandates", "mandates", show=False, priority=True),
         Binding("d", "delete", "delete mandate"),
     ]
 
@@ -47,13 +53,31 @@ class FundSelectScreen(Screen):
         super().__init__()
         self._summaries: dict[tuple[str, float], dict | None] = {}
 
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
+        # The arrow keys cross between the two lists only when there is
+        # somewhere to go, so the footer never offers a dead key.
+        if action == "focus_history":
+            runs = self.query_one("#select-history", OptionList)
+            return runs.option_count > 0 and self.app.focused is not runs
+        if action == "focus_mandates":
+            return self.app.focused is self.query_one("#select-history", OptionList)
+        return True
+
+    def action_focus_history(self) -> None:
+        self.query_one("#select-history", OptionList).focus()
+
+    def action_focus_mandates(self) -> None:
+        self.query_one("#select-menu", OptionList).focus()
+
     def compose(self) -> ComposeResult:
         with Horizontal(id="select"):
             with Vertical(id="select-rail"):
                 yield Static(Text("YOUR MANDATES", style=MUTED), classes="rail-title")
                 yield OptionList(id="select-menu")
-            with VerticalScroll(id="select-detail"):
+            with VerticalScroll(id="select-detail", can_focus=False):
                 yield Static("", id="detail-body")
+                yield Static("", id="history-title")
+                yield OptionList(id="select-history")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -110,6 +134,18 @@ class FundSelectScreen(Screen):
                 return
             self.app.push_screen(BacktestScreen(spec))
 
+    @on(OptionList.OptionSelected, "#select-history")
+    def _reopen(self, event: OptionList.OptionSelected) -> None:
+        """Enter on a past run: open its saved result in the results view."""
+        oid = event.option.id or ""
+        menu = self.query_one("#select-menu", OptionList)
+        if not oid.startswith("result:") or menu.highlighted is None:
+            return
+        spec = self._slots[menu.highlighted].spec
+        if spec is None:
+            return
+        self.app.push_screen(BacktestScreen(spec, saved=Path(oid[len("result:"):])))
+
     def action_delete(self) -> None:
         menu = self.query_one("#select-menu", OptionList)
         if not self._slots or menu.highlighted is None:
@@ -142,8 +178,20 @@ class FundSelectScreen(Screen):
         spec = self._slots[i].spec
         if spec is None:
             return
-        self.query_one("#detail-body", Static).update(
-            _fund_detail(spec, self._history(spec.name)))
+        history = self._history(spec.name)
+        self.query_one("#detail-body", Static).update(_fund_detail(spec, history))
+        title = self.query_one("#history-title", Static)
+        runs = self.query_one("#select-history", OptionList)
+        runs.clear_options()
+        self.refresh_bindings()  # the footer's "→ past runs" follows whether there are any
+        if not history:
+            title.update("")
+            return
+        title.update(Text.assemble(("\nBACKTESTS", f"bold {BRIGHT}"),
+                                   ("  ·  → here, enter opens a run's results", MUTED)))
+        for h in history[:12]:
+            runs.add_option(Option(_history_row(h), id=f"result:{h['path']}"))
+        runs.highlighted = 0  # options added after mount leave it unset; enter needs a row
 
     def _history(self, name: str) -> list[dict]:
         """Every backtest of this mandate, newest first, as light summaries.
@@ -361,8 +409,8 @@ def _slot_card(index: int, spec: FundSpec, score: tuple | None) -> Text:
 
 
 def _fund_detail(spec: FundSpec, history: list[dict]) -> Group:
-    """The right pane: the mandate's identity, its latest backtest stats, then
-    every backtest, newest first, each with the tickers it was run over."""
+    """The right pane's top: the mandate's identity and its latest backtest
+    stats. The run list beneath it is an OptionList (see `_history_row`)."""
     staff = ", ".join(s.title for s in spec.strategies)
     parts: list = [
         Text(spec.name, style=f"bold {BRIGHT}"),
@@ -384,27 +432,20 @@ def _fund_detail(spec: FundSpec, history: list[dict]) -> Group:
     parts.append(Text("\nLATEST BACKTEST", style=f"bold {BRIGHT}"))
     parts.append(Text("  ·  ".join(facts), style=MUTED))
     parts.append(_stat_list(latest))
-
-    parts.append(Text("\nBACKTESTS", style=f"bold {BRIGHT}"))
-    # Three columns, not four. The kind and the number are pinned with no_wrap
-    # so a narrow pane can never drop the result — the tickers ride along in
-    # the middle column and are the only thing allowed to ellipsize.
-    log = Table(box=None, show_header=False, padding=(0, 1), pad_edge=False,
-                expand=True)
-    log.add_column(no_wrap=True)                          # kind
-    log.add_column(overflow="ellipsis", no_wrap=True)     # when · tickers
-    log.add_column(justify="right", no_wrap=True)         # headline number
-    for h in history[:12]:
-        up = h["total"] >= 0
-        when = Text(f"{h['start']} → {h['end']}", style=MUTED)
-        if h["universe"]:
-            when.append(f"  {short_tickers(h['universe'])}", style=CYAN)
-        log.add_row(
-            Text("backtest", style=MUTED), when,
-            Text(f"{h['total']:+.1%}", style=GREEN if up else RED),
-        )
-    parts.append(log)
     return Group(*parts)
+
+
+def _history_row(h: dict) -> Text:
+    """One past run as a selectable row: when, the tickers, the result. One
+    line, never wrapped, so a narrow pane ellipsizes the tickers and keeps
+    the number."""
+    up = h["total"] >= 0
+    row = Text(no_wrap=True, overflow="ellipsis")
+    row.append(f"{h['start']} → {h['end']}", style=MUTED)
+    if h["universe"]:
+        row.append(f"  {short_tickers(h['universe'])}", style=CYAN)
+    row.append(f"  {h['total']:+.1%}", style=GREEN if up else RED)
+    return row
 
 
 def _stat_list(bt: dict) -> Table:

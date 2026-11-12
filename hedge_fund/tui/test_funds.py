@@ -9,10 +9,10 @@ import yaml
 from textual.widgets import ContentSwitcher, Input, OptionList, Static
 
 from hedge_fund import paths
-from hedge_fund.backtesting import research
+from hedge_fund.backtesting import FundBacktestResult, performance_metrics, research
 from hedge_fund.tui import backtest, funds
 from hedge_fund.tui.app import HedgeFundApp
-from hedge_fund.tui.fixtures import make_spec, render
+from hedge_fund.tui.fixtures import make_cycle, make_session, make_signal, make_spec, render
 
 
 def test_both_pickers_disable_only_invalid_configurations():
@@ -69,6 +69,7 @@ def test_latest_backtest_sets_headline_regardless_of_version(newest_version):
     os.utime(older, (1000, 1000))
     original = older.read_bytes()
     older_summary = research.summarize(older, 1000)
+    assert older_summary["path"] == str(older)
     assert research.last_score("test") == (.5, .4, "SPY")
     assert "LATEST BACKTEST" in render(funds._fund_detail(spec, [older_summary]))
 
@@ -85,3 +86,60 @@ def test_latest_backtest_sets_headline_regardless_of_version(newest_version):
     headline = detail.split("\nBACKTESTS")[0]
     assert "LATEST BACKTEST" in headline and "30.0%" in headline
     assert older.read_bytes() == original
+
+
+def test_history_rows_reopen_the_saved_result():
+    record = make_cycle(make_signal())
+    spec = record.spec
+    (paths.MANDATES_DIR / "test.yaml").write_text(yaml.safe_dump(spec.model_dump()))
+    dates = ["2025-01-15", "2025-01-16"]
+    nav, benchmark_nav = [100000, 110000], [100000, 101000]
+    result = FundBacktestResult(
+        fund=spec.name, start=dates[0], end=dates[-1], rebalance="weekly", benchmark="SPY",
+        universe=["TEST"], capital=100000, dates=dates, nav=nav, benchmark_nav=benchmark_nav,
+        records=[make_session(dates[0]), make_session(dates[1], executed=record, nav=110000)],
+        metrics=performance_metrics(100000, dates, nav, benchmark_nav, [record]))
+    saved = paths.RESEARCH_DIR / f"{spec.name}-{dates[0]}-{dates[-1]}-x.json"
+    saved.write_text(result.model_dump_json())
+
+    async def scenario():
+        app = HedgeFundApp()
+        async with app.run_test(size=(140, 50)) as pilot:
+            await app.push_screen(funds.FundSelectScreen())
+            picker = app.screen
+            runs = picker.query_one("#select-history", OptionList)
+            assert runs.option_count == 1
+            row = render(runs.get_option_at_index(0).prompt)
+            assert "2025-01-15 → 2025-01-16" in row and "TEST" in row and "+10.0%" in row
+            assert "BACKTESTS" in render(picker.query_one("#history-title", Static).content)
+            assert "BACKTESTS" not in render(picker.query_one("#detail-body", Static).content)
+            await pilot.press("right")
+            assert app.focused is runs
+            await pilot.press("left")
+            assert app.focused is picker.query_one("#select-menu", OptionList)
+            await pilot.press("tab")
+            assert app.focused is runs
+            await pilot.press("enter")
+            await pilot.pause()
+            assert isinstance(app.screen, backtest.BacktestScreen)
+            assert app.screen._phase == "done"
+            assert app.screen.query_one("#bt-panes", ContentSwitcher).current == "bt-run"
+            assert "BACKTEST RESULTS" in render(app.screen.query_one("#phase-line", Static).content)
+            assert "+10.00%" in render(app.screen.query_one("#stat-return", Static).content)
+            await pilot.press("escape")
+            assert app.screen is picker
+    asyncio.run(scenario())
+
+
+def test_a_mandate_with_no_history_has_an_empty_run_list():
+    (paths.MANDATES_DIR / "test.yaml").write_text(yaml.safe_dump(make_spec().model_dump()))
+    async def scenario():
+        app = HedgeFundApp()
+        async with app.run_test() as pilot:
+            await app.push_screen(funds.FundSelectScreen())
+            assert app.screen.query_one("#select-history", OptionList).option_count == 0
+            await pilot.press("right")  # nowhere to go: focus stays on the mandates
+            assert app.focused is app.screen.query_one("#select-menu", OptionList)
+            assert render(app.screen.query_one("#history-title", Static).content).strip() == ""
+            assert "No backtests yet." in render(app.screen.query_one("#detail-body", Static).content)
+    asyncio.run(scenario())

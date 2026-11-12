@@ -13,7 +13,7 @@ from rich.text import Text
 from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import (
     ContentSwitcher,
@@ -38,13 +38,21 @@ from hedge_fund.backtesting.research import last_universe, save_result
 from hedge_fund.brokers import Fill
 from hedge_fund.data import CachedDataClient, FDClient
 from hedge_fund.fund import discover_funds, Fund, FundSpec, normalize_universe
-from hedge_fund.pipeline import CycleRecord, history_days, history_start
+from hedge_fund.pipeline import CycleRecord, history_days, history_start, SessionRecord
 from hedge_fund.scorecard import score
 from hedge_fund.signals import ALPHA_MODEL_REGISTRY, LLMAgent
 from hedge_fund.tui.home import demand_run_keys, HomeScreen
 from hedge_fund.tui.palette import BRIGHT, CYAN, GREEN, MUTED, RED, TEXT
-from hedge_fund.tui.report import cost_line, roster_table, tape_table
+from hedge_fund.tui.report import (
+    book_summary,
+    cost_line,
+    decision_overview,
+    decision_row,
+    roster_table,
+    tape_table,
+)
 from hedge_fund.tui.scorecard_view import analyst_table, strategy_table
+from hedge_fund.tui.session_report import SessionReportScreen
 from hedge_fund.tui.shared import (
     agent_names,
     BACKTEST_DAYS,
@@ -58,20 +66,35 @@ from hedge_fund.tui.shared import (
 from hedge_fund.tui.widgets import first_selectable, StatTiles
 
 
+def tape_rows(cycles: list[CycleRecord]) -> list[tuple[str, Fill, int]]:
+    """The trade tape's rows for *cycles*, in order: the date the fill
+    happened (the execution session when there was one), the fill, and the
+    position it left behind."""
+    return [(record.execution_as_of or record.as_of, fill, record.positions.get(fill.ticker, 0))
+            for record in cycles for fill in record.fills]
+
+
 class BacktestScreen(Screen):
     """Pick a mandate → pick a window → warm → replay with a live equity curve.
+    Or, given a saved result, open it straight in the results view.
 
     Warm-then-replay: threads only warm the disk caches (market data first,
     then every agent across the whole window); the sequential `backtest_fund`
     afterward is the source of truth.
     """
 
-    BINDINGS = [Binding("escape", "back", "back")]
+    BINDINGS = [
+        Binding("escape", "back", "back"),
+        Binding("d", "decisions", "decisions"),
+        Binding("s", "scorecard", "scorecard"),
+    ]
 
-    def __init__(self, spec: FundSpec | None = None) -> None:
+    def __init__(self, spec: FundSpec | None = None, *, saved: Path | None = None) -> None:
         super().__init__()
         self._spec = spec  # preselected by the mandate picker or the builder
         self._preselected = spec is not None
+        self._saved = saved  # a result file to reopen instead of running
+        self._result: FundBacktestResult | None = None  # set when the results view lands
         self._specs: list[FundSpec | None] = []
         self._phase = "pick"
         self._roster_order: list[str] = []
@@ -110,16 +133,20 @@ class BacktestScreen(Screen):
                 with Vertical(id="tape-box", classes="hidden"):
                     yield Static("", id="tape")
                 yield Static("", id="cycle-line")
-                yield Static("", id="result-summary", classes="hidden")
-                yield Static("", id="scorecard", classes="hidden")
                 yield OptionList(
+                    Option("Browse decisions", id="bt-decisions"),
+                    Option("Scorecard", id="bt-scorecard"),
                     Option("Back to home", id="bt-home"),
                     id="bt-done-menu",
                     classes="hidden",
                 )
+                yield Static("", id="result-summary", classes="hidden")
         yield Footer()
 
     def on_mount(self) -> None:
+        if self._saved is not None:
+            self._reopen(self._saved)
+            return
         if self._spec is not None:
             self._begin_dates()
             return
@@ -145,7 +172,17 @@ class BacktestScreen(Screen):
         # replaying the fund; leaving the screen would orphan them.
         if action == "back" and self._phase == "run":
             return False
+        if action in ("decisions", "scorecard"):  # only once the results have landed
+            return self._phase == "done"
         return True
+
+    def action_decisions(self) -> None:
+        assert self._result is not None
+        self.app.push_screen(BacktestDecisionsScreen(self._result))
+
+    def action_scorecard(self) -> None:
+        assert self._result is not None
+        self.app.push_screen(BacktestScorecardScreen(self._result))
 
     def action_back(self) -> None:
         pane = self.query_one("#bt-panes", ContentSwitcher).current
@@ -155,6 +192,18 @@ class BacktestScreen(Screen):
             self.query_one("#fund-list", OptionList).focus()
         else:
             self.app.pop_screen()
+
+    def _reopen(self, path: Path) -> None:
+        """Open a saved result in the same view a live run ends on. The file
+        holds the curve, the stats, and every session, so nothing is fetched;
+        the largest result on disk parses in well under a second."""
+        self.query_one("#bt-panes", ContentSwitcher).current = "bt-run"
+        try:
+            result = FundBacktestResult.model_validate_json(path.read_text())
+        except (OSError, ValueError) as exc:  # fail loud, in the UI
+            self._fail(exc)
+            return
+        self._show_result(result, path)
 
     @on(OptionList.OptionSelected, "#fund-list")
     def _pick_fund(self, event: OptionList.OptionSelected) -> None:
@@ -227,6 +276,12 @@ class BacktestScreen(Screen):
 
     @on(OptionList.OptionSelected, "#bt-done-menu")
     def _after_done(self, event: OptionList.OptionSelected) -> None:
+        if event.option.id == "bt-decisions":
+            self.action_decisions()
+            return
+        if event.option.id == "bt-scorecard":
+            self.action_scorecard()
+            return
         # "Back to home" means home, however deep the stack got here.
         while not isinstance(self.app.screen, HomeScreen):
             self.app.pop_screen()
@@ -380,10 +435,16 @@ class BacktestScreen(Screen):
             ("  ·  daily valuations and next-close execution",
              MUTED),
         ))
+        self._show_board(spec.benchmark)
+
+    def _show_board(self, benchmark: str) -> None:
+        """Reveal the stat tiles, the equity curve, and the trade tape, titled.
+        The live replay shows them as it starts; a reopened result shows
+        them filled in."""
         box_widget = self.query_one("#curve-box", Vertical)
         box_widget.border_title = "equity curve"
         box_widget.border_subtitle = (
-            f"[{GREEN}]██[/] fund   [{CYAN}]──[/] {spec.benchmark}"
+            f"[{GREEN}]██[/] fund   [{CYAN}]──[/] {benchmark}"
         )
         tape_box = self.query_one("#tape-box", Vertical)
         tape_box.border_title = "trades (newest first)"
@@ -392,9 +453,7 @@ class BacktestScreen(Screen):
         tape_box.remove_class("hidden")
 
     def _board_tick(self, record: CycleRecord) -> None:
-        for fill in record.fills:
-            self._tape.append((record.execution_as_of or record.as_of, fill,
-                               record.positions.get(fill.ticker, 0)))
+        self._tape.extend(tape_rows([record]))
         self.query_one("#tape", Static).update(tape_table(self._tape))
 
     def _board_valuation(self, value: DailyValuation) -> None:
@@ -405,57 +464,67 @@ class BacktestScreen(Screen):
         benchmark_curve = [capital * self._closes[d] / self._closes[self._dates[0]]
                            for d in self._dates]
         metrics = performance_metrics(capital, self._dates, self._nav, benchmark_curve, [])
-        self._update_stats(value.nav, metrics.total_return_pct, metrics.benchmark_return_pct,
+        self._update_stats(self._spec.benchmark, value.nav,
+                           metrics.total_return_pct, metrics.benchmark_return_pct,
                            metrics.excess_return_pct, metrics.sharpe_ratio, metrics.max_drawdown_pct)
-        curve_widget = self.query_one("#curve", Static)
-        width = curve_widget.content_size.width or 80
-        curve_widget.update(Group(*render_area_chart(
-            self._nav, benchmark_curve, capital, min(width, 100))))
+        self._draw_curve(self._nav, benchmark_curve, capital)
         self.query_one("#cycle-line", Static).update(Text(
             f"session {len(self._nav)}/{self._n_cycles} · {value.as_of}", style=MUTED))
 
-    def _update_stats(self, nav: float, fund_return: float,
+    def _update_stats(self, benchmark: str, nav: float, fund_return: float,
                       benchmark_return: float, excess: float,
                       sharpe: float, max_dd: float) -> None:
         """One row of running tallies, live during the replay and refreshed
         with the engine's authoritative numbers at the end."""
-        assert self._spec is not None
         self.query_one("#stats", StatTiles).update(
-            self._spec.benchmark, nav, fund_return, benchmark_return, excess, sharpe, max_dd)
+            benchmark, nav, fund_return, benchmark_return, excess, sharpe, max_dd)
+
+    def _draw_curve(self, nav: list[float], benchmark_curve: list[float], capital: float) -> None:
+        curve_widget = self.query_one("#curve", Static)
+        width = curve_widget.content_size.width or 80
+        curve_widget.update(Group(*render_area_chart(
+            nav, benchmark_curve, capital, min(width, 100))))
 
     def _finish(self, result: FundBacktestResult, path: Path) -> None:
-        self._phase = "done"
-        m = result.metrics
-        # The graph is the trophy: stay on the run pane, land the header and
-        # receipt around it, and let the stat tiles carry the final numbers.
         self.query_one("#warm-progress", ProgressBar).add_class("hidden")
         self.query_one("#roster", Static).add_class("hidden")
+        self._show_result(result, path)
+
+    def _show_result(self, result: FundBacktestResult, path: Path) -> None:
+        """The results view, drawn from the saved result alone — the live run
+        ends here, and a reopened file starts here, so the two cannot drift.
+        The graph is the trophy: stay on the run pane, land the header and
+        receipt around it, and let the stat tiles carry the final numbers."""
+        self._phase = "done"
+        self._result = result
+        m = result.metrics
+        self._show_board(result.benchmark)
         self.query_one("#phase-line", Static).update(Text.assemble(
             ("BACKTEST RESULTS  ", f"bold {BRIGHT}"),
             (result.fund, f"bold {CYAN}"),
-            (f"  {result.start} → {result.end} · {result.rebalance} "
-             f"rebalance · {m.n_cycles} executed cycles · {m.n_orders} orders · "
-             f"{cost_line(m.trading_cost, m.traded_notional)} · "
-             f"{m.annualized_return_pct:+.1%} annualized",
-             MUTED),
+            (f"  {result.start} → {result.end} · {result.rebalance} rebalance", MUTED),
         ))
         self._update_stats(
-            result.nav[-1],
+            result.benchmark, result.nav[-1],
             m.total_return_pct, m.benchmark_return_pct,
             m.excess_return_pct, m.sharpe_ratio, m.max_drawdown_pct,
         )
+        self._draw_curve(result.nav, result.benchmark_nav, result.capital)
+        self._tape = tape_rows(result.cycles)
+        self.query_one("#tape", Static).update(tape_table(self._tape))
+        n_decisions = sum(1 for r in result.records if r.decision is not None)
+        self.query_one("#cycle-line", Static).update(Text(
+            f"{n_decisions} decisions · {m.n_orders} orders · "
+            f"{cost_line(m.trading_cost, m.traded_notional)} · "
+            f"{m.annualized_return_pct:+.1%} annualized", style=MUTED))
         self.query_one("#result-summary", Static).update(
-            Text.assemble(("✓ ", f"bold {GREEN}"),
-                          ("Saved backtest record to ", TEXT),
-                          (str(path), f"bold {BRIGHT}")))
+            Text.assemble(("saved · ", MUTED), (str(path), MUTED)))
         self.query_one("#result-summary", Static).remove_class("hidden")
-        card = score(result.records)
-        scorecard = self.query_one("#scorecard", Static)
-        scorecard.update(Group(analyst_table(card), strategy_table(card)))
-        scorecard.remove_class("hidden")
         menu = self.query_one("#bt-done-menu", OptionList)
         menu.remove_class("hidden")
+        menu.highlighted = 0  # "Browse decisions" under the cursor
         menu.focus()
+        self.refresh_bindings()  # d / s join the footer now that there is a result
 
     def _fail(self, exc: Exception) -> None:
         self._phase = "failed"
@@ -464,3 +533,110 @@ class BacktestScreen(Screen):
             (f"{type(exc).__name__}: {exc}", RED),
         ))
         self.notify(str(exc), title="Backtest failed", severity="error")
+
+
+class BacktestDecisionsScreen(Screen):
+    """A backtest's decisions, browsable: one row per decision, newest first,
+    each paired with the session that filled it. The overview beside the
+    rail shows what was decided and what was filled; Enter opens the same
+    session report the paper fund uses — signals, theses, risk limits, orders."""
+
+    BINDINGS = [Binding("escape", "back", "back")]
+
+    def __init__(self, result: FundBacktestResult) -> None:
+        super().__init__()
+        self._result = result
+        self._weeks: list[tuple[SessionRecord, SessionRecord | None]] = list(reversed(pair_decisions(result.records)))
+        # The change on each row is since the previous decision (the capital before the first).
+        navs = [result.capital, *(d.nav for d, _ in pair_decisions(result.records))]
+        self._prev_nav: list[float] = list(reversed(navs[:-1]))
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="pf"):
+            yield Static("", id="pf-head")
+            with Horizontal(id="pf-panes"):
+                with Vertical(id="report-rail", classes="wide"):
+                    yield Static(Text("DECISIONS", style=MUTED), classes="rail-title")
+                    yield OptionList(id="pf-sessions")
+                with VerticalScroll(id="report-detail"):
+                    yield Static("", id="detail-pane")
+            yield Static("", id="report-foot")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        r = self._result
+        n = len(self._weeks)
+        self.query_one("#pf-head", Static).update(Text.assemble(
+            (r.fund, f"bold {BRIGHT}"),
+            (f"  ·  {r.start} → {r.end}  ·  {r.rebalance}  ·  {n} {'decision' if n == 1 else 'decisions'}", MUTED),
+        ))
+        menu = self.query_one("#pf-sessions", OptionList)
+        if not self._weeks:
+            self.query_one("#detail-pane", Static).update(
+                Text("No decisions in this window.", style=MUTED))
+            return
+        for i, ((decided, executed), prev_nav) in enumerate(zip(self._weeks, self._prev_nav)):
+            menu.add_option(Option(decision_row(decided, executed, prev_nav), id=f"w:{i}"))
+        menu.highlighted = 0
+        menu.focus()
+
+    def action_back(self) -> None:
+        self.app.pop_screen()
+
+    @on(OptionList.OptionHighlighted, "#pf-sessions")
+    def _highlight(self, event: OptionList.OptionHighlighted) -> None:
+        oid = (event.option.id or "") if event.option else ""
+        if oid.startswith("w:"):
+            decided, executed = self._weeks[int(oid.split(":")[1])]
+            self.query_one("#detail-pane", Static).update(decision_overview(decided, executed))
+            self.query_one("#report-foot", Static).update(book_summary(executed or decided))
+            self.query_one("#report-detail", VerticalScroll).scroll_home(animate=False)
+
+    @on(OptionList.OptionSelected, "#pf-sessions")
+    def _open(self, event: OptionList.OptionSelected) -> None:
+        oid = event.option.id or ""
+        if oid.startswith("w:"):
+            decided, executed = self._weeks[int(oid.split(":")[1])]
+            self.app.push_screen(SessionReportScreen(self._result.fund, executed or decided))
+
+
+class BacktestScorecardScreen(Screen):
+    """The backtest's scorecard on a screen of its own: every analyst graded
+    at its horizon, every strategy's P&L between executions."""
+
+    BINDINGS = [Binding("escape", "back", "back")]
+
+    def __init__(self, result: FundBacktestResult) -> None:
+        super().__init__()
+        self._result = result
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="pf"):
+            yield Static("", id="pf-head")
+            with VerticalScroll(id="report-detail", can_focus=False):
+                yield Static("", id="scorecard")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        r = self._result
+        self.query_one("#pf-head", Static).update(Text.assemble(
+            (r.fund, f"bold {BRIGHT}"), ("  ·  scorecard  ·  ", MUTED),
+            (f"{r.start} → {r.end}", MUTED)))
+        card = score(r.records)
+        self.query_one("#scorecard", Static).update(Group(analyst_table(card), strategy_table(card)))
+
+    def action_back(self) -> None:
+        self.app.pop_screen()
+
+
+def pair_decisions(records: list[SessionRecord]) -> list[tuple[SessionRecord, SessionRecord | None]]:
+    """Each session that decided, with the first later session that executed
+    that decision (None when the window ended first). In order."""
+    pairs: list[tuple[SessionRecord, SessionRecord | None]] = []
+    for i, decided in enumerate(records):
+        if decided.decision is None:
+            continue
+        executed = next((r for r in records[i + 1:]
+                         if r.executed is not None and r.executed.as_of == decided.session), None)
+        pairs.append((decided, executed))
+    return pairs

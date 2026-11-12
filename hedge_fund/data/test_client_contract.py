@@ -348,3 +348,103 @@ def test_financial_metrics_parses_filing_metadata(client):
     assert m.filing_date == "2024-05-02"
     assert m.filing_datetime == "2024-05-02T16:31:00-04:00"
     assert m.report_period == "2024-03-30"
+
+
+# ---------------------------------------------------------------------------
+# Screener: point-in-time by construction, 404 is a failure
+# ---------------------------------------------------------------------------
+
+from hedge_fund.data import CallMeter, OrderBy, ScreenFilter  # noqa: E402
+
+
+def _screen_row(ticker, **values):
+    return {"ticker": ticker, "filing_date": "2026-07-31", "report_period": "2026-06-30",
+            "currency": "USD", "sector": "Financials", "industry": "Banks", **values}
+
+
+def test_screen_posts_the_date_the_filters_and_the_full_limit(client):
+    calls = _stub(client, [_FakeResponse(200, {"results": [_screen_row("JPM", market_cap=8e11)], "as_of": "2026-08-06"})])
+    rows = client.screen("2026-08-06", [ScreenFilter(field="market_cap", operator="gt", value=1e9)])
+    assert [r.ticker for r in rows] == ["JPM"] and rows[0].values == {"market_cap": 8e11}
+    assert calls[0]["method"] == "POST"
+    assert calls[0]["url"] == "https://api.financialdatasets.ai/financials/search/screener"
+    assert calls[0]["json"] == {
+        "as_of": "2026-08-06",
+        "filters": [{"field": "market_cap", "operator": "gt", "value": 1e9}],
+        "limit": 20_000,
+    }
+
+
+def test_screen_sends_order_by_only_when_asked(client):
+    calls = _stub(client, [_FakeResponse(200, {"results": []})])
+    client.screen("2026-08-06", [ScreenFilter(field="market_cap", operator="gt", value=1e9)],
+                  order_by=OrderBy(field="revenue_growth", direction="asc"), limit=40)
+    assert calls[0]["json"]["order_by"] == {"field": "revenue_growth", "direction": "asc"}
+    assert calls[0]["json"]["limit"] == 40
+
+
+def test_screen_refuses_to_run_without_a_date_or_a_filter(client):
+    calls = _stub(client, [])
+    with pytest.raises(ValueError, match="as_of"):
+        client.screen("", [ScreenFilter(field="market_cap", operator="gt", value=1e9)])
+    with pytest.raises(ValueError, match="filter"):
+        client.screen("2026-08-06", [])
+    assert calls == []
+
+
+def test_screen_404_is_a_failure_and_empty_results_are_an_answer(client):
+    _stub(client, [_FakeResponse(404)])
+    with pytest.raises(FDClientError, match="404") as exc_info:
+        client.screen("2026-08-06", [ScreenFilter(field="market_cap", operator="gt", value=1e9)])
+    assert exc_info.value.status_code == 404
+    _stub(client, [_FakeResponse(200, {"results": []})])
+    assert client.screen("2026-08-06", [ScreenFilter(field="market_cap", operator="gt", value=1e9)]) == []
+
+
+def test_screener_fields_parses_the_vocabulary_and_404_fails_loud(client):
+    calls = _stub(client, [_FakeResponse(200, {
+        "metrics": {"financial_metrics": ["market_cap", "stock_price"], "company": {"sector": ["Energy"], "industry": []}},
+        "aliases": {}, "company_filters": {"values": {"sector": ["Energy"], "industry": []}},
+        "operators": ["gt", "eq", "in"],
+    })])
+    fields = client.screener_fields()
+    assert calls[0]["url"] == "https://api.financialdatasets.ai/financials/search/screener/filters"
+    assert fields.numeric == {"market_cap", "stock_price"} and fields.sectors == {"Energy"}
+    _stub(client, [_FakeResponse(404)])
+    with pytest.raises(FDClientError, match="404"):
+        client.screener_fields()
+
+
+# ---------------------------------------------------------------------------
+# Call meter: every attempt that reaches the wire counts
+# ---------------------------------------------------------------------------
+
+def test_the_meter_counts_retries_and_pages_by_bare_path(monkeypatch):
+    monkeypatch.setattr("hedge_fund.data.client.time.sleep", lambda s: None)
+    meter = CallMeter()
+    with FDClient(api_key="test-key", meter=meter) as c:
+        _stub(c, [
+            _FakeResponse(503),
+            _FakeResponse(200, {"prices": [_price_row(1)], "next_page_url": "https://api.financialdatasets.ai/prices/?cursor=page2"}),
+            _FakeResponse(200, {"prices": [_price_row(2)]}),
+            _FakeResponse(200, {"company_facts": {"ticker": "AAPL"}}),
+        ])
+        c.get_prices("AAPL", "2024-01-01", "2024-01-02")
+        c.get_company_facts("AAPL")
+    assert meter.calls == 4
+    assert meter.by_path == {"/prices/": 3, "/company/facts/": 1}
+
+
+def test_one_meter_sums_across_clients_and_each_client_has_its_own_by_default():
+    shared = CallMeter()
+    with FDClient(api_key="k", meter=shared) as a, FDClient(api_key="k", meter=shared) as b:
+        _stub(a, [_FakeResponse(200, {"company_facts": {"ticker": "AAPL"}})])
+        _stub(b, [_FakeResponse(200, {"company_facts": {"ticker": "MSFT"}})])
+        a.get_company_facts("AAPL")
+        b.get_company_facts("MSFT")
+    assert shared.calls == 2
+    with FDClient(api_key="k") as c:
+        _stub(c, [_FakeResponse(404)])
+        c.get_company_facts("NOPE")
+        assert c.meter.calls == 1
+    assert shared.calls == 2

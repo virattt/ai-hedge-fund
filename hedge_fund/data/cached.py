@@ -36,11 +36,13 @@ from hedge_fund.data.models import (
     Price,
 )
 from hedge_fund.data.protocol import DataClient
+from hedge_fund.data.screener import SCREEN_LIMIT, ScreenerFields, ScreenRow
 from hedge_fund.data.sessions import NEW_YORK
 from hedge_fund.paths import CACHE_DIR
 
 DEFAULT_CACHE_DIR = CACHE_DIR / "data"
 SAME_DAY_TTL = 600  # seconds an answer about an unfinished day stays fresh
+VOCABULARY_TTL = 86_400  # seconds the screener's field list stays fresh; it changes rarely
 
 
 class CachedDataClient:
@@ -121,6 +123,20 @@ class CachedDataClient:
             lambda: self._client.get_market_cap(ticker, end_date),
         )
 
+    def screen(self, as_of, filters, *, order_by=None, limit=SCREEN_LIMIT):
+        return self._cached_list(
+            "screen", ScreenRow,
+            {"as_of": as_of, "filters": [item.model_dump() for item in filters],
+             "order_by": order_by.model_dump() if order_by is not None else None, "limit": limit},
+            lambda: self._client.screen(as_of, filters, order_by=order_by, limit=limit),
+        )
+
+    def screener_fields(self):
+        return self._cached_item(
+            "screener_fields", ScreenerFields, {},
+            lambda: self._client.screener_fields(),
+        )
+
     # ------------------------------------------------------------------
     # Cache mechanics
     # ------------------------------------------------------------------
@@ -151,12 +167,13 @@ class CachedDataClient:
         final. Answers about an unfinished day are not: a daily bar for it
         is never reused (the close is not in yet); anything else is reused
         for SAME_DAY_TTL and then asked for again. Date-less "latest"
-        answers are final unless the client is live. Entries written before
+        answers are final unless the client is live. The screener's
+        vocabulary is reused for VOCABULARY_TTL. Entries written before
         fetch times were recorded are trusted, except the daily bar, which
         was never trusted without one.
         """
         daily_bar = method == "get_prices" and params.get("interval") == "day"
-        end = params.get("end_date")
+        end = params.get("end_date") or params.get("as_of")
         try:
             fetched = datetime.fromisoformat(hit["fetched_at"])
             if fetched.tzinfo is None:
@@ -166,6 +183,8 @@ class CachedDataClient:
         if method == "get_earnings_history":
             today = datetime.now(NEW_YORK).date().isoformat()
             return fetched.astimezone(NEW_YORK).date().isoformat() >= today
+        if method == "screener_fields":
+            return (datetime.now(NEW_YORK) - fetched).total_seconds() < VOCABULARY_TTL
         if end is None:
             if not self._live:
                 return True
@@ -182,7 +201,7 @@ class CachedDataClient:
             return [model_cls(**row) for row in hit["data"]]
         fetched_at = datetime.now(NEW_YORK).isoformat()
         result = fetch()
-        self._write(key, {"data": [r.model_dump() for r in result], "fetched_at": fetched_at})
+        self._write(key, {"data": [r.model_dump(mode="json") for r in result], "fetched_at": fetched_at})
         return result
 
     def _cached_item(self, method: str, model_cls, params: dict, fetch: Callable):
@@ -192,7 +211,7 @@ class CachedDataClient:
             return model_cls(**hit["data"]) if hit["data"] is not None else None
         fetched_at = datetime.now(NEW_YORK).isoformat()
         result = fetch()
-        self._write(key, {"data": result.model_dump() if result is not None else None,
+        self._write(key, {"data": result.model_dump(mode="json") if result is not None else None,
                           "fetched_at": fetched_at})
         return result
 

@@ -30,6 +30,7 @@ from typing import Callable, Protocol
 from hedge_fund.data.bars import bar_time, current_bar, is_intraday, previous_bar, session_date
 from hedge_fund.data.models import Price, PriceSnapshot
 from hedge_fund.data.protocol import DataClient
+from hedge_fund.data.screener import SCREEN_LIMIT
 from hedge_fund.data.sessions import completed_through, NEW_YORK, previous_day
 from hedge_fund.fund.spec import FundSpec, TradingWindow
 
@@ -264,6 +265,12 @@ class PinnedQuotes:
 
     def get_market_cap(self, ticker, end_date):
         return self._data.get_market_cap(ticker, end_date)
+
+    def screen(self, as_of, filters, *, order_by=None, limit=SCREEN_LIMIT):
+        return self._data.screen(as_of, filters, order_by=order_by, limit=limit)
+
+    def screener_fields(self):
+        return self._data.screener_fields()
 
 
 def _session_stamp(session: str) -> str:

@@ -7,6 +7,9 @@ import json
 import logging
 import os
 import time
+from collections import Counter
+from dataclasses import dataclass, field
+from urllib.parse import urlsplit
 
 import requests
 
@@ -20,6 +23,7 @@ from hedge_fund.data.models import (
     Price,
     PriceSnapshot,
 )
+from hedge_fund.data.screener import OrderBy, SCREEN_LIMIT, ScreenerFields, ScreenFilter, ScreenRow
 from hedge_fund.data.wallet import payment_session, WALLET_KEY_ENV
 
 logger = logging.getLogger(__name__)
@@ -48,6 +52,23 @@ def has_data_credential() -> bool:
     an API key, or a wallet to pay per call with x402. The one place that
     decides it, so the TUI gates and the client cannot disagree."""
     return bool(os.environ.get(API_KEY_ENV) or os.environ.get(WALLET_KEY_ENV))
+
+
+@dataclass
+class CallMeter:
+    """How many requests actually went to the API, by path.
+
+    Counts attempts: a retry and every pagination page each count once,
+    because each is a billable call on x402. Cache hits never reach the
+    client, so they are never counted. Share one meter across the clients
+    of a run to see what the run cost."""
+
+    calls: int = 0
+    by_path: Counter[str] = field(default_factory=Counter)
+
+    def record(self, url: str) -> None:
+        self.calls += 1
+        self.by_path[urlsplit(url).path] += 1
 
 
 class FDClientError(Exception):
@@ -79,13 +100,17 @@ class FDClient:
         api_key: str | None = None,
         wallet_key: str | None = None,
         timeout: float = 30.0,
+        meter: CallMeter | None = None,
     ) -> None:
         """An API key bills the account; otherwise a wallet key pays each
         call with x402. Both set means the key wins, which is the API's own
-        rule: a request carrying X-API-KEY is never charged to a wallet."""
+        rule: a request carrying X-API-KEY is never charged to a wallet.
+        *meter* counts the requests this client sends; pass one meter to
+        every client of a run to count the run."""
         self._api_key = api_key or os.environ.get(API_KEY_ENV, "")
         self._wallet_key = wallet_key or os.environ.get(WALLET_KEY_ENV, "")
         self._timeout = timeout
+        self.meter = meter if meter is not None else CallMeter()
         if self.pays_per_call():
             try:
                 self._session = payment_session(self._wallet_key)
@@ -255,6 +280,47 @@ class FDClient:
         return [EarningsRecord(**row) for row in data] if data else []
 
     # ------------------------------------------------------------------
+    # Screener
+    # ------------------------------------------------------------------
+
+    def screen(
+        self,
+        as_of: str,
+        filters: list[ScreenFilter],
+        *,
+        order_by: OrderBy | None = None,
+        limit: int = SCREEN_LIMIT,
+    ) -> list[ScreenRow]:
+        """The companies that passed *filters* on *as_of*, judged from each
+        one's newest filing made public on or before that date.
+
+        *as_of* is required on purpose: without it the API screens today's
+        numbers, which is lookahead inside a backtest. A 404 raises: this
+        endpoint answers "nothing passed" with an empty list, so a 404 is a
+        missing endpoint or entitlement, not a data fact.
+        """
+        if not as_of:
+            raise ValueError("screen needs an as_of date: a screen without one reads today's numbers")
+        if not filters:
+            raise ValueError("screen needs at least one filter")
+        path = "/financials/search/screener"
+        body: dict = {"as_of": as_of, "filters": [item.model_dump() for item in filters], "limit": limit}
+        if order_by is not None:
+            body["order_by"] = order_by.model_dump()
+        resp = self._request("POST", path, json=body)
+        if resp is None:
+            raise FDClientError(f"POST {path} returned 404", status_code=404, path=path)
+        return [ScreenRow.from_api(row) for row in resp.json().get("results") or []]
+
+    def screener_fields(self) -> ScreenerFields:
+        """The fields, operators, sectors, and industries the screener accepts."""
+        path = "/financials/search/screener/filters"
+        resp = self._request("GET", path)
+        if resp is None:
+            raise FDClientError(f"GET {path} returned 404", status_code=404, path=path)
+        return ScreenerFields.from_api(resp.json())
+
+    # ------------------------------------------------------------------
     # Convenience
     # ------------------------------------------------------------------
 
@@ -326,6 +392,7 @@ class FDClient:
         """
         url = path if path.startswith("http") else self.BASE_URL + path
         for attempt, delay in enumerate((*self._RETRY_DELAYS, None)):
+            self.meter.record(url)
             try:
                 resp = self._session.request(
                     method, url, timeout=self._timeout, **kwargs,

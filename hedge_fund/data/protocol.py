@@ -29,6 +29,7 @@ from hedge_fund.data.models import (
     Price,
     PriceSnapshot,
 )
+from hedge_fund.data.screener import OrderBy, SCREEN_LIMIT, ScreenerFields, ScreenFilter, ScreenRow
 
 
 @runtime_checkable
@@ -42,6 +43,8 @@ class DataClient(Protocol):
 
     get_financial_metrics must be point-in-time: return only data that was
     publicly filed by *end_date*, not data whose fiscal period ended by then.
+    screen must be too: *as_of* is required, and the answer uses only filings
+    public on or before it.
     """
 
     def get_prices(
@@ -89,3 +92,14 @@ class DataClient(Protocol):
     ) -> list[EarningsRecord]: ...
 
     def get_market_cap(self, ticker: str, end_date: str) -> float | None: ...
+
+    def screen(
+        self,
+        as_of: str,
+        filters: list[ScreenFilter],
+        *,
+        order_by: OrderBy | None = None,
+        limit: int = SCREEN_LIMIT,
+    ) -> list[ScreenRow]: ...
+
+    def screener_fields(self) -> ScreenerFields: ...

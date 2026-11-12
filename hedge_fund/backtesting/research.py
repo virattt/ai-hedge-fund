@@ -33,7 +33,7 @@ def summarize(path: Path, mtime: float) -> dict | None:
             return None
         m = d["metrics"]
         return {
-            "kind": "backtest", "mtime": mtime, "fund": d.get("fund", ""),
+            "kind": "backtest", "mtime": mtime, "path": str(path), "fund": d.get("fund", ""),
             "universe": d.get("universe", []),
             "start": d.get("start", ""), "end": d.get("end", ""),
             "benchmark": d.get("benchmark", "SPY"),
