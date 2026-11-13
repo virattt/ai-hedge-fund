@@ -1,4 +1,4 @@
-"""Saved backtest results: research/<fund>-<start>-<end>-<stamp>.json.
+"""Saved backtest results: research/<fund>-<start>-<end>-<stamp>-<uuid>.json.
 
 Both `aihf backtest` and the app write here through `save_result`; the app's
 mandate picker reads the directory back through the functions below. Results
@@ -10,17 +10,19 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 from hedge_fund import paths
 from hedge_fund.backtesting.fund import FundBacktestResult
 
 
 def save_result(result: FundBacktestResult) -> Path:
-    """Write *result* where the mandate picker's history will find it."""
+    """Write a separate receipt where the mandate picker's history will find it."""
     paths.RESEARCH_DIR.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    path = paths.RESEARCH_DIR / f"{result.fund}-{result.start}-{result.end}-{stamp}.json"
-    path.write_text(result.model_dump_json(indent=2))
+    path = paths.RESEARCH_DIR / f"{result.fund}-{result.start}-{result.end}-{stamp}-{uuid4().hex}.json"
+    with path.open("x") as stream:
+        stream.write(result.model_dump_json(indent=2))
     return path
 
 
