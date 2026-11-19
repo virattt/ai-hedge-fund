@@ -132,3 +132,46 @@ class TestPEADPredict:
         fd = MockFDClient([_rec("2025-06-30", "2025-08-01", "BEAT")])
         sig = PEADModel().predict("TEST", "2025-08-01", fd)
         assert isinstance(sig, Signal)
+
+
+# ---------------------------------------------------------------------------
+# QuantModel._compute_rsi
+# ---------------------------------------------------------------------------
+
+# 60 closes: a rally, a sell-off, then a range.
+_RSI_PRICES = [
+    101.2, 100.8, 101.7, 102.0, 101.3, 102.5, 102.1, 103.0, 103.3, 102.6,
+    103.8, 103.4, 104.3, 104.6, 103.9, 105.1, 104.7, 105.6, 105.9, 105.2,
+    106.4, 106.0, 106.9, 107.2, 106.5, 105.4, 105.9, 105.1, 104.8, 105.4,
+    104.3, 104.8, 104.0, 103.7, 104.3, 103.2, 103.7, 102.9, 102.6, 103.2,
+    102.1, 102.6, 101.8, 101.5, 102.1, 102.5, 101.9, 102.6, 102.4, 102.5,
+    102.9, 102.3, 103.0, 102.8, 102.9, 103.3, 102.7, 103.4, 103.2, 103.3,
+]
+
+
+class TestComputeRSI:
+    def test_matches_talib(self):
+        import pandas as pd
+
+        # talib.RSI(np.array(_RSI_PRICES), 14)[-1] (TA-Lib 0.6) = 52.22076120167022.
+        # The old rolling-mean version returned 57.142857 here.
+        assert abs(QuantModel._compute_rsi(pd.Series(_RSI_PRICES)) - 52.22076120167022) < 1e-9
+
+    def test_prefix_matches_talib(self):
+        import pandas as pd
+
+        # talib.RSI(...)[24] = 65.09848759625741 (latest value after the rally).
+        assert abs(QuantModel._compute_rsi(pd.Series(_RSI_PRICES[:25])) - 65.09848759625741) < 1e-9
+
+    def test_neutral_when_not_enough_data_or_flat(self):
+        import pandas as pd
+
+        assert QuantModel._compute_rsi(pd.Series(_RSI_PRICES[:14])) == 50.0
+        assert QuantModel._compute_rsi(pd.Series([100.0] * 30)) == 50.0
+        assert QuantModel._compute_rsi(pd.Series([], dtype=float)) == 50.0
+
+    def test_ignores_missing_prices(self):
+        import pandas as pd
+
+        with_gap = pd.Series(_RSI_PRICES[:30] + [float("nan")] + _RSI_PRICES[30:])
+        assert QuantModel._compute_rsi(with_gap) == QuantModel._compute_rsi(pd.Series(_RSI_PRICES))
