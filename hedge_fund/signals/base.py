@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import ClassVar, Literal, TypeAlias
 
+import fin_primitives
 import numpy as np
 import pandas as pd
 
@@ -89,13 +90,17 @@ class QuantModel(AlphaModel):
 
     @staticmethod
     def _compute_rsi(prices: pd.Series, period: int = 14) -> float:
-        """Compute the latest RSI value for a price series."""
-        delta = prices.diff()
-        gain = delta.where(delta > 0, 0.0).rolling(window=period).mean()
-        loss = (-delta.where(delta < 0, 0.0)).rolling(window=period).mean()
-        rs = gain / loss
-        rsi = 100.0 - (100.0 / (1.0 + rs))
-        latest = rsi.iloc[-1]
-        if pd.isna(latest):
+        """Compute the latest RSI value for a price series (Wilder's RSI, as ``talib.RSI``).
+
+        Average gain and loss are seeded with the mean of the first *period* changes and
+        then smoothed with alpha = 1/period. A rolling mean of gains and losses (Cutler's
+        RSI) is a different indicator that never converges to this value. Returns 50.0 when
+        there are not *period* + 1 prices or the prices never move.
+        """
+        values = pd.to_numeric(prices, errors="coerce").dropna().to_numpy(dtype=float)
+        if len(values) <= period or np.all(values == values[0]):
+            return 50.0
+        latest = fin_primitives.rsi(values, period, mode="float")[-1]
+        if np.isnan(latest):
             return 50.0
         return float(latest)
