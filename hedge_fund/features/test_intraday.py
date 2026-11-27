@@ -1,9 +1,12 @@
 """IntradayContext — the day so far, rendered so quiet bars match."""
 
+from datetime import datetime
+
 import pytest
 
 from hedge_fund.data.models import CompanyNews, EarningsData, EarningsRecord, Price, PriceSnapshot
-from hedge_fund.features.intraday import build_intraday_context, IntradayContext
+from hedge_fund.data.sessions import NEW_YORK
+from hedge_fund.features.intraday import build_intraday_context, Headline, IntradayContext
 from hedge_fund.fund.spec import TradingWindow
 from hedge_fund.pipeline.clock import BarClock, PinnedQuotes
 
@@ -146,3 +149,12 @@ def test_headlines_are_capped_to_the_newest():
                                   "TEST", "2024-06-04T10:00:00", DayClient(news=news)).headlines)
     text = context.render()
     assert "Headlines (20, newest last)" in text and "Item 19" in text and "Item 10" in text and "Item 9" not in text
+
+
+def test_prior_day_headline_stamp_is_portable():
+    context = IntradayContext(
+        ticker="TEST", as_of="2024-06-04T09:30:00", move_pct=None, market_pct=None, earnings=None,
+        headlines=[Headline(when=datetime(2024, 6, 3, 17, 0, tzinfo=NEW_YORK),
+                            source="Wire", title="After hours")],
+    )
+    assert "Jun 3 17:00 ET  Wire: After hours" in context.render()
