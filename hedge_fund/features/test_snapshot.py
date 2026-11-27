@@ -96,6 +96,15 @@ def test_aggregates():
     assert snap.bvps_cagr == pytest.approx((10.0 / 8.0) ** (1 / 0.75) - 1, abs=1e-4)
 
 
+def test_bvps_cagr_uses_elapsed_quarters_when_a_period_is_missing():
+    metrics = _history(8)
+    metrics[0].book_value_per_share = 20.0
+    metrics[-1].book_value_per_share = 10.0
+    metrics[4].book_value_per_share = None
+    snap = build_snapshot("TEST", "2025-01-15", MockDataClient(metrics=metrics))
+    assert snap.bvps_cagr == pytest.approx(2 ** (1 / 1.75) - 1, abs=1e-4)
+
+
 def test_market_cap_comes_from_pit_metrics_not_facts():
     """company_facts market cap is latest-only (lookahead); the snapshot must
     use the most recent FILED metrics row instead."""

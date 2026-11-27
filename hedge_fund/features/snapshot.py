@@ -140,7 +140,7 @@ class FundamentalsSnapshot(BaseModel):
         """Backtest prompt: ratios and indexed trends, no identifying dollars."""
         oldest = self.periods[-1]
         lines = [
-            f"Company: (withheld)"
+            "Company: (withheld)"
             + (f"  |  Sector: {self.sector}" if self.sector else ""),
             "Periods are labelled relative to the latest filing (t-0). "
             "Calendar dates, absolute size and per-share dollar values are withheld; "
@@ -294,10 +294,10 @@ def _trend(values: list[float | None]) -> float | None:
 
 def _cagr(values: list[float | None]) -> float | None:
     """Annualized growth from oldest to latest (ttm rows are quarter-spaced)."""
-    xs = [v for v in values if v is not None]
-    if len(xs) < 2 or xs[-1] is None or xs[-1] <= 0 or xs[0] <= 0:
+    present = [(i, v) for i, v in enumerate(values) if v is not None]
+    if len(present) < 2 or present[-1][1] <= 0 or present[0][1] <= 0:
         return None
-    years = (len(xs) - 1) / 4  # quarter-spaced ttm periods
+    years = (present[-1][0] - present[0][0]) / 4
     if years <= 0:
         return None
-    return round((xs[0] / xs[-1]) ** (1 / years) - 1, 4)
+    return round((present[0][1] / present[-1][1]) ** (1 / years) - 1, 4)
